@@ -24,3 +24,13 @@ export function canRunRevenueCycle(role: Role): boolean {
 export function canCorrectClaims(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "specialist";
 }
+
+/** Registering and updating patient records: the people who bill (compliance reviews, R-5.1.2). */
+export function canEditPatients(role: Role): boolean {
+  return role === "admin" || role === "manager" || role === "specialist";
+}
+
+/** Sensitivity tags drive stricter access (R-3.5.1), so only administrators set them. */
+export function canTagSensitivity(role: Role): boolean {
+  return role === "admin";
+}

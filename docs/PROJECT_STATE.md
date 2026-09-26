@@ -12,6 +12,10 @@ _Last updated: 2026-09-26_
 - Claims module C1 (`specs/claims.md`): claims list with timely-filing warnings, claim detail,
   corrections of draft/rejected claims with a required reason, and append-only version history
   enforced by database triggers. Next: C2 CSV charge import, C3 837P + filing block, C4 999/277CA.
+- Patient records P1 (`specs/patients.md`): `/patients` list, POST search (no names in URLs),
+  register/edit with primary coverage (encrypted member ID), admin-only sensitivity tags, and a
+  patient chart linking claims and denials; claim and denial pages link back. "Patients" is in the
+  primary navigation. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
 - Operator console can reset the demo with sample data or empty (setup only) to test features
   from a clean slate.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
@@ -48,6 +52,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
+6. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
+   disclosures export (R-5.1.1), sensitivity-tag enforcement. Reset the demo after P1 deploys so
+   seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
@@ -67,6 +74,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   (force-push of the default branch), or leave it? Owner decision.
 - Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must
   honor; Medicare Advantage filing windows assumed to come from payer contracts (`specs/claims.md`).
+- Patients: should front-desk registration be its own role? Guarantor now or with statements (§8.6)?
 - Claims before real data: sensitivity masking of diagnosis codes in `claim_versions` snapshots and
   history; retention/legal-hold path for append-only history; PIP/workers' comp/Medicaid filing
   rules and the HMO citation for timely filing (`specs/claims.md`).

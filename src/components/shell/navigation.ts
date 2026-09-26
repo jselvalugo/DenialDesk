@@ -13,6 +13,7 @@ import {
   PieChart,
   Receipt,
   Scale,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,6 +37,7 @@ export const navigation: NavSection[] = [
     label: "Work",
     items: [
       { label: "Overview", href: "/", icon: LayoutDashboard, available: true },
+      { label: "Patients", href: "/patients", icon: Users, available: true },
       { label: "Denial queue", href: "/denials", icon: Inbox, available: true },
       { label: "Appeals", href: "/appeals", icon: Gavel, available: false },
     ],

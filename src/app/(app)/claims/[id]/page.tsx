@@ -262,7 +262,9 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
           <Panel title="Patient">
             <dl className="flex flex-col gap-3">
               <Field label="Name">
-                {patient.lastName}, {patient.firstName}
+                <Link href={`/patients/${patient.id}`} className="font-medium text-link hover:underline">
+                  {patient.lastName}, {patient.firstName}
+                </Link>
               </Field>
               <Field label="Date of birth">
                 <span className="tabular">{formatDate(patient.birthDate)}</span>

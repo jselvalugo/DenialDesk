@@ -101,6 +101,11 @@ export async function seedPractice(options: {
   // Only people who can work denials get assignments (compliance and admins don't in the demo).
   const specialists = userIds.filter((_, i) => ["specialist", "manager"].includes(options.users[i]!.role));
 
+  // Primary coverage: the payer of each patient's most recent claim.
+  const primaryPayerKey = new Map<string, string>();
+  for (const c of [...dataset.claims].sort((a, b) => a.serviceDate.localeCompare(b.serviceDate)))
+    primaryPayerKey.set(c.patientKey, c.payerKey);
+
   const claimRows: (typeof claims.$inferInsert)[] = [];
   const lineRows: (typeof claimLines.$inferInsert)[] = [];
   const denialRows: (typeof denials.$inferInsert)[] = [];
@@ -188,7 +193,7 @@ export async function seedPractice(options: {
     );
     if (dataset.patients.length > 0)
       await tx.insert(patients).values(
-        dataset.patients.map((p) => ({
+        dataset.patients.map((p, index) => ({
           id: idFor(p.key),
           tenantId,
           mrn: p.mrn,
@@ -197,6 +202,12 @@ export async function seedPractice(options: {
           birthDate: p.birthDate,
           memberIdEnc: encryptField(p.memberId),
           memberIdLast4: p.memberId.slice(-4),
+          sex: p.sex,
+          addressLine1: `${100 + (index % 900)} Synthetic Way`,
+          city: p.city,
+          state: "FL",
+          postalCode: p.postalCode,
+          primaryPayerId: primaryPayerKey.has(p.key) ? idFor(primaryPayerKey.get(p.key)!) : null,
         })),
       );
     await insertInChunks(claimRows, (chunk) => tx.insert(claims).values(chunk));

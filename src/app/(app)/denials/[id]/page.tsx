@@ -18,7 +18,9 @@ import { DENIAL_STATUSES, REGIME_LABELS } from "@/domain/denial-status";
 import { DUE_SOON_DAYS, getDenial, teamMembers } from "@/domain/denials/queries";
 import { audit } from "@/lib/audit";
 import { formatDate } from "@/lib/format";
-import { AssignControl, MaskedMemberId, NoteForm, StatusControl } from "./controls";
+import { MaskedMemberId } from "@/components/patients/MaskedMemberId";
+import { revealMemberId } from "./actions";
+import { AssignControl, NoteForm, StatusControl } from "./controls";
 
 // The title never includes patient data (DESIGN.md §12).
 export const metadata: Metadata = { title: "Denial" };
@@ -339,7 +341,9 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
           <Panel title="Patient">
             <dl className="flex flex-col gap-3">
               <Field label="Name">
-                {patient.lastName}, {patient.firstName}
+                <Link href={`/patients/${patient.id}`} className="font-medium text-link hover:underline">
+                  {patient.lastName}, {patient.firstName}
+                </Link>
               </Field>
               <Field label="Date of birth">
                 <span className="tabular">{formatDate(patient.birthDate)}</span>
@@ -349,7 +353,10 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
               </Field>
               <Field label="Member ID">
                 {canWork ? (
-                  <MaskedMemberId denialId={denial.id} last4={patient.memberIdLast4} />
+                  <MaskedMemberId
+                    last4={patient.memberIdLast4}
+                    reveal={revealMemberId.bind(null, denial.id)}
+                  />
                 ) : (
                   <span className="font-mono">•••• {patient.memberIdLast4}</span>
                 )}

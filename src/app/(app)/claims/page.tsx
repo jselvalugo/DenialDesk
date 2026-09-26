@@ -181,9 +181,12 @@ export default async function ClaimsPage({
                       </Link>
                     </Td>
                     <Td>
-                      <span className="block font-medium">
+                      <Link
+                        href={`/patients/${row.patientId}`}
+                        className="block font-medium text-link hover:underline"
+                      >
                         {row.patientLast}, {row.patientFirst.charAt(0)}.
-                      </span>
+                      </Link>
                       <span className="block font-mono text-label text-muted">{row.mrn}</span>
                     </Td>
                     <Td>

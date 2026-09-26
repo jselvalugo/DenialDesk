@@ -169,6 +169,15 @@ const DENIAL_CODES: ReadonlyArray<readonly [string, number]> = [
 ];
 const RARCS: Record<string, string[]> = { "16": ["N290"], "252": ["N706"], "50": ["N115"], "197": ["N54"] };
 
+/** Florida towns for synthetic addresses (real town names and ZIPs; no real people). */
+const PATIENT_TOWNS = [
+  { city: "Tampa", postalCode: "33606" },
+  { city: "Orlando", postalCode: "32801" },
+  { city: "Clearwater", postalCode: "33755" },
+  { city: "Winter Park", postalCode: "32789" },
+  { city: "Brandon", postalCode: "33511" },
+];
+
 export interface SyntheticDataset {
   asOf: string;
   locations: Array<{ key: string; name: string; city: string }>;
@@ -181,6 +190,9 @@ export interface SyntheticDataset {
     lastName: string;
     birthDate: string;
     memberId: string;
+    sex: "F" | "M";
+    city: string;
+    postalCode: string;
   }>;
   claims: Array<{
     key: string;
@@ -249,6 +261,9 @@ export function generateDataset(options: {
     lastName: random.pick(LAST_NAMES),
     birthDate: addCalendarDays("1950-01-01", random.int(0, 365 * 55)),
     memberId: `${SYNTHETIC_MARKER}${String(random.int(100_000_000, 999_999_999))}`,
+    // Derived from the index (no extra random draws), so existing seeds produce the same data.
+    sex: i % 2 === 0 ? ("F" as const) : ("M" as const),
+    ...PATIENT_TOWNS[i % PATIENT_TOWNS.length]!,
   }));
 
   const claims: SyntheticDataset["claims"] = [];
