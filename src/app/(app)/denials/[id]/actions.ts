@@ -62,7 +62,7 @@ export async function changeStatus(_: ActionState, formData: FormData): Promise<
         from: current.status,
         to: parsed.data.status,
         // Keep the previous appeal-filed date when a re-stamp overwrites it (R-7.5.1, R-3.10.3).
-        ...(stamped !== current.appealSubmittedOn
+        ...(current.appealSubmittedOn !== null && stamped !== current.appealSubmittedOn
           ? { previousAppealSubmittedOn: current.appealSubmittedOn }
           : {}),
       },
