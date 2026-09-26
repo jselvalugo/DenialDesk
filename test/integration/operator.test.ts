@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { createDemoPractice as ensureDemoPracticeFresh, ensureDemoPractice } from "@/auth/demo";
 import { verifyPassword } from "@/auth/password";
-import type { AuthContext } from "@/auth/session";
+import type { OperatorContext } from "@/auth/operator";
+import { setUpOperatorAccount } from "@/auth/operator-account";
 import { closeDatabase, systemDb } from "@/db/client";
 import {
   auditEvents,
@@ -28,21 +29,20 @@ import {
 } from "@/domain/platform/practices";
 import { createTestTenant } from "./helpers";
 
-let operator: AuthContext;
+// The operator belongs to no practice (docs/specs/operator-login.md).
+let operator: OperatorContext;
+let listedPractice: { tenantId: string };
 
 beforeAll(async () => {
-  const home = await createTestTenant("Operator home");
+  const email = `operator-${Date.now()}@synthetic.test`;
+  const { userId } = await setUpOperatorAccount({ email, password: "a synthetic operator passphrase" });
   operator = {
     sessionId: "00000000-0000-4000-8000-000000000000",
-    userId: home.userId,
-    tenantId: home.tenantId,
-    displayName: "Synthetic Operator",
-    tenantName: "Operator home",
-    role: "admin",
-    tenantKind: "customer",
-    authMethod: "password_mfa",
-    email: "operator@synthetic.test",
+    userId,
+    displayName: "Platform operator",
+    email,
   };
+  listedPractice = await createTestTenant("Operator-listed practice");
 });
 
 afterAll(() => closeDatabase());
@@ -97,12 +97,6 @@ describe("suspension", () => {
   it("only suspends customer practices (demo practices are reset instead)", async () => {
     const demo = await ensureDemoPractice();
     await expect(setPracticeSuspended(demo.tenantId, true, operator)).rejects.toBeInstanceOf(PracticeError);
-  });
-
-  it("won't suspend the operator's own practice", async () => {
-    await expect(setPracticeSuspended(operator.tenantId, true, operator)).rejects.toBeInstanceOf(
-      PracticeError,
-    );
   });
 });
 
@@ -193,6 +187,6 @@ describe("listPractices", () => {
     const demoRow = practices.find((p) => p.id === demo.tenantId);
     expect(demoRow?.teamSize).toBe(4);
     expect(demoRow?.openDenials).toBeGreaterThan(0);
-    expect(practices.some((p) => p.id === operator.tenantId)).toBe(true);
+    expect(practices.some((p) => p.id === listedPractice.tenantId)).toBe(true);
   });
 });

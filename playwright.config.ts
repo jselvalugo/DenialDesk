@@ -48,7 +48,9 @@ export default defineConfig({
       env: {
         APP_ENV: "preview",
         DEMO_LOGIN_ENABLED: "true",
-        PLATFORM_OPERATOR_EMAIL: "operator@e2e.denialdesk.test",
+        PLATFORM_OPERATOR_EMAIL: "platform-operator@e2e.denialdesk.test",
+        // Operator setup code for this test server only (test/e2e/operator.spec.ts).
+        SEED_TOKEN: "e2e-operator-setup-code-synthetic-0000000000",
       },
     },
     {

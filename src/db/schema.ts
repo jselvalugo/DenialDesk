@@ -103,8 +103,11 @@ export const sessions = pgTable(
       .references(() => users.id),
     tenantId: uuid("tenant_id").references(() => tenants.id),
     mfaVerified: boolean("mfa_verified").notNull().default(false),
-    /** How the session was established. "demo" sessions skip MFA and are limited to the demo practice. */
-    authMethod: text("auth_method", { enum: ["password_mfa", "demo"] })
+    /**
+     * How the session was established. "demo" sessions skip MFA and are limited to the demo practice;
+     * "operator" sessions are the platform console's own (no practice, separate cookie).
+     */
+    authMethod: text("auth_method", { enum: ["password_mfa", "demo", "operator"] })
       .notNull()
       .default("password_mfa"),
     createdAt: createdAt(),

@@ -1,15 +1,26 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { systemDb } from "@/db/client";
 import { memberships, tenants, users } from "@/db/schema";
 import { auditSystem } from "@/lib/audit";
-import { limitCurrentRequest, retryMessage, type Bucket, type RateLimitResult } from "@/lib/rate-limit";
-import { decryptField } from "@/lib/crypto/field";
+import { limitCurrentRequest } from "@/lib/rate-limit";
+import {
+  claimTotp,
+  CODE_MISMATCH,
+  CODE_REUSED,
+  codeSchema,
+  loginSchema,
+  rateLimited,
+  recordFailure,
+  reserveAttempt,
+  SIGN_IN_FAILED,
+  type FormState,
+} from "./credentials";
+import { isOperatorEmail } from "./operator-account";
 import { decoyHash, hashPassword, passwordProblem, verifyPassword } from "./password";
-import { LOCKOUT_MS, MAX_FAILED_ATTEMPTS } from "./policy";
 import {
   clientIp,
   completeMfa,
@@ -19,65 +30,10 @@ import {
   revokeSession,
   touchSession,
 } from "./session";
-import { verifyTotp } from "./totp";
 import { ensureDemoPractice } from "./demo";
 import { demoLoginEnabled } from "@/lib/env";
 
-export interface FormState {
-  error?: string;
-}
-
-async function rateLimited(bucket: Bucket, what: string, result: RateLimitResult): Promise<FormState> {
-  await auditSystem({ action: "security.rate_limited", ipAddress: await clientIp(), metadata: { bucket } });
-  return { error: retryMessage(what, result) };
-}
-
-// One message for wrong password, unknown account, and locked account, so responses never reveal
-// which accounts exist (security review finding 3). Locked users are told how to recover.
-const SIGN_IN_FAILED =
-  "Email or password is incorrect, or the account is temporarily locked. Try again in 15 minutes or contact your administrator.";
-
-/**
- * Reserves one sign-in attempt atomically before any credential is checked. Every password and
- * MFA attempt counts; only a completed sign-in (password + MFA) resets the counter. Because the
- * reservation and the lock happen in one UPDATE, parallel attempts can't exceed the limit and a
- * correct password can't reset the count between MFA guesses (security review findings 1–2).
- * Returns false when the account is locked.
- */
-async function reserveAttempt(userId: string): Promise<boolean> {
-  const result = await systemDb().execute<{ id: string; locked_now: boolean }>(sql`
-    with counted as (
-      select id, (case when locked_until <= now() then 0 else failed_login_count end) + 1 as attempts
-      from users where id = ${userId} and (locked_until is null or locked_until <= now())
-      for update
-    )
-    update users set
-      failed_login_count = counted.attempts,
-      locked_until = case when counted.attempts >= ${MAX_FAILED_ATTEMPTS}
-        then now() + make_interval(secs => ${LOCKOUT_MS / 1000}) else null end
-    from counted where users.id = counted.id
-    returning users.id, counted.attempts >= ${MAX_FAILED_ATTEMPTS} as locked_now`);
-  const row = result.rows[0];
-  if (row?.locked_now) {
-    await auditSystem({
-      action: "auth.locked_out",
-      actorUserId: userId,
-      entityType: "user",
-      entityId: userId,
-    });
-  }
-  return row !== undefined;
-}
-
-async function recordFailure(userId: string, action: "auth.login_failed" | "auth.mfa_failed") {
-  await auditSystem({
-    action,
-    actorUserId: userId,
-    entityType: "user",
-    entityId: userId,
-    ipAddress: await clientIp(),
-  });
-}
+export type { FormState };
 
 /**
  * Ends the browser's current session, if any, before a new one replaces it (e.g. the owner signing
@@ -99,11 +55,6 @@ async function replacePreviousSession(actorUserId: string): Promise<void> {
   });
 }
 
-const loginSchema = z.object({
-  email: z.email().max(254),
-  password: z.string().min(1).max(128),
-});
-
 export async function signIn(_: FormState, formData: FormData): Promise<FormState> {
   const parsed = loginSchema.safeParse({ email: formData.get("email"), password: formData.get("password") });
   if (!parsed.success) return { error: "Enter your email and password." };
@@ -119,6 +70,17 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
   if (!user || user.disabledAt) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing for unknown accounts
     await auditSystem({ action: "auth.login_failed", ipAddress: await clientIp() });
+    return { error: SIGN_IN_FAILED };
+  }
+  // The platform operator signs in only at /operator/login; here it looks like any unknown account.
+  if (isOperatorEmail(user.email)) {
+    await verifyPassword(parsed.data.password, await decoyHash());
+    await auditSystem({
+      action: "auth.login_failed",
+      actorUserId: user.id,
+      ipAddress: await clientIp(),
+      metadata: { operatorAccount: true },
+    });
     return { error: SIGN_IN_FAILED };
   }
   if (!(await reserveAttempt(user.id))) {
@@ -150,13 +112,6 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
   );
 }
 
-const codeSchema = z.object({
-  code: z
-    .string()
-    .trim()
-    .regex(/^\d{6}$/),
-});
-
 /** Shared by sign-in MFA and first-time enrollment. */
 async function checkCode(formData: FormData, enrolling: boolean): Promise<FormState> {
   const session = await getSession();
@@ -178,27 +133,14 @@ async function checkCode(formData: FormData, enrolling: boolean): Promise<FormSt
     redirect("/login?reason=locked");
   }
 
-  const step = verifyTotp(decryptField(user.totpSecretEnc), parsed.data.code, user.totpLastStep);
-  if (step === null) {
+  const result = await claimTotp(
+    { id: user.id, totpSecretEnc: user.totpSecretEnc, totpLastStep: user.totpLastStep },
+    parsed.data.code,
+    enrolling,
+  );
+  if (result !== "ok") {
     await recordFailure(user.id, "auth.mfa_failed");
-    return { error: "That code didn't match. Check your authenticator app and try again." };
-  }
-
-  // Claim the code's time step atomically so two simultaneous submissions of the same code can't
-  // both succeed (single-use codes).
-  const claimed = await systemDb()
-    .update(users)
-    .set({
-      totpLastStep: step,
-      failedLoginCount: 0,
-      lockedUntil: null,
-      ...(enrolling ? { mfaEnrolledAt: new Date() } : {}),
-    })
-    .where(and(eq(users.id, user.id), or(isNull(users.totpLastStep), lt(users.totpLastStep, step))))
-    .returning({ id: users.id });
-  if (claimed.length === 0) {
-    await recordFailure(user.id, "auth.mfa_failed");
-    return { error: "That code was already used. Wait for the next code and try again." };
+    return { error: result === "mismatch" ? CODE_MISMATCH : CODE_REUSED };
   }
   await completeMfa(session.sessionId);
   const ip = await clientIp();

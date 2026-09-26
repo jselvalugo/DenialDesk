@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Palette } from "lucide-react";
+import { Palette } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { navigation, type NavItem } from "./navigation";
 
@@ -40,11 +40,9 @@ function NavEntry({ item, active }: { item: NavItem; active: boolean }) {
 
 export function Sidebar({
   showDesignSystem,
-  showOperatorConsole = false,
   showRevenueCycle = false,
 }: {
   showDesignSystem: boolean;
-  showOperatorConsole?: boolean;
   showRevenueCycle?: boolean;
 }) {
   const pathname = usePathname();
@@ -76,20 +74,12 @@ export function Sidebar({
             </div>
           ))}
       </nav>
-      {(showDesignSystem || showOperatorConsole) && (
+      {showDesignSystem && (
         <div className="space-y-0.5 border-t border-sidebar-border px-3 py-3">
-          {showOperatorConsole && (
-            <NavEntry
-              item={{ label: "Platform console", href: "/operator", icon: Building2, available: true }}
-              active={isActive("/operator")}
-            />
-          )}
-          {showDesignSystem && (
-            <NavEntry
-              item={{ label: "Design system", href: "/design", icon: Palette, available: true }}
-              active={isActive("/design")}
-            />
-          )}
+          <NavEntry
+            item={{ label: "Design system", href: "/design", icon: Palette, available: true }}
+            active={isActive("/design")}
+          />
         </div>
       )}
     </aside>

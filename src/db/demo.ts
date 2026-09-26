@@ -13,7 +13,7 @@ export const DEMO_PRACTICE = "Coral Bay Physicians (synthetic)";
  * Creates the synthetic demo practice once. If it already exists, repairs its admin account
  * instead ("repaired"): creates the admin if missing, otherwise resets the password to the
  * configured one and clears any lockout, and with `resetMfa` clears two-step enrollment so it can
- * be set up again. This is how the owner regains operator access in pre-production. Used by
+ * be set up again. (The platform operator is a separate account: /operator/setup.) Used by
  * `pnpm db:seed` and the pre-production seed endpoint (token-protected, never in production).
  */
 export class SeedRefusedError extends Error {}
