@@ -32,6 +32,7 @@ Engineering:
 Setup:
 - [ ] Practice, location, and provider setup (NPI, taxonomy, FL license) [§8.1]
 - [ ] Payer master with regulatory-regime tags [§8.1, §1.3]
+- [ ] Custom field values on patient, claim, denial, and payer records (sensitive fields masked, opened with a reason, audited) [R-3.5.1, R-7.5.1] — `specs/settings-and-custom-fields.md` S2; added to MVP by owner 2026-09-26
 
 Claims:
 - [x] Claim data model with immutable version history [R-3.10.3] — claims list/detail, corrections with reason, append-only `claim_versions` (`specs/claims.md` C1)
