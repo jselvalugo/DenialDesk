@@ -239,6 +239,7 @@ describe("migrations raise only listed, value-free trigger messages", () => {
     "OLD.id": "uuid",
     "NEW.id": "uuid",
     "NEW.claim_id": "uuid",
+    "NEW.remittance_id": "uuid",
     "NEW.version": "int",
     "OLD.version + 1": "int",
     missing: "int",

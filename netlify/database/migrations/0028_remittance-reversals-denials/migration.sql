@@ -10,14 +10,27 @@ CREATE OR REPLACE FUNCTION remittance_events_rules() RETURNS trigger
   SET search_path = public, pg_temp
   AS $$
 BEGIN
+  -- Who: a signed-in user records their own events; only seeded (system) remittances have none.
+  IF NEW.actor_id IS NULL AND nullif(current_setting('app.user_id', true), '') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM remittances r WHERE r.id = NEW.remittance_id AND r.source = 'seed') THEN
+    RAISE EXCEPTION 'remittance history needs the signed-in user';
+  END IF;
+  -- Each event at most once, and at most one of posted / void.
+  IF EXISTS (
+    SELECT 1 FROM remittance_events e
+    WHERE e.remittance_id = NEW.remittance_id
+      AND (e.event = NEW.event OR (e.event <> 'received' AND NEW.event <> 'received'))
+  ) THEN
+    RAISE EXCEPTION 'remittance % already has this history event', NEW.remittance_id;
+  END IF;
+  -- While loading (same transaction), any first event is allowed (the seed loads posted remittances).
   IF EXISTS (SELECT 1 FROM remittances r WHERE r.id = NEW.remittance_id AND r.created_at = now()) THEN
     RETURN NEW;
   END IF;
   IF NEW.event = 'received' THEN
     RAISE EXCEPTION 'remittance % already has its loaded event', NEW.remittance_id;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM remittances r WHERE r.id = NEW.remittance_id AND r.status = 'received')
-     OR EXISTS (SELECT 1 FROM remittance_events e WHERE e.remittance_id = NEW.remittance_id AND e.event <> 'received') THEN
+  IF NOT EXISTS (SELECT 1 FROM remittances r WHERE r.id = NEW.remittance_id AND r.status = 'received') THEN
     RAISE EXCEPTION 'remittance % is not ready to post', NEW.remittance_id;
   END IF;
   RETURN NEW;

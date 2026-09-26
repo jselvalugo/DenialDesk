@@ -462,6 +462,10 @@ describe("reversals and denial capture (R2)", () => {
     const { id } = await withTenant(a, (tx) => loadRemittance(tx, { ...a, parsed }));
     const result = await withTenant(a, (tx) => postRemittance(tx, { ...a, remittanceId: id }));
     expect(result.denialsCaptured).toBe(1);
+    const captureAudit = await withTenant(a, (tx) =>
+      tx.select().from(auditEvents).where(eq(auditEvents.action, "denial.captured")),
+    );
+    expect(captureAudit.some((e) => (e.metadata as Record<string, string>).remittanceId === id)).toBe(true);
     const detail = await withTenant(a, (tx) => getRemittance(tx, id));
     expect(detail!.captured).toEqual([
       expect.objectContaining({
@@ -512,9 +516,13 @@ describe("reversals and denial capture (R2)", () => {
   });
 
   it("refuses a second posted event or a late loaded event", async () => {
-    const [posted] = await withTenant(a, (tx) =>
-      tx.select().from(remittances).where(eq(remittances.status, "posted")).limit(1),
-    );
+    const { claim, ediPayerId } = await floridaClaim(a);
+    const own = file(ediPayerId, `SYN-E-${Date.now()}`, [
+      line(claim.claimNumber, { statusCode: "2", paidCents: 50 }),
+    ]);
+    const { id: postedId } = await withTenant(a, (tx) => loadRemittance(tx, { ...a, parsed: own }));
+    await withTenant(a, (tx) => postRemittance(tx, { ...a, remittanceId: postedId }));
+    const posted = { id: postedId };
     const spoof = (event: "received" | "posted") =>
       withTenant(a, (tx) =>
         tx.insert(remittanceEvents).values({
@@ -525,7 +533,87 @@ describe("reversals and denial capture (R2)", () => {
           actorId: a.userId,
         }),
       );
-    await expectDbError(spoof("posted"), /not ready to post/);
-    await expectDbError(spoof("received"), /already has its loaded event/);
+    await expectDbError(spoof("posted"), /already has this history event/);
+    await expectDbError(spoof("received"), /already has this history event/);
+  });
+
+  it("refuses a history row without the signed-in user", async () => {
+    const { claim, ediPayerId } = await floridaClaim(a);
+    const parsed = file(ediPayerId, `SYN-U-${Date.now()}`, [
+      line(claim.claimNumber, { statusCode: "2", paidCents: 50 }),
+    ]);
+    const { id } = await withTenant(a, (tx) => loadRemittance(tx, { ...a, parsed }));
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx
+          .insert(remittanceEvents)
+          .values({ tenantId: a.tenantId, remittanceId: id, event: "void", reason: "No actor" }),
+      ),
+      /needs the signed-in user/,
+    );
+  });
+
+  it("refuses reversals with no matching payment, reversals larger than paid, and $0 reversals", async () => {
+    const { claim, ediPayerId } = await floridaClaim(a);
+    const fresh = await withTenant(a, (tx) => getClaim(tx, claim.id));
+    const post = async (claims: Remittance835["claims"]) => {
+      const parsed = file(ediPayerId, `SYN-X-${Date.now()}-${Math.random()}`, claims);
+      const { id } = await withTenant(a, (tx) => loadRemittance(tx, { ...a, parsed }));
+      return withTenant(a, (tx) => postRemittance(tx, { ...a, remittanceId: id }));
+    };
+    await expect(
+      post([
+        line(claim.claimNumber, {
+          statusCode: "22",
+          chargeCents: -2_000,
+          paidCents: -(fresh!.claim.paidCents + 1),
+        }),
+      ]),
+    ).rejects.toThrow(/more than was paid/);
+    await expect(
+      post([line(claim.claimNumber, { statusCode: "22", chargeCents: -2_000, paidCents: -7 })]),
+    ).rejects.toThrow(/doesn't match an earlier payment/);
+    await expect(
+      withTenant(a, (tx) =>
+        loadRemittance(tx, {
+          ...a,
+          parsed: file(ediPayerId, `SYN-Z-${Date.now()}`, [
+            line(claim.claimNumber, { statusCode: "22", chargeCents: -2_000, paidCents: 0 }),
+            line(claim.claimNumber, { statusCode: "2", paidCents: 10 }),
+          ]),
+        }),
+      ),
+    ).rejects.toThrow(/reverse \$0/);
+    const after = await withTenant(a, (tx) => getClaim(tx, claim.id));
+    expect(after!.claim.paidCents).toBe(fresh!.claim.paidCents);
+  });
+
+  it("returns a fully reversed claim to accepted-by-payer and audits the reversal", async () => {
+    const { claim, ediPayerId } = await floridaClaim(b);
+    const start = await withTenant(b, (tx) => getClaim(tx, claim.id));
+    const pay = file(ediPayerId, `SYN-P-${Date.now()}`, [
+      line(claim.claimNumber, { statusCode: "2", paidCents: 900 }),
+    ]);
+    const { id: payId } = await withTenant(b, (tx) => loadRemittance(tx, { ...b, parsed: pay }));
+    await withTenant(b, (tx) => postRemittance(tx, { ...b, remittanceId: payId }));
+    // Take back everything paid so far: the seeded payment (if any) is reversed separately first.
+    const clock = await withTenant(b, (tx) => getPromptPayClock(tx, claim.id, today));
+    const payments = clock!.history.filter((h) => h.kind === "payment" && !h.voidsResponseId);
+    const reversal = file(
+      ediPayerId,
+      `SYN-RV-${Date.now()}`,
+      payments
+        .map((p) => line(claim.claimNumber, { statusCode: "22", chargeCents: -2_000, paidCents: -p.cents }))
+        .slice(0, 1),
+    );
+    const { id } = await withTenant(b, (tx) => loadRemittance(tx, { ...b, parsed: reversal }));
+    await withTenant(b, (tx) => postRemittance(tx, { ...b, remittanceId: id }));
+    const after = await withTenant(b, (tx) => getClaim(tx, claim.id));
+    expect(after!.claim.paidCents).toBe(start!.claim.paidCents + 900 - payments[0]!.cents);
+    if (after!.claim.paidCents === 0) expect(after!.claim.status).toBe("acknowledged");
+    const audits = await withTenant(b, (tx) =>
+      tx.select().from(auditEvents).where(eq(auditEvents.action, "prompt_pay.response_voided")),
+    );
+    expect(audits.some((e) => (e.metadata as Record<string, string>).remittanceId === id)).toBe(true);
   });
 });

@@ -67,6 +67,12 @@ export async function loadRemittance(
       `No payer in this practice has EDI payer ID ${parsed.payer.ediPayerId}. Add the payer first, then upload again.`,
     );
   }
+  const emptyReversals = parsed.claims.filter((c) => c.statusCode === "22" && c.paidCents === 0);
+  if (emptyReversals.length > 0) {
+    throw new RemittanceError(
+      `Reversals must take back a payment: ${nameSome(emptyReversals.map((c) => c.claimNumber))} reverse $0.`,
+    );
+  }
   const badReversals = parsed.claims.filter(
     (c) => (c.statusCode === "22") !== c.paidCents < 0 && c.paidCents !== 0,
   );
@@ -197,6 +203,7 @@ export async function postRemittance(
     .from(payers)
     .where(eq(payers.id, remittance.payerId))
     .limit(1);
+  if (!payer) throw new RemittanceError("The payer on this remittance is no longer available.");
   let captured = 0;
 
   for (const payment of payments) {
@@ -211,6 +218,11 @@ export async function postRemittance(
       throw new RemittanceError(`Claim ${claim.claimNumber} is ${claim.status} and can't take a payment.`);
     }
     const paidTotal = claim.paidCents + payment.paidCents;
+    if (paidTotal < 0) {
+      throw new RemittanceError(
+        `Claim ${claim.claimNumber}: the reversal takes back more than was paid. Nothing was posted.`,
+      );
+    }
     // A reversal takes the claim back to "accepted" until the payer's corrected claim posts.
     const status =
       payment.statusCode === "22"
@@ -269,10 +281,11 @@ export async function postRemittance(
     });
     captured += await captureDenials(tx, {
       tenantId: input.tenantId,
+      userId: input.userId,
       claimId: claim.id,
       remittanceId: remittance.id,
       noticeDate: remittance.paymentDate,
-      payer: payer!,
+      payer,
       adjustments: payment.adjustments,
       rarcs: payment.rarcs,
     });
@@ -368,17 +381,34 @@ async function recordReversal(
     .orderBy(desc(promptPayResponses.responseDate), desc(promptPayResponses.createdAt));
   const voided = new Set(responses.flatMap((r) => (r.voidsResponseId ? [r.voidsResponseId] : [])));
   const open = responses.filter((r) => r.kind === "payment" && !r.voidsResponseId && !voided.has(r.id));
-  const target = open.find((r) => r.cents === input.reversedCents) ?? open[0];
-  if (!target) return;
-  await tx.insert(promptPayResponses).values({
+  const target = open.find((r) => r.cents === input.reversedCents);
+  if (!target) {
+    // Don't guess which payment is being taken back: a person reconciles it (nothing is posted).
+    throw new RemittanceError(
+      "A reversal on this remittance doesn't match an earlier payment of the same amount. Post it by hand after checking with the payer.",
+    );
+  }
+  const [row] = await tx
+    .insert(promptPayResponses)
+    .values({
+      tenantId: input.tenantId,
+      claimId: input.claimId,
+      kind: "payment",
+      responseDate: target.responseDate,
+      note: `Reversed by remittance ${input.remittance.traceNumber}`,
+      voidsResponseId: target.id,
+      remittanceId: input.remittance.id,
+      recordedBy: input.userId,
+    })
+    .returning({ id: promptPayResponses.id });
+  await audit(tx, {
+    action: "prompt_pay.response_voided",
+    actorUserId: input.userId,
     tenantId: input.tenantId,
-    claimId: input.claimId,
-    kind: "payment",
-    responseDate: target.responseDate,
-    note: `Reversed by remittance ${input.remittance.traceNumber}`,
-    voidsResponseId: target.id,
-    remittanceId: input.remittance.id,
-    recordedBy: input.userId,
+    entityType: "prompt_pay_response",
+    entityId: row!.id,
+    reason: "remittance_reversal",
+    metadata: { claimId: input.claimId, voidsResponseId: target.id, remittanceId: input.remittance.id },
   });
 }
 
@@ -390,6 +420,7 @@ async function captureDenials(
   tx: TenantTx,
   input: {
     tenantId: string;
+    userId: string;
     claimId: string;
     remittanceId: string;
     noticeDate: string;
@@ -398,16 +429,18 @@ async function captureDenials(
     rarcs: string[];
   },
 ): Promise<number> {
+  // No regime (unverified payer) or no contract window: no deadline is invented (shown as not set).
+  const deadline = input.payer.regime
+    ? appealDeadline({
+        regime: input.payer.regime,
+        noticeDate: input.noticeDate,
+        payerAppealWindowDays: input.payer.appealWindowDays,
+      })
+    : null;
+  // RARCs on a claim-level CLP loop apply to the whole claim, so each captured denial carries them.
   const rows = input.adjustments
     .filter((a) => !isExpected(a) && a.cents > 0)
     .map((a) => {
-      const deadline = input.payer.regime
-        ? appealDeadline({
-            regime: input.payer.regime,
-            noticeDate: input.noticeDate,
-            payerAppealWindowDays: input.payer.appealWindowDays,
-          })
-        : null;
       return {
         tenantId: input.tenantId,
         claimId: input.claimId,
@@ -422,6 +455,17 @@ async function captureDenials(
         remittanceId: input.remittanceId,
       };
     });
-  if (rows.length > 0) await tx.insert(denials).values(rows);
-  return rows.length;
+  if (rows.length === 0) return 0;
+  const created = await tx.insert(denials).values(rows).returning({ id: denials.id });
+  for (const denial of created) {
+    await audit(tx, {
+      action: "denial.captured",
+      actorUserId: input.userId,
+      tenantId: input.tenantId,
+      entityType: "denial",
+      entityId: denial.id,
+      metadata: { claimId: input.claimId, remittanceId: input.remittanceId },
+    });
+  }
+  return created.length;
 }

@@ -121,7 +121,8 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                   className="font-medium text-link hover:underline"
                 >
                   captured from remittance
-                </Link>
+                </Link>{" "}
+                <Badge tone="warning">Category unverified</Badge>
               </>
             )}
           </p>

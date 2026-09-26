@@ -74,6 +74,8 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
   { format: "remittance % changed status without a history row", args: ["uuid"] },
   { format: "remittance % already has its loaded event", args: ["uuid"] },
   { format: "remittance % is not ready to post", args: ["uuid"] },
+  { format: "remittance history needs the signed-in user", args: [] },
+  { format: "remittance % already has this history event", args: ["uuid"] },
   { format: "a correction must point at an original response of the same claim", args: [] },
   { format: "claim_versions.changed_by must be the current user", args: [] },
   { format: "claims.created_at cannot change", args: [] },

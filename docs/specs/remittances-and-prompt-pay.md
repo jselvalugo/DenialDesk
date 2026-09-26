@@ -60,19 +60,24 @@ on late payments, with an itemized worksheet per claim. Every record keeps its f
 
 ### Reversals and denial capture (R2)
 - [x] Files with reversals (CLP02 = 22, negative paid) load. Posting a reversal lowers the
-      claim's paid total with a new claim version and marks the matching earlier payment on the
-      prompt-pay clock as recorded in error ("Reversed by remittance <trace>"); nothing is deleted.
-      A claim reversed to $0 goes back to "Accepted by payer" until the corrected claim posts.
+      claim's paid total with a new claim version and marks the earlier payment of the same
+      amount on the prompt-pay clock as recorded in error ("Reversed by remittance <trace>");
+      nothing is deleted. A claim reversed to $0 goes back to "Accepted by payer". A reversal
+      with no matching payment, larger than the amount paid, or of $0 is refused (a person
+      reconciles it).
 - [x] Posting creates one denial per claim-level adjustment the practice didn't expect (any group
-      other than PR, except CO-45), with group, CARC, RARCs, amount, notice date = payment date,
-      and the appeal deadline from the rules engine / payer contract. Category comes from
-      `src/domain/carc.ts` (DenialDesk's own ⚠️ VERIFY mapping, OA-021); unknown CARCs are "Other".
-      Each captured denial links to its remittance, and the denial page shows it.
-- [x] Post refuses a remittance that doesn't balance (server-side, not only the button).
-- [x] The database refuses a posted/void history row unless the remittance is ready to post, and
-      refuses a blank actor when a user is signed in.
-- [x] Tests: reversal with and without a matching payment; denial capture (CO-97 captured,
-      CO-45 and PR not); unbalanced post refused; specialist can't void; spoofed event refused.
+      other than PR, except CO-45), with group, CARC, claim RARCs, amount, notice date = payment
+      date, and the appeal deadline from the rules engine / payer contract (none when the payer's
+      regime is unverified). Category comes from `src/domain/carc.ts` (⚠️ VERIFY, OA-021; shown as
+      "Category unverified"); unknown CARCs are "Other". Each captured denial links to its
+      remittance and is audited (`denial.captured`); each reversal is audited.
+- [x] Post re-checks the balance on the server (defensive: the parser already refuses
+      unbalanced files, so no stored remittance can fail it today).
+- [x] The database refuses a history row without the signed-in user (except seeded remittances),
+      a repeated event, and a second posted/void event.
+- [x] Tests: reversal matching, no match, over-reversal, $0 reversal, to-$0 status; denial
+      capture (CO-97 captured, CO-45 and PR not); specialist can't void; spoofed and blank-actor
+      events refused.
 
 ### Prompt pay (PP1)
 - [x] `/prompt-pay` table of claims with a received date whose payer regime is under Florida

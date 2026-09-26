@@ -227,7 +227,7 @@ export default async function RemittancePage({ params }: { params: Promise<{ id:
           {detail.captured.length > 0 && (
             <Panel
               title="Denials captured"
-              description="Added to the denial queue when this remittance was posted."
+              description="Added to the denial queue when this remittance was posted. Categories come from DenialDesk's own code mapping, pending review."
             >
               <ul className="flex flex-col gap-3">
                 {detail.captured.map((d) => (
