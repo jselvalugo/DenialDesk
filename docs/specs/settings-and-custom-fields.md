@@ -74,8 +74,8 @@ None.
 - Resolved 2026-09-26 (owner): S2 (values on records) is part of the Phase 1 MVP.
 - Resolved 2026-09-26 (owner): administrators only create and change fields; role permissions
   are intentionally unchanged.
-- Open (human): a non-sensitive free-text field holding an identifier is encrypted at rest but shown
-  unmasked (threat model I5). Accept, or mask all free text?
+- Resolved 2026-09-26 (owner): masking follows the sensitivity category set on the field; non-sensitive
+  free text is shown unmasked (threat model I5 accepted). ADR 0007 accepted.
 
 ## Implementation plan (S2)
 

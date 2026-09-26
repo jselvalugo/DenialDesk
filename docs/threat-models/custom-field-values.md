@@ -29,7 +29,7 @@ value -> audit -> value returned for that view only (client state, never cached 
 | I2 | Disclosure of sensitive values in the UI | Fields with `sensitivity` render masked (fixed-width dots, no length hint) with "Open"; reason required (`appeal`, `eligibility`, `payer_call`, `other`); value held in component state for that view only; never pre-rendered in HTML/RSC payload | Shoulder surfing after opening: accepted |
 | I3 | Disclosure via lists, search, exports, snapshots | List/search/export queries never join `custom_field_values` (lint-level test asserts); only detail pages load values; sensitive values not decrypted on load at all; test snapshots use synthetic values and never sensitive ones | Future features must keep this; noted in spec "Out of scope" |
 | I4 | Disclosure in logs, URLs, audit, errors | Values never in audit metadata (keys/IDs only), URLs, or thrown messages; validation errors name the field label, not the value; DB errors sanitized (ADR 0006) | Low |
-| I5 | Admin labels invite PHI ("Patient's HIV status") or free text is used for identifiers | Form warning (S1); values encrypted regardless of label; sensitivity category available | Users may still put a member ID in a non-sensitive text field: encrypted at rest but shown unmasked. Accepted; human to confirm |
+| I5 | Admin labels invite PHI ("Patient's HIV status") or free text is used for identifiers | Form warning (S1); values encrypted regardless of label; sensitivity category available | Users may still put a member ID in a non-sensitive text field: encrypted at rest but shown unmasked. Accepted by owner 2026-09-26 |
 | I6 | Field marked non-sensitive later exposes previously protected values | Changing/removing `sensitivity` already audited with both values (S1); only administrators | Accepted: deliberate, audited admin act |
 | I7 | Patient-level sensitivity tags (e.g., Part 2 record) vs. non-sensitive custom fields | Values on a patient with any sensitivity tag render masked as well, using the same reveal | Low |
 | D1 | DoS: many values or huge payloads | Max 50 active fields per type (S1); value size caps; body size limit on server actions | Low |
@@ -38,4 +38,3 @@ value -> audit -> value returned for that view only (client state, never cached 
 
 ## Blocking before real data
 - Key management in Azure Key Vault and rotation runbook (shared with member IDs).
-- Human confirmation of I5 (free-text identifiers shown unmasked when the field is not sensitive).

@@ -1,6 +1,6 @@
 # ADR 0007: Custom field values are stored encrypted, one row per record and field
 
-Status: Proposed (2026-09-26, architect; spec `docs/specs/settings-and-custom-fields.md` S2)
+Status: Accepted (2026-09-26, owner; proposed by architect; spec `docs/specs/settings-and-custom-fields.md` S2)
 
 ## Context
 S2 stores administrator-defined values on patient, claim, denial, and payer records. Values on
