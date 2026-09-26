@@ -21,7 +21,13 @@ test.describe("patients", () => {
     await form.getByLabel("Sex").selectOption("F");
     await form.getByLabel("City").fill("Tampa");
     await form.getByLabel("ZIP").fill("33606");
-    await form.getByLabel("Payer").selectOption({ index: 1 });
+    // The payer is a searchable text field: text that matches no payer blocks the save instead of
+    // silently becoming self-pay; a listed name resolves to that payer.
+    await form.getByLabel("Payer").fill("No Such Insurer");
+    await expect(form.getByText(/No payer matches/)).toBeVisible();
+    await expect(form.getByRole("button", { name: "Register patient" })).toBeDisabled();
+    await form.getByLabel("Payer").fill("Gulf Coast Mutual");
+    await expect(form.getByText(/No payer matches/)).toBeHidden();
     // A real-looking member ID is refused in a synthetic-only environment; typed values survive.
     await form.getByLabel("Member ID").fill("W123456789");
     await form.getByLabel(/I confirm this record is synthetic/).check();

@@ -138,10 +138,15 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
 
 ## Deploy preview fails with "migration … has been modified after being applied"
 
-A migration file changed after an earlier push applied it to the PR's branch database. Code is
-not at risk. Either delete that database branch in Netlify (Project → Database) and retry the
-deploy, or push the same commits under a new branch name and open a new PR, which gets a fresh
-branch database. Then never edit that migration again; add a new one.
+Two causes, and code is not at risk in either:
+
+1. **Number collision (most likely).** The base branch already has a migration with the same
+   number, applied to the main preview database the branch database starts from. Merge the base
+   branch, move the PR's migration to the next free number (`pnpm db:generate`, then
+   `pnpm netlify:migrations`), and push.
+2. **Edited after being applied.** A migration changed after an earlier push applied it to this
+   PR's branch database. Delete that database branch in Netlify (Project → Database) and retry,
+   or push under a new branch name. Then never edit that migration again; add a new one.
 
 ## Checks after each deploy
 - `https://denialdesk.netlify.app/api/health` returns `{"status":"ok","appEnv":"preview","db":"up"}`.

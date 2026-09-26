@@ -148,7 +148,7 @@ test.describe("signed in", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
   test("the tab bar names the current module and opens the switcher from it", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/overview");
     const button = page.getByRole("button", { name: "Denials, switch module", exact: true });
     await expect(button).toHaveAttribute("aria-haspopup", "dialog");
     await button.click();
@@ -159,5 +159,49 @@ test.describe("signed in", () => {
     await expect(
       page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Claims" }),
     ).toHaveAttribute("aria-current", "page");
+  });
+
+  test("the logo opens the home page, and /welcome redirects there", async ({ page }) => {
+    await page.goto("/welcome");
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+    await page.goto("/claims");
+    await page.getByRole("link", { name: "DenialDesk home" }).click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+    await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
+    for (const name of [
+      "How DenialDesk works",
+      "From patient record to claim and denial",
+      "Your modules",
+      "Safeguards",
+    ]) {
+      await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+    }
+    // Shipped steps link to their page; planned steps are labelled, never linked.
+    for (const step of [1, 2, 3]) {
+      await expect(page.locator(`[data-step="${step}"]`).getByRole("link")).toHaveCount(1);
+    }
+    for (const step of [4, 5]) {
+      const item = page.locator(`[data-step="${step}"]`);
+      await expect(item.getByRole("link")).toHaveCount(0);
+      await expect(item.getByText("Planned")).toBeVisible();
+    }
+    for (const step of [1, 4]) {
+      await expect(page.locator(`[data-record-step="${step}"]`).getByRole("link")).toHaveAttribute(
+        "href",
+        "/patients",
+      );
+    }
+    for (const step of [2, 3]) {
+      const item = page.locator(`[data-record-step="${step}"]`);
+      await expect(item.getByRole("link")).toHaveCount(0);
+      await expect(item.getByText("Planned", { exact: true })).toBeVisible();
+    }
+    for (const title of [
+      "Sign-in needs a second factor",
+      "Identifiers are encrypted",
+      "Business Associate Agreements on file",
+    ]) {
+      await expect(page.getByText(title, { exact: true })).toBeVisible();
+    }
   });
 });

@@ -4,7 +4,7 @@ test.describe("denial work", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
   test("overview shows real totals and links to the queue", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/overview");
     const totals = page.getByRole("region", { name: "Open denial totals" });
     await expect(totals.getByText("Open denials")).toBeVisible();
     await expect(page.getByRole("table", { name: "Next appeal deadlines" }).getByRole("row")).not.toHaveCount(

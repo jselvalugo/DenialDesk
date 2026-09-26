@@ -14,7 +14,7 @@ import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
 import { CATEGORY_LABELS } from "@/domain/carc";
 import { CLAIM_STATUSES } from "@/domain/claims/status";
-import { DENIAL_STATUSES, REGIME_LABELS } from "@/domain/denial-status";
+import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { getPatientChart } from "@/domain/patients/queries";
 import { patientName, SENSITIVITY_TAGS, SEX_LABELS, type SensitivityTag } from "@/domain/patients/record";
 import { audit } from "@/lib/audit";
@@ -249,7 +249,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
               <dl className="flex flex-col gap-3">
                 <Field label="Payer">
                   {payer.name}
-                  <span className="block text-label text-muted">{REGIME_LABELS[payer.regime]}</span>
+                  <span className="block text-label text-muted">{regimeLabel(payer.regime)}</span>
                 </Field>
                 <Field label="Member ID">
                   {!patient.memberIdLast4 ? (

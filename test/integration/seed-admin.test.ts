@@ -54,9 +54,9 @@ describe("seedDemoPractice", () => {
     const events = await systemDb()
       .select()
       .from(auditEvents)
-      .where(
-        sql`${auditEvents.action} = 'system.admin_repaired' and ${auditEvents.entityId} = ${created.id}`,
-      );
+      .where(sql`${auditEvents.action} = 'system.admin_repaired' and ${auditEvents.entityId} = ${created.id}`)
+      // bigserial id: insertion order. Without it Postgres may return the rows in any order.
+      .orderBy(auditEvents.id);
     expect(events.map((e) => e.metadata)).toEqual([
       { resetMfa: false, created: true },
       { resetMfa: false, created: false },

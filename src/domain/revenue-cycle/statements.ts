@@ -125,7 +125,8 @@ export function kpis(months: MonthActivity[], openArCents: number): Kpis | null 
 }
 
 export interface DenialsByRegime {
-  regime: string;
+  /** Null when the payer is unverified (spec: payer-catalog P1); reported as "Unmapped". */
+  regime: string | null;
   count: number;
   deniedCents: number;
 }
@@ -150,7 +151,7 @@ export function denialsByClass(
   }
   const byClass = new Map<string, ClassDenials>();
   for (const d of denials) {
-    const payerClass = owner.get(d.regime) ?? "Unmapped";
+    const payerClass = (d.regime ? owner.get(d.regime) : undefined) ?? "Unmapped";
     const row = byClass.get(payerClass) ?? { payerClass, count: 0, deniedCents: 0 };
     row.count += d.count;
     row.deniedCents += d.deniedCents;

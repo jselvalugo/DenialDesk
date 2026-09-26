@@ -6,6 +6,9 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
+- Welcome page (`specs/welcome-page.md`) now explains how the patient record feeds claims and
+  denials (4 steps; charge import and 837P/835 marked Planned) and lists more safeguards (MFA,
+  field encryption, BAA on file). Wording passed `compliance-checker`; owner sign-off on copy pending.
 - Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
   section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
   planned; Design system in pre-production). Administrators define custom fields on patients,
@@ -33,6 +36,16 @@ _Last updated: 2026-09-26_
   calculation/display bugs (comma charges, `-$0.00`, "filed on time" with no deadline, prompt-pay
   "Met" on any notice), missing catalog rules, and a page-by-page record-model gap list with a
   prioritized order of work (P0–P4). Next session should start with its P0 list.
+- Payer catalog P1 (`specs/payer-catalog.md`): `payers.edi_payer_id`/`regime` are now nullable plus
+  a `payers.source` column; a payer missing either is "unverified". Starter Florida insurer catalog
+  by name only (`src/domain/payers/florida-catalog.ts`, no payer IDs/regimes) loaded per-tenant,
+  idempotently, by `ensureCatalogPayers` (`src/domain/payers/catalog.ts`), called from the seed and
+  from `seedRevenueCycleDefaults`/practice setup. Primary Insurance's Payer field is a searchable
+  input+datalist (`PatientForm.tsx`) labelling unverified payers. `regimeLabel()`
+  (`domain/denial-status.ts`) and `filingStatus()` (`domain/claims/status.ts`, new
+  `"payer_unverified"` state) handle a null regime everywhere it's shown; unverified payers get no
+  computed deadline. `assertPayerVerified` (`domain/payers/verification.ts`) guards future 837P
+  submission. Next: P2 clearinghouse payer IDs + admin regime verification + payer admin screen.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). A platform operator
   console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
@@ -74,6 +87,7 @@ _Last updated: 2026-09-26_
 |---|---|---|
 | 2026-09-26 | MVP = Florida claims + denial platform (REQUIREMENTS §12 Phase 1) | `PRODUCT_BRIEF.md`, `ROADMAP.md` |
 | 2026-09-26 | 8-agent roster instead of 11 | `AGENT_WORKFLOW.md` |
+| 2026-09-26 | App opens on the welcome page at `/` (sign-in and logo land there); Denials overview moved to `/overview` | `specs/welcome-page.md` |
 | 2026-09-26 | Stack: TypeScript, Next.js, PostgreSQL + Drizzle, Vitest, Playwright | ADR 0001 |
 | 2026-09-26 | Production on Azure, U.S. only; primary likely East US 2 (confirm at cutover) | ADR 0002 |
 | 2026-09-26 | Pre-production on Netlify, synthetic data only | ADR 0003 |
@@ -194,9 +208,10 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   C0's column drops were a one-time pre-production change on synthetic data.
 - Never edit, rename, or renumber a migration once pushed: Netlify deploy previews apply each
   branch's migrations to a branch database, track them by number, and refuse any change ("modified
-  after being applied"). Add a new migration instead. Even a trailing-newline change counts. If a
-  PR's branch database is already broken this way, push the same commits under a new branch name
-  and open a new PR (fresh branch database); nothing in git is lost (PR #49 → storage PR, 2026-09-26).
+  after being applied"). Add a new migration instead. The same error appears when two
+  branches pick the same number: branch databases start from the main preview database, so a
+  base migration 0025 blocks a PR's own 0025. Before pushing a migration, merge the base branch
+  and take the next free number (custom field values hit this on 2026-09-26: #49, then #52).
 - Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
 - Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):

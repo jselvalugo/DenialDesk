@@ -166,11 +166,15 @@ export const payers = pgTable(
     id: id(),
     tenantId: tenantId(),
     name: text("name").notNull(),
-    ediPayerId: text("edi_payer_id").notNull(),
-    regime: regimeEnum("regime").notNull(),
+    /** Null until the clearinghouse payer list confirms it (P2). Payer is "unverified" until then. */
+    ediPayerId: text("edi_payer_id"),
+    /** Null until an admin verifies it (P2). Never guessed — no legal clock without a verified regime. */
+    regime: regimeEnum("regime"),
     /** Appeal window from the payer contract (not statute). Null = not configured. */
     appealWindowDays: integer("appeal_window_days"),
     appealWindowSource: text("appeal_window_source"),
+    /** Where a catalog name came from (e.g. "FL OIR licensee list — ⚠️ VERIFY"). Null for practice-entered payers. */
+    source: text("source"),
     createdAt: createdAt(),
   },
   // Target of tenant-scoped foreign keys (FKs bypass RLS, so the tenant is part of the key).
