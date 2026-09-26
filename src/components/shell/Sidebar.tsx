@@ -26,7 +26,7 @@ function NavEntry({ item, active }: { item: NavItem; active: boolean }) {
       aria-current={active ? "page" : undefined}
       className={cn(
         base,
-        "font-medium focus-visible:outline-sidebar-accent",
+        "font-medium",
         active
           ? "bg-sidebar-active text-white shadow-[inset_3px_0_0_var(--dd-sidebar-accent)]"
           : "text-sidebar-fg hover:bg-sidebar-active/60 hover:text-white",
@@ -49,7 +49,7 @@ export function Sidebar({
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-fg">
+    <aside data-chrome="dark" className="flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-fg">
       {/* The logo sits on white so its colors stay exactly as designed. */}
       <div className="flex h-14 items-center border-r border-b border-border bg-surface px-5">
         <Link href="/" aria-label="DenialDesk home">

@@ -18,7 +18,7 @@
   --dd-surface: #ffffff;
   --dd-surface-muted: #f1f5f9;
   --dd-border: #e2e8f0;
-  --dd-border-strong: #8492a6;
+  --dd-border-strong: #768599;
   --dd-text: #0f172a;
   --dd-text-muted: #475569;
   --dd-text-subtle: #5b6b82;
@@ -51,8 +51,8 @@
   --dd-chart-1: #1f6b75;
   --dd-chart-2: #1a2c4e;
   --dd-chart-3: #2e75b6;
-  --dd-chart-4: #d9a441;
-  --dd-chart-5: #e8844a;
+  --dd-chart-4: #b7791f;
+  --dd-chart-5: #c05621;
   --dd-chart-danger: #a32d2d;
 }
 
@@ -143,6 +143,10 @@
   :focus-visible {
     outline: 2px solid var(--dd-blue);
     outline-offset: 2px;
+  }
+  /* Navy chrome (sidebar, operator header): the blue ring is < 3:1 on navy, so use light teal. */
+  [data-chrome="dark"] :focus-visible {
+    outline-color: var(--dd-sidebar-accent);
   }
   @media (prefers-reduced-motion: reduce) {
     *,

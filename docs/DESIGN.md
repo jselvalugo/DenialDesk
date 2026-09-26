@@ -64,13 +64,14 @@ Neutrals are cool slate.
 | `surface` | `#FFFFFF` | Panels, tables, inputs |
 | `surface-muted` | `#F1F5F9` | Table header, toolbars, read-only fields |
 | `border` | `#E2E8F0` | Default 1px borders and dividers |
-| `border-strong` | `#8492A6` | Input and checkbox borders (3.2:1 on white, WCAG 1.4.11) |
+| `border-strong` | `#768599` | Input and checkbox borders (3.8:1 on white, 3.4:1 on `surface-muted`, WCAG 1.4.11) |
 | `text` | `#0F172A` | Primary text |
 | `text-muted` | `#475569` | Secondary text, labels (AA on white and canvas) |
 | `text-subtle` | `#5B6B82` | Placeholder, metadata (≥ 4.5:1 on white and muted surfaces) |
 
 Chart series: `chart-1` teal `#1F6B75`, `chart-2` navy `#1A2C4E`, `chart-3` blue `#2E75B6`,
-`chart-4` amber `#D9A441`, `chart-5` orange `#E8844A`, `chart-danger` `#A32D2D`. Charts always
+`chart-4` amber `#B7791F`, `chart-5` orange `#C05621`, `chart-danger` `#A32D2D` (every series ≥ 3:1
+on white). Charts always
 have a text or table equivalent; color never carries meaning alone.
 
 Status (each has `-fg` text, `-bg` tint, `-border`):
@@ -109,7 +110,8 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 - 4px grid. Common steps: 4, 8, 12, 16, 24, 32, 48.
 - Radius: 4px controls, 5px panels and dialogs (≈ 0.3rem). Nothing larger.
 - Borders do the work. Shadows only for floating layers: menus/popovers `shadow-sm`, dialogs `shadow-lg`.
-- Focus: 2px `focus` ring with 2px offset (`sidebar-accent` inside the sidebar), always visible on keyboard focus.
+- Focus: 2px `focus` ring with 2px offset, always visible on keyboard focus. Inside navy chrome
+  (mark the container `data-chrome="dark"`) the ring is `sidebar-accent` (≥ 5.5:1 on navy).
 
 ## 8. Layout
 - **App shell:** navy left sidebar 256px with icons (logo header on white), top bar 56px, content on `canvas`.
