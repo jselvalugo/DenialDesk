@@ -184,12 +184,22 @@ test.describe("signed in", () => {
       await expect(item.getByText("Planned")).toBeVisible();
     }
     for (const step of [1, 4]) {
-      await expect(page.locator(`[data-record-step="${step}"]`).getByRole("link")).toHaveCount(1);
+      await expect(page.locator(`[data-record-step="${step}"]`).getByRole("link")).toHaveAttribute(
+        "href",
+        "/patients",
+      );
     }
     for (const step of [2, 3]) {
       const item = page.locator(`[data-record-step="${step}"]`);
       await expect(item.getByRole("link")).toHaveCount(0);
-      await expect(item.getByText("Planned")).toBeVisible();
+      await expect(item.getByText("Planned", { exact: true })).toBeVisible();
+    }
+    for (const title of [
+      "Sign-in needs a second factor",
+      "Identifiers are encrypted",
+      "Business Associate Agreements on file",
+    ]) {
+      await expect(page.getByText(title, { exact: true })).toBeVisible();
     }
   });
 });
