@@ -7,7 +7,16 @@ import { TextField } from "@/components/ui/TextField";
 import { recordAgreement, type RecordAgreementState } from "../../actions";
 
 /** Records a signed BAA for one practice; a new one supersedes the current active agreement. */
-export function RecordAgreementForm({ tenantId, hasActive }: { tenantId: string; hasActive: boolean }) {
+export function RecordAgreementForm({
+  tenantId,
+  hasActive,
+  syntheticOnly,
+}: {
+  tenantId: string;
+  hasActive: boolean;
+  /** Pre-production accepts synthetic test documents only (ADR 0003). */
+  syntheticOnly: boolean;
+}) {
   const [state, action] = useActionState<RecordAgreementState, FormData>(recordAgreement, {});
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
@@ -25,7 +34,7 @@ export function RecordAgreementForm({ tenantId, hasActive }: { tenantId: string;
           {state.recorded.supersededPrevious ? "; the previous agreement is kept as superseded." : "."}
         </p>
       )}
-      <form ref={formRef} action={action} className="flex flex-col gap-4" noValidate>
+      <form ref={formRef} action={action} className="flex flex-col gap-4">
         <input type="hidden" name="tenantId" value={tenantId} />
         <FormAlert message={state.error} />
         {hasActive && (
@@ -83,6 +92,15 @@ export function RecordAgreementForm({ tenantId, hasActive }: { tenantId: string;
           />
           <TextField label="Note" name="note" maxLength={500} hint="Optional. No patient information." />
         </div>
+        {syntheticOnly && (
+          <label className="flex items-start gap-2 text-body text-text">
+            <input type="checkbox" name="syntheticAttestation" required className="mt-0.5 size-4" />
+            <span>
+              This is a synthetic test document, not a real agreement. Its file name starts with{" "}
+              <code>SYN-</code>; real agreements are rejected in this environment.
+            </span>
+          </label>
+        )}
         <div>
           <SubmitButton variant="primary" pendingLabel="Recording…">
             Record agreement

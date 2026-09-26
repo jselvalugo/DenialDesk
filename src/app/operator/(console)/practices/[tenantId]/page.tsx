@@ -11,6 +11,7 @@ import { Panel } from "@/components/ui/Panel";
 import { agreementStatus, listAgreements } from "@/domain/platform/agreements";
 import { getPractice } from "@/domain/platform/practices";
 import { auditSystem } from "@/lib/audit";
+import { syntheticDataOnly } from "@/lib/env";
 import { AgreementStatusBadge } from "../../AgreementStatusBadge";
 import { RecordAgreementForm } from "./RecordAgreementForm";
 
@@ -51,7 +52,7 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
   const customer = practice.kind === "customer";
   const agreements = customer ? await listAgreements(tenantId) : [];
   const active = agreements.find((a) => a.status === "active") ?? null;
-  const status = agreementStatus(active, todayIn());
+  const status = agreementStatus(agreements, todayIn());
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
@@ -157,7 +158,11 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
             description="Stored with the practice for the retention period; agreements are never edited or deleted."
           >
             <div className="max-w-3xl">
-              <RecordAgreementForm tenantId={tenantId} hasActive={active !== null} />
+              <RecordAgreementForm
+                tenantId={tenantId}
+                hasActive={active !== null}
+                syntheticOnly={syntheticDataOnly()}
+              />
             </div>
           </Panel>
         </>

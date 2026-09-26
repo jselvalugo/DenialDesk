@@ -22,17 +22,20 @@ CREATE TABLE "tenant_agreements" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "tenant_agreements" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "tenant_agreements" ADD CONSTRAINT "tenant_agreements_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tenant_agreements" ADD CONSTRAINT "tenant_agreements_recorded_by_users_id_fk" FOREIGN KEY ("recorded_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 -- Deferred so a renewal can mark the previous agreement superseded (pointing at the new row) and
 -- insert the new active row in one transaction under the one-active-per-practice index.
 ALTER TABLE "tenant_agreements" ADD CONSTRAINT "tenant_agreements_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."tenant_agreements"("id") ON DELETE no action ON UPDATE no action DEFERRABLE INITIALLY DEFERRED;--> statement-breakpoint
 CREATE INDEX "tenant_agreements_tenant_idx" ON "tenant_agreements" USING btree ("tenant_id","created_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "tenant_agreements_one_active" ON "tenant_agreements" USING btree ("tenant_id","kind") WHERE status = 'active';--> statement-breakpoint
+CREATE UNIQUE INDEX "tenant_agreements_one_active" ON "tenant_agreements" USING btree ("tenant_id","kind") WHERE status = 'active';
+--> statement-breakpoint
 
 -- Agreements are a platform record (docs/specs/practice-agreements.md): Confidential, never PHI.
--- The app role gets no privileges, so practice sessions can't reach them even without RLS.
--- Recorded fields never change and rows are never deleted (retention, REQUIREMENTS §9.1); the
+-- The app role gets no privileges, and row-level security is enabled with no policies, so even a
+-- stray GRANT would show practice sessions nothing.
+-- Recorded fields never change and rows are never deleted (retention, REQUIREMENTS §9.2); the
 -- only permitted change is the status transition when a newer agreement supersedes this one.
 ALTER TABLE "tenant_agreements" ADD CONSTRAINT "tenant_agreements_dates_valid"
   CHECK ("expires_on" IS NULL OR "expires_on" >= "effective_date");--> statement-breakpoint

@@ -4,13 +4,18 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { passwordProblem } from "@/auth/password";
 import { requireOperator } from "@/auth/operator";
-import { checkAgreementFile, recordAgreement as record } from "@/domain/platform/agreements";
+import {
+  checkAgreementFile,
+  recordAgreement as record,
+  TEMPLATE_VERSION_PATTERN,
+} from "@/domain/platform/agreements";
 import {
   createPractice as create,
   PracticeError,
   resetDemoPractice as reset,
   setPracticeSuspended,
 } from "@/domain/platform/practices";
+import { syntheticDataOnly } from "@/lib/env";
 
 export interface CreateState {
   error?: string;
@@ -95,7 +100,7 @@ const agreementSchema = z.object({
   signedOn: z.iso.date(),
   practiceSigner: z.string().trim().min(2).max(160),
   ourSigner: z.string().trim().min(2).max(160),
-  templateVersion: z.string().trim().min(1).max(40),
+  templateVersion: z.string().trim().regex(TEMPLATE_VERSION_PATTERN),
   note: optionalText(500),
 });
 
@@ -116,17 +121,34 @@ export async function recordAgreement(
     note: formData.get("note") ?? "",
   });
   if (!parsed.success) {
-    return { error: "Enter the effective and signed dates, both signers, and the template version." };
+    return {
+      error:
+        "Enter the effective and signed dates, both signers, and the template version (letters, digits, dots, dashes).",
+    };
   }
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "Choose the signed agreement as a PDF file." };
+  const syntheticOnly = syntheticDataOnly();
+  const attestedSynthetic = formData.get("syntheticAttestation") === "on";
   const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
-  const check = checkAgreementFile({ name: file.name, size: file.size, head });
+  const check = checkAgreementFile({
+    name: file.name,
+    size: file.size,
+    head,
+    syntheticOnly,
+    attestedSynthetic,
+  });
   if (!check.ok) return { error: check.error };
   try {
     const { supersededId } = await record(
-      { ...parsed.data, filename: file.name, content: Buffer.from(await file.arrayBuffer()) },
+      {
+        ...parsed.data,
+        filename: file.name,
+        content: Buffer.from(await file.arrayBuffer()),
+        attestedSynthetic,
+      },
       operator,
+      { syntheticOnly },
     );
     revalidatePath("/operator");
     revalidatePath(`/operator/practices/${parsed.data.tenantId}`);

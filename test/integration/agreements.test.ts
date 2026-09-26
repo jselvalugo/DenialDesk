@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { todayIn } from "@rules/calendar";
+import { addCalendarDays, todayIn } from "@rules/calendar";
 import { ensureDemoPractice } from "@/auth/demo";
 import type { OperatorContext } from "@/auth/operator";
 import { setUpOperatorAccount } from "@/auth/operator-account";
@@ -9,10 +9,11 @@ import { closeDatabase, systemDb } from "@/db/client";
 import { auditEvents, tenantAgreements, tenants } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import {
-  activeAgreementsByTenant,
+  agreementDatesByTenant,
   listAgreements,
   openAgreementFile,
-  recordAgreement,
+  recordAgreement as recordWithOptions,
+  type AgreementInput,
 } from "@/domain/platform/agreements";
 import { createPractice, listPractices, PracticeError } from "@/domain/platform/practices";
 import { createTestTenant, expectDbError } from "./helpers";
@@ -23,7 +24,20 @@ const pdf = (label: string) => Buffer.from(`%PDF-1.7\n% synthetic ${label}\n%%EO
 let operator: OperatorContext;
 let practice: { tenantId: string; userId: string };
 
-const input = (tenantId: string, overrides: Partial<Parameters<typeof recordAgreement>[0]> = {}) => ({
+// Real-environment rules by default; the synthetic-only guard has its own test.
+const recordAgreement = (
+  agreement: AgreementInput,
+  by: OperatorContext,
+  options: { syntheticOnly: boolean } = { syntheticOnly: false },
+) => recordWithOptions(agreement, by, options);
+
+/** The input's column values (drops the attestation flag, which isn't stored). */
+function columnsOf({ attestedSynthetic, ...columns }: AgreementInput) {
+  void attestedSynthetic;
+  return columns;
+}
+
+const input = (tenantId: string, overrides: Partial<AgreementInput> = {}): AgreementInput => ({
   tenantId,
   effectiveDate: "2026-09-01",
   expiresOn: "2027-08-31",
@@ -34,6 +48,7 @@ const input = (tenantId: string, overrides: Partial<Parameters<typeof recordAgre
   note: null,
   filename: "synthetic-baa.pdf",
   content: pdf("one"),
+  attestedSynthetic: false,
   ...overrides,
 });
 
@@ -85,13 +100,9 @@ describe("recordAgreement", () => {
   it("a renewal supersedes the active agreement and keeps it on file", async () => {
     const { tenantId } = await createTestTenant("BAA renewal");
     const first = await recordAgreement(input(tenantId), operator);
+    const nextYear = addCalendarDays(todayIn(), 365);
     const second = await recordAgreement(
-      input(tenantId, {
-        effectiveDate: "2027-09-01",
-        expiresOn: null,
-        signedOn: todayIn(),
-        content: pdf("two"),
-      }),
+      input(tenantId, { effectiveDate: nextYear, expiresOn: null, signedOn: todayIn(), content: pdf("two") }),
       operator,
     );
     expect(second.supersededId).toBe(first.agreementId);
@@ -102,14 +113,15 @@ describe("recordAgreement", () => {
       [first.agreementId, "superseded", second.agreementId],
     ]);
     expect(rows[0]).not.toHaveProperty("content");
-    expect((await activeAgreementsByTenant()).get(tenantId)).toEqual({
-      effectiveDate: "2027-09-01",
-      expiresOn: null,
-    });
+    expect((await agreementDatesByTenant()).get(tenantId)).toEqual([
+      { status: "active", effectiveDate: nextYear, expiresOn: null },
+      { status: "superseded", effectiveDate: "2026-09-01", expiresOn: "2027-08-31" },
+    ]);
 
+    // The renewal starts next year and the superseded agreement still covers today, so the
+    // practice reads as active (the boundaries and the gap warning are unit-tested).
     const practices = await listPractices(operator);
-    // The renewal starts next year, so the list shows it as not yet effective (status tests: unit).
-    expect(practices.find((p) => p.id === tenantId)?.baa).toBe("not_yet_effective");
+    expect(practices.find((p) => p.id === tenantId)?.baa).toBe("active");
   });
 
   it("rejects bad dates, non-PDF content, and practices that can't hold a BAA", async () => {
@@ -129,6 +141,72 @@ describe("recordAgreement", () => {
     const demo = await ensureDemoPractice();
     await expect(recordAgreement(input(demo.tenantId), operator)).rejects.toThrow(/customer practice/);
     expect(await listAgreements(tenantId)).toEqual([]);
+  });
+
+  it("accepts an agreement that expires on its effective date and one signed today", async () => {
+    const { tenantId } = await createTestTenant("BAA one-day");
+    const today = todayIn();
+    const { agreementId } = await recordAgreement(
+      input(tenantId, { effectiveDate: today, expiresOn: today, signedOn: today }),
+      operator,
+    );
+    expect((await listAgreements(tenantId))[0]?.id).toBe(agreementId);
+  });
+
+  it("in a synthetic-only environment takes only attested SYN- files (ADR 0003)", async () => {
+    const { tenantId } = await createTestTenant("BAA synthetic guard");
+    const syntheticOnly = { syntheticOnly: true };
+    await expect(
+      recordAgreement(input(tenantId, { attestedSynthetic: true }), operator, syntheticOnly),
+    ).rejects.toThrow(/SYN-/);
+    await expect(
+      recordAgreement(
+        input(tenantId, { filename: "SYN-baa.pdf", attestedSynthetic: false }),
+        operator,
+        syntheticOnly,
+      ),
+    ).rejects.toThrow(/Confirm/);
+    const { agreementId } = await recordAgreement(
+      input(tenantId, { filename: "SYN-baa.pdf", attestedSynthetic: true }),
+      operator,
+      syntheticOnly,
+    );
+    expect((await listAgreements(tenantId))[0]?.id).toBe(agreementId);
+  });
+
+  it("two recordings racing for one practice: one wins, the other gets a plain message with no file bytes", async () => {
+    const { tenantId } = await createTestTenant("BAA race");
+    const results = await Promise.allSettled([
+      recordAgreement(
+        input(tenantId, { content: pdf("racer A"), practiceSigner: "Synthetic Racer A" }),
+        operator,
+      ),
+      recordAgreement(
+        input(tenantId, { content: pdf("racer B"), practiceSigner: "Synthetic Racer B" }),
+        operator,
+      ),
+    ]);
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    const error = (rejected[0] as PromiseRejectedResult).reason as Error;
+    expect(error).toBeInstanceOf(PracticeError);
+    expect(error.message).toMatch(/just recorded/);
+    expect(error.message).not.toMatch(/Racer|%PDF/);
+    expect(await listAgreements(tenantId)).toHaveLength(1);
+  });
+
+  it("records the audit event in the same transaction as the agreement", async () => {
+    const { tenantId } = await createTestTenant("BAA audit");
+    const { agreementId } = await recordAgreement(input(tenantId), operator);
+    const [event] = await systemDb()
+      .select({ id: auditEvents.id })
+      .from(auditEvents)
+      .where(
+        and(eq(auditEvents.action, "operator.agreement_recorded"), eq(auditEvents.entityId, agreementId)),
+      );
+    expect(event).toBeDefined();
   });
 
   it("only customer practices carry a BAA status on the practices list", async () => {
@@ -212,7 +290,7 @@ describe("database guarantees", () => {
       systemDb()
         .insert(tenantAgreements)
         .values({
-          ...input(tenantId),
+          ...columnsOf(input(tenantId)),
           kind: "baa",
           status: "active",
           contentType: "application/pdf",

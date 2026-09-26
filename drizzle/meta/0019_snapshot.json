@@ -1,5 +1,5 @@
 {
-  "id": "869a0e1a-2d33-4686-98bf-a36731f37b30",
+  "id": "1707fe2c-cd7b-4c55-9418-32d52cf65eb3",
   "prevId": "112e1f96-779e-4718-b90f-203bff99b16a",
   "version": "7",
   "dialect": "postgresql",
@@ -3590,7 +3590,7 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
+      "isRLSEnabled": true
     },
     "public.tenants": {
       "name": "tenants",

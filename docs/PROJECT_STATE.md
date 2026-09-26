@@ -99,6 +99,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - BAAs (`specs/practice-agreements.md`): block sign-in for a practice without an active BAA, or
   keep it as a flag on the console? Who countersigns for DenialDesk and what the current template
   version is (R-5.5.1, counsel). Termination and the R-9.2.2 data-return clock are not built.
+  Every recording becomes the active agreement, so back-filling an older BAA or fixing a typo
+  needs a "recorded in error" status or a historical import (reviewer finding, owner decision).
 - Claims before real data: sensitivity masking of diagnosis codes in `claim_versions` snapshots and
   history; retention/legal-hold path for append-only history; PIP/workers' comp/Medicaid filing
   rules and the HMO citation for timely filing (`specs/claims.md`).

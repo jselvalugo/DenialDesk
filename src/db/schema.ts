@@ -764,9 +764,12 @@ export const rateLimits = pgTable(
 // ---------------------------------------------------------------------------------------------
 // Platform agreements (docs/specs/practice-agreements.md): the signed BAA for each customer
 // practice. A platform record, not tenant data: no RLS and no grants to the app role; read and
-// written only by the platform operator through src/domain/platform/agreements.ts. Rows are never
-// deleted and their recorded fields never change (trigger in drizzle/0019_tenant_agreements.sql);
-// retention per REQUIREMENTS §9.1. Confidential, never PHI.
+// written only by the platform operator through src/domain/platform/agreements.ts. RLS is enabled
+// with no policies (defense in depth: a stray GRANT would still show the app role nothing). Rows are
+// never deleted and their recorded fields never change (trigger in drizzle/0019_tenant_agreements.sql,
+// which also adds CHECK constraints and makes the self-referencing key DEFERRABLE INITIALLY DEFERRED;
+// renewals depend on that, so keep it if the table is ever regenerated). Retention per
+// REQUIREMENTS §9.2; classification Confidential (§9.1), never PHI.
 // ---------------------------------------------------------------------------------------------
 
 export const agreementKindEnum = pgEnum("agreement_kind", ["baa"]);
@@ -816,4 +819,4 @@ export const tenantAgreements = pgTable(
       name: "tenant_agreements_superseded_by_fk",
     }),
   ],
-);
+).enableRLS();

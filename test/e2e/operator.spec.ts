@@ -159,9 +159,10 @@ test.describe("as the platform operator", () => {
     await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
     await expect(page.getByText("No agreement on file")).toBeVisible();
 
-    // Synthetic PDF bytes; never a real agreement.
+    // Synthetic PDF bytes; never a real agreement. The preview server is synthetic-only (ADR 0003),
+    // so the file name must start with SYN- and the operator attests to it.
     await page.getByLabel("Signed agreement").setInputFiles({
-      name: "synthetic-baa.pdf",
+      name: "SYN-baa.pdf",
       mimeType: "application/pdf",
       buffer: Buffer.from("%PDF-1.7\n% synthetic e2e BAA\n%%EOF\n", "latin1"),
     });
@@ -171,10 +172,9 @@ test.describe("as the platform operator", () => {
     await page.getByLabel("Signed for the practice by").fill("Synthetic Signer, Practice Administrator");
     await page.getByLabel("Signed for DenialDesk by").fill("Synthetic Officer, DenialDesk");
     await page.getByLabel("BAA template version").fill("BAA-2026.1");
+    await page.getByLabel("This is a synthetic test document").check();
     await page.getByRole("button", { name: "Record agreement" }).click();
-    await expect(page.getByRole("status")).toContainText(
-      "synthetic-baa.pdf recorded as the active agreement",
-    );
+    await expect(page.getByRole("status")).toContainText("SYN-baa.pdf recorded as the active agreement");
 
     const agreements = page.getByRole("table", { name: "Agreements on file" });
     await expect(agreements.getByRole("row")).toHaveCount(2); // header + one agreement
@@ -182,18 +182,25 @@ test.describe("as the platform operator", () => {
     await expect(agreements).toContainText("08/31/2027");
 
     const downloading = page.waitForEvent("download");
-    await agreements.getByRole("link", { name: "synthetic-baa.pdf" }).click();
+    await agreements.getByRole("link", { name: "SYN-baa.pdf" }).click();
     const download = await downloading;
-    expect(download.suggestedFilename()).toBe("synthetic-baa.pdf");
+    expect(download.suggestedFilename()).toBe("SYN-baa.pdf");
     const chunks: Buffer[] = [];
     for await (const chunk of await download.createReadStream()) chunks.push(Buffer.from(chunk));
     const body = Buffer.concat(chunks).toString("latin1");
     expect(body.startsWith("%PDF-1.7")).toBe(true);
     const downloadUrl = new URL(download.url());
+    // Served as an attachment, never cached or sniffed (spec security notes).
+    const served = await page.request.get(downloadUrl.pathname);
+    expect(served.status()).toBe(200);
+    expect(served.headers()["content-type"]).toBe("application/pdf");
+    expect(served.headers()["content-disposition"]).toBe('attachment; filename="SYN-baa.pdf"');
+    expect(served.headers()["cache-control"]).toBe("no-store");
+    expect(served.headers()["x-content-type-options"]).toBe("nosniff");
 
     // Recording a renewal keeps the first agreement on file as superseded.
     await page.getByLabel("Signed agreement").setInputFiles({
-      name: "synthetic-baa-renewal.pdf",
+      name: "SYN-baa-renewal.pdf",
       mimeType: "application/pdf",
       buffer: Buffer.from("%PDF-1.7\n% synthetic e2e BAA renewal\n%%EOF\n", "latin1"),
     });
@@ -202,6 +209,7 @@ test.describe("as the platform operator", () => {
     await page.getByLabel("Signed for the practice by").fill("Synthetic Signer, Practice Administrator");
     await page.getByLabel("Signed for DenialDesk by").fill("Synthetic Officer, DenialDesk");
     await page.getByLabel("BAA template version").fill("BAA-2026.2");
+    await page.getByLabel("This is a synthetic test document").check();
     await page.getByRole("button", { name: "Record agreement" }).click();
     await expect(page.getByRole("status")).toContainText("previous agreement is kept as superseded");
     await expect(agreements.getByRole("row")).toHaveCount(3);

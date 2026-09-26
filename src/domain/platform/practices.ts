@@ -11,7 +11,7 @@ import { withTenant } from "@/db/tenant";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { auditSystem } from "@/lib/audit";
 import { demoLoginEnabled } from "@/lib/env";
-import { activeAgreementsByTenant, agreementStatus, type AgreementStatus } from "./agreements";
+import { agreementDatesByTenant, agreementStatus, type AgreementStatus } from "./agreements";
 import { PracticeError } from "./errors";
 
 // Platform operator actions (spec: docs/specs/demo-login-and-operator-console.md).
@@ -45,7 +45,7 @@ export async function listPractices(operator: OperatorContext): Promise<Practice
     .from(memberships)
     .groupBy(memberships.tenantId);
   const teamSize = new Map(teams.map((t) => [t.tenantId, t.size]));
-  const agreements = await activeAgreementsByTenant();
+  const agreements = await agreementDatesByTenant();
   const today = todayIn();
 
   // Denial counts run inside each practice's own tenant context, so row-level security still applies.
@@ -58,7 +58,7 @@ export async function listPractices(operator: OperatorContext): Promise<Practice
         ...row,
         teamSize: teamSize.get(row.id) ?? 0,
         openDenials: result?.open ?? 0,
-        baa: row.kind === "customer" ? agreementStatus(agreements.get(row.id), today) : null,
+        baa: row.kind === "customer" ? agreementStatus(agreements.get(row.id) ?? [], today) : null,
       };
     }),
   );
