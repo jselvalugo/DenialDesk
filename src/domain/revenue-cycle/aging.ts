@@ -222,7 +222,7 @@ const normalize = (h: string) =>
     .replace(/[^a-z]+/g, " ")
     .trim();
 const DATE_HEADERS = ["date", "deposit date", "posted date", "posting date"];
-const AMOUNT_HEADERS = ["amount", "deposit amount", "credit"];
+const AMOUNT_HEADERS = ["amount", "deposit amount"];
 /** Pre-production accepts synthetic deposit files only: each row carries this marker. */
 export const SYNTHETIC_DEPOSIT_MARKER = "SYN-DEPOSIT";
 const MARKER_HEADERS = ["synthetic marker"];

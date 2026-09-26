@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { DEFAULT_RULES } from "@/domain/revenue-cycle/defaults";
+import { openFromLauncher } from "./support";
 
 async function openDemo(page: Page) {
   await page.goto("/login");
@@ -12,7 +13,7 @@ test.describe("revenue cycle as compliance (read-only)", () => {
 
   test("rules and ledger show the seeded default configuration", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: "Rules and ledger" }).click();
+    await openFromLauncher(page, "Rules and ledger");
     await expect(page.getByRole("heading", { level: 1, name: "Rules and ledger" })).toBeVisible();
     const rules = page.getByRole("table", { name: "Business rules in evaluation order" });
     await expect(rules.getByRole("row")).toHaveCount(DEFAULT_RULES.length + 1); // header + rules
@@ -99,6 +100,9 @@ test.describe("journal vouchers", () => {
     page,
   }) => {
     await openDemo(page);
+    await openFromLauncher(page, "Revenue cycle app");
+    await expect(page.getByRole("heading", { level: 1, name: "Monthly files" })).toBeVisible();
+    // Inside the Revenue cycle app its pages are tabs.
     await page
       .getByRole("navigation", { name: "Primary" })
       .getByRole("link", { name: "Journal vouchers" })
@@ -136,7 +140,7 @@ test.describe("journal vouchers", () => {
 test.describe("receivables and deposits", () => {
   test("the demo shows aging, a tying roll-forward, and reconciles imported deposits", async ({ page }) => {
     await openDemo(page);
-    await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "A/R aging" }).click();
+    await openFromLauncher(page, "A/R aging");
     await expect(page.getByRole("heading", { level: 1, name: "A/R aging" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Receivables summary" })).toContainText("Open A/R");
     await expect(
@@ -193,15 +197,61 @@ test.describe("receivables and deposits", () => {
   });
 });
 
+test.describe("statements and dashboard", () => {
+  test("the demo dashboard shows key figures and the statements net revenue by account", async ({ page }) => {
+    await openDemo(page);
+    await openFromLauncher(page, "RCM dashboard");
+    // Inside the Revenue cycle app its pages are tabs.
+    const nav = page.getByRole("navigation", { name: "Primary" });
+    await expect(page.getByRole("heading", { level: 1, name: "RCM dashboard" })).toBeVisible();
+    const figures = page.getByRole("region", { name: "Key figures" });
+    for (const label of ["Net revenue", "Payments", "Open A/R", "Days in A/R", "Net collection rate"]) {
+      await expect(figures).toContainText(label);
+    }
+    await expect(page.getByRole("list", { name: "Net revenue by month" }).getByRole("listitem")).toHaveCount(
+      3,
+    );
+
+    await nav.getByRole("link", { name: "Statements" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Statements" })).toBeVisible();
+    const income = page.getByRole("table", { name: "Income statement by month" });
+    await expect(income.getByRole("cell", { name: "Net revenue", exact: true })).toBeVisible();
+    await expect(income).toContainText("4000");
+    await expect(page.getByRole("table", { name: "Receivables by account" })).toContainText("1200");
+    await expect(page.getByRole("table", { name: "Cash by month" })).toBeVisible();
+  });
+
+  test.describe("as compliance (read-only)", () => {
+    test.use({ storageState: "test/e2e/.auth/viewer.json" });
+
+    test("can review the dashboard and statements", async ({ page }) => {
+      await page.goto("/revenue-cycle/dashboard");
+      await expect(page.getByRole("heading", { level: 1, name: "RCM dashboard" })).toBeVisible();
+      await page.goto("/revenue-cycle/statements");
+      await expect(page.getByRole("heading", { level: 1, name: "Statements" })).toBeVisible();
+    });
+  });
+});
+
 test.describe("revenue cycle as a denial specialist", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
   test("is hidden from navigation and returns 404", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("navigation", { name: "Primary" })).not.toContainText("Revenue cycle");
+    await page.getByRole("button", { name: "App launcher" }).click();
+    const launcher = page.getByRole("dialog", { name: "App launcher" });
+    await expect(launcher.getByRole("link", { name: "Claims app" })).toBeVisible();
+    await expect(launcher).not.toContainText("Revenue cycle");
+    await expect(launcher).not.toContainText("Journal vouchers");
+    await expect(launcher).not.toContainText("A/R aging");
+    await expect(launcher).not.toContainText("Deposits");
+    await page.keyboard.press("Escape");
     expect((await page.goto("/revenue-cycle/journal"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/ar-aging"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/deposits"))?.status()).toBe(404);
+    expect((await page.goto("/revenue-cycle/dashboard"))?.status()).toBe(404);
+    expect((await page.goto("/revenue-cycle/statements"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/rules"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/files"))?.status()).toBe(404);
     expect((await page.request.get("/api/revenue-cycle/sample-file")).status()).toBe(404);
