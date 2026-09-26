@@ -6,6 +6,7 @@ import { z } from "zod";
 import { todayIn } from "@rules/calendar";
 import { canEditPatients, canTagSensitivity, canWorkDenials } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { type DatabaseError, isUniqueViolation } from "@/db/errors";
 import { withTenant } from "@/db/tenant";
 import {
   createPatient,
@@ -69,7 +70,7 @@ function parse(formData: FormData) {
 
 /** Unique MRN races that slip past the pre-check still come back as a form error. */
 function isDuplicateMrn(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "23505";
+  return isUniqueViolation(error) && (error as DatabaseError).constraint === "patients_tenant_mrn_key";
 }
 
 export async function registerPatient(_: PatientFormState, formData: FormData): Promise<PatientFormState> {

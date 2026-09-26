@@ -5,7 +5,7 @@ import { addCalendarDays, todayIn } from "@rules/calendar";
 import type { OperatorContext } from "@/auth/operator";
 import { systemDb } from "@/db/client";
 import { tenantAgreements, tenants, type AgreementStatus as AgreementRecordStatus } from "@/db/schema";
-import { sanitizeDatabaseError } from "@/db/tenant";
+import { isUniqueViolation, sanitizeDatabaseError } from "@/db/errors";
 import { audit, auditSystem } from "@/lib/audit";
 import { PracticeError } from "./errors";
 
@@ -232,7 +232,7 @@ export async function recordAgreement(
     });
   } catch (error) {
     // Two recordings racing for the same practice: the loser hits the one-active index.
-    if ((error as { cause?: { code?: string } })?.cause?.code === "23505") {
+    if (isUniqueViolation(error)) {
       throw new PracticeError(
         "Another agreement was just recorded for this practice. Reload the page to see it.",
       );

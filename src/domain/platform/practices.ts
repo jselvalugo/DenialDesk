@@ -5,6 +5,7 @@ import { todayIn } from "@rules/calendar";
 import { hashPassword } from "@/auth/password";
 import type { OperatorContext } from "@/auth/operator";
 import { systemDb } from "@/db/client";
+import { isUniqueViolation } from "@/db/errors";
 import { denials, memberships, tenants, users } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { OPEN_STATUSES } from "@/domain/denial-status";
@@ -125,7 +126,7 @@ export async function createPractice(
     })
     .catch((error: unknown) => {
       // Two operators' submissions racing on the same email hit the unique index.
-      if ((error as { cause?: { code?: string } })?.cause?.code === "23505") {
+      if (isUniqueViolation(error)) {
         throw new PracticeError("An account with that email already exists.");
       }
       throw error;

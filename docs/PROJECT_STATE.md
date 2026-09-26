@@ -77,6 +77,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | No self-service sign-up; the operator creates practices after the BAA is signed, and records the BAA on the practice page | `specs/practice-agreements.md` |
 | 2026-09-26 | BAA handling is manual by design: no sign-in blocking without a BAA, no template version, corrections via "recorded in error", nothing automatic at termination | `specs/practice-agreements.md` (Decisions) |
 | 2026-09-26 | Shell differentiated from any vendor's product; no third-party design IP; competitor names out of product copy and public docs | ADR 0005 |
+| 2026-09-26 | Every DB error sanitized where Drizzle creates it (system and tenant); kept messages opt-in (owner: fix both in PR #28) | ADR 0006 |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -157,6 +158,13 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - `claims.status` / `paid_cents` are not covered by the version trigger, and no DB CHECK enforces
   0 ≤ paid ≤ billed, 0 < denied ≤ billed, charges ≥ 0; must land with C3 / 835 posting, before the
   Azure cutover (2026-09-26 review, security; owner decision §8.4).
+- Azure deploy gate, logging (owner decision 2026-09-26: hold until the Azure deployment; PR #28 reviews):
+  - Log-sink residency and BAA (R-7.5.5): the Azure log destination is U.S.-only and under a BAA.
+  - Tracing: Drizzle puts every query's params in the `drizzle.query.params` span attribute when
+    OpenTelemetry is present. Before adding Azure Monitor / Application Insights, disable Drizzle
+    spans or scrub that attribute.
+  - Migrations: `drizzle-kit migrate` runs outside the sanitizer and prints full Postgres errors
+    (including `detail` row values). Decide how production migrations run and where their output goes.
 
 ## Lessons / conventions learned
 - Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
@@ -165,7 +173,6 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   an integration test); prefer separate grouped queries.
 - Tenant data only through `withTenant()` (src/db/tenant.ts); FK references from user input must be
   checked against the tenant in code (FKs bypass RLS).
-- Drizzle wraps DB errors: the Postgres message is on `error.cause` (see test helper `expectDbError`).
 - Next.js renders a hidden `role="alert"` route announcer; scope e2e alert queries to `main`.
 - Once production exists, record tables (imports, vouchers, audit) change by adding columns only;
   C0's column drops were a one-time pre-production change on synthetic data.
@@ -177,8 +184,14 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):
   tenant tables FORCE RLS, so a non-superuser migration owner (Netlify, Azure) sees no rows
   otherwise. Local and CI databases use a superuser and hide this.
-- Server-side validation must reject impossible dates (`z.iso.date()`); `sanitizeDatabaseError`
-  drops messages for SQLSTATE class 22 because they quote values.
+- Server-side validation must reject impossible dates (`z.iso.date()`).
+- Every Drizzle query error (system and tenant) is sanitized where Drizzle creates it (ADR 0006,
+  `src/db/errors.ts`): SQLSTATE + constraint for class 23, messages only for allow-listed codes and
+  listed trigger formats. Match DB errors on `.code` / `.constraint` (`isUniqueViolation`), never on
+  message text. A new trigger `RAISE` must be added to `TRIGGER_MESSAGE_FORMATS`.
+- `onRequestError` (src/instrumentation.ts) logs route template, digest, error name and SQLSTATE
+  only; Next.js still logs the error itself, so error messages must be PHI-free where thrown.
+  `log.ts` checks the values of `route`/`routeType`/`digest`/`errorName`/`constraint` by pattern.
 - Local test DB without Docker: `initdb`/`pg_ctl` from `/usr/lib/postgresql/16/bin` as the
   `postgres` user, with the data dir somewhere that user can reach.
 - Playwright in this cloud env: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
