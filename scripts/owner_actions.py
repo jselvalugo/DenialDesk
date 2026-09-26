@@ -81,6 +81,7 @@ def style(ws):
     for row in ws.iter_rows(min_row=2):
         for c in row:
             c.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.data_validations.dataValidation.clear()
     for col, opts in (("B", "Open,In progress,Blocked,Done,Dropped"), ("C", "P0,P1,P2,P3"),
                       ("D", "Data source,Clarification,Decision,Legal/Compliance,Vendor/Account,Design/Brand,Business")):
         dv = DataValidation(type="list", formula1=f'"{opts}"', allow_blank=True)
@@ -93,7 +94,15 @@ def next_id(ws):
     return f"OA-{(max(nums) + 1) if nums else 1:03d}"
 
 
+PRIORITIES = ("P0", "P1", "P2", "P3")
+CATEGORIES = ("Data source", "Clarification", "Decision", "Legal/Compliance", "Vendor/Account", "Design/Brand", "Business")
+
+
 def add(ws, prio, cat, action, why, needs, req, raised, due):
+    if prio not in PRIORITIES or cat not in CATEGORIES:
+        sys.exit(f"priority must be one of {PRIORITIES}; category one of {CATEGORIES}")
+    # Neutralise spreadsheet formula injection.
+    action, why, needs, req, raised, due = ("'" + v if v[:1] in "=+-@" else v for v in (action, why, needs, req, raised, due))
     ws.append([next_id(ws), "Open", prio, cat, action, why, needs, req, raised, due, "", ""])
 
 
@@ -101,7 +110,7 @@ def create():
     wb = Workbook()
     ws = wb.active
     ws.title = SHEET
-    style(ws)
+    style(ws)  # header row first
     for p, cat, a, w, n, r, d in SEED:
         add(ws, p, cat, a, w, n, r, SRC, d)
     style(ws)
@@ -123,6 +132,9 @@ def main(argv):
         for r in ws.iter_rows(min_row=2):
             if r[0].value == argv[2]:
                 r[1].value, r[11].value = "Done", TODAY
+                break
+        else:
+            sys.exit(f"no row {argv[2]}")
     else:
         sys.exit(__doc__)
     style(ws)
