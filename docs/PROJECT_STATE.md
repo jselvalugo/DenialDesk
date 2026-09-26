@@ -29,7 +29,15 @@ _Last updated: 2026-09-26_
   made with `pnpm operator:credential`); no page can create or reset it (owner rebaseline 2026-09-26).
 - Next (owner rebaseline): tenancy lifecycle in the console: Pause for non-payment (read-only +
   export), Suspend for security, Terminate → offboarding (export, legal hold, certified destruction),
-  BAA-on-file gate in production. Demo stays on pre-production only.
+  BAA-on-file gate in production (later the same day the owner chose
+  to keep that manual for now: the console flags a missing BAA and the owner decides;
+  `specs/practice-agreements.md`). Demo stays on pre-production only.
+- Operator console: each customer practice has a page (`/operator/practices/<id>`) where the
+  operator records the signed Business Associate Agreement (PDF, dates, signers) and downloads
+  it; renewals supersede, older ones can be back-filled as historical, mistakes are marked
+  "recorded in error" with a reason; nothing is deleted; the practices list shows BAA status
+  (`specs/practice-agreements.md`). Practices are still created by the operator only (owner
+  decision 2026-09-26: no self-service sign-up; a BAA must be signed before a practice exists).
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
 - Open item (human decision): single-administrator risk acceptance with compensating controls
@@ -53,6 +61,8 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
 | 2026-09-26 | ERP shell: global header, navy app bar with tabs, app launcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
+| 2026-09-26 | No self-service sign-up; the operator creates practices after the BAA is signed, and records the BAA on the practice page | `specs/practice-agreements.md` |
+| 2026-09-26 | BAA handling is manual by design: no sign-in blocking without a BAA, no template version, corrections via "recorded in error", nothing automatic at termination | `specs/practice-agreements.md` (Decisions) |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -101,6 +111,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   version history for HIPAA amendments (§164.526), P3; confirm compliance needs address and phone.
   Pre-prod entry relies on the SYN prefixes plus a synthetic attestation checkbox (ADR 0003).
 - Patients: should front-desk registration be its own role? Guarantor now or with statements (§8.6)?
+
 - Claims before real data: sensitivity masking of diagnosis codes in `claim_versions` snapshots and
   history; retention/legal-hold path for append-only history; PIP/workers' comp/Medicaid filing
   rules and the HMO citation for timely filing (`specs/claims.md`).

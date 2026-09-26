@@ -1,10 +1,13 @@
 # Threat model: platform operator console and its sign-in
 
-Scope: `/operator` (console), `/operator/login`, `/operator/login/mfa[/setup]`;
+Scope: `/operator` (console), `/operator/practices/<id>` (practice page, BAA on file and download),
+`/operator/login`, `/operator/login/mfa[/setup]`;
 `src/auth/{operator,operator-account,operator-actions,operator-email,session,credentials}.ts`,
-`scripts/operator-credential.ts`.
-Spec: `docs/specs/operator-login.md`. Data: practice-level metadata and counts (no PHI); the
-operator credential and TOTP secret (encrypted); `operator.*` audit events (IDs and IP only).
+`scripts/operator-credential.ts`, `src/domain/platform/agreements.ts`.
+Specs: `docs/specs/operator-login.md`, `docs/specs/practice-agreements.md`. Data: practice-level
+metadata and counts (no PHI); signed Business Associate Agreements (Confidential contract PDFs
+with signer names, never PHI); the operator credential and TOTP secret (encrypted); `operator.*`
+audit events (IDs, counts, and IP only).
 
 | Threat | Control | Residual risk / owner |
 |---|---|---|
@@ -20,3 +23,7 @@ operator credential and TOTP secret (encrypted); `operator.*` audit events (IDs 
 | An old deployment re-applies a retired credential (deploy link, rollback, stale slot) | Every applied credential's fingerprint is recorded; a retired one is never re-applied and sign-in on that deployment is refused, without ending the owner's sessions | Low |
 | Hosting account compromised (can rewrite the operator credential) | Owner-only access to Netlify team / Azure configuration; rotations are audited | **Production gate**: phishing-resistant MFA on the hosting accounts; alert on `operator.credential_*` to a channel the owner doesn't solely control (R-7.2.6) |
 | Single administrator (no separation of duties, no second holder) | Every privileged action audited | **Human decision**: written risk acceptance with compensating controls (independent periodic log review, sealed break-glass holder) before production |
+| Signed BAA read by a practice user, demo session, or through a practice's own tenant context | `tenant_agreements` has no grants to `denialdesk_app` (integration test); the practice page, record action, and download route all require a verified operator session; the download route checks the agreement belongs to the practice in the URL | Low |
+| A real customer agreement uploaded to pre-production (no BAA with Netlify, region still to confirm) | Synthetic-only environments accept only `SYN-`-named files with the operator's attestation (ADR 0003 guard; unit and integration tests); the form says so | Low; attestation-level, like the other synthetic guards |
+| BAA upload used to store or serve malicious content | PDF checked by magic bytes and extension, 5 MB cap, kept in memory; served as `attachment` with `nosniff` and `no-store`, never rendered inline; file name sanitized in `Content-Disposition` | Low. Uploaded PDFs are not scanned for malware; the operator is the only uploader and downloader |
+| Agreement altered or removed to hide a gap in coverage | Trigger blocks DELETE/TRUNCATE and any change to recorded fields; only the status transitions (superseded, recorded in error with a reason) are allowed and a voided row is frozen; every record, void, and download is audited with IDs, reason, and byte counts | The database owner could drop the trigger (same as the audit log); WORM export at Azure cutover (R-7.5.1) |
