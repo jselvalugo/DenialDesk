@@ -57,8 +57,15 @@ describe("locate", () => {
 
   it("does not match a path that only shares a prefix, and never a planned page", () => {
     expect(locate(apps, "/claimsx").item).toBeNull();
-    expect(locate(apps, "/appeals").item).toBeNull();
-    expect(locate(apps, "/appeals").app.id).toBe("denials");
+    expect(locate(apps, "/remittances").item).toBeNull();
+  });
+
+  it("matches the appeals page, now shipped, to the denials module", () => {
+    expect(locate(apps, "/appeals")).toMatchObject({ app: { id: "denials" }, item: { label: "Appeals" } });
+    expect(locate(apps, "/appeals/abc")).toMatchObject({
+      app: { id: "denials" },
+      item: { label: "Appeals" },
+    });
   });
 });
 

@@ -62,7 +62,7 @@ export function navApps({
       items: [
         { label: "Overview", href: "/overview", icon: LayoutDashboard, available: true },
         { label: "Denial queue", href: "/denials", icon: Inbox, available: true },
-        { label: "Appeals", href: "/appeals", icon: Gavel, available: false },
+        { label: "Appeals", href: "/appeals", icon: Gavel, available: true },
       ],
     },
     {
