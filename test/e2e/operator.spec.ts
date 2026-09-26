@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { currentStep } from "@/auth/totp";
+import { e2eUser, freshCode, signInWithPassword } from "./support";
 
 test.describe("demo login", () => {
   test("one click opens the demo practice without MFA", async ({ page }) => {
@@ -14,12 +16,27 @@ test.describe("demo login", () => {
     await expect(page.getByRole("table").getByRole("row")).not.toHaveCount(0);
   });
 
-  test("demo sessions can't open the operator console", async ({ page }) => {
+  test("demo sessions are sent to sign-in, and the operator can sign in from there", async ({ page }) => {
+    test.setTimeout(60_000); // may wait up to 30 s for a TOTP step the setup sign-in didn't use
     await page.goto("/login");
     await page.getByRole("button", { name: "Explore the demo practice" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Platform console" })).toHaveCount(0);
-    expect((await page.goto("/operator"))?.status()).toBe(404);
+    await page.goto("/operator");
+    await expect(page).toHaveURL(/\/login\?reason=account$/);
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+
+    // The sign-in page no longer bounces a demo session back to the demo.
+    await page.goto("/login");
+    await expect(page.getByRole("status")).toContainText("Signing in ends the demo session");
+    const operator = e2eUser("operator");
+    await signInWithPassword(page, operator);
+    await page
+      .getByLabel("6-digit code")
+      .fill(await freshCode(operator.totpSecret!, new Set([currentStep()])));
+    await page.getByRole("button", { name: "Verify" }).click();
+    await page.getByRole("link", { name: "Platform console" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Practices" })).toBeVisible();
   });
 });
 

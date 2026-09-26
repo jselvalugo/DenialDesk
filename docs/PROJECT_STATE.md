@@ -12,7 +12,8 @@ _Last updated: 2026-09-26_
 - Operator console can reset the demo with sample data or empty (setup only) to test features
   from a clean slate.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
-  login and a platform operator console (`/operator`) for the owner.
+  login and a platform operator console (`/operator`) for the owner. A browser with a demo session
+  can now reach the sign-in form (it used to be trapped: `/operator` 404, `/login` bounced to the demo).
 - Working branch: `claude/adoring-hypatia-5co7fz`; production branch on Netlify: `claude/quirky-feynman-ufql5a` (default).
 
 ## Decisions made (details in `docs/decisions/`)

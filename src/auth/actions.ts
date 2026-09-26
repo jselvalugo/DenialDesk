@@ -10,7 +10,15 @@ import { limitCurrentRequest, retryMessage, type Bucket, type RateLimitResult } 
 import { decryptField } from "@/lib/crypto/field";
 import { decoyHash, hashPassword, passwordProblem, verifyPassword } from "./password";
 import { LOCKOUT_MS, MAX_FAILED_ATTEMPTS } from "./policy";
-import { clientIp, completeMfa, createSession, endSession, getSession, touchSession } from "./session";
+import {
+  clientIp,
+  completeMfa,
+  createSession,
+  endSession,
+  getSession,
+  revokeSession,
+  touchSession,
+} from "./session";
 import { verifyTotp } from "./totp";
 import { ensureDemoPractice } from "./demo";
 import { demoLoginEnabled } from "@/lib/env";
@@ -115,6 +123,9 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
     return { error: "This practice's access is suspended. Contact DenialDesk support." };
   }
 
+  // Signing in from a browser that already has a session (e.g. the shared demo) ends that session.
+  const previous = await getSession();
+  if (previous) await revokeSession(previous.sessionId);
   await createSession(user.id);
   redirect(
     user.mustChangePassword ? "/login/password" : user.mfaEnrolledAt ? "/login/mfa" : "/login/mfa/setup",

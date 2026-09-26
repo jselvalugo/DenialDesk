@@ -27,8 +27,11 @@ Demo login
 
 Operator console (`/operator`)
 - [x] Only the account whose email equals `PLATFORM_OPERATOR_EMAIL`, signed in with password
-      **and** MFA, can open it. Every other signed-in account (including demo sessions) gets a 404;
-      signed-out visitors are sent to sign-in like any other page (2026-09-26, owner feedback).
+      **and** MFA, can open it. Every other signed-in practice account gets a 404. Signed-out
+      visitors and demo sessions are sent to sign-in (2026-09-26, owner feedback: a browser that
+      had explored the demo could never reach the sign-in form).
+- [x] The sign-in page shows the form to a demo session (it doesn't bounce back to the demo), and
+      signing in with a password ends any session the browser already had.
 - [x] Lists every practice: name, kind (customer/demo), status, created date, team size, open
       denials. Shows practice-level metadata and counts only — never patient or claim data.
 - [x] Create practice: name + first admin (name, email). Shows a one-time temporary password
@@ -85,6 +88,6 @@ practices (retention/legal hold, R-9.2), Netlify deploy management (stays in Net
 - Integration: create practice (admin can sign in with the temporary password; MFA not yet
   enrolled; audited), duplicate email rejected, suspend/reactivate, can't suspend own practice,
   demo created once and reused, reset archives and replaces, practice list counts.
-- E2E: one-click demo lands in the demo practice; demo and regular users get 404 (signed-out users are sent to sign-in) on
-  /operator; operator creates, suspends, and reactivates a practice; production hides the demo
+- E2E: one-click demo lands in the demo practice; regular users get 404 on /operator; signed-out
+  users and demo sessions are sent to sign-in, and the operator can sign in from a demo session; operator creates, suspends, and reactivates a practice; production hides the demo
   button even with DEMO_LOGIN_ENABLED=true.
