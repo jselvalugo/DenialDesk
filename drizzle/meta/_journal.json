@@ -134,6 +134,13 @@
       "when": 1790437723344,
       "tag": "0018_patients_record",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790440442222,
+      "tag": "0019_tenant_agreements",
+      "breakpoints": true
     }
   ]
 }

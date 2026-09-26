@@ -3,6 +3,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  customType,
   date,
   foreignKey,
   index,
@@ -31,6 +32,8 @@ const tenantId = () =>
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
 const cents = (name: string) => bigint(name, { mode: "number" });
+/** Raw bytes (PostgreSQL bytea); Drizzle has no built-in binary column type. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 // ---------------------------------------------------------------------------------------------
 // Identity and tenancy (no RLS: read before a tenant is chosen; never exposed to tenant queries)
@@ -755,5 +758,62 @@ export const rateLimits = pgTable(
   (t) => [
     primaryKey({ columns: [t.bucket, t.keyHash, t.windowStart] }),
     index("rate_limits_window_idx").on(t.windowStart),
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------
+// Platform agreements (docs/specs/practice-agreements.md): the signed BAA for each customer
+// practice. A platform record, not tenant data: no RLS and no grants to the app role; read and
+// written only by the platform operator through src/domain/platform/agreements.ts. Rows are never
+// deleted and their recorded fields never change (trigger in drizzle/0019_tenant_agreements.sql);
+// retention per REQUIREMENTS §9.1. Confidential, never PHI.
+// ---------------------------------------------------------------------------------------------
+
+export const agreementKindEnum = pgEnum("agreement_kind", ["baa"]);
+export const agreementStatusEnum = pgEnum("agreement_status", ["active", "superseded"]);
+
+export const tenantAgreements = pgTable(
+  "tenant_agreements",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    kind: agreementKindEnum("kind").notNull().default("baa"),
+    status: agreementStatusEnum("status").notNull().default("active"),
+    effectiveDate: date("effective_date").notNull(),
+    /** Null: in force until terminated. */
+    expiresOn: date("expires_on"),
+    signedOn: date("signed_on").notNull(),
+    /** Name and title of the practice's signer. */
+    practiceSigner: text("practice_signer").notNull(),
+    /** Name and title of DenialDesk's signer. */
+    ourSigner: text("our_signer").notNull(),
+    /** Version of the counsel-reviewed BAA template (R-5.5.1). */
+    templateVersion: text("template_version").notNull(),
+    note: text("note"),
+    /** Original file name as uploaded (shown to the operator; never logged). */
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    /** Hex SHA-256 of `content`, so a downloaded copy can be verified against the record. */
+    sha256: text("sha256").notNull(),
+    content: bytea("content").notNull(),
+    recordedBy: uuid("recorded_by")
+      .notNull()
+      .references(() => users.id),
+    /** The agreement that replaced this one, once superseded. */
+    supersededById: uuid("superseded_by_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("tenant_agreements_tenant_idx").on(t.tenantId, t.createdAt),
+    // One active agreement of each kind per practice.
+    uniqueIndex("tenant_agreements_one_active")
+      .on(t.tenantId, t.kind)
+      .where(sql`status = 'active'`),
+    foreignKey({
+      columns: [t.supersededById],
+      foreignColumns: [t.id],
+      name: "tenant_agreements_superseded_by_fk",
+    }),
   ],
 );

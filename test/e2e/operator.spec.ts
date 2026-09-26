@@ -139,6 +139,91 @@ test.describe("operator and demo sessions side by side", () => {
 test.describe("as the platform operator", () => {
   test.use({ storageState: "test/e2e/.auth/operator.json" });
 
+  test("records a practice's BAA, downloads the signed copy, and the list shows its status", async ({
+    page,
+    browser,
+  }) => {
+    test.setTimeout(60_000);
+    await page.goto("/operator");
+    const name = `Synthetic Coral Clinic ${Date.now()}`;
+    await page.getByLabel("Practice name").fill(name);
+    await page.getByLabel("Admin's full name").fill("Synthetic Admin");
+    await page.getByLabel("Admin's work email").fill(`baa-admin-${Date.now()}@e2e.denialdesk.test`);
+    await page.getByRole("button", { name: "Create practice" }).click();
+    await expect(page.getByRole("status")).toContainText(`${name} created`);
+
+    const table = page.getByRole("table", { name: "All practices on this environment" });
+    const row = table.getByRole("row", { name: new RegExp(name) });
+    await expect(row.getByRole("cell").nth(3)).toHaveText("No BAA");
+    await row.getByRole("link", { name }).click();
+    await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+    await expect(page.getByText("No agreement on file")).toBeVisible();
+
+    // Synthetic PDF bytes; never a real agreement.
+    await page.getByLabel("Signed agreement").setInputFiles({
+      name: "synthetic-baa.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.7\n% synthetic e2e BAA\n%%EOF\n", "latin1"),
+    });
+    await page.getByLabel("Effective date").fill("2026-09-01");
+    await page.getByLabel("Expires on").fill("2027-08-31");
+    await page.getByLabel("Date signed").fill("2026-08-28");
+    await page.getByLabel("Signed for the practice by").fill("Synthetic Signer, Practice Administrator");
+    await page.getByLabel("Signed for DenialDesk by").fill("Synthetic Officer, DenialDesk");
+    await page.getByLabel("BAA template version").fill("BAA-2026.1");
+    await page.getByRole("button", { name: "Record agreement" }).click();
+    await expect(page.getByRole("status")).toContainText(
+      "synthetic-baa.pdf recorded as the active agreement",
+    );
+
+    const agreements = page.getByRole("table", { name: "Agreements on file" });
+    await expect(agreements.getByRole("row")).toHaveCount(2); // header + one agreement
+    await expect(agreements).toContainText("BAA-2026.1");
+    await expect(agreements).toContainText("08/31/2027");
+
+    const downloading = page.waitForEvent("download");
+    await agreements.getByRole("link", { name: "synthetic-baa.pdf" }).click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toBe("synthetic-baa.pdf");
+    const chunks: Buffer[] = [];
+    for await (const chunk of await download.createReadStream()) chunks.push(Buffer.from(chunk));
+    const body = Buffer.concat(chunks).toString("latin1");
+    expect(body.startsWith("%PDF-1.7")).toBe(true);
+    const downloadUrl = new URL(download.url());
+
+    // Recording a renewal keeps the first agreement on file as superseded.
+    await page.getByLabel("Signed agreement").setInputFiles({
+      name: "synthetic-baa-renewal.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("%PDF-1.7\n% synthetic e2e BAA renewal\n%%EOF\n", "latin1"),
+    });
+    await page.getByLabel("Effective date").fill("2026-09-15");
+    await page.getByLabel("Date signed").fill("2026-09-10");
+    await page.getByLabel("Signed for the practice by").fill("Synthetic Signer, Practice Administrator");
+    await page.getByLabel("Signed for DenialDesk by").fill("Synthetic Officer, DenialDesk");
+    await page.getByLabel("BAA template version").fill("BAA-2026.2");
+    await page.getByRole("button", { name: "Record agreement" }).click();
+    await expect(page.getByRole("status")).toContainText("previous agreement is kept as superseded");
+    await expect(agreements.getByRole("row")).toHaveCount(3);
+    await expect(agreements.getByRole("row").nth(1)).toContainText("Active");
+    await expect(agreements.getByRole("row").nth(2)).toContainText("Superseded");
+
+    await page.goto("/operator");
+    await expect(
+      table
+        .getByRole("row", { name: new RegExp(name) })
+        .getByRole("cell")
+        .nth(3),
+    ).toHaveText("Active");
+
+    // Without an operator session the signed copy isn't served: the request is sent to sign in.
+    const anonymous = await browser.newContext({ baseURL: downloadUrl.origin, storageState: undefined });
+    const response = await anonymous.request.get(downloadUrl.pathname, { maxRedirects: 0 });
+    expect(response.status()).toBe(307);
+    expect(response.headers()["location"]).toMatch(/\/operator\/login$/);
+    await anonymous.close();
+  });
+
   test("sees every practice and can create, suspend, and reactivate one", async ({ page, browser }) => {
     test.setTimeout(60_000);
     await page.goto("/operator");

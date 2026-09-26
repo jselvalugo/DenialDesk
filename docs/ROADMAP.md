@@ -21,6 +21,7 @@ Engineering:
 - [x] Tenancy + RBAC skeleton with row-level security and isolation tests [R-7.2.3, R-7.2.4]
 - [x] Auth: OIDC SSO behind an interface (Entra ID at cutover), MFA, session timeouts [R-7.2.1, R-7.2.2, R-7.2.7]
 - [x] Platform console with its own sign-in and a practice-free operator account (`specs/operator-login.md`) [R-7.2.3, R-7.2.7, R-7.5.1]
+- [x] Signed BAA on file per customer practice, with status on the practices list (`specs/practice-agreements.md`) [R-5.5.1, R-7.5.1, §9.1]
 - [ ] **Production gate:** WebAuthn/passkeys for the operator (TOTP today) and just-in-time, approved, recorded privileged access [R-7.2.2, R-7.2.5] (`threat-models/operator-console.md`)
 - [x] Immutable audit log skeleton [R-7.5.1]
 - [x] Rules-engine skeleton: versioned, effective-dated rules with citations; business-day

@@ -57,6 +57,9 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   first use. Reset it any time from `/operator` → *Reset demo with sample data* or *Reset demo empty* (setup only, no claims/denials/files); the old one is archived.
 - Migrations run with the deploy; never deploy app code ahead of its migrations or run a
   column-dropping migration while an older build is still serving.
+- Each customer practice's signed BAA is recorded from its practice page (`/operator` → practice
+  name → *Record the signed agreement*; spec: `docs/specs/practice-agreements.md`). Pre-production
+  holds synthetic practices only, so upload test PDFs there, never a real customer's agreement.
 - After a release that changes the revenue cycle starter configuration or file layout (e.g. C0,
   2026-09-26), reset the demo so it carries the new configuration and sample files. Other
   pre-production practices keep their stored rules; an admin can review them on the Rules page.

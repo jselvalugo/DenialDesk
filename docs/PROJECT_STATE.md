@@ -23,6 +23,11 @@ _Last updated: 2026-09-26_
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
   login and a platform operator console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
+- Operator console: each customer practice has a page (`/operator/practices/<id>`) where the
+  operator records the signed Business Associate Agreement (PDF, dates, signers, template version)
+  and downloads it; renewals supersede, nothing is deleted; the practices list shows BAA status
+  (`specs/practice-agreements.md`). Practices are still created by the operator only (owner
+  decision 2026-09-26: no self-service sign-up; a BAA must be signed before a practice exists).
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
 - Production branch on Netlify: `claude/quirky-feynman-ufql5a` (default). Each session works on its
@@ -44,6 +49,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
 | 2026-09-26 | ERP shell: global header, navy app bar with tabs, app launcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
+| 2026-09-26 | No self-service sign-up; the operator creates practices after the BAA is signed, and records the BAA on the practice page | `specs/practice-agreements.md` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -90,6 +96,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   version history for HIPAA amendments (§164.526), P3; confirm compliance needs address and phone.
   Pre-prod entry relies on the SYN prefixes plus a synthetic attestation checkbox (ADR 0003).
 - Patients: should front-desk registration be its own role? Guarantor now or with statements (§8.6)?
+- BAAs (`specs/practice-agreements.md`): block sign-in for a practice without an active BAA, or
+  keep it as a flag on the console? Who countersigns for DenialDesk and what the current template
+  version is (R-5.5.1, counsel). Termination and the R-9.2.2 data-return clock are not built.
 - Claims before real data: sensitivity masking of diagnosis codes in `claim_versions` snapshots and
   history; retention/legal-hold path for append-only history; PIP/workers' comp/Medicaid filing
   rules and the HMO citation for timely filing (`specs/claims.md`).
