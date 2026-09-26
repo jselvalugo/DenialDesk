@@ -17,6 +17,7 @@ import { withTenant } from "@/db/tenant";
 import { AGING_BUCKETS } from "@/domain/revenue-cycle/aging";
 import { periodLabel } from "@/domain/revenue-cycle/imports";
 import { receivablesReport } from "@/domain/revenue-cycle/receivables";
+import { audit } from "@/lib/audit";
 import { cn } from "@/lib/cn";
 import { formatCents, formatDate } from "@/lib/format";
 
@@ -41,7 +42,21 @@ export default async function AgingPage({
   if (!canViewRevenueCycle(auth.role)) notFound();
   const { month } = query.parse(await searchParams);
   const chosen = month ? { year: Number(month.slice(0, 4)), month: Number(month.slice(5)) } : undefined;
-  const report = await withTenant(auth, (tx) => receivablesReport(tx, chosen));
+  const report = await withTenant(auth, async (tx) => {
+    const result = await receivablesReport(tx, chosen);
+    // Totals only, but built from PHI lines: record the view (R-7.5.1).
+    if (result) {
+      await audit(tx, {
+        action: "rcm.report_viewed",
+        actorUserId: auth.userId,
+        tenantId: auth.tenantId,
+        entityType: "rcm_file",
+        entityId: result.selected.fileId,
+        metadata: { report: "ar_aging" },
+      });
+    }
+    return result;
+  });
 
   if (!report) {
     return (
@@ -116,10 +131,14 @@ export default async function AgingPage({
           emphasis={credits < 0 ? "warning" : undefined}
         />
         <StatTile
-          label="Undeposited payments"
-          value={latestRecon ? formatCents(latestRecon.clearingCents) : "—"}
-          detail="Payments posted minus deposits, all months shown"
-          emphasis={latestRecon?.growing ? "warning" : undefined}
+          label={latestRecon && latestRecon.clearingCents < 0 ? "Unposted deposits" : "Undeposited payments"}
+          value={latestRecon ? formatCents(Math.abs(latestRecon.clearingCents)) : "—"}
+          detail={
+            latestRecon && latestRecon.clearingCents < 0
+              ? "Deposited but not posted in the practice-management system"
+              : "Payments posted minus deposits"
+          }
+          emphasis={latestRecon?.alert || (latestRecon?.clearingCents ?? 0) < 0 ? "warning" : undefined}
         />
       </section>
 
@@ -267,7 +286,7 @@ export default async function AgingPage({
 
       <Panel
         title="Payments and deposits"
-        description="Payments posted in the practice-management system against bank deposits in the same month. The running difference sits in the payments-clearing account."
+        description="Payments posted in the practice-management system against bank deposits in the same month. The running difference (since the first month shown, restarting after a missing month) is what the payments-clearing account should hold."
         actions={
           <Link href="/revenue-cycle/deposits" className="text-label font-medium text-link hover:underline">
             Deposits
@@ -282,7 +301,7 @@ export default async function AgingPage({
               <Th numeric>Payments posted</Th>
               <Th numeric>Deposits</Th>
               <Th numeric>Difference</Th>
-              <Th numeric>Undeposited to date</Th>
+              <Th numeric>Posted minus deposited</Th>
               <Th>Status</Th>
             </tr>
           </thead>
@@ -303,8 +322,10 @@ export default async function AgingPage({
                   <Money cents={r.clearingCents} />
                 </Td>
                 <Td>
-                  {r.growing ? (
-                    <Badge tone="warning">Growing</Badge>
+                  {r.clearingCents < 0 ? (
+                    <Badge tone="warning">Deposits not posted</Badge>
+                  ) : r.alert ? (
+                    <Badge tone="warning">Follow up</Badge>
                   ) : r.clearingCents === 0 ? (
                     <Badge tone="success">Cleared</Badge>
                   ) : (

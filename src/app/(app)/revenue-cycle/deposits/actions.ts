@@ -6,19 +6,24 @@ import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
 import { DEPOSIT_MAX_BYTES, parseDepositFile } from "@/domain/revenue-cycle/aging";
 import { decodeUpload } from "@/domain/revenue-cycle/monthly-file";
-import { importDeposits } from "@/domain/revenue-cycle/receivables";
+import { z } from "zod";
+import { revalidatePath } from "next/cache";
+import { DepositError, importDeposits, reverseDepositFile } from "@/domain/revenue-cycle/receivables";
 import { auditSystem } from "@/lib/audit";
+import { syntheticDataOnly } from "@/lib/env";
 
 export interface DepositUploadState {
   error?: string;
   problems?: Array<{ row: number; message: string }>;
 }
 
-/** Imports a bank deposit CSV (date and amount only; other columns are ignored, never stored). */
+/**
+ * Imports a bank deposit CSV: only Date and Amount are read; other columns are ignored and never
+ * stored. Pre-production (and anything on Netlify) accepts marked synthetic files only, with an
+ * attestation. Every refusal is audited with a reason and counts.
+ */
 export async function uploadDeposits(_: DepositUploadState, formData: FormData): Promise<DepositUploadState> {
   const auth = await requireAuth();
-  if (!canRunRevenueCycle(auth.role))
-    return { error: "Only administrators and RCM managers can import deposits." };
   const rejected = (reason: string, problems = 0) =>
     auditSystem({
       action: "rcm.deposits_rejected",
@@ -26,9 +31,20 @@ export async function uploadDeposits(_: DepositUploadState, formData: FormData):
       tenantId: auth.tenantId,
       metadata: { reason, problems },
     });
+  if (!canRunRevenueCycle(auth.role)) {
+    await rejected("forbidden");
+    return { error: "Only administrators and RCM managers can import deposits." };
+  }
+  const syntheticOnly = syntheticDataOnly();
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Choose a CSV file to import." };
-  if (!/\.csv$/i.test(file.name)) return { error: "Upload the bank export as CSV (.csv)." };
+  if (!(file instanceof File) || file.size === 0 || !/\.csv$/i.test(file.name)) {
+    await rejected("upload_check");
+    return { error: "Choose the bank export as a CSV (.csv) file." };
+  }
+  if (syntheticOnly && formData.get("syntheticAttestation") !== "on") {
+    await rejected("upload_check");
+    return { error: "Confirm that the file contains synthetic data only." };
+  }
   if (file.size > DEPOSIT_MAX_BYTES) {
     await rejected("too_large");
     return { error: "The file is larger than 1 MB. Split it by month." };
@@ -38,7 +54,7 @@ export async function uploadDeposits(_: DepositUploadState, formData: FormData):
     await rejected("encoding");
     return { error: "The file isn't UTF-8 text. Export it from your bank as CSV." };
   }
-  const parsed = parseDepositFile(text);
+  const parsed = parseDepositFile(text, { syntheticOnly });
   if (!parsed.ok) {
     await rejected("validation", parsed.problems.length);
     return {
@@ -46,6 +62,32 @@ export async function uploadDeposits(_: DepositUploadState, formData: FormData):
       problems: parsed.problems,
     };
   }
-  await withTenant(auth, (tx) => importDeposits(tx, auth, parsed.deposits));
+  try {
+    await withTenant(auth, (tx) => importDeposits(tx, auth, parsed.deposits));
+  } catch (error) {
+    if (!(error instanceof DepositError)) throw error;
+    await rejected("refused");
+    return { error: error.message };
+  }
   redirect("/revenue-cycle/ar-aging");
+}
+
+/** Reverses an imported deposit file (administrators, with a reason). */
+export async function reverseDeposits(
+  _: DepositUploadState,
+  formData: FormData,
+): Promise<DepositUploadState> {
+  const auth = await requireAuth();
+  const id = z.uuid().safeParse(formData.get("fileId"));
+  if (!id.success) return { error: "That deposit file doesn't exist." };
+  try {
+    await withTenant(auth, (tx) =>
+      reverseDepositFile(tx, auth, id.data, String(formData.get("reason") ?? "")),
+    );
+  } catch (error) {
+    if (!(error instanceof DepositError)) throw error;
+    return { error: error.message };
+  }
+  revalidatePath("/revenue-cycle/deposits");
+  return {};
 }

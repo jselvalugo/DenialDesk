@@ -195,13 +195,20 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       roll forward. Preparer may export an approved voucher (approval is the second person).
 - [x] **B4** (2026-09-26): pure `aging.ts` (buckets 0–30/31–60/61–90/91–120/over 120 from
       service date to month-end, credit balances apart; roll-forward that reports differences;
-      payments-to-deposits reconciliation with a running clearing balance; deposit CSV parser)
-      and `receivables.ts` (report per month from `periodFiles()`; deposit import, audited).
-      `rcm_deposit_files` + `rcm_deposits` (FORCE RLS, insert/select only, non-zero amounts).
-      A/R aging page (month links, class × age table, age bars with text values, credit
-      balances, roll-forward, payments and deposits) and Deposits page (import, synthetic sample
-      matching the practice's months). Demo practices get synthetic deposits for their three
-      months with a realistic lag. Reports hold totals only (no PHI).
+      payments-to-deposits reconciliation whose running difference restarts after a missing month
+      and flags months where undeposited payments exceed half the month's payments, a product
+      default; deposit CSV parser) and `receivables.ts` (report per month from `periodFiles()`,
+      aging bucketed in SQL so only totals leave the database; deposit import and reversal).
+      `rcm_deposit_files` + `rcm_deposits` (FORCE RLS, insert/select only, tenant-scoped FKs,
+      uploader must belong to the practice, non-zero amounts, plausible dates). The same file
+      can't be imported twice (content hash) and files can't overlap in dates; an administrator
+      reverses a wrong file with negated rows (audited, once per file). Pre-production accepts
+      marked synthetic deposit files only, with an attestation (ADR 0003). A/R aging page (month
+      links, class × age table, age bars with text values, credit balances, roll-forward, payments
+      and deposits; each view audited as `rcm.report_viewed`) and Deposits page (import, reverse,
+      synthetic sample only for months without deposits). Demo practices get synthetic deposits
+      with a realistic lag. Reports show totals only; they're built from PHI lines, so views
+      are audited.
 - [ ] B5
 
 ## Security notes

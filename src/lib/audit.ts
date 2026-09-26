@@ -43,10 +43,11 @@ export type AuditAction =
   | "rcm.voucher_approved"
   | "rcm.voucher_exported"
   | "rcm.voucher_voided"
-  | "rcm.voucher_voided"
   | "rcm.voucher_superseded"
   | "rcm.deposits_imported"
-  | "rcm.deposits_rejected";
+  | "rcm.deposits_rejected"
+  | "rcm.deposits_reversed"
+  | "rcm.report_viewed";
 
 export interface AuditEvent {
   action: AuditAction;

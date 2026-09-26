@@ -33,7 +33,9 @@ Data: Restricted PHI (patient name, practice account number, service date, CPT, 
 
 | Threat | Control | Residual risk / owner |
 |---|---|---|
-| Bank account numbers or payer descriptions stored | Parser reads only the Date and Amount columns; nothing else is kept | Low |
+| Bank account numbers or payer descriptions stored | Parser reads only the Date and Amount columns; nothing else is kept. The raw file is held in memory only while it's parsed | Low |
+| Real bank data in pre-production | Synthetic marker column required on every row plus an attestation where `syntheticDataOnly()` | Attestation-level, like monthly files |
+| Deposits counted twice | Content hash (same file) and date-range overlap refused; reversal by administrators with negated rows, audited | Low |
 | Tampering with deposits | Insert/select only, FORCE RLS, non-zero CHECK; corrections are reversing entries | Owner DB role (open decision) |
 | Parser DoS | 1 MB, 5,000 rows, 50 columns, linear parser | Low |
-| PHI through aging | Aging, credit balances, roll-forward, and reconciliation are totals by class and month | Low |
+| PHI through aging | Aging is bucketed in SQL, so only totals by class and bucket leave the database; each report view is audited | Low |

@@ -24,10 +24,15 @@ export function bucketFor(serviceDate: string, asOf: string): BucketKey {
   return AGING_BUCKETS.find((b) => age <= b.maxDays)!.key;
 }
 
-export interface AgingLine {
+/**
+ * Open balances already summed by class and bucket (the database does the bucketing, so only
+ * totals leave it); `bucket` null holds the class's credit (negative) balances.
+ */
+export interface AgingTotal {
   payerClass: string;
-  serviceDate: string;
-  balanceCents: number;
+  bucket: BucketKey | null;
+  cents: number;
+  lines: number;
 }
 
 export interface AgingRow {
@@ -47,34 +52,54 @@ const emptyBuckets = () =>
   Object.fromEntries(AGING_BUCKETS.map((b) => [b.key, 0])) as Record<BucketKey, number>;
 
 /** Open balances by financial class and age; credit balances are listed apart, never netted. */
-export function ageReceivables(lines: AgingLine[], asOf: string): Aging {
+export function ageReceivables(totals: AgingTotal[]): Aging {
   const byClass = new Map<string, AgingRow>();
   const credits = new Map<string, { payerClass: string; lines: number; totalCents: number }>();
-  const totals: AgingRow = { payerClass: "All classes", buckets: emptyBuckets(), totalCents: 0 };
-  for (const line of lines) {
-    if (line.balanceCents < 0) {
-      const credit = credits.get(line.payerClass) ?? { payerClass: line.payerClass, lines: 0, totalCents: 0 };
-      credit.lines += 1;
-      credit.totalCents += line.balanceCents;
-      credits.set(line.payerClass, credit);
+  const all: AgingRow = { payerClass: "All classes", buckets: emptyBuckets(), totalCents: 0 };
+  for (const t of totals) {
+    if (t.bucket === null) {
+      const credit = credits.get(t.payerClass) ?? { payerClass: t.payerClass, lines: 0, totalCents: 0 };
+      credit.lines += t.lines;
+      credit.totalCents += t.cents;
+      credits.set(t.payerClass, credit);
       continue;
     }
-    if (line.balanceCents === 0) continue;
-    const row = byClass.get(line.payerClass) ?? {
-      payerClass: line.payerClass,
+    const row = byClass.get(t.payerClass) ?? {
+      payerClass: t.payerClass,
       buckets: emptyBuckets(),
       totalCents: 0,
     };
-    const bucket = bucketFor(line.serviceDate, asOf);
-    row.buckets[bucket] += line.balanceCents;
-    row.totalCents += line.balanceCents;
-    totals.buckets[bucket] += line.balanceCents;
-    totals.totalCents += line.balanceCents;
-    byClass.set(line.payerClass, row);
+    row.buckets[t.bucket] += t.cents;
+    row.totalCents += t.cents;
+    all.buckets[t.bucket] += t.cents;
+    all.totalCents += t.cents;
+    byClass.set(t.payerClass, row);
   }
   const byTotal = <T extends { totalCents: number; payerClass: string }>(a: T, b: T) =>
     Math.abs(b.totalCents) - Math.abs(a.totalCents) || (a.payerClass < b.payerClass ? -1 : 1);
-  return { rows: [...byClass.values()].sort(byTotal), totals, credits: [...credits.values()].sort(byTotal) };
+  return {
+    rows: [...byClass.values()].sort(byTotal),
+    totals: all,
+    credits: [...credits.values()].sort(byTotal),
+  };
+}
+
+/** Sums lines into aging totals in memory (tests and synthetic checks; reports bucket in SQL). */
+export function agingTotals(
+  lines: Array<{ payerClass: string; serviceDate: string; balanceCents: number }>,
+  asOf: string,
+): AgingTotal[] {
+  const map = new Map<string, AgingTotal>();
+  for (const l of lines) {
+    if (l.balanceCents === 0) continue;
+    const bucket = l.balanceCents < 0 ? null : bucketFor(l.serviceDate, asOf);
+    const key = `${l.payerClass}|${bucket}`;
+    const t = map.get(key) ?? { payerClass: l.payerClass, bucket, cents: 0, lines: 0 };
+    t.cents += l.balanceCents;
+    t.lines += 1;
+    map.set(key, t);
+  }
+  return [...map.values()];
 }
 
 export interface MonthTotals {
@@ -113,6 +138,12 @@ export function rollForward(months: MonthTotals[]): RollForwardRow[] {
   });
 }
 
+/**
+ * When undeposited payments exceed this share of the month's payments, the month is flagged for
+ * follow-up. A product default (one to two weeks of normal deposit lag), not a legal threshold.
+ */
+export const CLEARING_ALERT_SHARE_BPS = 5_000;
+
 export interface ReconciliationRow {
   periodYear: number;
   periodMonth: number;
@@ -120,15 +151,20 @@ export interface ReconciliationRow {
   depositsCents: number;
   /** Payments − deposits this month. */
   differenceCents: number;
-  /** Running payments − deposits since the first month shown: the clearing account's balance. */
+  /**
+   * Payments posted minus deposits since the first month of the run (restarting after a missing
+   * month). Positive: posted but not yet deposited; negative: deposited but not posted.
+   */
   clearingCents: number;
-  /** The clearing balance grew and is positive: payments posted but not (yet) deposited. */
-  growing: boolean;
+  /** The run restarted here because the prior month has no activity file. */
+  afterGap: boolean;
+  /** Undeposited payments exceed CLEARING_ALERT_SHARE_BPS of the month's payments. */
+  alert: boolean;
 }
 
 /**
  * Payments posted in the practice-management system against deposits recorded by the bank,
- * month by month. The running difference is what sits in the payments-clearing account.
+ * month by month, with the running difference (the payments-clearing account since the run began).
  */
 export function reconcileDeposits(
   months: Array<{ periodYear: number; periodMonth: number; paymentsCents: number }>,
@@ -140,12 +176,16 @@ export function reconcileDeposits(
     byMonth.set(key, (byMonth.get(key) ?? 0) + d.amountCents);
   }
   let clearing = 0;
+  let previous: number | null = null;
   return [...months]
     .sort((a, b) => monthIndex(a) - monthIndex(b))
     .map((m) => {
-      const depositsCents = byMonth.get(monthIndex(m)) ?? 0;
+      const index = monthIndex(m);
+      const afterGap = previous !== null && index !== previous + 1;
+      if (afterGap) clearing = 0;
+      previous = index;
+      const depositsCents = byMonth.get(index) ?? 0;
       const differenceCents = m.paymentsCents - depositsCents;
-      const previous = clearing;
       clearing += differenceCents;
       return {
         periodYear: m.periodYear,
@@ -154,7 +194,8 @@ export function reconcileDeposits(
         depositsCents,
         differenceCents,
         clearingCents: clearing,
-        growing: clearing > 0 && clearing > previous,
+        afterGap,
+        alert: clearing * 10_000 > m.paymentsCents * CLEARING_ALERT_SHARE_BPS,
       };
     });
 }
@@ -182,13 +223,16 @@ const normalize = (h: string) =>
     .trim();
 const DATE_HEADERS = ["date", "deposit date", "posted date", "posting date"];
 const AMOUNT_HEADERS = ["amount", "deposit amount", "credit"];
+/** Pre-production accepts synthetic deposit files only: each row carries this marker. */
+export const SYNTHETIC_DEPOSIT_MARKER = "SYN-DEPOSIT";
+const MARKER_HEADERS = ["synthetic marker"];
 
 /**
  * Bank deposits: only the date and amount columns are read; any other column (descriptions,
  * account numbers) is ignored and never stored (bank data needs field-level encryption,
  * CLAUDE.md #6). The whole file is rejected on any bad row; messages never echo values.
  */
-export function parseDepositFile(text: string): DepositParse {
+export function parseDepositFile(text: string, options: { syntheticOnly: boolean }): DepositParse {
   let rows;
   try {
     rows = parseCsv(text, { maxRows: DEPOSIT_MAX_ROWS, maxColumns: 50, headerRows: 1 });
@@ -210,13 +254,33 @@ export function parseDepositFile(text: string): DepositParse {
       ],
     };
   }
+  const markerCols = find(MARKER_HEADERS);
+  if (options.syntheticOnly && markerCols.length !== 1) {
+    return {
+      ok: false,
+      problems: [
+        {
+          row: rows[0]!.line,
+          message: `This environment accepts synthetic deposit files only: add a "Synthetic marker" column with ${SYNTHETIC_DEPOSIT_MARKER} on every row.`,
+        },
+      ],
+    };
+  }
   const problems: Array<{ row: number; message: string }> = [];
   const deposits: DepositLine[] = [];
   for (const { cells, line } of rows.slice(1)) {
     const date = parseServiceDate(cells[dateCols[0]!] ?? "");
-    const amount = parseMoney(cells[amountCols[0]!] ?? "");
+    const rawAmount = (cells[amountCols[0]!] ?? "").trim();
+    const amount = rawAmount === "" ? null : parseMoney(rawAmount);
+    if (options.syntheticOnly && (cells[markerCols[0]!] ?? "").trim() !== SYNTHETIC_DEPOSIT_MARKER) {
+      problems.push({ row: line, message: `Synthetic marker isn't ${SYNTHETIC_DEPOSIT_MARKER}.` });
+    }
     if (!date) problems.push({ row: line, message: "Date isn't a valid date (use MM/DD/YYYY)." });
-    if (amount === null)
+    else if (date < "2000-01-01" || date > "2100-12-31") {
+      problems.push({ row: line, message: "Date is outside 2000–2100." });
+    }
+    if (rawAmount === "") problems.push({ row: line, message: "Amount is blank." });
+    else if (amount === null)
       problems.push({ row: line, message: "Amount isn't a valid dollar amount (up to $10,000,000)." });
     else if (amount === 0) problems.push({ row: line, message: "Amount is zero." });
     if (problems.length >= 20) break;

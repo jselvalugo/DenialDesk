@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ageReceivables,
+  agingTotals,
   bucketFor,
   parseDepositFile,
   reconcileDeposits,
@@ -8,6 +9,8 @@ import {
   type MonthTotals,
 } from "./aging";
 import { depositsToCsv, generateDeposits, generateMonthlyFiles } from "./synthetic-file";
+
+const OPEN = { syntheticOnly: false };
 
 describe("bucketFor", () => {
   it.each([
@@ -27,14 +30,16 @@ describe("bucketFor", () => {
 describe("ageReceivables", () => {
   it("ages open balances by class, lists credit balances apart, and skips closed lines", () => {
     const aging = ageReceivables(
-      [
-        { payerClass: "COMM", serviceDate: "2026-03-20", balanceCents: 10_000 },
-        { payerClass: "COMM", serviceDate: "2025-10-01", balanceCents: 2_500 },
-        { payerClass: "SELF", serviceDate: "2026-02-10", balanceCents: 4_000 },
-        { payerClass: "SELF", serviceDate: "2026-02-10", balanceCents: 0 },
-        { payerClass: "MCR", serviceDate: "2026-01-05", balanceCents: -700 },
-      ],
-      "2026-03-31",
+      agingTotals(
+        [
+          { payerClass: "COMM", serviceDate: "2026-03-20", balanceCents: 10_000 },
+          { payerClass: "COMM", serviceDate: "2025-10-01", balanceCents: 2_500 },
+          { payerClass: "SELF", serviceDate: "2026-02-10", balanceCents: 4_000 },
+          { payerClass: "SELF", serviceDate: "2026-02-10", balanceCents: 0 },
+          { payerClass: "MCR", serviceDate: "2026-01-05", balanceCents: -700 },
+        ],
+        "2026-03-31",
+      ),
     );
     expect(
       aging.rows.map((r) => [r.payerClass, r.totalCents, r.buckets["0_30"], r.buckets.over_120]),
@@ -102,7 +107,7 @@ describe("rollForward", () => {
 });
 
 describe("reconcileDeposits", () => {
-  it("tracks payments posted but not deposited as the clearing balance", () => {
+  it("tracks payments posted but not deposited as the running difference", () => {
     const rows = reconcileDeposits(
       [
         { periodYear: 2026, periodMonth: 2, paymentsCents: 900 },
@@ -112,17 +117,31 @@ describe("reconcileDeposits", () => {
       [
         { depositDate: "2026-01-15", amountCents: 950 },
         { depositDate: "2026-02-03", amountCents: 50 },
-        { depositDate: "2026-02-20", amountCents: 700 },
-        { depositDate: "2026-03-10", amountCents: 700 },
+        { depositDate: "2026-02-20", amountCents: 300 },
+        { depositDate: "2026-03-10", amountCents: 1_200 },
         { depositDate: "2025-12-31", amountCents: 1 }, // outside the months shown
       ],
     );
     expect(
-      rows.map((r) => [r.periodMonth, r.depositsCents, r.differenceCents, r.clearingCents, r.growing]),
+      rows.map((r) => [r.periodMonth, r.depositsCents, r.differenceCents, r.clearingCents, r.alert]),
     ).toEqual([
-      [1, 950, 50, 50, true],
-      [2, 750, 150, 200, true],
-      [3, 700, -200, 0, false],
+      [1, 950, 50, 50, false], // 5% of the month's payments: normal lag
+      [2, 350, 550, 600, true], // over half the month's payments undeposited
+      [3, 1_200, -700, -100, false], // deposits ran ahead of posting (negative)
+    ]);
+  });
+
+  it("restarts after a missing month", () => {
+    const rows = reconcileDeposits(
+      [
+        { periodYear: 2026, periodMonth: 1, paymentsCents: 1_000 },
+        { periodYear: 2026, periodMonth: 3, paymentsCents: 500 },
+      ],
+      [{ depositDate: "2026-03-05", amountCents: 400 }],
+    );
+    expect(rows.map((r) => [r.clearingCents, r.afterGap])).toEqual([
+      [1_000, false],
+      [100, true],
     ]);
   });
 
@@ -154,6 +173,7 @@ describe("parseDepositFile", () => {
   it("reads only the date and amount, ignoring other columns", () => {
     const result = parseDepositFile(
       'Posted Date,Description,Account,Amount\n03/02/2026,"EFT Harbor Plan",****1234,"$1,250.00"\n3/9/2026,Lockbox,****1234,(20.00)\n',
+      OPEN,
     );
     expect(result).toEqual({
       ok: true,
@@ -166,16 +186,36 @@ describe("parseDepositFile", () => {
   });
 
   it("rejects the whole file on bad rows without echoing values", () => {
-    const result = parseDepositFile("Date,Amount\n02/30/2026,12\n03/01/2026,12x5\n03/02/2026,0\n");
+    const result = parseDepositFile("Date,Amount\n02/30/2026,12\n03/01/2026,12x5\n03/02/2026,0\n", OPEN);
     expect(result.ok).toBe(false);
     expect(!result.ok && result.problems.map((p) => p.row)).toEqual([2, 3, 4]);
     expect(JSON.stringify(result)).not.toContain("12x5");
   });
 
+  it("accepts only marked synthetic files where synthetic-only applies, and plausible dates", () => {
+    const unmarked = parseDepositFile("Date,Amount\n03/01/2026,1.00\n", { syntheticOnly: true });
+    expect(!unmarked.ok && unmarked.problems[0]!.message).toMatch(/synthetic deposit files only/);
+    const wrong = parseDepositFile("Date,Amount,Synthetic marker\n03/01/2026,1.00,REAL\n", {
+      syntheticOnly: true,
+    });
+    expect(!wrong.ok && wrong.problems[0]!.message).toMatch(/Synthetic marker/);
+    const marked = parseDepositFile("Date,Amount,Synthetic marker\n03/01/2026,1.00,SYN-DEPOSIT\n", {
+      syntheticOnly: true,
+    });
+    expect(marked.ok).toBe(true);
+    expect(parseDepositFile("Date,Amount\n03/01/1999,1.00\n", OPEN).ok).toBe(false);
+  });
+
+  it("names blank amounts and ignores the Credit column of debit/credit exports", () => {
+    const blank = parseDepositFile("Date,Amount\n03/01/2026,\n", OPEN);
+    expect(!blank.ok && blank.problems[0]!.message).toBe("Amount is blank.");
+    expect(parseDepositFile("Date,Debit,Credit\n03/01/2026,5.00,\n", OPEN).ok).toBe(false);
+  });
+
   it("needs exactly one date and one amount column", () => {
-    expect(parseDepositFile("Date,Amount,Deposit amount\n03/01/2026,1,1\n").ok).toBe(false);
-    expect(parseDepositFile("When,Amount\n03/01/2026,1\n").ok).toBe(false);
-    expect(parseDepositFile("Date,Amount\n").ok).toBe(false);
+    expect(parseDepositFile("Date,Amount,Deposit amount\n03/01/2026,1,1\n", OPEN).ok).toBe(false);
+    expect(parseDepositFile("When,Amount\n03/01/2026,1\n", OPEN).ok).toBe(false);
+    expect(parseDepositFile("Date,Amount\n", OPEN).ok).toBe(false);
   });
 
   it("round-trips synthetic deposits", () => {
@@ -187,7 +227,7 @@ describe("parseDepositFile", () => {
       facilities: [],
     });
     const deposits = generateDeposits(files, 2);
-    const parsed = parseDepositFile(depositsToCsv(deposits));
+    const parsed = parseDepositFile(depositsToCsv(deposits), { syntheticOnly: true });
     expect(
       parsed.ok && parsed.deposits.map(({ depositDate, amountCents }) => ({ depositDate, amountCents })),
     ).toEqual(deposits);

@@ -1,5 +1,6 @@
 import { csvCell } from "@/lib/csv/parse";
 import { createRandom, FIRST_NAMES, LAST_NAMES } from "@/domain/synthetic/generator";
+import { SYNTHETIC_DEPOSIT_MARKER } from "./aging";
 import { MONTHLY_FILE_HEADER, SYNTHETIC_ACCOUNT_PREFIX, type MonthlyLine } from "./monthly-file";
 
 // Synthetic practice-management activity (R-15.1): fictional patients and payers, SYN- account
@@ -288,8 +289,10 @@ export function generateDeposits(files: SyntheticMonth[], seed: number) {
   );
 }
 
-/** Deposits as a bank-style CSV (date and amount only). */
+/** Deposits as a bank-style CSV: date, amount, and the synthetic-data marker. */
 export function depositsToCsv(deposits: Array<{ depositDate: string; amountCents: number }>): string {
-  const body = deposits.map((d) => [usDate(d.depositDate), money(d.amountCents)].map(csvCell).join(","));
-  return ["Date,Amount", ...body].join("\r\n") + "\r\n";
+  const body = deposits.map((d) =>
+    [usDate(d.depositDate), money(d.amountCents), SYNTHETIC_DEPOSIT_MARKER].map(csvCell).join(","),
+  );
+  return ["Date,Amount,Synthetic marker", ...body].join("\r\n") + "\r\n";
 }

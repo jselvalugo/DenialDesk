@@ -647,6 +647,13 @@ export const rcmDepositFiles = pgTable("rcm_deposit_files", {
     .references(() => users.id),
   rowCount: integer("row_count").notNull(),
   totalCents: cents("total_cents").notNull(),
+  /** SHA-256 of the file's (date, amount) rows; the same file can't be imported twice. */
+  contentHash: text("content_hash"),
+  /** First and last deposit date; files may not overlap (reversals excepted). */
+  dateFrom: date("date_from", { mode: "string" }),
+  dateTo: date("date_to", { mode: "string" }),
+  /** Set on a reversing file: the file whose deposits it cancels (one reversal per file). */
+  reversesFileId: uuid("reverses_file_id"),
   createdAt: createdAt(),
 });
 

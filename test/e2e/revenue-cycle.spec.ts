@@ -155,8 +155,11 @@ test.describe("receivables and deposits", () => {
     await page.getByLabel("Bank deposits (CSV, up to 1 MB)").setInputFiles({
       name: "bank.csv",
       mimeType: "text/csv",
-      buffer: Buffer.from("Posted Date,Description,Amount\n03/02/2026,Synthetic EFT,125.00\n"),
+      buffer: Buffer.from(
+        "Posted Date,Description,Amount,Synthetic marker\n03/02/2026,Synthetic EFT,125.00,SYN-DEPOSIT\n",
+      ),
     });
+    await page.getByLabel(/synthetic data only/).check();
     await page.getByRole("button", { name: "Import deposits" }).click();
     await expect(page).toHaveURL(/\/revenue-cycle\/ar-aging$/);
     await page.goto("/revenue-cycle/deposits");
@@ -166,12 +169,16 @@ test.describe("receivables and deposits", () => {
     await page.getByLabel("Bank deposits (CSV, up to 1 MB)").setInputFiles({
       name: "bad.csv",
       mimeType: "text/csv",
-      buffer: Buffer.from("Date,Amount\n02/30/2026,12x\n"),
+      buffer: Buffer.from("Date,Amount,Synthetic marker\n02/30/2026,12x,SYN-DEPOSIT\n"),
     });
+    await page.getByLabel(/synthetic data only/).check();
     await page.getByRole("button", { name: "Import deposits" }).click();
     const problems = page.getByRole("list", { name: "Problems in the file" });
     await expect(problems).toContainText("Row 2: Date isn't a valid date");
     await expect(problems).not.toContainText("12x");
+
+    // Every demo month already has deposits, so there's no sample to download.
+    await expect(page.getByText(/Every imported month already has deposits/)).toBeVisible();
   });
 
   test.describe("as compliance (read-only)", () => {
