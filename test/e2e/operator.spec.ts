@@ -135,7 +135,16 @@ test.describe("as the platform operator", () => {
     await page.getByLabel("Admin's work email").fill(`baa-admin-${Date.now()}@e2e.denialdesk.test`);
     await page.getByRole("button", { name: "Create practice" }).click();
     await expect(page.getByRole("status")).toContainText(`${name} created`);
-    await page.getByRole("link", { name: "All practices" }).click();
+    await expect(page.getByRole("link", { name: "Open practice" })).toHaveAttribute(
+      "href",
+      /^\/operator\/practices\/[0-9a-f-]{36}$/,
+    );
+    // "Create another" clears the one-time password and shows an empty form.
+    await page.getByRole("button", { name: "Create another" }).click();
+    await expect(page.getByText("Temporary password")).toHaveCount(0);
+    await expect(page.getByLabel("Practice name")).toHaveValue("");
+    await page.getByRole("link", { name: "Cancel" }).click();
+    await expect(page).toHaveURL(/\/operator$/);
 
     const table = page.getByRole("table", { name: "All practices on this environment" });
     const row = table.getByRole("row", { name: new RegExp(name) });

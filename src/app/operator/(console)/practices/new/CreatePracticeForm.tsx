@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { primaryLinkButtonClass } from "@/components/ui/linkButton";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
@@ -37,10 +38,7 @@ function CreatePracticeRound({ onAnother }: { onAnother: () => void }) {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <Link
-            href={`/operator/practices/${tenantId}`}
-            className="inline-flex h-8 items-center rounded-control border border-primary bg-primary px-3 text-body font-medium text-white hover:border-primary-hover hover:bg-primary-hover"
-          >
+          <Link href={`/operator/practices/${tenantId}`} className={primaryLinkButtonClass}>
             Open practice
           </Link>
           <Link href="/operator" className="text-body font-medium text-link hover:underline">
