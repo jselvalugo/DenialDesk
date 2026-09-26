@@ -9,9 +9,16 @@ function key(): Buffer {
   return Buffer.from(serverEnv().FIELD_ENCRYPTION_KEY, "base64");
 }
 
-export function encryptField(plaintext: string, encryptionKey: Buffer = key()): string {
+/**
+ * `aad` (additional authenticated data, e.g. `tenant_id|field_id|record_id`, ADR 0007) binds the
+ * ciphertext to where it was written, without being stored itself: GCM authenticates it, so
+ * decrypting with a different `aad` (a value copied to another row, record, or tenant) fails. The
+ * format stays `v1`; callers that pass no `aad` are unaffected.
+ */
+export function encryptField(plaintext: string, encryptionKey: Buffer = key(), aad?: string): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv);
+  if (aad !== undefined) cipher.setAAD(Buffer.from(aad, "utf8"));
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return [VERSION, iv, tag, ciphertext]
@@ -19,12 +26,13 @@ export function encryptField(plaintext: string, encryptionKey: Buffer = key()): 
     .join(".");
 }
 
-export function decryptField(payload: string, encryptionKey: Buffer = key()): string {
+export function decryptField(payload: string, encryptionKey: Buffer = key(), aad?: string): string {
   const [version, iv, tag, ciphertext] = payload.split(".");
   if (version !== VERSION || !iv || !tag || ciphertext === undefined) {
     throw new Error("Unrecognized encrypted field format");
   }
   const decipher = createDecipheriv("aes-256-gcm", encryptionKey, Buffer.from(iv, "base64url"));
+  if (aad !== undefined) decipher.setAAD(Buffer.from(aad, "utf8"));
   decipher.setAuthTag(Buffer.from(tag, "base64url"));
   return Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64url")), decipher.final()]).toString(
     "utf8",

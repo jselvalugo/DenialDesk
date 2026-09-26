@@ -70,7 +70,9 @@ export type AuditAction =
   | "settings.custom_field_created"
   | "settings.custom_field_updated"
   | "settings.custom_field_deactivated"
-  | "settings.custom_field_reactivated";
+  | "settings.custom_field_reactivated"
+  | "custom_field.value_revealed"
+  | "custom_field.value_integrity_failed";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
@@ -98,7 +100,8 @@ export interface AuditEvent {
     | "rcm_file"
     | "rcm_voucher"
     | "rcm_deposit_file"
-    | "custom_field";
+    | "custom_field"
+    | "custom_field_value";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;
