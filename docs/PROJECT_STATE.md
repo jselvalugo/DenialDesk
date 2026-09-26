@@ -9,7 +9,9 @@ _Last updated: 2026-09-26_
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
   rules engine, synthetic data, Netlify config (not yet deployed — see `docs/runbooks/netlify.md`).
 - Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
-- Working branch: `claude/adoring-hypatia-5co7fz`.
+- Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
+  login and a platform operator console (`/operator`) for the owner.
+- Working branch: `claude/adoring-hypatia-5co7fz`; production branch on Netlify: `claude/quirky-feynman-ufql5a` (default).
 
 ## Decisions made (details in `docs/decisions/`)
 | Date | Decision | Record |
@@ -59,6 +61,10 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Pin GitHub Actions to commit SHAs (Dependabot now keeps them current).
 
 ## Lessons / conventions learned
+- Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
+  set secrets per context in the Netlify UI, or non-secret via the connector.
+- In raw SQL subqueries, unqualified column names bind to the inner table (team-size bug caught by
+  an integration test); prefer separate grouped queries.
 - Tenant data only through `withTenant()` (src/db/tenant.ts); FK references from user input must be
   checked against the tenant in code (FKs bypass RLS).
 - Drizzle wraps DB errors: the Postgres message is on `error.cause` (see test helper `expectDbError`).

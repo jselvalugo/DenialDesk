@@ -36,9 +36,15 @@ const cents = (name: string) => bigint(name, { mode: "number" });
 
 export const roleEnum = pgEnum("member_role", ["admin", "manager", "specialist", "compliance"]);
 
+export const tenantKindEnum = pgEnum("tenant_kind", ["customer", "demo"]);
+
 export const tenants = pgTable("tenants", {
   id: id(),
   name: text("name").notNull(),
+  /** "demo" = synthetic demo practice for the preview's one-click demo login. */
+  kind: tenantKindEnum("kind").notNull().default("customer"),
+  /** Set by the platform operator; blocks sign-in and existing sessions for the practice. */
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -84,6 +90,10 @@ export const sessions = pgTable(
       .references(() => users.id),
     tenantId: uuid("tenant_id").references(() => tenants.id),
     mfaVerified: boolean("mfa_verified").notNull().default(false),
+    /** How the session was established. "demo" sessions skip MFA and are limited to the demo practice. */
+    authMethod: text("auth_method", { enum: ["password_mfa", "demo"] })
+      .notNull()
+      .default("password_mfa"),
     createdAt: createdAt(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),

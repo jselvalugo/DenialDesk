@@ -6,10 +6,12 @@ import { TopBar, type ShellUser } from "./TopBar";
 export function AppShell({
   user,
   showDesignSystem,
+  showOperatorConsole = false,
   children,
 }: {
   user: ShellUser | null;
   showDesignSystem: boolean;
+  showOperatorConsole?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -20,7 +22,7 @@ export function AppShell({
       >
         Skip to content
       </a>
-      <Sidebar showDesignSystem={showDesignSystem} />
+      <Sidebar showDesignSystem={showDesignSystem} showOperatorConsole={showOperatorConsole} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar user={user} />
         <main

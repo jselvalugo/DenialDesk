@@ -36,6 +36,20 @@
       "when": 1790415259602,
       "tag": "0004_tenant_identity_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790418028860,
+      "tag": "0005_tenant_kind_and_suspension",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790418070360,
+      "tag": "0006_session_auth_method",
+      "breakpoints": true
     }
   ]
 }

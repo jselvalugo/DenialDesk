@@ -32,7 +32,13 @@ function NavEntry({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export function Sidebar({ showDesignSystem }: { showDesignSystem: boolean }) {
+export function Sidebar({
+  showDesignSystem,
+  showOperatorConsole = false,
+}: {
+  showDesignSystem: boolean;
+  showOperatorConsole?: boolean;
+}) {
   const pathname = usePathname();
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
@@ -57,12 +63,20 @@ export function Sidebar({ showDesignSystem }: { showDesignSystem: boolean }) {
           </div>
         ))}
       </nav>
-      {showDesignSystem && (
-        <div className="border-t border-border px-3 py-3">
-          <NavEntry
-            item={{ label: "Design system", href: "/design", available: true }}
-            active={isActive("/design")}
-          />
+      {(showDesignSystem || showOperatorConsole) && (
+        <div className="space-y-px border-t border-border px-3 py-3">
+          {showOperatorConsole && (
+            <NavEntry
+              item={{ label: "Platform console", href: "/operator", available: true }}
+              active={isActive("/operator")}
+            />
+          )}
+          {showDesignSystem && (
+            <NavEntry
+              item={{ label: "Design system", href: "/design", available: true }}
+              active={isActive("/design")}
+            />
+          )}
         </div>
       )}
     </aside>

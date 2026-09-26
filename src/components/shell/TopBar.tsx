@@ -1,10 +1,12 @@
 import { signOut } from "@/auth/actions";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 
 export interface ShellUser {
   displayName: string;
   tenantName: string;
   role: string;
+  demo?: boolean;
 }
 
 const roleLabels: Record<string, string> = {
@@ -20,6 +22,7 @@ export function TopBar({ user }: { user: ShellUser | null }) {
       <div className="flex min-w-0 items-center gap-3">
         <span className="text-label font-medium text-subtle">Practice</span>
         <span className="truncate text-body font-medium text-text">{user?.tenantName ?? "Style guide"}</span>
+        {user?.demo && <Badge tone="info">Demo practice · shared with other visitors</Badge>}
       </div>
       {user && (
         <div className="flex items-center gap-4">

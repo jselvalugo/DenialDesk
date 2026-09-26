@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/auth/session";
+import { demoLoginEnabled } from "@/lib/env";
+import { DemoSignIn } from "./DemoSignIn";
 import { SignInForm } from "./SignInForm";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -11,6 +13,7 @@ const notices: Record<string, string> = {
 };
 const errors: Record<string, string> = {
   "no-practice": "Your account isn't linked to a practice yet. Contact your administrator.",
+  suspended: "This practice's access is suspended. Contact DenialDesk support.",
 };
 
 export default async function SignInPage({
@@ -29,6 +32,7 @@ export default async function SignInPage({
         Use your practice account. You&apos;ll confirm with your authenticator app next.
       </p>
       <SignInForm notice={notices[params.reason ?? ""] ?? errors[params.error ?? ""]} />
+      {demoLoginEnabled() && <DemoSignIn />}
     </>
   );
 }
