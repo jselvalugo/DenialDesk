@@ -50,6 +50,8 @@ export async function promptPayOverview(tx: TenantTx, filters: PromptPayFilters,
     index.map((c) => c.id),
   );
   const evaluated = index
+    // No legal clock without a verified regime (payer catalog, P2).
+    .flatMap((row) => (row.regime ? [{ ...row, regime: row.regime }] : []))
     .map((row) => {
       const clock = clockFor({
         regime: row.regime,
@@ -182,15 +184,16 @@ export async function getPromptPayClock(tx: TenantTx, claimId: string, today: st
     .leftJoin(users, eq(users.id, promptPayResponses.recordedBy))
     .where(eq(promptPayResponses.claimId, claimId))
     .orderBy(desc(promptPayResponses.createdAt), desc(promptPayResponses.id));
-  const clock = row.receivedDate
-    ? clockFor({
-        regime: row.regime,
-        electronic: row.electronic,
-        receivedDate: row.receivedDate,
-        responses: history,
-        today,
-      })
-    : null;
+  const clock =
+    row.receivedDate && row.regime
+      ? clockFor({
+          regime: row.regime,
+          electronic: row.electronic,
+          receivedDate: row.receivedDate,
+          responses: history,
+          today,
+        })
+      : null;
   return { claim: row, history, clock };
 }
 

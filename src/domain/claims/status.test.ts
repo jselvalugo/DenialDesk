@@ -43,6 +43,14 @@ describe("timely-filing status (R-3.1.5)", () => {
     }
   });
 
+  it("computes no deadline for an unverified payer (null regime, spec: payer-catalog P1)", () => {
+    expect(filingStatus(null, "2026-03-31", "2026-09-26")).toEqual({
+      state: "payer_unverified",
+      deadline: null,
+      daysRemaining: null,
+    });
+  });
+
   it("only draft and rejected claims are unsubmitted", () => {
     expect(isUnsubmitted("draft")).toBe(true);
     expect(isUnsubmitted("rejected")).toBe(true);

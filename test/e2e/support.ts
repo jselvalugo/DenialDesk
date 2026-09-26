@@ -32,7 +32,7 @@ export async function signIn(page: Page, user: E2EUser) {
   await expect(page.getByRole("heading", { name: "Two-step verification" })).toBeVisible();
   await page.getByLabel("6-digit code").fill(await freshCode(user.totpSecret!, new Set()));
   await page.getByRole("button", { name: "Verify" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
 }
 
 /** Platform console sign-in (its own page and session), ending on the console. */

@@ -59,7 +59,8 @@ async function floridaClaim(ctx: Ctx) {
       )
       .orderBy(asc(claims.claimNumber))
       .limit(1);
-    return row!;
+    // Seeded payers all carry an EDI payer ID.
+    return { ...row!, ediPayerId: row!.ediPayerId! };
   });
 }
 

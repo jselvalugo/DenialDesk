@@ -70,7 +70,7 @@ on late payments, with an itemized worksheet per claim. Every record keeps its f
       (`rules/prompt-pay.test.ts`).
 
 ## Data / API changes
-Migration `0025_remittances_prompt_pay` (Restricted PHI: claim links; no names, no bank data):
+Migration `0026_remittances_prompt_pay` (Restricted PHI: claim links; no names, no bank data):
 - `remittances`: payer, method (check / eft / non_payment), trace number, payment date, total
   paid, status (received / posted / void), source (upload / seed), loaded by. Unique
   (tenant, payer, trace number).

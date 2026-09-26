@@ -1,4 +1,4 @@
--- Generated from drizzle/0025_remittances_prompt_pay.sql by `pnpm netlify:migrations`. Do not edit.
+-- Generated from drizzle/0026_remittances_prompt_pay.sql by `pnpm netlify:migrations`. Do not edit.
 CREATE TYPE "public"."prompt_pay_response_kind" AS ENUM('payment', 'denial', 'contest');--> statement-breakpoint
 CREATE TYPE "public"."remittance_method" AS ENUM('check', 'eft', 'non_payment');--> statement-breakpoint
 CREATE TYPE "public"."remittance_status" AS ENUM('received', 'posted', 'void');--> statement-breakpoint

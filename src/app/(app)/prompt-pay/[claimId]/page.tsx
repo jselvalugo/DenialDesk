@@ -105,9 +105,11 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
       {!clock?.applies ? (
         <Panel>
           <p className="text-body text-muted">
-            {claim.receivedDate
-              ? `Florida prompt pay doesn't cover ${REGIME_LABELS[claim.regime]} claims, so this claim has no clock.`
-              : "The payer hasn't confirmed receipt of this claim, so its prompt-pay clock hasn't started."}
+            {!claim.regime
+              ? "This payer's regulatory regime hasn't been verified, so DenialDesk doesn't run a prompt-pay clock for it. An administrator can verify the payer."
+              : claim.receivedDate
+                ? `Florida prompt pay doesn't cover ${REGIME_LABELS[claim.regime]} claims, so this claim has no clock.`
+                : "The payer hasn't confirmed receipt of this claim, so its prompt-pay clock hasn't started."}
           </p>
         </Panel>
       ) : (
@@ -236,7 +238,9 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                 </Field>
                 <Field label="Payer">
                   {claim.payerName}
-                  <span className="block text-label text-muted">{REGIME_LABELS[claim.regime]}</span>
+                  <span className="block text-label text-muted">
+                    {claim.regime ? REGIME_LABELS[claim.regime] : "Regime not verified"}
+                  </span>
                 </Field>
                 <Field label="Status">
                   <Badge tone={CLAIM_STATUSES[claim.status].tone}>{CLAIM_STATUSES[claim.status].label}</Badge>

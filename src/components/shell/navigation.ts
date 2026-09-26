@@ -60,7 +60,7 @@ export function navApps({
       icon: ShieldAlert,
       tone: "teal",
       items: [
-        { label: "Overview", href: "/", icon: LayoutDashboard, available: true },
+        { label: "Overview", href: "/overview", icon: LayoutDashboard, available: true },
         { label: "Denial queue", href: "/denials", icon: Inbox, available: true },
         { label: "Appeals", href: "/appeals", icon: Gavel, available: false },
       ],

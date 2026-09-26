@@ -18,7 +18,7 @@ import { getClaim } from "@/domain/claims/queries";
 import { claimPayments } from "@/domain/remittances/queries";
 import { REMITTANCE_STATUSES } from "@/domain/remittances/status";
 import { CLAIM_STATUSES, FILING_WARNING_DAYS, filingStatus, isUnsubmitted } from "@/domain/claims/status";
-import { DENIAL_STATUSES, REGIME_LABELS } from "@/domain/denial-status";
+import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { audit } from "@/lib/audit";
 import { formatDate } from "@/lib/format";
 import { CorrectionForm } from "./CorrectionForm";
@@ -113,7 +113,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
               <Field label="Location">{detail.locationName}</Field>
               <Field label="Payer">
                 {payer.name}
-                <span className="block text-label text-muted">{REGIME_LABELS[payer.regime]}</span>
+                <span className="block text-label text-muted">{regimeLabel(payer.regime)}</span>
               </Field>
               <Field label="Billed">
                 <Money cents={claim.billedCents} />
@@ -254,9 +254,15 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                 </p>
                 {filing.deadline.verify && <Badge tone="warning">Pending counsel verification</Badge>}
               </div>
+            ) : filing.state === "payer_unverified" ? (
+              <p className="text-body text-warning-fg">
+                No deadline — payer not verified. Once this payer&apos;s regulatory regime is verified,
+                confirm the filing window manually with the payer contract or applicable law; DenialDesk
+                cannot compute one until then.
+              </p>
             ) : (
               <p className="text-body text-warning-fg">
-                DenialDesk has no filing rule configured for {REGIME_LABELS[payer.regime]} claims. Confirm the
+                DenialDesk has no filing rule configured for {regimeLabel(payer.regime)} claims. Confirm the
                 filing window with the payer contract or applicable law before it lapses.
               </p>
             )}

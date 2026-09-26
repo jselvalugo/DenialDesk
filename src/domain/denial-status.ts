@@ -38,3 +38,13 @@ export const REGIME_LABELS: Record<string, string> = {
   workers_comp: "Workers' comp",
   pip: "PIP",
 };
+
+/**
+ * A payer's regulatory regime is null until it is verified against the clearinghouse payer list
+ * (P2, spec: payer-catalog). Anywhere a regime label is shown, null must read as "not verified"
+ * rather than throwing or showing "undefined".
+ */
+export function regimeLabel(regime: string | null): string {
+  if (regime === null) return "Regime not verified";
+  return REGIME_LABELS[regime] ?? regime;
+}
