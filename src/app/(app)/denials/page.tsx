@@ -17,7 +17,7 @@ import { Select } from "@/components/ui/Select";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
 import { CATEGORY_LABELS } from "@/domain/carc";
-import { DENIAL_STATUSES, REGIME_LABELS } from "@/domain/denial-status";
+import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { DUE_SOON_DAYS, listDenials, PAGE_SIZE, payerOptions, queueSummary } from "@/domain/denials/queries";
 import { audit } from "@/lib/audit";
 import { formatCents } from "@/lib/format";
@@ -210,7 +210,7 @@ export default async function DenialQueuePage({
                     </Td>
                     <Td>
                       <span className="block">{row.payerName}</span>
-                      <span className="block text-label text-muted">{REGIME_LABELS[row.regime]}</span>
+                      <span className="block text-label text-muted">{regimeLabel(row.regime)}</span>
                     </Td>
                     <Td>
                       <span className="inline-flex items-center gap-2">

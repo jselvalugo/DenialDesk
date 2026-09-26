@@ -1,181 +1,264 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import {
+  ArrowRight,
+  Building2,
+  CalendarClock,
+  FileCheck2,
+  KeyRound,
+  LockKeyhole,
+  ScrollText,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 import { todayIn } from "@rules/calendar";
-import { daysUntil } from "@rules/deadlines";
+import { canViewRevenueCycle } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { appHome, navApps } from "@/components/shell/navigation";
+import { toneClasses } from "@/components/shell/tones";
 import { Badge } from "@/components/ui/Badge";
-import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
-import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { Money } from "@/components/ui/Money";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { primaryLinkButtonClass } from "@/components/ui/linkButton";
 import { Panel } from "@/components/ui/Panel";
-import { StatTile } from "@/components/ui/StatTile";
-import { withTenant } from "@/db/tenant";
-import { CATEGORY_LABELS } from "@/domain/carc";
-import { DENIAL_STATUSES } from "@/domain/denial-status";
-import { DUE_SOON_DAYS, openByCategory, queueSummary, upcomingDeadlines } from "@/domain/denials/queries";
-import { audit } from "@/lib/audit";
-import { formatCents } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { isProduction } from "@/lib/env";
+import { formatDate } from "@/lib/format";
 
-export default async function OverviewPage() {
+export const metadata: Metadata = { title: "Welcome" };
+
+interface Step {
+  title: string;
+  body: string;
+  /** Null until the step ships: shown as "Planned", never a link. */
+  href: string | null;
+  linkLabel?: string;
+}
+
+const STEPS: Step[] = [
+  {
+    title: "Record the claim",
+    body: "Claims are kept with their service lines, diagnosis and procedure codes, payer, and the filing deadline that applies to them.",
+    href: "/claims",
+    linkLabel: "Claims",
+  },
+  {
+    title: "Classify the denial",
+    body: "Each denial is read by its CARC and RARC reason codes and grouped into a category that points to the likely fix.",
+    href: "/denials",
+    linkLabel: "Denials",
+  },
+  {
+    title: "Work what matters first",
+    body: "The queue sorts open denials by appeal deadline or amount at stake, with deadlines computed from versioned Florida and payer rules.",
+    href: "/denials",
+    linkLabel: "Denial queue",
+  },
+  {
+    title: "Appeal with approval",
+    body: "Appeals are drafted from the denial and the claim record. No procedure or diagnosis code changes without a recorded human approval.",
+    href: null,
+  },
+  {
+    title: "Track the outcome",
+    body: "Recoveries, write-offs, and payer response times are reported so the practice can see which payers and reasons cost it most.",
+    href: null,
+  },
+];
+
+/** How the patient record feeds claims and denials. Same shipped/planned rule as STEPS. */
+const RECORD_FLOW: Step[] = [
+  {
+    title: "Patient record",
+    body: "Registration keeps demographics and primary coverage: payer, plan, and member ID (encrypted). Each claim is linked to the patient and the payer billed, so the record behind every claim is one click away.",
+    href: "/patients",
+    linkLabel: "Patients",
+  },
+  {
+    title: "Charges become claims",
+    body: "Charges from your practice management or EHR system will arrive by CSV file and become draft claims tied to the patient and payer. Direct EHR connections are not planned for launch.",
+    href: null,
+  },
+  {
+    title: "Claim filed and answered",
+    body: "Claims will go to the clearinghouse as 837P files; acknowledgments and 835 remittances will come back and be matched to the claim.",
+    href: null,
+  },
+  {
+    title: "Denial back on the chart",
+    body: "Each denial is linked to its claim and patient. The patient chart lists every claim and denial, so a coverage or registration error can be found and corrected on the patient record.",
+    href: "/patients",
+    linkLabel: "Patient charts",
+  },
+];
+
+const SAFEGUARDS: { icon: LucideIcon; title: string; body: string }[] = [
+  {
+    icon: Building2,
+    title: "Practice data stays separate",
+    body: "Every record is scoped to your practice at the database layer.",
+  },
+  {
+    icon: ScrollText,
+    title: "Every access is recorded",
+    body: "Reads and changes to patient data are written to an audit trail: who, what, and when.",
+  },
+  {
+    icon: CalendarClock,
+    title: "Deadlines come from cited rules",
+    body: "Filing, prompt-pay, and appeal clocks are versioned, effective-dated rules with their statutory source.",
+  },
+  {
+    icon: FileCheck2,
+    title: "People approve coding changes",
+    body: "No procedure or diagnosis code will be changed without a recorded human approval.",
+  },
+  {
+    icon: KeyRound,
+    title: "Sign-in needs a second factor",
+    body: "Every practice account uses an authenticator code, and idle sessions end after 15 minutes.",
+  },
+  {
+    icon: LockKeyhole,
+    title: "Identifiers are encrypted",
+    body: "Member IDs are encrypted field by field, and patient names are kept out of page addresses.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Business Associate Agreements on file",
+    body: "Each practice's signed agreement is recorded with its dates and signers; a missing one is flagged.",
+  },
+];
+
+function StepLink({ step }: { step: Step }) {
+  return step.href ? (
+    <Link
+      href={step.href}
+      className="inline-flex items-center gap-1 text-body font-medium text-link hover:underline"
+    >
+      {step.linkLabel}
+      <ArrowRight aria-hidden="true" className="size-3.5" strokeWidth={2} />
+    </Link>
+  ) : (
+    <span>
+      <Badge dot={false}>Planned</Badge>
+    </span>
+  );
+}
+
+/** Home: where sign-in and the logo land: a plain-language map of the platform and a way into each module. */
+export default async function HomePage() {
   const auth = await requireAuth();
-  const today = todayIn();
-  const { summary, upcoming, categories } = await withTenant(auth, async (tx) => {
-    const [summary, upcoming, categories] = await Promise.all([
-      queueSummary(tx, today),
-      upcomingDeadlines(tx, today, 8),
-      openByCategory(tx),
-    ]);
-    await audit(tx, {
-      action: "denial.queue_viewed",
-      actorUserId: auth.userId,
-      tenantId: auth.tenantId,
-      metadata: { count: upcoming.length },
-    });
-    return { summary, upcoming, categories };
+  const firstName = auth.displayName.trim().split(/\s+/)[0] || auth.displayName;
+  const apps = navApps({
+    showDesignSystem: !isProduction(),
+    showRevenueCycle: canViewRevenueCycle(auth.role),
+    showSettings: true,
   });
-  const totalOpenCents = categories.reduce((sum, c) => sum + c.deniedCents, 0);
 
   return (
-    <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="Overview"
-        description="Open denials, money at risk, and the deadlines that need attention first."
-        actions={
-          <Link
-            href="/denials"
-            className="inline-flex h-8 items-center rounded-control border border-primary bg-primary px-3 text-body font-medium text-white hover:bg-primary-hover"
-          >
-            Open denial queue
-          </Link>
-        }
-      />
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 rounded-panel border border-border bg-surface px-5 py-4 shadow-xs">
+        <div className="min-w-0">
+          <p className="text-label font-semibold tracking-wider text-muted uppercase">
+            {auth.tenantName} · {formatDate(todayIn())}
+          </p>
+          <h1 className="font-serif text-display font-bold text-primary">Welcome, {firstName}</h1>
+          <p className="mt-0.5 max-w-3xl text-body text-muted">
+            DenialDesk follows each claim from submission to payment: it classifies denials, ranks them by
+            value and deadline, and keeps the Florida clocks that decide what can still be recovered.
+          </p>
+        </div>
+        <Link href="/denials" className={primaryLinkButtonClass}>
+          Open denial queue
+        </Link>
+      </header>
 
-      <section aria-label="Open denial totals" className="grid grid-cols-4 gap-4">
-        <StatTile label="Open denials" value={summary.open.toLocaleString("en-US")} />
-        <StatTile label="Amount at risk" value={formatCents(summary.atRiskCents)} />
-        <StatTile
-          label={`Due in ${DUE_SOON_DAYS} days`}
-          value={summary.dueSoon}
-          emphasis={summary.dueSoon > 0 ? "warning" : undefined}
-        />
-        <StatTile
-          label="Past deadline"
-          value={summary.overdue}
-          emphasis={summary.overdue > 0 ? "danger" : undefined}
-        />
-      </section>
+      <Panel title="How DenialDesk works" description="The path a claim takes through the platform" flush>
+        <ol className="grid grid-cols-1 divide-y divide-border md:grid-cols-5 md:divide-x md:divide-y-0">
+          {STEPS.map((step, index) => (
+            <li key={step.title} data-step={index + 1} className="flex flex-col gap-2 px-4 py-4">
+              <span className="font-mono text-label text-subtle tabular-nums">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <h3 className="text-heading font-semibold text-text">{step.title}</h3>
+              <p className="flex-1 text-body text-muted">{step.body}</p>
+              <StepLink step={step} />
+            </li>
+          ))}
+        </ol>
+      </Panel>
 
-      <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start gap-6">
-        <Panel title="Next appeal deadlines" description="Open denials, soonest first." flush>
-          {upcoming.length === 0 ? (
-            <EmptyState
-              title="No upcoming deadlines"
-              description="Open denials with an appeal deadline will appear here, soonest first."
-            />
-          ) : (
-            <Table caption="Next appeal deadlines">
-              <thead>
-                <tr>
-                  <Th>Claim</Th>
-                  <Th>Payer</Th>
-                  <Th>Category</Th>
-                  <Th numeric>Denied</Th>
-                  <Th>Deadline</Th>
-                  <Th>Status</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {upcoming.map((row) => (
-                  <Tr key={row.id}>
-                    <Td>
-                      <Link
-                        href={`/denials/${row.id}`}
-                        className="font-mono text-label font-medium whitespace-nowrap text-link hover:underline"
-                      >
-                        {row.claimNumber}
-                      </Link>
-                    </Td>
-                    <Td>{row.payerName}</Td>
-                    <Td className="text-muted">{CATEGORY_LABELS[row.category]}</Td>
-                    <Td numeric>
-                      <Money cents={row.deniedCents} />
-                    </Td>
-                    <Td>
-                      {row.appealDeadline && (
-                        <DeadlineIndicator
-                          dueDate={row.appealDeadline}
-                          daysRemaining={daysUntil(row.appealDeadline, today)}
-                          dueSoonDays={DUE_SOON_DAYS}
-                        />
+      <Panel
+        title="From patient record to claim and denial"
+        description="How the patient record feeds every claim, and where each denial comes back to"
+        flush
+      >
+        <ol className="grid grid-cols-1 divide-y divide-border md:grid-cols-4 md:divide-x md:divide-y-0">
+          {RECORD_FLOW.map((step, index) => (
+            <li key={step.title} data-record-step={index + 1} className="flex flex-col gap-2 px-4 py-4">
+              <span className="font-mono text-label text-subtle tabular-nums">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <h3 className="text-heading font-semibold text-text">{step.title}</h3>
+              <p className="flex-1 text-body text-muted">{step.body}</p>
+              <StepLink step={step} />
+            </li>
+          ))}
+        </ol>
+      </Panel>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-3">
+          <Panel title="Your modules" description="Also available from the module switcher (Ctrl K)" flush>
+            <ul className="divide-y divide-border">
+              {apps.map((app) => {
+                const href = appHome(app);
+                return (
+                  <li key={app.id} className="flex items-center gap-3 px-4 py-3">
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "inline-flex size-8 shrink-0 items-center justify-center rounded-control border",
+                        toneClasses[app.tone],
                       )}
-                    </Td>
-                    <Td>
-                      <Badge tone={DENIAL_STATUSES[row.status].tone}>
-                        {DENIAL_STATUSES[row.status].label}
-                      </Badge>
-                    </Td>
-                  </Tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
-        </Panel>
-
-        <Panel title="Open denials by reason" description="Where the money at risk sits." flush>
-          {categories.length === 0 ? (
-            <EmptyState
-              title="No open denials"
-              description="Denials appear here once remittances with denials are imported."
-            />
-          ) : (
-            <Table caption="Open denials by reason category">
-              <thead>
-                <tr>
-                  <Th>Category</Th>
-                  <Th numeric>Denials</Th>
-                  <Th numeric>Denied</Th>
-                  <Th numeric>Share</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {categories.map((row) => {
-                  const share = totalOpenCents === 0 ? 0 : row.deniedCents / totalOpenCents;
-                  return (
-                    <Tr key={row.category}>
-                      <Td>
-                        <Link
-                          href={`/denials?category=${row.category}`}
-                          className="font-medium text-text hover:text-link hover:underline"
-                        >
-                          {CATEGORY_LABELS[row.category]}
+                    >
+                      <app.icon className="size-4" strokeWidth={1.75} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      {href ? (
+                        <Link href={href} className="text-body font-semibold text-link hover:underline">
+                          {app.label}
                         </Link>
-                      </Td>
-                      <Td numeric>{row.count}</Td>
-                      <Td numeric>
-                        <Money cents={row.deniedCents} />
-                      </Td>
-                      <Td numeric>
-                        <span className="inline-flex items-center justify-end gap-2">
-                          <span
-                            aria-hidden
-                            className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-muted"
-                          >
-                            <span
-                              className="block h-full bg-chart-1"
-                              style={{ width: `${Math.round(share * 100)}%` }}
-                            />
-                          </span>
-                          <span className="w-9 text-right">{Math.round(share * 100)}%</span>
-                        </span>
-                      </Td>
-                    </Tr>
-                  );
-                })}
-              </tbody>
-            </Table>
-          )}
-        </Panel>
+                      ) : (
+                        <span className="text-body font-semibold text-text">{app.label}</span>
+                      )}
+                      <p className="text-label text-muted">{app.description}</p>
+                    </div>
+                    {!href && <Badge dot={false}>Planned</Badge>}
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+        </div>
+        <div className="lg:col-span-2">
+          <Panel title="Safeguards" description="Security and compliance controls in place today">
+            <ul className="flex flex-col gap-4">
+              {SAFEGUARDS.map(({ icon: Icon, title, body }) => (
+                <li key={title} className="flex gap-3">
+                  <Icon
+                    aria-hidden="true"
+                    className="mt-0.5 size-4 shrink-0 text-accent"
+                    strokeWidth={1.75}
+                  />
+                  <div>
+                    <p className="text-body font-semibold text-text">{title}</p>
+                    <p className="text-label text-muted">{body}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        </div>
       </div>
     </div>
   );

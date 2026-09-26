@@ -16,7 +16,7 @@ import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
 import { CLAIMS_PAGE_SIZE, claimsOverview, UNSUBMITTED_LIMIT } from "@/domain/claims/queries";
 import { CLAIM_STATUSES, FILING_WARNING_DAYS } from "@/domain/claims/status";
-import { REGIME_LABELS } from "@/domain/denial-status";
+import { regimeLabel } from "@/domain/denial-status";
 import { payerOptions } from "@/domain/denials/queries";
 import { audit } from "@/lib/audit";
 import { formatCents, formatDate } from "@/lib/format";
@@ -83,8 +83,15 @@ export default async function ClaimsPage({
           value={summary.pastDeadline}
           emphasis={summary.pastDeadline > 0 ? "danger" : undefined}
           detail={
-            summary.notConfigured > 0
-              ? `${summary.notConfigured} with no filing rule configured`
+            summary.notConfigured > 0 || summary.payerUnverified > 0
+              ? [
+                  summary.notConfigured > 0
+                    ? `${summary.notConfigured} with no filing rule configured`
+                    : null,
+                  summary.payerUnverified > 0 ? `${summary.payerUnverified} with an unverified payer` : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ")
               : "Likely denied as untimely"
           }
         />
@@ -120,6 +127,7 @@ export default async function ClaimsPage({
               { value: "due_soon", label: `Due in ${FILING_WARNING_DAYS} days` },
               { value: "past_deadline", label: "Past deadline" },
               { value: "not_configured", label: "Not configured" },
+              { value: "payer_unverified", label: "Payer not verified" },
             ]}
           />
           <div className="flex gap-2">
@@ -191,7 +199,7 @@ export default async function ClaimsPage({
                     </Td>
                     <Td>
                       <span className="block">{row.payerName}</span>
-                      <span className="block text-label text-muted">{REGIME_LABELS[row.regime]}</span>
+                      <span className="block text-label text-muted">{regimeLabel(row.regime)}</span>
                     </Td>
                     <Td className="tabular">{formatDate(row.serviceDate)}</Td>
                     <Td numeric className="font-medium">
@@ -206,6 +214,10 @@ export default async function ClaimsPage({
                           daysRemaining={row.filing.daysRemaining}
                           dueSoonDays={FILING_WARNING_DAYS}
                         />
+                      ) : row.filing.state === "payer_unverified" ? (
+                        <span className="text-label font-medium text-warning-fg">
+                          No deadline — payer not verified
+                        </span>
                       ) : (
                         <span className="text-label font-medium text-warning-fg">Not configured</span>
                       )}
