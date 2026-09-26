@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+/*
+ * DenialDesk design tokens — source of truth is docs/DESIGN.md.
+ * Components use these via Tailwind classes (bg-surface, text-muted, …), never raw hex.
+ */
+:root {
+  --dd-ink: #0b1a33;
+  --dd-brand-700: #0a3fa8;
+  --dd-brand-600: #0b5cd5;
+  --dd-brand-500: #1e7bf0;
+  --dd-brand-50: #eef4fe;
+  --dd-care-500: #12b8a2;
+
+  --dd-canvas: #f6f8fb;
+  --dd-surface: #ffffff;
+  --dd-surface-muted: #f1f4f8;
+  --dd-border: #dde3eb;
+  --dd-border-strong: #8592a6;
+  --dd-text: #0b1a33;
+  --dd-text-muted: #4a5a73;
+  --dd-text-subtle: #5f6e84;
+
+  --dd-danger-fg: #b42318;
+  --dd-danger-bg: #fef3f2;
+  --dd-danger-border: #fecdca;
+  --dd-warning-fg: #b54708;
+  --dd-warning-bg: #fffaeb;
+  --dd-warning-border: #fedf89;
+  --dd-success-fg: #067647;
+  --dd-success-bg: #ecfdf3;
+  --dd-success-border: #abefc6;
+  --dd-info-fg: #0b5cd5;
+  --dd-info-bg: #eef4fe;
+  --dd-info-border: #c7dafc;
+  --dd-neutral-fg: #4a5a73;
+  --dd-neutral-bg: #f1f4f8;
+  --dd-neutral-border: #dde3eb;
+}
+
+@theme inline {
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  --color-ink: var(--dd-ink);
+  --color-brand-700: var(--dd-brand-700);
+  --color-brand-600: var(--dd-brand-600);
+  --color-brand-500: var(--dd-brand-500);
+  --color-brand-50: var(--dd-brand-50);
+  --color-care-500: var(--dd-care-500);
+
+  --color-canvas: var(--dd-canvas);
+  --color-surface: var(--dd-surface);
+  --color-surface-muted: var(--dd-surface-muted);
+  --color-border: var(--dd-border);
+  --color-border-strong: var(--dd-border-strong);
+  --color-text: var(--dd-text);
+  --color-muted: var(--dd-text-muted);
+  --color-subtle: var(--dd-text-subtle);
+
+  --color-danger-fg: var(--dd-danger-fg);
+  --color-danger-bg: var(--dd-danger-bg);
+  --color-danger-border: var(--dd-danger-border);
+  --color-warning-fg: var(--dd-warning-fg);
+  --color-warning-bg: var(--dd-warning-bg);
+  --color-warning-border: var(--dd-warning-border);
+  --color-success-fg: var(--dd-success-fg);
+  --color-success-bg: var(--dd-success-bg);
+  --color-success-border: var(--dd-success-border);
+  --color-info-fg: var(--dd-info-fg);
+  --color-info-bg: var(--dd-info-bg);
+  --color-info-border: var(--dd-info-border);
+  --color-neutral-fg: var(--dd-neutral-fg);
+  --color-neutral-bg: var(--dd-neutral-bg);
+  --color-neutral-border: var(--dd-neutral-border);
+
+  /* Type scale (DESIGN.md §6): size / line-height */
+  --text-display: 1.5rem;
+  --text-display--line-height: 2rem;
+  --text-title: 1.125rem;
+  --text-title--line-height: 1.625rem;
+  --text-heading: 0.9375rem;
+  --text-heading--line-height: 1.375rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.25rem;
+  --text-table: 0.8125rem;
+  --text-table--line-height: 1.125rem;
+  --text-label: 0.75rem;
+  --text-label--line-height: 1rem;
+
+  /* Shape (DESIGN.md §7) */
+  --radius-control: 4px;
+  --radius-panel: 6px;
+}
+
+@layer base {
+  html {
+    color: var(--dd-text);
+    background: var(--dd-canvas);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+  }
+  :focus-visible {
+    outline: 2px solid var(--dd-brand-600);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+    }
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
