@@ -50,6 +50,8 @@ _Last updated: 2026-09-26_
   "recorded in error" with a reason; nothing is deleted; the practices list shows BAA status
   (`specs/practice-agreements.md`). Practices are still created by the operator only (owner
   decision 2026-09-26: no self-service sign-up; a BAA must be signed before a practice exists).
+  Creating a practice now has its own page, `/operator/practices/new` ("New practice" button on
+  the list). Owner rule: every create flow on the platform gets its own page (`DESIGN.md` §8).
 - The one-click demo practice was removed entirely (owner request, 2026-09-26); migration 0021
   archived any live demo practice and ended demo sessions; 0022 disabled demo-only accounts and
   audited each retired demo practice (`system.demo_retired`). Practices are created from the console.

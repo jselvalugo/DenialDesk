@@ -39,6 +39,11 @@ session, and practice-free account; 2026-09-26)
       denials. Shows practice-level metadata and counts only — never patient or claim data.
 - [x] Create practice: name + first admin (name, email). Shows a one-time temporary password
       for the admin, who sets up MFA on first sign-in.
+- [x] Creating a practice has its own page, `/operator/practices/new`, reached from a "New
+      practice" button on the practices list (owner request 2026-09-26: create/edit flows get their
+      own pages, not inline forms on list pages). After creation it links to the new practice's
+      page (to record the BAA), back to all practices, or to create another; "Create another"
+      clears the one-time password from the page.
 - [x] Suspend / reactivate a practice. Suspended practices' users can't sign in or use existing
       sessions.
 - [x] Reset demo: archives the current demo practice (kept for the audit trail, never deleted)
