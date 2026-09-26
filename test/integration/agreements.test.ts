@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { addCalendarDays, todayIn } from "@rules/calendar";
 import type { OperatorContext } from "@/auth/operator";
@@ -210,7 +210,35 @@ describe("recordAgreement", () => {
 
   it("two recordings racing for one practice: one wins, the other gets a plain message with no file bytes", async () => {
     const { tenantId } = await createTestTenant("BAA race");
-    const results = await Promise.allSettled([
+    // Force a real overlap: an uncommitted active row makes both recordings pass their read and
+    // wait on the one-active index. Without it, one recording can commit before the other starts,
+    // and the second then (correctly) supersedes the first.
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    let blockerInserted!: () => void;
+    const inserted = new Promise<void>((resolve) => (blockerInserted = resolve));
+    const blocker = systemDb()
+      .transaction(async (tx) => {
+        const { attestedSynthetic, content, ...columns } = input(tenantId, { content: pdf("blocker") });
+        void attestedSynthetic;
+        await tx.insert(tenantAgreements).values({
+          ...columns,
+          id: randomUUID(),
+          kind: "baa",
+          status: "active",
+          contentType: "application/pdf",
+          sizeBytes: content.length,
+          sha256: createHash("sha256").update(content).digest("hex"),
+          content,
+          recordedBy: operator.userId,
+        });
+        blockerInserted();
+        await released;
+        tx.rollback();
+      })
+      .catch(() => undefined);
+    await inserted;
+    const racing = Promise.allSettled([
       recordAgreement(
         input(tenantId, { content: pdf("racer A"), practiceSigner: "Synthetic Racer A" }),
         operator,
@@ -220,6 +248,26 @@ describe("recordAgreement", () => {
         operator,
       ),
     ]);
+    // Wait until both recordings are blocked behind the uncommitted row, then roll it back.
+    await expect
+      .poll(
+        async () => {
+          const [row] = await systemDb()
+            .execute<{ waiting: number }>(
+              sql`
+            select count(*)::int as waiting from pg_stat_activity
+            where datname = current_database() and wait_event_type = 'Lock'
+              and query ilike 'insert into "tenant_agreements"%'`,
+            )
+            .then((r) => r.rows);
+          return row?.waiting;
+        },
+        { timeout: 10_000, interval: 25 },
+      )
+      .toBe(2);
+    release();
+    await blocker;
+    const results = await racing;
     const fulfilled = results.filter((r) => r.status === "fulfilled");
     const rejected = results.filter((r) => r.status === "rejected");
     expect(fulfilled).toHaveLength(1);
