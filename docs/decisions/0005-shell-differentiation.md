@@ -56,5 +56,5 @@ so these retained elements are part of what counsel should review.
 
 ## Consequences
 - `DESIGN.md` §4 and §8 and `specs/erp-shell.md` describe the new shell; e2e names changed
-  ("Module: <name>" button, "Go to" dialog, "<Name> module" links).
+  ("<Name>, switch module" button, "Go to" dialog, "<Name> module" links).
 - Counsel review of the overall look and feel stays an owner item before public launch.

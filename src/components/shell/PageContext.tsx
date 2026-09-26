@@ -9,7 +9,7 @@ export function PageIcon() {
   return location ? <ModuleIcon app={location.app} size="lg" /> : null;
 }
 
-/** "App · Page" line above a page title, so a detail page still says where it lives. */
+/** "Module · Page" line above a page title, so a detail page still says where it lives. */
 export function PageEyebrow({ title }: { title: string }) {
   const location = useShellLocation();
   if (!location) return null;

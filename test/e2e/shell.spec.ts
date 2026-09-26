@@ -24,35 +24,38 @@ test("design system page renders the sample queue", async ({ page }) => {
 
 test("unbuilt sections are not links", async ({ page }) => {
   await page.goto("/design");
-  await page.getByRole("button", { name: /^Module: / }).click();
-  const launcher = page.getByRole("dialog", { name: "Go to" });
-  await expect(launcher.getByText("Appeals")).toBeVisible();
+  await page.getByRole("button", { name: /, switch module$/ }).click();
+  const switcher = page.getByRole("dialog", { name: "Go to" });
+  await expect(switcher.getByText("Appeals")).toBeVisible();
   await expect(page.getByRole("link", { name: /^Appeals/ })).toHaveCount(0);
-  await expect(launcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
+  await expect(switcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
+  // A planned module (Insight) is listed as a heading, never a link.
+  await expect(switcher.getByRole("heading", { level: 3, name: /^Insight/ })).toBeVisible();
+  await expect(switcher.getByRole("link", { name: /Insight/ })).toHaveCount(0);
 });
 
 test("the module switcher searches modules and pages and opens one", async ({ page }) => {
   await page.goto("/design");
   // The shortcut listener attaches after hydration; wait for client-rendered chrome first.
-  await expect(page.getByRole("button", { name: /^Module: / })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /, switch module$/ })).toBeEnabled();
   await expect(async () => {
     await page.keyboard.press("Control+k");
     await expect(page.getByRole("dialog", { name: "Go to" })).toBeVisible({ timeout: 500 });
   }).toPass();
-  const launcher = page.getByRole("dialog", { name: "Go to" });
-  await expect(launcher.getByLabel("Search modules and pages")).toBeFocused();
-  await launcher.getByLabel("Search modules and pages").fill("queue");
-  await expect(launcher.getByRole("link", { name: "Design system" })).toHaveCount(0);
-  await expect(launcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
+  const switcher = page.getByRole("dialog", { name: "Go to" });
+  await expect(switcher.getByLabel("Search modules and pages")).toBeFocused();
+  await switcher.getByLabel("Search modules and pages").fill("queue");
+  await expect(switcher.getByRole("link", { name: "Design system" })).toHaveCount(0);
+  await expect(switcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
   // A module match keeps all of its pages; a page match shows only its module and that page.
-  await launcher.getByLabel("Search modules and pages").fill("claims");
-  await expect(launcher.getByRole("link", { name: "Claims module" })).toBeVisible();
-  await expect(launcher.getByText("Remittances", { exact: true })).toBeVisible();
-  await expect(launcher.getByRole("link", { name: "Denials module" })).toHaveCount(0);
+  await switcher.getByLabel("Search modules and pages").fill("claims");
+  await expect(switcher.getByRole("link", { name: "Claims module" })).toBeVisible();
+  await expect(switcher.getByText("Remittances", { exact: true })).toBeVisible();
+  await expect(switcher.getByRole("link", { name: "Denials module" })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await expect(launcher).toBeHidden();
-  await page.getByRole("button", { name: /^Module: / }).click();
-  await launcher.getByRole("link", { name: "Setup module" }).click();
+  await expect(switcher).toBeHidden();
+  await page.getByRole("button", { name: /, switch module$/ }).click();
+  await switcher.getByRole("link", { name: "Setup module" }).click();
   await expect(
     page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Design system" }),
   ).toHaveAttribute("aria-current", "page");
@@ -90,30 +93,33 @@ test("the preview seed endpoint rejects requests without the secret token", asyn
 test("navigation icons are decorative and link names stay text-only", async ({ page }) => {
   await page.goto("/design");
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await page.getByRole("button", { name: /^Module: / }).click();
-  const launcher = page.getByRole("dialog", { name: "Go to" });
-  for (const scope of [nav, launcher]) {
+  const moduleButton = page.getByRole("button", { name: "Setup, switch module", exact: true });
+  await moduleButton.click();
+  const switcher = page.getByRole("dialog", { name: "Go to" });
+  // No nine-dot grid icon anywhere in the chrome (ADR 0005).
+  await expect(page.locator("header svg.lucide-grip, header svg.lucide-grid-3x3")).toHaveCount(0);
+  for (const scope of [nav, switcher, moduleButton]) {
     const icons = scope.locator("svg");
     expect(await icons.count()).toBeGreaterThan(0);
     for (const icon of await icons.all()) await expect(icon).toHaveAttribute("aria-hidden", "true");
   }
   await expect(nav.getByRole("link", { name: "Design system", exact: true })).toBeVisible();
-  await expect(launcher.getByRole("link", { name: "Denial queue", exact: true })).toBeVisible();
+  await expect(switcher.getByRole("link", { name: "Denial queue", exact: true })).toBeVisible();
 });
 
 test("the module switcher opens from the header field and closes with its button or the backdrop", async ({
   page,
 }) => {
   await page.goto("/design");
-  const launcher = page.getByRole("dialog", { name: "Go to" });
+  const switcher = page.getByRole("dialog", { name: "Go to" });
   await page.getByRole("button", { name: "Go to a module or page" }).click();
-  await expect(launcher).toBeVisible();
-  await launcher.getByRole("button", { name: "Close" }).click();
-  await expect(launcher).toBeHidden();
-  await page.getByRole("button", { name: /^Module: / }).click();
-  await expect(launcher).toBeVisible();
+  await expect(switcher).toBeVisible();
+  await switcher.getByRole("button", { name: "Close" }).click();
+  await expect(switcher).toBeHidden();
+  await page.getByRole("button", { name: /, switch module$/ }).click();
+  await expect(switcher).toBeVisible();
   await page.mouse.click(8, 890); // the backdrop, outside the dialog box
-  await expect(launcher).toBeHidden();
+  await expect(switcher).toBeHidden();
 });
 
 test("the header fits a 1024px window without horizontal scroll", async ({ page }) => {
@@ -128,13 +134,13 @@ test.describe("signed in", () => {
 
   test("the tab bar names the current module and opens the switcher from it", async ({ page }) => {
     await page.goto("/");
-    const button = page.getByRole("button", { name: "Module: Denials" });
+    const button = page.getByRole("button", { name: "Denials, switch module", exact: true });
     await expect(button).toHaveAttribute("aria-haspopup", "dialog");
     await button.click();
     const switcher = page.getByRole("dialog", { name: "Go to" });
     await expect(switcher).toBeVisible();
     await switcher.getByRole("link", { name: "Claims module" }).click();
-    await expect(page.getByRole("button", { name: "Module: Claims" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Claims, switch module", exact: true })).toBeVisible();
     await expect(
       page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Claims" }),
     ).toHaveAttribute("aria-current", "page");

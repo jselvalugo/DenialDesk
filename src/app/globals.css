@@ -23,7 +23,7 @@
   --dd-text-muted: #475569;
   --dd-text-subtle: #5b6b82;
 
-  /* Navy chrome: the app bar (token names predate it; they were the sidebar) */
+  /* Navy chrome: the tab bar (token names predate it; they were the sidebar) */
   --dd-sidebar: #1a2c4e;
   --dd-sidebar-fg: #e2e8f0;
   --dd-sidebar-muted: #8a9bb5;

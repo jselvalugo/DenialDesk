@@ -47,9 +47,9 @@ export async function signInOperator(page: Page, user: E2EUser, usedSteps = new 
 
 /**
  * Opens a page, or a module ("Revenue cycle module"), through the module switcher ("Go to"): the
- * tab bar only shows the current module's pages. The switcher button is named "Module: <current>".
+ * tab bar only shows the current module's pages. The switcher button is named "<Module>, switch module".
  */
-export async function openFromLauncher(page: Page, name: string) {
-  await page.getByRole("button", { name: /^Module: / }).click();
+export async function openFromSwitcher(page: Page, name: string) {
+  await page.getByRole("button", { name: /, switch module$/ }).click();
   await page.getByRole("dialog", { name: "Go to" }).getByRole("link", { name, exact: true }).click();
 }

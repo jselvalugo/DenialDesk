@@ -77,7 +77,7 @@ export function ModuleSwitcher({
     >
       <div className="flex max-h-[calc(100dvh-6rem)] flex-col">
         <div className="flex items-center gap-4 border-b border-border px-5 py-3">
-          <h2 id={titleId} className="shrink-0 font-serif text-title font-semibold text-primary">
+          <h2 id={titleId} className="shrink-0 text-heading font-semibold text-primary">
             Go to
           </h2>
           <label className="relative flex-1">
@@ -108,7 +108,7 @@ export function ModuleSwitcher({
 
         <div className="overflow-y-auto">
           {groups.length === 0 ? (
-            <p className="px-5 py-6 text-body text-muted">
+            <p role="status" className="px-5 py-6 text-body text-muted">
               Nothing matches “{query.trim()}”. Try a module or page name, like “Denial queue”.
             </p>
           ) : (
@@ -119,7 +119,10 @@ export function ModuleSwitcher({
                   <>
                     <ModuleIcon app={app} size="md" />
                     <span className="min-w-0">
-                      <span className="flex items-center gap-2 text-heading font-semibold text-text">
+                      <span
+                        id={`${titleId}-${app.id}-name`}
+                        className="flex items-center gap-2 text-heading font-semibold text-text"
+                      >
                         {app.label}
                         {!home && <span className="text-label font-normal text-subtle">Planned</span>}
                       </span>
@@ -131,20 +134,27 @@ export function ModuleSwitcher({
                 );
                 return (
                   <li key={app.id} className="px-5 py-3">
-                    {home ? (
-                      <Link
-                        href={home}
-                        onClick={close}
-                        aria-label={`${app.label} module`}
-                        aria-describedby={`${titleId}-${app.id}`}
-                        className="-mx-2 flex items-center gap-3 rounded-control px-2 py-1 transition-colors duration-100 hover:bg-surface-muted"
-                      >
-                        {heading}
-                      </Link>
-                    ) : (
-                      <div className="-mx-2 flex items-center gap-3 px-2 py-1">{heading}</div>
-                    )}
-                    <ul className="mt-2 flex flex-wrap gap-2 pl-11">
+                    <h3 className="-mx-2">
+                      {home ? (
+                        <Link
+                          href={home}
+                          onClick={close}
+                          aria-label={`${app.label} module`}
+                          aria-describedby={`${titleId}-${app.id}`}
+                          className="flex items-center gap-3 rounded-control px-2 py-1 transition-colors duration-100 hover:bg-surface-muted"
+                        >
+                          {heading}
+                        </Link>
+                      ) : (
+                        <div className="flex items-center gap-3 border border-dashed border-border px-2 py-1 rounded-control">
+                          {heading}
+                        </div>
+                      )}
+                    </h3>
+                    <ul
+                      aria-labelledby={`${titleId}-${app.id}-name`}
+                      className="mt-2 flex flex-wrap gap-2 pl-11"
+                    >
                       {items.map((item) => {
                         const Icon = item.icon;
                         const icon = (

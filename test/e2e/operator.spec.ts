@@ -26,7 +26,7 @@ test.describe("demo login", () => {
     await page.goto("/login");
     await page.getByRole("button", { name: "Explore the demo practice" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
-    await page.getByRole("button", { name: /^Module: / }).click();
+    await page.getByRole("button", { name: /, switch module$/ }).click();
     await expect(page.getByRole("dialog", { name: "Go to" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Platform console" })).toHaveCount(0);
 
@@ -74,7 +74,7 @@ test.describe("operator console access", () => {
     test.use({ storageState: "test/e2e/.auth/worker.json" });
     test("gets the operator sign-in, not the console, and no console link", async ({ page }) => {
       await page.goto("/");
-      await page.getByRole("button", { name: /^Module: / }).click();
+      await page.getByRole("button", { name: /, switch module$/ }).click();
       await expect(page.getByRole("dialog", { name: "Go to" })).toBeVisible();
       await expect(page.getByRole("link", { name: "Platform console" })).toHaveCount(0);
       await page.goto("/operator");

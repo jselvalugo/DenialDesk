@@ -20,12 +20,14 @@ expression is DenialDesk's own and does not reproduce any vendor's shell (ADR 00
 - [x] Global header: logo (home link), "Go to a module or page" button beside it that opens the
       switcher, practice name, demo badge, user menu (name, role, practice, Sign out).
 - [x] Navy tab bar: the current module's name as its first control (accessible name
-      "Module: <name>", `aria-haspopup="dialog"`, opens the switcher), the module's shipped pages
+      "<Module>, switch module", `aria-haspopup="dialog"`, opens the switcher), the module's shipped pages
       as tabs in `nav` "Primary", the active tab marked `aria-current="page"`. No grid icon.
 - [x] Module switcher: modal dialog "Go to" with a search field (focused on open) and one grouped
-      list: each module row (tinted tile, name, description) links to the module's first page
-      (link name "<Module> module"), its pages follow as links; planned modules and pages are
-      shown as "Planned" and never links; Escape, the Close button, and the backdrop close it.
+      list: each module row (an `h3`: tinted tile, name, description) links to the module's first
+      page (link name "<Module> module"), its pages follow as links in a list labelled by the
+      module name; planned modules and pages are shown as "Planned" with a dashed border and never
+      links; the no-match message is a status region; Escape, the Close button, and the backdrop
+      close it.
 - [x] Search: a query matching a module's name or description keeps all of its pages; otherwise
       only matching pages are listed under their module (`filterModules`).
 - [x] Modules respect permissions: Revenue cycle only for roles that can view it; Setup only when

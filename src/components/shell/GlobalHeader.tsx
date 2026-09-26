@@ -14,7 +14,8 @@ export type { ShellUser };
 
 /**
  * DenialDesk chrome (DESIGN.md §8): a white global header (logo, "Go to" field, practice, user) over
- * a navy tab bar whose first control is the current module's name; it opens the module switcher.
+ * a navy tab bar whose first control is the current module's name (accessible name
+ * "<Module>, switch module"); it opens the module switcher.
  */
 export function GlobalHeader({ user }: { user: ShellUser | null }) {
   const location = useShellLocation();
@@ -49,6 +50,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
         <button
           type="button"
           onClick={() => setSwitcherOpen(true)}
+          aria-haspopup="dialog"
           className="group flex h-9 w-full min-w-40 max-w-xs items-center gap-2.5 rounded-control border border-border bg-surface-muted px-3 text-left text-body text-subtle transition-colors duration-100 hover:border-border-strong hover:bg-surface"
         >
           <Search aria-hidden="true" className="size-4 shrink-0" />
@@ -84,9 +86,9 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
           type="button"
           onClick={() => setSwitcherOpen(true)}
           aria-haspopup="dialog"
+          aria-label={`${app.label}, switch module`}
           className="flex shrink-0 items-center gap-2 border-r border-sidebar-border px-4 text-body font-semibold text-white transition-colors duration-100 hover:bg-sidebar-active focus-visible:-outline-offset-2"
         >
-          <span className="sr-only">Module: </span>
           {app.label}
           <ChevronDown aria-hidden="true" className="size-4 text-sidebar-muted" strokeWidth={2} />
         </button>

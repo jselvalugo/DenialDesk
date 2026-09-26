@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { PageEyebrow, PageIcon } from "@/components/shell/PageContext";
 
-/** Page header band (DESIGN.md §8): app icon, "App · Page" eyebrow, serif title, actions on the right. */
+/** Page header band (DESIGN.md §8): module tile, "Module · Page" eyebrow, serif title, actions on the right. */
 export function PageHeader({
   title,
   description,

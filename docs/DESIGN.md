@@ -135,11 +135,11 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
     module switcher; Ctrl/⌘ K); practice name, demo badge, and the user menu (name, role, practice,
     sign out) on the right.
   - *Tab bar*, 44px navy: the current module's name with a chevron as the first control (accessible
-    name "Module: <name>"; opens the switcher), then the module's shipped pages as tabs (`nav`
+    name "<Module>, switch module"; opens the switcher), then the module's shipped pages as tabs (`nav`
     "Primary"). Planned pages are not tabs. No grid or "waffle" icon.
   - *Module switcher* ("Go to"): modal dialog with a search field and one grouped list: each module
     row (tinted tile, name, one-line description) links to its home, and its pages follow as compact
-    links; planned modules and pages are shown as "Planned" (dashed), never links.
+    links; planned modules and pages are shown as "Planned" with a dashed border, never links.
   - Modules ("apps" in code): Denials, Patients, Claims, Revenue cycle (roles that can view it),
     Insight, Setup (style guide; only when available). Defined once in
     `src/components/shell/navigation.ts`.

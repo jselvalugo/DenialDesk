@@ -115,7 +115,7 @@ export function navApps({ showRevenueCycle, showDesignSystem }: NavVisibility): 
     apps.push({
       id: "setup",
       label: "Setup",
-      description: "Platform administration and the design style guide.",
+      description: "The design style guide.",
       icon: Settings2,
       tone: "slate",
       items: setup,
