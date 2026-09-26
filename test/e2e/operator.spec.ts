@@ -62,8 +62,8 @@ test.describe("operator console access", () => {
     test.use({ storageState: "test/e2e/.auth/worker.json" });
     test("gets the operator sign-in, not the console, and no console link", async ({ page }) => {
       await page.goto("/");
-      await page.getByRole("button", { name: "App launcher" }).click();
-      await expect(page.getByRole("dialog", { name: "App launcher" })).toBeVisible();
+      await page.getByRole("button", { name: /, switch module$/ }).click();
+      await expect(page.getByRole("dialog", { name: "Go to" })).toBeVisible();
       await expect(page.getByRole("link", { name: "Platform console" })).toHaveCount(0);
       await page.goto("/operator");
       await expect(page).toHaveURL(/\/operator\/login$/);

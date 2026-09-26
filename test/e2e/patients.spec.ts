@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { openFromLauncher } from "./support";
+import { openFromSwitcher } from "./support";
 
 test.describe("patients", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
@@ -8,7 +8,7 @@ test.describe("patients", () => {
     page,
   }) => {
     await page.goto("/");
-    await openFromLauncher(page, "Patients");
+    await openFromSwitcher(page, "Patients");
     await expect(page.getByRole("heading", { level: 1, name: "Patients" })).toBeVisible();
     await page.getByRole("link", { name: "Register patient" }).click();
     // Scoped to the page: the environment banner outside <main> says "Synthetic data only." too.

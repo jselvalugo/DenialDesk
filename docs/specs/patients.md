@@ -58,7 +58,7 @@ denials, and balances.
 - [x] Patient chart: demographics, coverage, totals (claims, billed, paid, open denied amount),
       claims table (links to `/claims/[id]`), denials table (links to `/denials/[id]`).
 - [x] Claim and denial detail pages link the patient name to the chart; the claims list links it too.
-- [x] "Patients" is its own app in the app launcher (`specs/erp-shell.md`), available to every role.
+- [x] "Patients" is its own module in the module switcher (`specs/erp-shell.md`), available to every role.
 - [x] Page titles never include patient data (DESIGN.md §12).
 - [x] Audit events: `patient.list_viewed`, `patient.searched`, `patient.viewed`,
       `patient.created`, `patient.updated` (IDs, counts, field names; never values).
