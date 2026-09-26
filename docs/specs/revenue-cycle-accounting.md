@@ -105,9 +105,10 @@ else the most recent current-format import (`periodFiles()`); every report uses 
 - **A/R roll-forward:** prior month's open balance + charges − payments − adjustments = this
   month's open balance; any difference is shown as unexplained (a missing line or an incomplete
   export).
-- **Bank deposits:** CSV with `Date` and `Amount` only (never account numbers or free-text
-  descriptions: bank data needs field-level encryption, CLAUDE.md #6), 1 MB / 5,000 rows, strict
-  validation, insert-only, admin or manager, audited.
+- **Bank deposits:** CSV; only the `Date` and `Amount` columns are read. Other columns (account
+  numbers, free-text descriptions) are ignored and never stored (bank data needs field-level
+  encryption, CLAUDE.md #6). 1 MB / 5,000 rows, strict validation, insert-only, admin or manager,
+  audited (rejections too, with counts).
 - **Payments-to-deposits reconciliation** per month: payments posted in the PM system vs.
   deposits recorded in the bank; the running difference is the clearing account's balance
   (undeposited or unposted cash), flagged when it grows month over month.
@@ -192,7 +193,23 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       Demo practices get last month's draft prepared by a synthetic manager so the guest can
       approve it. B4's roll-forward only reports; the voucher is what blocks a file that doesn't
       roll forward. Preparer may export an approved voucher (approval is the second person).
-- [ ] B4 · [ ] B5
+- [x] **B4** (2026-09-26): pure `aging.ts` (buckets 0–30/31–60/61–90/91–120/over 120 from
+      service date to month-end, credit balances apart; roll-forward that reports differences;
+      payments-to-deposits reconciliation whose running difference restarts after a missing month
+      and flags months where undeposited payments exceed half the month's payments, a product
+      default; deposit CSV parser) and `receivables.ts` (report per month from `periodFiles()`,
+      aging bucketed in SQL so only totals leave the database; deposit import and reversal).
+      `rcm_deposit_files` + `rcm_deposits` (FORCE RLS, insert/select only, tenant-scoped FKs,
+      uploader must belong to the practice, non-zero amounts, plausible dates). The same file
+      can't be imported twice (content hash) and files can't overlap in dates; an administrator
+      reverses a wrong file with negated rows (audited, once per file). Pre-production accepts
+      marked synthetic deposit files only, with an attestation (ADR 0003). A/R aging page (month
+      links, class × age table, age bars with text values, credit balances, roll-forward, payments
+      and deposits; each view audited as `rcm.report_viewed`) and Deposits page (import, reverse,
+      synthetic sample only for months without deposits). Demo practices get synthetic deposits
+      with a realistic lag. Reports show totals only; they're built from PHI lines, so views
+      are audited.
+- [ ] B5
 
 ## Security notes
 - Uploads: CSV only, size-capped, parsed in memory, never written to disk or object storage;

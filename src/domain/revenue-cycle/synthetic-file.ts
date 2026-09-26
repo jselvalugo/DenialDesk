@@ -1,5 +1,6 @@
 import { csvCell } from "@/lib/csv/parse";
 import { createRandom, FIRST_NAMES, LAST_NAMES } from "@/domain/synthetic/generator";
+import { SYNTHETIC_DEPOSIT_MARKER } from "./aging";
 import { MONTHLY_FILE_HEADER, SYNTHETIC_ACCOUNT_PREFIX, type MonthlyLine } from "./monthly-file";
 
 // Synthetic practice-management activity (R-15.1): fictional patients and payers, SYN- account
@@ -237,4 +238,61 @@ export function monthlyLinesToCsv(lines: MonthlyLine[]): string {
       .join(","),
   );
   return [MONTHLY_FILE_HEADER.join(","), ...body].join("\r\n") + "\r\n";
+}
+
+/**
+ * Synthetic bank deposits for months of posted payments: each month's payments arrive in a
+ * handful of deposits during the month, except a small share that clears in the first days of
+ * the next month (the usual deposit lag). The last month's lagged share is still in transit.
+ */
+export function depositsForPayments(
+  months: Array<{ periodYear: number; periodMonth: number; paymentsCents: number }>,
+  seed: number,
+): Array<{ depositDate: string; amountCents: number }> {
+  const random = createRandom(seed);
+  const deposits: Array<{ depositDate: string; amountCents: number }> = [];
+  months.forEach((m, i) => {
+    const lagged = Math.round((m.paymentsCents * random.int(3, 12)) / 100);
+    const days = new Date(Date.UTC(m.periodYear, m.periodMonth, 0)).getUTCDate();
+    const count = 6;
+    let left = m.paymentsCents - lagged;
+    for (let d = 0; d < count; d++) {
+      const amount = d === count - 1 ? left : Math.round((m.paymentsCents - lagged) / count);
+      left -= amount;
+      const day = Math.min(days, Math.round(((d + 1) * days) / count));
+      if (amount !== 0)
+        deposits.push({
+          depositDate: `${m.periodYear}-${pad(m.periodMonth)}-${pad(day)}`,
+          amountCents: amount,
+        });
+    }
+    const next = months[i + 1];
+    if (next && lagged !== 0) {
+      deposits.push({
+        depositDate: `${next.periodYear}-${pad(next.periodMonth)}-0${random.int(1, 4)}`,
+        amountCents: lagged,
+      });
+    }
+  });
+  return deposits;
+}
+
+/** Synthetic deposits for simulated activity files. */
+export function generateDeposits(files: SyntheticMonth[], seed: number) {
+  return depositsForPayments(
+    files.map((f) => ({
+      periodYear: f.periodYear,
+      periodMonth: f.periodMonth,
+      paymentsCents: f.lines.reduce((t, l) => t + l.paymentCents, 0),
+    })),
+    seed,
+  );
+}
+
+/** Deposits as a bank-style CSV: date, amount, and the synthetic-data marker. */
+export function depositsToCsv(deposits: Array<{ depositDate: string; amountCents: number }>): string {
+  const body = deposits.map((d) =>
+    [usDate(d.depositDate), money(d.amountCents), SYNTHETIC_DEPOSIT_MARKER].map(csvCell).join(","),
+  );
+  return ["Date,Amount,Synthetic marker", ...body].join("\r\n") + "\r\n";
 }

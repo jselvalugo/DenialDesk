@@ -133,6 +133,66 @@ test.describe("journal vouchers", () => {
   });
 });
 
+test.describe("receivables and deposits", () => {
+  test("the demo shows aging, a tying roll-forward, and reconciles imported deposits", async ({ page }) => {
+    await openDemo(page);
+    await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "A/R aging" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "A/R aging" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Receivables summary" })).toContainText("Open A/R");
+    await expect(
+      page.getByRole("table", { name: "Open receivables by financial class and age" }),
+    ).toContainText("All classes");
+    const rollForward = page.getByRole("table", { name: "Receivables roll-forward by month" });
+    await expect(rollForward.getByRole("cell", { name: "Ties", exact: true })).toHaveCount(2);
+    await expect(
+      page.getByRole("list", { name: "Open receivables by age" }).getByRole("listitem"),
+    ).toHaveCount(5);
+
+    // Import a synthetic deposit file; other columns in a bank export are ignored.
+    await page.goto("/revenue-cycle/deposits");
+    const deposits = page.getByRole("table", { name: "Imported deposit files" });
+    const before = await deposits.getByRole("row").count();
+    await page.getByLabel("Bank deposits (CSV, up to 1 MB)").setInputFiles({
+      name: "bank.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(
+        "Posted Date,Description,Amount,Synthetic marker\n03/02/2026,Synthetic EFT,125.00,SYN-DEPOSIT\n",
+      ),
+    });
+    await page.getByLabel(/synthetic data only/).check();
+    await page.getByRole("button", { name: "Import deposits" }).click();
+    await expect(page).toHaveURL(/\/revenue-cycle\/ar-aging$/);
+    await page.goto("/revenue-cycle/deposits");
+    await expect(deposits.getByRole("row")).toHaveCount(before + 1);
+
+    // A bad file is refused with row numbers, never values.
+    await page.getByLabel("Bank deposits (CSV, up to 1 MB)").setInputFiles({
+      name: "bad.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from("Date,Amount,Synthetic marker\n02/30/2026,12x,SYN-DEPOSIT\n"),
+    });
+    await page.getByLabel(/synthetic data only/).check();
+    await page.getByRole("button", { name: "Import deposits" }).click();
+    const problems = page.getByRole("list", { name: "Problems in the file" });
+    await expect(problems).toContainText("Row 2: Date isn't a valid date");
+    await expect(problems).not.toContainText("12x");
+
+    // Every demo month already has deposits, so there's no sample to download.
+    await expect(page.getByText(/Every imported month already has deposits/)).toBeVisible();
+  });
+
+  test.describe("as compliance (read-only)", () => {
+    test.use({ storageState: "test/e2e/.auth/viewer.json" });
+
+    test("can review aging and deposits but not import", async ({ page }) => {
+      await page.goto("/revenue-cycle/ar-aging");
+      await expect(page.getByRole("heading", { level: 1, name: "A/R aging" })).toBeVisible();
+      await page.goto("/revenue-cycle/deposits");
+      await expect(page.getByRole("heading", { name: "Import deposits" })).toHaveCount(0);
+    });
+  });
+});
+
 test.describe("revenue cycle as a denial specialist", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
@@ -140,6 +200,8 @@ test.describe("revenue cycle as a denial specialist", () => {
     await page.goto("/");
     await expect(page.getByRole("navigation", { name: "Primary" })).not.toContainText("Revenue cycle");
     expect((await page.goto("/revenue-cycle/journal"))?.status()).toBe(404);
+    expect((await page.goto("/revenue-cycle/ar-aging"))?.status()).toBe(404);
+    expect((await page.goto("/revenue-cycle/deposits"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/rules"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/files"))?.status()).toBe(404);
     expect((await page.request.get("/api/revenue-cycle/sample-file")).status()).toBe(404);

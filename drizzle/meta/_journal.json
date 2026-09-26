@@ -106,6 +106,20 @@
       "when": 1790430771011,
       "tag": "0014_revenue_cycle_journal_vouchers",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790431033092,
+      "tag": "0015_revenue_cycle_deposits",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790432471541,
+      "tag": "0016_revenue_cycle_deposit_guards",
+      "breakpoints": true
     }
   ]
 }
