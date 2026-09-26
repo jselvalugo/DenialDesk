@@ -7,9 +7,10 @@ const none = { showRevenueCycle: false, showDesignSystem: false };
 describe("navApps", () => {
   it("hides revenue cycle and setup from users who can't open them", () => {
     const ids = navApps(none).map((app) => app.id);
-    expect(ids).toEqual(["denials", "claims", "insight"]);
+    expect(ids).toEqual(["denials", "patients", "claims", "insight"]);
     expect(navApps(all).map((app) => app.id)).toEqual([
       "denials",
+      "patients",
       "claims",
       "revenue-cycle",
       "insight",
@@ -35,6 +36,10 @@ describe("locate", () => {
     expect(locate(apps, "/revenue-cycle/journal/1")).toMatchObject({
       app: { id: "revenue-cycle" },
       item: { label: "Journal vouchers" },
+    });
+    expect(locate(apps, "/patients/abc/edit")).toMatchObject({
+      app: { id: "patients" },
+      item: { label: "Patients" },
     });
     expect(locate(apps, "/revenue-cycle/deposits")).toMatchObject({ item: { label: "Deposits" } });
     expect(locate(apps, "/revenue-cycle/ar-aging")).toMatchObject({ item: { label: "A/R aging" } });

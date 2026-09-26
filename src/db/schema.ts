@@ -157,17 +157,22 @@ export const providers = pgTable(
   (t) => [uniqueIndex("providers_tenant_npi_key").on(t.tenantId, t.npi)],
 );
 
-export const payers = pgTable("payers", {
-  id: id(),
-  tenantId: tenantId(),
-  name: text("name").notNull(),
-  ediPayerId: text("edi_payer_id").notNull(),
-  regime: regimeEnum("regime").notNull(),
-  /** Appeal window from the payer contract (not statute). Null = not configured. */
-  appealWindowDays: integer("appeal_window_days"),
-  appealWindowSource: text("appeal_window_source"),
-  createdAt: createdAt(),
-});
+export const payers = pgTable(
+  "payers",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    name: text("name").notNull(),
+    ediPayerId: text("edi_payer_id").notNull(),
+    regime: regimeEnum("regime").notNull(),
+    /** Appeal window from the payer contract (not statute). Null = not configured. */
+    appealWindowDays: integer("appeal_window_days"),
+    appealWindowSource: text("appeal_window_source"),
+    createdAt: createdAt(),
+  },
+  // Target of tenant-scoped foreign keys (FKs bypass RLS, so the tenant is part of the key).
+  (t) => [uniqueIndex("payers_tenant_id_key").on(t.tenantId, t.id)],
+);
 
 // ---------------------------------------------------------------------------------------------
 // Patients and claims (Restricted PHI, REQUIREMENTS §9.1)
@@ -189,9 +194,32 @@ export const patients = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    /** Administrative sex as on the 837P (DMG03): F, M, or U (unknown). */
+    sex: text("sex", { enum: ["F", "M", "U"] })
+      .notNull()
+      .default("U"),
+    addressLine1: text("address_line1"),
+    city: text("city"),
+    /** Two-letter state of residence (breach notification by state, R-3.4.3). */
+    state: text("state"),
+    postalCode: text("postal_code"),
+    phone: text("phone"),
+    /** Primary coverage; the member ID above belongs to this payer. */
+    primaryPayerId: uuid("primary_payer_id"),
     createdAt: createdAt(),
+    /** Stale-edit check for the patient form: every update must set it (updatePatient does). */
+    updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex("patients_tenant_mrn_key").on(t.tenantId, t.mrn)],
+  (t) => [
+    uniqueIndex("patients_tenant_mrn_key").on(t.tenantId, t.mrn),
+    index("patients_tenant_name_idx").on(t.tenantId, t.lastName, t.firstName),
+    // Coverage can only point at a payer of the same practice.
+    foreignKey({
+      name: "patients_primary_payer_fk",
+      columns: [t.tenantId, t.primaryPayerId],
+      foreignColumns: [payers.tenantId, payers.id],
+    }),
+  ],
 );
 
 export const claimStatusEnum = pgEnum("claim_status", [
@@ -242,6 +270,7 @@ export const claims = pgTable(
     // Target of tenant-scoped foreign keys (FKs bypass RLS, so the tenant is part of the key).
     uniqueIndex("claims_tenant_id_key").on(t.tenantId, t.id),
     index("claims_tenant_payer_idx").on(t.tenantId, t.payerId),
+    index("claims_tenant_patient_idx").on(t.tenantId, t.patientId),
   ],
 );
 

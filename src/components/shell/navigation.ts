@@ -16,6 +16,7 @@ import {
   Scale,
   Settings2,
   ShieldAlert,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,6 +58,14 @@ export function navApps({ showRevenueCycle, showDesignSystem }: NavVisibility): 
         { label: "Denial queue", href: "/denials", icon: Inbox, available: true },
         { label: "Appeals", href: "/appeals", icon: Gavel, available: false },
       ],
+    },
+    {
+      id: "patients",
+      label: "Patients",
+      description: "Patient records: demographics, insurance, and every claim and denial.",
+      icon: Users,
+      tone: "slate",
+      items: [{ label: "Patients", href: "/patients", icon: Users, available: true }],
     },
     {
       id: "claims",
