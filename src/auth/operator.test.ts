@@ -6,7 +6,12 @@ vi.mock("next/navigation", () => ({
     throw new Error(`redirect:${to}`);
   }),
 }));
-vi.mock("./session", () => ({ getOperatorSession: vi.fn(), revokeSession: vi.fn() }));
+vi.mock("./session", () => ({
+  getOperatorSession: vi.fn(),
+  revokeSession: vi.fn(),
+  clientIp: vi.fn(async () => "192.0.2.1"),
+}));
+vi.mock("@/lib/audit", () => ({ auditSystem: vi.fn() }));
 vi.mock("./operator-account", async () => {
   const email = () => process.env.PLATFORM_OPERATOR_EMAIL?.trim().toLowerCase() || null;
   return {
@@ -18,6 +23,7 @@ vi.mock("./operator-account", async () => {
 const { requireOperator } = await import("./operator");
 const session = await import("./session");
 const account = await import("./operator-account");
+const { auditSystem } = await import("@/lib/audit");
 
 describe("requireOperator", () => {
   const operator = "owner@synthetic.test";
@@ -37,6 +43,7 @@ describe("requireOperator", () => {
     vi.stubEnv("PLATFORM_OPERATOR_EMAIL", operator);
     vi.mocked(account.hasPracticeMembership).mockResolvedValue(false);
     vi.mocked(session.revokeSession).mockClear();
+    vi.mocked(auditSystem).mockClear();
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -58,13 +65,22 @@ describe("requireOperator", () => {
     operatorSession();
     await expect(requireOperator()).resolves.toMatchObject({ userId: "u1", sessionId: "s1" });
     expect(session.revokeSession).not.toHaveBeenCalled();
+    expect(auditSystem).not.toHaveBeenCalled();
   });
 
-  it("ends the session when the account no longer matches the configured email", async () => {
+  it("ends the session, audited, when the account no longer matches the configured email", async () => {
     vi.stubEnv("PLATFORM_OPERATOR_EMAIL", "someone-else@synthetic.test");
     operatorSession();
     await expect(requireOperator()).rejects.toThrow("redirect:/operator/login");
     expect(session.revokeSession).toHaveBeenCalledWith("s1");
+    expect(auditSystem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "operator.session_revoked",
+        entityType: "session",
+        entityId: "s1",
+        metadata: { reason: "email_mismatch" },
+      }),
+    );
   });
 
   it("ends the session when the console is switched off", async () => {
@@ -79,5 +95,11 @@ describe("requireOperator", () => {
     operatorSession();
     await expect(requireOperator()).rejects.toThrow("redirect:/operator/login");
     expect(session.revokeSession).toHaveBeenCalledWith("s1");
+    expect(auditSystem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "operator.session_revoked",
+        metadata: { reason: "practice_membership" },
+      }),
+    );
   });
 });

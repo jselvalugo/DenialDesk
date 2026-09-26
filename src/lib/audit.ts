@@ -36,6 +36,7 @@ export type AuditAction =
   | "operator.mfa_failed"
   | "operator.mfa_enrolled"
   | "operator.logout"
+  | "operator.session_revoked"
   | "operator.setup_completed"
   | "operator.setup_failed"
   | "operator.practice_created"

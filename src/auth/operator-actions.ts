@@ -7,7 +7,6 @@ import { z } from "zod";
 import { systemDb } from "@/db/client";
 import { users } from "@/db/schema";
 import { auditSystem } from "@/lib/audit";
-import { isProduction } from "@/lib/env";
 import { limitCurrentRequest } from "@/lib/rate-limit";
 import {
   claimTotp,
@@ -22,10 +21,11 @@ import {
   type FormState,
 } from "./credentials";
 import {
-  hasPracticeMembership,
+  isOperatorAccount,
   isOperatorEmail,
   OperatorSetupError,
   operatorEmail,
+  operatorSetupAllowed,
   setUpOperatorAccount,
 } from "./operator-account";
 import { decoyHash, passwordProblem, verifyPassword } from "./password";
@@ -42,10 +42,22 @@ import {
 // Platform console sign-in (docs/specs/operator-login.md). Same protections as practice sign-in
 // (credentials.ts), but its own account, pages, session cookie, and audit events.
 
-/** Ends this browser's previous operator session, if any, before a new one replaces it. */
-async function replacePreviousOperatorSession(): Promise<void> {
+/**
+ * Ends this browser's previous operator session, if any, before a new one replaces it. Audited so
+ * every operator session has a recorded end.
+ */
+async function replacePreviousOperatorSession(actorUserId: string): Promise<void> {
   const previous = await getOperatorSession();
-  if (previous) await revokeSession(previous.sessionId);
+  if (!previous) return;
+  await revokeSession(previous.sessionId);
+  await auditSystem({
+    action: "auth.session_replaced",
+    actorUserId,
+    entityType: "session",
+    entityId: previous.sessionId,
+    ipAddress: await clientIp(),
+    metadata: { previousUserId: previous.userId, previousAuthMethod: previous.authMethod },
+  });
 }
 
 export async function signInOperator(_: FormState, formData: FormData): Promise<FormState> {
@@ -54,22 +66,26 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
   const limited = await limitCurrentRequest("sign_in");
   if (!limited.allowed) return rateLimited("sign_in", "sign-in attempts", limited);
 
-  const [user] = isOperatorEmail(parsed.data.email)
-    ? await systemDb()
-        .select()
-        .from(users)
-        .where(sql`lower(${users.email}) = lower(${parsed.data.email})`)
-        .limit(1)
-    : [];
+  // Always look the account up, so response timing doesn't reveal which email is the operator's.
+  const [user] = await systemDb()
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = lower(${parsed.data.email})`)
+    .limit(1);
   // Every account but the operator (and a disabled or practice-linked one) looks unknown here.
-  if (!user || user.disabledAt || (await hasPracticeMembership(user.id))) {
+  if (!user || user.disabledAt || !(await isOperatorAccount(user))) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing
     await auditSystem({ action: "operator.login_failed", ipAddress: await clientIp() });
     return { error: SIGN_IN_FAILED };
   }
   if (!(await reserveAttempt(user.id))) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing while locked
-    await auditSystem({ action: "operator.login_failed", actorUserId: user.id, metadata: { locked: true } });
+    await auditSystem({
+      action: "operator.login_failed",
+      actorUserId: user.id,
+      ipAddress: await clientIp(),
+      metadata: { locked: true },
+    });
     return { error: SIGN_IN_FAILED };
   }
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
@@ -78,7 +94,7 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
   }
 
   // The attempt counter resets only after MFA succeeds.
-  await replacePreviousOperatorSession();
+  await replacePreviousOperatorSession(user.id);
   await createSession(user.id, { authMethod: "operator" });
   redirect(user.mfaEnrolledAt ? "/operator/login/mfa" : "/operator/login/mfa/setup");
 }
@@ -98,6 +114,14 @@ async function checkOperatorCode(formData: FormData, enrolling: boolean): Promis
     redirect("/operator/login");
   }
   if (!(await reserveAttempt(user.id))) {
+    await auditSystem({
+      action: "operator.mfa_failed",
+      actorUserId: user.id,
+      entityType: "session",
+      entityId: session.sessionId,
+      ipAddress: await clientIp(),
+      metadata: { locked: true },
+    });
     await endSession(session.sessionId, "operator");
     redirect("/operator/login?reason=locked");
   }
@@ -111,9 +135,14 @@ async function checkOperatorCode(formData: FormData, enrolling: boolean): Promis
     return { error: result === "mismatch" ? CODE_MISMATCH : CODE_REUSED };
   }
   await completeMfa(session.sessionId, "operator");
-  const ip = await clientIp();
-  if (enrolling) await auditSystem({ action: "operator.mfa_enrolled", actorUserId: user.id, ipAddress: ip });
-  await auditSystem({ action: "operator.login_succeeded", actorUserId: user.id, ipAddress: ip });
+  const event = {
+    actorUserId: user.id,
+    entityType: "session",
+    entityId: session.sessionId,
+    ipAddress: await clientIp(),
+  } as const;
+  if (enrolling) await auditSystem({ action: "operator.mfa_enrolled", ...event });
+  await auditSystem({ action: "operator.login_succeeded", ...event });
   redirect("/operator");
 }
 
@@ -129,7 +158,12 @@ export async function signOutOperator(): Promise<void> {
   const session = await getOperatorSession();
   if (session) {
     await endSession(session.sessionId, "operator");
-    await auditSystem({ action: "operator.logout", actorUserId: session.userId });
+    await auditSystem({
+      action: "operator.logout",
+      actorUserId: session.userId,
+      entityType: "session",
+      entityId: session.sessionId,
+    });
   }
   redirect("/operator/login");
 }
@@ -165,7 +199,7 @@ const SETUP_FAILED = "The email or setup code is incorrect.";
  * operator email and the environment's setup code; then continues to two-step enrollment.
  */
 export async function setUpOperator(_: FormState, formData: FormData): Promise<FormState> {
-  if (isProduction()) return { error: "Operator setup isn't available here." };
+  if (!operatorSetupAllowed()) return { error: "Operator setup isn't available here." };
   const limited = await limitCurrentRequest("seed");
   if (!limited.allowed) return rateLimited("seed", "setup attempts", limited);
   const parsed = setupSchema.safeParse({
@@ -180,7 +214,11 @@ export async function setUpOperator(_: FormState, formData: FormData): Promise<F
   // Check the code even when the email is wrong, so both failures take the same path.
   const codeOk = setupCodeMatches(parsed.data.code);
   if (!codeOk || !isOperatorEmail(parsed.data.email)) {
-    await auditSystem({ action: "operator.setup_failed", ipAddress: await clientIp() });
+    await auditSystem({
+      action: "operator.setup_failed",
+      ipAddress: await clientIp(),
+      metadata: { reason: "bad_code_or_email" },
+    });
     return { error: SETUP_FAILED };
   }
   const problem = passwordProblem(parsed.data.password);
@@ -192,12 +230,16 @@ export async function setUpOperator(_: FormState, formData: FormData): Promise<F
     ({ userId } = await setUpOperatorAccount({ email: parsed.data.email, password: parsed.data.password }));
   } catch (error) {
     if (error instanceof OperatorSetupError) {
-      await auditSystem({ action: "operator.setup_failed", ipAddress: await clientIp() });
+      await auditSystem({
+        action: "operator.setup_failed",
+        ipAddress: await clientIp(),
+        metadata: { reason: error.reason },
+      });
       return { error: error.message };
     }
     throw error;
   }
-  await replacePreviousOperatorSession();
+  // Setup already ended every session of this account, so there's no previous one to replace.
   await createSession(userId, { authMethod: "operator" });
   redirect("/operator/login/mfa/setup");
 }

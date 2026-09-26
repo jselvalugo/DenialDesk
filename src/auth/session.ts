@@ -61,7 +61,8 @@ async function setCookie(token: string, realm: Realm) {
   (await cookies()).set(COOKIE[realm], token, {
     httpOnly: true,
     secure: true,
-    sameSite: "lax",
+    // The console is never reached from another site, so its cookie is never sent cross-site.
+    sameSite: realm === "operator" ? "strict" : "lax",
     path: "/",
     maxAge: SESSION_ABSOLUTE_MS / 1000,
   });

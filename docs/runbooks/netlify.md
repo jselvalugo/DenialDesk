@@ -64,6 +64,9 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   Only the `PLATFORM_OPERATOR_EMAIL` account can use it, with password + two-step verification. That
   account belongs to no practice and can't sign in at `/login`; practice users can't sign in to the console.
   Operator and practice/demo sessions are separate, so one browser can hold both.
+- **Upgrading from before 2026-09-26:** `PLATFORM_OPERATOR_EMAIL` used to equal `SEED_ADMIN_EMAIL`
+  (the demo admin). Change it to a new, console-only address before deploying (the seed endpoint now
+  refuses when the two match), then run `/operator/setup`. The demo admin keeps signing in at `/login`.
 - First time, forgotten password, lockout, or lost authenticator: open `/operator/setup`, enter the
   operator email and the setup code (`SEED_TOKEN`), and choose a password. This signs the account out
   everywhere and restarts two-step setup. Pre-production only (404 in production); production

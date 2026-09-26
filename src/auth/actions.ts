@@ -19,7 +19,7 @@ import {
   SIGN_IN_FAILED,
   type FormState,
 } from "./credentials";
-import { isOperatorEmail } from "./operator-account";
+import { isOperatorAccount } from "./operator-account";
 import { decoyHash, hashPassword, passwordProblem, verifyPassword } from "./password";
 import {
   clientIp,
@@ -73,7 +73,8 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
     return { error: SIGN_IN_FAILED };
   }
   // The platform operator signs in only at /operator/login; here it looks like any unknown account.
-  if (isOperatorEmail(user.email)) {
+  // An account with a practice membership is never the operator, even if its email matches.
+  if (await isOperatorAccount(user)) {
     await verifyPassword(parsed.data.password, await decoyHash());
     await auditSystem({
       action: "auth.login_failed",
@@ -85,7 +86,12 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
   }
   if (!(await reserveAttempt(user.id))) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing while locked
-    await auditSystem({ action: "auth.login_failed", actorUserId: user.id, metadata: { locked: true } });
+    await auditSystem({
+      action: "auth.login_failed",
+      actorUserId: user.id,
+      ipAddress: await clientIp(),
+      metadata: { locked: true },
+    });
     return { error: SIGN_IN_FAILED };
   }
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {

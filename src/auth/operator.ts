@@ -1,8 +1,9 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { auditSystem } from "@/lib/audit";
 import { hasPracticeMembership, isOperatorEmail } from "./operator-account";
-import { getOperatorSession, revokeSession } from "./session";
+import { clientIp, getOperatorSession, revokeSession } from "./session";
 
 /** Who is using the platform console. The operator belongs to no practice. */
 export interface OperatorContext {
@@ -24,8 +25,21 @@ export const requireOperator = cache(async (): Promise<OperatorContext> => {
   if (!session.mfaVerified) {
     redirect(session.mfaEnrolled ? "/operator/login/mfa" : "/operator/login/mfa/setup");
   }
-  if (!isOperatorEmail(session.email) || (await hasPracticeMembership(session.userId))) {
+  const reason = !isOperatorEmail(session.email)
+    ? "email_mismatch"
+    : (await hasPracticeMembership(session.userId))
+      ? "practice_membership"
+      : null;
+  if (reason) {
     await revokeSession(session.sessionId);
+    await auditSystem({
+      action: "operator.session_revoked",
+      actorUserId: session.userId,
+      entityType: "session",
+      entityId: session.sessionId,
+      ipAddress: await clientIp(),
+      metadata: { reason },
+    });
     redirect("/operator/login");
   }
   return {

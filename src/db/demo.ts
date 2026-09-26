@@ -1,5 +1,6 @@
 import { and, eq, ne, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
+import { isOperatorEmail } from "@/auth/operator-email";
 import { hashPassword } from "@/auth/password";
 import { audit } from "@/lib/audit";
 import type { TenantTx } from "./tenant";
@@ -25,6 +26,12 @@ export async function seedDemoPractice(
   // Checked here, not only in seedPractice: the repair path never reaches seedPractice.
   if (process.env.APP_ENV === "production") {
     throw new SeedRefusedError("Refusing to seed or repair accounts with APP_ENV=production");
+  }
+  // The operator is a separate, practice-free account: the seed must never touch it.
+  if (isOperatorEmail(admin.email)) {
+    throw new SeedRefusedError(
+      "SEED_ADMIN_EMAIL is the platform operator's email. Give the demo admin a different address.",
+    );
   }
   const [existing] = await systemDb()
     .select({ id: tenants.id })

@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { verifyPassword } from "@/auth/password";
 import { closeDatabase, systemDb } from "@/db/client";
@@ -6,7 +6,7 @@ import { DEMO_PRACTICE, SeedRefusedError, seedDemoPractice } from "@/db/demo";
 import { auditEvents, memberships, sessions, tenants, users } from "@/db/schema";
 import { createTestTenant } from "./helpers";
 
-// The pre-production seed endpoint doubles as the owner's way back into the operator account.
+// The pre-production seed endpoint repairs the demo practice's admin (never the operator account).
 afterAll(() => closeDatabase());
 
 const email = `seed-admin-${Date.now()}@synthetic.test`;
@@ -104,6 +104,17 @@ describe("seedDemoPractice", () => {
       );
     } finally {
       process.env.APP_ENV = previous;
+    }
+  });
+
+  it("refuses to touch the platform operator's account", async () => {
+    vi.stubEnv("PLATFORM_OPERATOR_EMAIL", `operator-${email}`);
+    try {
+      await expect(
+        seedDemoPractice({ email: `OPERATOR-${email}`, password: "synthetic-password-one" }),
+      ).rejects.toBeInstanceOf(SeedRefusedError);
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 });

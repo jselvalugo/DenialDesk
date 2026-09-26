@@ -21,7 +21,8 @@ _Last updated: 2026-09-26_
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
-- Working branch: `claude/adoring-hypatia-5co7fz`; production branch on Netlify: `claude/quirky-feynman-ufql5a` (default).
+- Production branch on Netlify: `claude/quirky-feynman-ufql5a` (default). Each session works on its
+  own branch and merges through a PR.
 
 ## Decisions made (details in `docs/decisions/`)
 | Date | Decision | Record |

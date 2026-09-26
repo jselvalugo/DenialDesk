@@ -2,7 +2,8 @@
 
 Status: done (2026-09-26) — requested by the product owner
 Roadmap item: platform operations (follows `demo-login-and-operator-console.md`)
-Requirement IDs: R-7.2.2, R-7.2.3, R-7.2.5, R-7.2.7, R-7.2.9, R-7.5.1, R-15.1
+Requirement IDs: R-7.2.3, R-7.2.7, R-7.2.9, R-7.5.1, R-15.1; partial: R-7.2.2 (TOTP, not yet
+phishing-resistant), R-7.2.5 (no JIT approval) — both production gates in `docs/ROADMAP.md`
 
 ## Goal
 The platform console (`/operator`) has its own sign-in, separate from practice sign-in, used only
@@ -76,9 +77,19 @@ None.
   queries stay practice-level metadata and counts (tenant-scoped via `withTenant`).
 
 ## Test evidence
-- Unit: operator email match, realm separation in session reads, `requireOperator` redirects.
-- Integration: setup creates a membership-free account, re-running resets password/MFA/lockout and
-  revokes sessions, refuses a practice account's email; console domain functions with the new context.
-- E2E: operator signs in at `/operator/login` while a demo session stays usable; practice and signed-out
-  visitors are sent to `/operator/login`; practice sign-in refuses the operator and vice versa; wrong
-  setup code refused; `/operator/setup` is 404 in production.
+- Unit (`src/auth/operator.test.ts`): `requireOperator` redirects; revocation (audited with a reason)
+  on email mismatch, unset config, or a practice membership.
+- Integration: `session-realms.test.ts` (a token works only in its own cookie; fails if the realm
+  filter is removed); `operator-account.test.ts` (membership-free creation, recovery resets
+  password/MFA/lockout and ends sessions, practice/disabled accounts refused, setup refused unless
+  `APP_ENV` is development/preview, the one operator-account rule); `seed-admin.test.ts` (seed refuses
+  the operator email); console domain functions with the operator context.
+- E2E: operator signs in while a demo session in the same browser keeps working; practice and
+  signed-out visitors are sent to `/operator/login`; practice sign-in refuses the operator and vice
+  versa; wrong setup code refused; `/operator/setup` is 404 in production. The setup → enrollment →
+  console path was run by hand (it resets the shared test operator, so it isn't in the suite).
+
+## Upgrade note (existing environments)
+Before deploying, set `PLATFORM_OPERATOR_EMAIL` to a new address used only for the console (the old
+runbook made it equal to `SEED_ADMIN_EMAIL`, the demo admin, which has a practice and no longer
+qualifies), then run `/operator/setup`.
