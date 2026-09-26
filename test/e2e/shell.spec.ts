@@ -6,6 +6,10 @@ test("sign-in page shows the synthetic-data banner", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
 });
 
+test("the removed design system page returns 404", async ({ request }) => {
+  expect((await request.get("/design")).status()).toBe(404);
+});
+
 test("health endpoint reports status without leaking config", async ({ request }) => {
   const response = await request.get("/api/health");
   const body = await response.json();

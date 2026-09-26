@@ -35,5 +35,5 @@ None. Deadline dates on `/design` are illustrative; tone thresholds are UI setti
 Radix primitives, icons, TanStack Table, dark theme, real navigation targets.
 
 ## Follow-ups
-- No automated test yet that production mode hides the banner and 404s `/design`; add one with
+- No automated test yet that production mode hides the banner and 404s `/design`; add one with (moot: page removed 2026-09-26)
   the Netlify deploy spec (needs a second server run with `APP_ENV=production`).
