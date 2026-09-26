@@ -71,9 +71,13 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
 - **Operator account (sole administrator):** it exists only from configuration. On your own machine run
   `pnpm operator:credential`, then set `PLATFORM_OPERATOR_EMAIL` (an address used only for the console,
   never a practice user and not `SEED_ADMIN_EMAIL`) and `PLATFORM_OPERATOR_PASSWORD_HASH` (secret) in
-  Netlify, and redeploy. Sign in at `/operator/login`; two-step is set up on first sign-in.
+  Netlify, and redeploy. Sign in at `/operator/login`; two-step is set up on first sign-in unless
+  `PLATFORM_OPERATOR_MFA=off` is set (remove that variable to turn two-step back on).
 - **`PLATFORM_OPERATOR_PASSWORD_HASH` is the hash the script prints, never the password itself.** The
-  value starts with `scrypt$131072$8$1$` and is about 130 characters. If it holds anything else (the
+  value starts with `scrypt$131072$8$1$`, is one line of about 127 characters, and ends with letters
+  or digits. Netlify shows the last four characters of a secret: a preview ending in `8$1$` means
+  only the prefix was pasted, and a value that short also trips Netlify's secret scanning (it
+  matches this runbook and the tests), which fails the build. If the value holds anything else (the
   password, a hash with other parameters, a truncated paste), the console is simply off: sign-in
   shows the generic "sign-in failed" error and nothing is created. The reason is in the function log
   (*Logs → Functions*) as an `operator.credential_unusable` line with `status: malformed` (or
