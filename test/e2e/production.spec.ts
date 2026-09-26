@@ -16,3 +16,10 @@ test("health endpoint reports production", async ({ request }) => {
   const body = await (await request.get("/api/health")).json();
   expect(body.appEnv).toBe("production");
 });
+
+test("the preview seed endpoint does not exist in production", async ({ request }) => {
+  const response = await request.post("/api/preview/seed", {
+    headers: { authorization: "Bearer x".repeat(8) },
+  });
+  expect(response.status()).toBe(404);
+});

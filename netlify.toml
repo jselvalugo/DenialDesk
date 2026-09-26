@@ -1,12 +1,12 @@
 # Pre-production only, synthetic data only (ADR 0003). Runbook: docs/runbooks/netlify.md
+#
+# Database: Netlify Database (provisioned automatically because @netlify/database is a dependency).
+# Netlify applies netlify/database/migrations/ before each deploy is published; every deploy
+# preview gets its own isolated database branch. Regenerate that folder with
+# `pnpm netlify:migrations` whenever drizzle/ changes (a unit test fails if they drift).
 [build]
   command = "pnpm build"
 
 [build.environment]
   NODE_VERSION = "24"
   NEXT_TELEMETRY_DISABLED = "1"
-
-# Only the main site deploy runs migrations. Deploy previews for PR branches build against the
-# existing schema, so an unreviewed branch can't alter the shared database (security review 12).
-[context.production]
-  command = "pnpm db:migrate && pnpm build"

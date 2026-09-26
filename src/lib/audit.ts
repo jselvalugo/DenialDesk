@@ -20,7 +20,8 @@ export type AuditAction =
   | "denial.status_changed"
   | "denial.assigned"
   | "denial.note_added"
-  | "patient.member_id_revealed";
+  | "patient.member_id_revealed"
+  | "system.demo_seeded";
 
 export interface AuditEvent {
   action: AuditAction;

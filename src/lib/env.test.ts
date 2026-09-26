@@ -16,6 +16,10 @@ describe("parseEnv", () => {
     expect(() => parseEnv({ ...valid, APP_ENV: "staging" })).toThrow(/APP_ENV/);
   });
 
+  it("allows DATABASE_URL to be omitted (Netlify supplies the database)", () => {
+    expect(parseEnv({ ...valid, DATABASE_URL: undefined }).DATABASE_URL).toBeUndefined();
+  });
+
   it("rejects a non-Postgres DATABASE_URL", () => {
     expect(() => parseEnv({ ...valid, DATABASE_URL: "mysql://u:p@localhost/db" })).toThrow(/DATABASE_URL/);
   });
