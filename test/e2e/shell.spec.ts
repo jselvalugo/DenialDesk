@@ -38,6 +38,10 @@ test("the module switcher searches modules and pages and opens one", async ({ pa
   await page.goto("/design");
   // The shortcut listener attaches after hydration; wait for client-rendered chrome first.
   await expect(page.getByRole("button", { name: /, switch module$/ })).toBeEnabled();
+  // The launcher shows the brand mark, not the module name.
+  await expect(
+    page.getByRole("button", { name: /, switch module$/ }).locator("svg[data-brand-mark]"),
+  ).toBeVisible();
   await expect(async () => {
     await page.keyboard.press("Control+k");
     await expect(page.getByRole("dialog", { name: "Go to" })).toBeVisible({ timeout: 500 });

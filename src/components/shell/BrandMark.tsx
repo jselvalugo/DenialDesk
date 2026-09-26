@@ -4,13 +4,13 @@
  */
 export function BrandMark({
   className,
-  crossClassName = "text-[#14c8b0]",
+  crossClassName = "text-[var(--dd-brand-cross)]",
 }: {
   className?: string;
   crossClassName?: string;
 }) {
   return (
-    <svg viewBox="0 0 48 48" fill="none" aria-hidden="true" className={className}>
+    <svg data-brand-mark viewBox="0 0 48 48" fill="none" aria-hidden="true" className={className}>
       {/* Top of the D sweeping into its bowl */}
       <path d="M5 5.5H21A17 17 0 0 1 38.5 20" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
       {/* Stem */}
