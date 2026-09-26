@@ -87,6 +87,13 @@ describe("receivables report", () => {
       receivablesReport(tx, { year: first.periodYear, month: first.periodMonth }),
     ))!;
     expect(earlier.selected).toEqual(first);
+    // F6: the reconciliation row for the *selected* (earliest) month must be findable by period,
+    // not just the latest one (`.at(-1)`), which the A/R aging page's undeposited tile reads.
+    const earlierRecon = earlier.reconciliation.find(
+      (r) => r.periodYear === first.periodYear && r.periodMonth === first.periodMonth,
+    );
+    expect(earlierRecon).toBeDefined();
+    expect(earlierRecon).not.toEqual(earlier.reconciliation.at(-1));
     // Every seeded month has deposits, so the synthetic sample has nothing left to cover.
     expect(await withTenant(a.manager, (tx) => monthsWithoutDeposits(tx))).toEqual([]);
     const unknown = (await withTenant(a.manager, (tx) => receivablesReport(tx, { year: 1999, month: 1 })))!;

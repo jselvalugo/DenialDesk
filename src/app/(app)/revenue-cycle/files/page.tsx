@@ -12,6 +12,7 @@ import { Panel } from "@/components/ui/Panel";
 import { rcmSites } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { CURRENT_FORMAT_VERSION, listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
+import { audit } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
 import { Badge } from "@/components/ui/Badge";
 import { UploadForm } from "./UploadForm";
@@ -21,13 +22,24 @@ export const metadata: Metadata = { title: "Monthly files" };
 export default async function FilesPage() {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
-  const { files, sites } = await withTenant(auth, async (tx) => ({
-    files: await listFiles(tx),
-    sites: await tx
+  const { files, sites } = await withTenant(auth, async (tx) => {
+    const files = await listFiles(tx);
+    const sites = await tx
       .select({ id: rcmSites.id, code: rcmSites.code, name: rcmSites.name })
       .from(rcmSites)
-      .orderBy(rcmSites.code),
-  }));
+      .orderBy(rcmSites.code);
+    // Each row aggregates a month's lines, which carry patient names: record which files were
+    // shown, IDs only (R-7.5.1).
+    if (files.length > 0) {
+      await audit(tx, {
+        action: "rcm.file_list_viewed",
+        actorUserId: auth.userId,
+        tenantId: auth.tenantId,
+        metadata: { fileIds: files.map((f) => f.id).join(","), count: files.length },
+      });
+    }
+    return { files, sites };
+  });
   // More than one import for a month usually means a correction; journal vouchers (B3) must use one.
   const perPeriod = new Map<string, number>();
   for (const f of files) {

@@ -225,10 +225,16 @@ export default async function DenialQueuePage({
                     </Td>
                     <Td>
                       {row.appealSubmittedOn ? (
-                        row.appealDeadline && row.appealSubmittedOn > row.appealDeadline ? (
-                          <span className="text-label font-medium text-danger-fg">Filed after deadline</span>
+                        row.appealDeadline ? (
+                          row.appealSubmittedOn > row.appealDeadline ? (
+                            <span className="text-label font-medium text-danger-fg">
+                              Filed after deadline
+                            </span>
+                          ) : (
+                            <span className="text-label text-muted">Appeal filed on time</span>
+                          )
                         ) : (
-                          <span className="text-label text-muted">Appeal filed on time</span>
+                          <span className="text-label text-muted">Appeal filed · no deadline configured</span>
                         )
                       ) : row.appealDeadline ? (
                         status.awaitingAction ? (

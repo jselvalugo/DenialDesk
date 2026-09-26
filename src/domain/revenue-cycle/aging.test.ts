@@ -3,6 +3,8 @@ import {
   ageReceivables,
   agingTotals,
   bucketFor,
+  over90Cents,
+  over90ShareBps,
   parseDepositFile,
   reconcileDeposits,
   rollForward,
@@ -25,6 +27,22 @@ describe("bucketFor", () => {
     ["2025-11-30", "over_120"], // 121 days
     ["2026-04-02", "0_30"], // service after the month end is treated as current
   ])("%s as of 2026-03-31 → %s", (date, bucket) => expect(bucketFor(date, "2026-03-31")).toBe(bucket));
+});
+
+describe("over90Cents / over90ShareBps (D7: one definition, shared by both pages)", () => {
+  it("sums the 91-120 and over-120 buckets only", () => {
+    const buckets = { "0_30": 100, "31_60": 100, "61_90": 100, "91_120": 451, over_120: 0 } as const;
+    expect(over90Cents(buckets)).toBe(451);
+  });
+
+  it("computes a basis-point share that matches the review's example (451/1001 = 45.0%)", () => {
+    expect(over90ShareBps(451, 1001)).toBe(4505);
+    expect(over90ShareBps(4505, 10000)).toBe(4505);
+  });
+
+  it("returns null with no open A/R instead of dividing by zero", () => {
+    expect(over90ShareBps(0, 0)).toBeNull();
+  });
 });
 
 describe("ageReceivables", () => {
@@ -129,6 +147,19 @@ describe("reconcileDeposits", () => {
       [2, 350, 550, 600, true], // over half the month's payments undeposited
       [3, 1_200, -700, -100, false], // deposits ran ahead of posting (negative)
     ]);
+  });
+
+  // §3.4: reconcileDeposits at exactly 50% (the alert threshold) was untested; the check is a
+  // strict ">" so exactly half undeposited must not alert.
+  it.each([
+    [500, false], // exactly half undeposited: at, not over, the threshold
+    [501, true], // just over half undeposited
+  ])("alert threshold: undeposited %i of 1000 → alert %s", (undeposited, alert) => {
+    const rows = reconcileDeposits(
+      [{ periodYear: 2026, periodMonth: 1, paymentsCents: 1_000 }],
+      [{ depositDate: "2026-01-15", amountCents: 1_000 - undeposited }],
+    );
+    expect(rows[0]!.alert).toBe(alert);
   });
 
   it("restarts after a missing month", () => {
