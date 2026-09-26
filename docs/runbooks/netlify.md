@@ -18,7 +18,7 @@ Site: https://denialdesk.netlify.app
   |---|---|
   | `APP_ENV` | `preview` — shows the synthetic-data banner, enables the seed endpoint |
   | `FIELD_ENCRYPTION_KEY` | AES-256 key for member IDs and MFA secrets (secret; pre-prod only) |
-  | `SEED_TOKEN` | Bearer token for the sample-practice seed endpoint (secret); no operator power |
+  | `SEED_TOKEN` | Bearer token for the sample-practice seed endpoint and the operator status endpoint (secret); it can trigger the same configuration sync a sign-in does, nothing more |
   | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Admin of the seeded synthetic practice (password secret); not the operator |
   | `PLATFORM_OPERATOR_EMAIL` | The operator account for the platform console; an address used only for the console, never a practice user |
   | `PLATFORM_OPERATOR_PASSWORD_HASH` | The operator's password hash from `pnpm operator:credential` (secret); the only way the operator account is created or reset |
