@@ -80,6 +80,11 @@ Provisioning from infrastructure configuration (owner rebaseline, 2026-09-26)
       rotates. 404 in production, without the token or with a wrong one; rate limited in the seed
       endpoint's bucket (5 per hour per network, shared); `Cache-Control: no-store`. It never returns a value, only
       these words, so `SEED_TOKEN` still has no operator power.
+- [x] `PLATFORM_OPERATOR_MFA=off` (owner decision, 2026-09-26, while the console is set up): outside
+      production a correct password signs the operator straight in to `/operator`. The session starts
+      verified, the attempt counter is cleared, and the sign-in is audited as
+      `operator.login_succeeded` with `mfa: skipped_by_config`. Production ignores the value; two-step
+      stays required there (R-7.2.2). Unsetting the variable restores two-step on the next sign-in.
 - [x] Production bootstrap and recovery are the same infrastructure step; production sign-in moves
       to Microsoft Entra ID with a hardware key (ROADMAP production gate).
 

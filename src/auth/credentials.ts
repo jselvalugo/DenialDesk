@@ -81,6 +81,11 @@ export async function recordFailure(userId: string, action: AuditAction): Promis
   });
 }
 
+/** Resets the per-account attempt counter (what a successful two-step check does). */
+export async function clearFailures(userId: string): Promise<void> {
+  await systemDb().update(users).set({ failedLoginCount: 0, lockedUntil: null }).where(eq(users.id, userId));
+}
+
 /**
  * Checks a TOTP code and claims its time step atomically, so two simultaneous submissions of the
  * same code can't both succeed (single-use codes). On success the attempt counter resets and, when

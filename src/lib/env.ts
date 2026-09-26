@@ -20,6 +20,11 @@ const schema = z.object({
   // Validated strictly where it's used (src/auth/operator-account.ts): a bad value switches the
   // console off rather than stopping the whole app.
   PLATFORM_OPERATOR_PASSWORD_HASH: z.string().optional(),
+  /**
+   * `off` lets the operator sign in with the password alone (owner decision, 2026-09-26, while the
+   * console is being set up). Ignored in production: two-step is always required there (R-7.2.2).
+   */
+  PLATFORM_OPERATOR_MFA: z.enum(["on", "off"]).optional(),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

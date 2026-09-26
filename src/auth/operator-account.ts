@@ -103,6 +103,14 @@ export function configuredOperatorHash(): string | null {
   return null;
 }
 
+/**
+ * Two-step verification is skipped for the operator only when PLATFORM_OPERATOR_MFA=off outside
+ * production (owner decision, 2026-09-26). Production always requires it (R-7.2.2).
+ */
+export function operatorMfaSkipped(): boolean {
+  return !isProduction() && process.env.PLATFORM_OPERATOR_MFA?.trim().toLowerCase() === "off";
+}
+
 /** Both the operator email and a usable password hash are configured. */
 export function operatorConfigured(): boolean {
   return operatorEmail() !== null && configuredOperatorHash() !== null;
