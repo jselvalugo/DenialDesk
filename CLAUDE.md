@@ -63,11 +63,11 @@ Agents live in `.claude/agents/`; details in `docs/AGENT_WORKFLOW.md`.
 | HIPAA / Florida law / SOC 2 review | compliance-checker |
 
 ## Stack
-TBD — see `docs/decisions/0001-tech-stack.md`. Once decided, list here:
-- Language / framework:
-- Database:
-- Test command:
-- Lint / typecheck command:
-- Run locally:
+Decided in `docs/decisions/0001-tech-stack.md` (layout and performance rules there too).
+- Language / framework: TypeScript (strict), Node.js 24 LTS, Next.js App Router, pnpm
+- Database: PostgreSQL with row-level security; Drizzle ORM + drizzle-kit migrations
+- Test command: `pnpm test` (Vitest), `pnpm test:e2e` (Playwright) — available once the skeleton lands
+- Lint / typecheck command: `pnpm lint`, `pnpm typecheck`
+- Run locally: `docker compose up db`, `pnpm db:migrate`, `pnpm dev`
 - Hosting: pre-production on Netlify, **synthetic data only** (`docs/decisions/0003-netlify-preproduction.md`);
   production on Microsoft Azure, U.S. regions only (`docs/decisions/0002-azure-hosting.md`). Keep platform code in adapters.

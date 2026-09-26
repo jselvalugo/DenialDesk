@@ -13,7 +13,7 @@ Compliance and legal (human):
 - [ ] Risk analysis and core policies drafted; compliance automation tool chosen [§6.4]
 
 Engineering:
-- [ ] ADR 0001 tech stack accepted (ADR 0003 Netlify pre-prod accepted; ADR 0002 Azure confirmed at cutover)
+- [x] ADR 0001 tech stack accepted (ADR 0003 Netlify pre-prod accepted; ADR 0002 Azure confirmed at cutover)
 - [ ] Project skeleton: app, DB, test runner, lint, CI on every PR [R-7.4.2, R-7.4.4]
 - [ ] Netlify deploy previews + demo site with pre-prod guards: synthetic banner, synthetic-only uploads, restricted access (ADR 0003) [R-7.1.3]
 - [ ] Synthetic data generator: practices, providers, payers, patients, claims, denials [R-15.1]
