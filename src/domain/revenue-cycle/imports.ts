@@ -3,7 +3,7 @@ import type { TenantTx } from "@/db/tenant";
 import { rcmClaimLines, rcmFiles, rcmSites, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { prepareEngine } from "./engine";
-import type { MonthlyLine } from "./monthly-file";
+import { periodEnd, type MonthlyLine } from "./monthly-file";
 import { loadEngineConfig } from "./setup";
 
 /** "March 2026" for a file's accounting period. */
@@ -20,7 +20,6 @@ const CHUNK = 500;
 export interface ImportInput {
   tenantId: string;
   userId: string;
-  filename: string;
   periodYear: number;
   periodMonth: number;
   /** Site for lines whose facility doesn't name a site; null = none. */
@@ -49,6 +48,8 @@ export async function importMonthlyFile(tx: TenantTx, input: ImportInput): Promi
     throw new Error("Unknown site");
   }
 
+  // Service after the period can't belong to this month's file; earlier dates are late charges.
+  const lastDay = periodEnd(input.periodYear, input.periodMonth);
   const rows = input.lines.map((line) => {
     const result = classify({
       status: line.status,
@@ -82,7 +83,7 @@ export async function importMonthlyFile(tx: TenantTx, input: ImportInput): Promi
       revenueGl: result.revenueGl,
       adjustmentGl: result.adjustmentGl,
       excluded: result.excluded,
-      flagged: line.billedCents === 0 || line.cpt === "",
+      flagged: line.billedCents === 0 || line.cpt === "" || line.serviceDate > lastDay,
     };
   });
   const sum = (key: "billedCents" | "paymentCents" | "balanceCents" | "contraCents" | "netCents") =>
@@ -93,7 +94,8 @@ export async function importMonthlyFile(tx: TenantTx, input: ImportInput): Promi
     .values({
       tenantId: input.tenantId,
       uploadedBy: input.userId,
-      filename: input.filename,
+      // A generic name: uploaded file names can contain patient names (PHI).
+      filename: `monthly-file-${input.periodYear}-${String(input.periodMonth).padStart(2, "0")}.csv`,
       periodYear: input.periodYear,
       periodMonth: input.periodMonth,
       rowCount: rows.length,
@@ -133,6 +135,7 @@ export async function listFiles(tx: TenantTx) {
       contraCents: rcmFiles.contraCents,
       netCents: rcmFiles.netCents,
       paymentCents: rcmFiles.paymentCents,
+      balanceCents: rcmFiles.balanceCents,
       flaggedCount: rcmFiles.flaggedCount,
       uploadedBy: users.displayName,
       createdAt: rcmFiles.createdAt,
@@ -146,8 +149,6 @@ export const LINES_PAGE_SIZE = 50;
 
 export interface LineFilters {
   ruleCode?: string;
-  payerClass?: string;
-  siteId?: string;
   flagged?: boolean;
   page: number;
 }
@@ -202,8 +203,6 @@ export async function getFile(tx: TenantTx, fileId: string, filters: LineFilters
 
   const conditions: SQL[] = [inFile];
   if (filters.ruleCode) conditions.push(eq(rcmClaimLines.ruleCode, filters.ruleCode));
-  if (filters.payerClass) conditions.push(eq(rcmClaimLines.payerClass, filters.payerClass));
-  if (filters.siteId) conditions.push(eq(rcmClaimLines.siteId, filters.siteId));
   if (filters.flagged) conditions.push(eq(rcmClaimLines.flagged, true));
   const where = and(...conditions);
   const lines = await tx
@@ -236,4 +235,14 @@ export async function getFile(tx: TenantTx, fileId: string, filters: LineFilters
   const [{ total } = { total: 0 }] = await tx.select({ total: count() }).from(rcmClaimLines).where(where);
 
   return { ...file, byRule, byPayerClass, bySite, lines, total };
+}
+
+/** Masks identifiers for roles that review totals but don't work accounts (minimum necessary). */
+export function maskPatientName(name: string): string {
+  const initial = name.trim().charAt(0);
+  return initial ? `${initial}••••` : "••••";
+}
+
+export function maskAccount(account: string): string {
+  return `•••• ${account.slice(-4)}`;
 }

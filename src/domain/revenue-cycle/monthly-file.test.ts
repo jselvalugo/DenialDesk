@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { MONTHLY_FILE_HEADER, parseMoney, parseMonthlyFile, parseServiceDate } from "./monthly-file";
+import {
+  checkUpload,
+  decodeUpload,
+  MAX_ROWS,
+  MONTHLY_FILE_HEADER,
+  parseMoney,
+  parseMonthlyFile,
+  parseServiceDate,
+  periodEnd,
+} from "./monthly-file";
 
 const header = MONTHLY_FILE_HEADER.join(",");
 const row = (overrides: Partial<Record<string, string>> = {}) => {
@@ -29,9 +38,15 @@ describe("parseMoney", () => {
     ["-7", -700],
     ["", 0],
     ["0.07", 7],
-  ])("%s → %d", (raw, cents) => expect(parseMoney(raw)).toBe(cents));
+    ["-$12", -1_200],
+    ["$ 1,000,000.00", null],
+    ["10,000,000.00", 1_000_000_000],
+  ])("%s → %s", (raw, cents) => expect(parseMoney(raw)).toBe(cents));
 
-  it.each(["12.345", "abc", "1e5", "$", "--5"])("rejects %s", (raw) => expect(parseMoney(raw)).toBeNull());
+  it.each(["12.345", "abc", "1e5", "$", "--5", "1,2,3", "12,34", "(-5)", "-(5)", "1,0000", "10,000,000.01"])(
+    "rejects %s",
+    (raw) => expect(parseMoney(raw)).toBeNull(),
+  );
 });
 
 describe("parseServiceDate", () => {
@@ -87,7 +102,57 @@ describe("parseMonthlyFile", () => {
     expect(parseMonthlyFile(text, { syntheticOnly: false }).ok).toBe(true);
   });
 
+  it("reports physical line numbers and skips blank and all-comma rows", () => {
+    const text = [header, "", row(), ",,,,,,,,,,,", row({ Patient: "" })].join("\n");
+    const result = parseMonthlyFile(text, { syntheticOnly: true });
+    expect(!result.ok && result.problems).toEqual([{ row: 5, message: "Patient is blank." }]);
+  });
+
+  it("rejects ambiguous headers", () => {
+    const text = `${header},Payment\n${row()},1`;
+    const result = parseMonthlyFile(text, { syntheticOnly: true });
+    expect(!result.ok && result.problems[0]!.message).toMatch(/More than one column could be Total Payment/);
+  });
+
+  it("accepts exactly the row limit and rejects one more", () => {
+    const one = row();
+    const at = [header, ...Array.from({ length: MAX_ROWS }, () => one)].join("\n");
+    expect(parseMonthlyFile(at, { syntheticOnly: true }).ok).toBe(true);
+    const over = `${at}\n${one}`;
+    const result = parseMonthlyFile(over, { syntheticOnly: true });
+    expect(!result.ok && result.problems[0]!.message).toMatch(/more than 50,000 data rows/);
+  });
+
   it("rejects files with no data rows", () => {
     expect(parseMonthlyFile(header, { syntheticOnly: true }).ok).toBe(false);
+  });
+});
+
+describe("upload checks", () => {
+  const base = { name: "march.csv", size: 1_000, attestedSynthetic: true, syntheticOnly: true };
+  it.each([
+    [{ size: 0 }, /Choose a CSV file/],
+    [{ name: "march.xlsx" }, /CSV \(\.csv\)/],
+    [{ size: 5 * 1024 * 1024 + 1 }, /larger than 5 MB/],
+    [{ attestedSynthetic: false }, /synthetic data only/],
+  ])("refuses %o", (overrides, message) => {
+    const result = checkUpload({ ...base, ...overrides });
+    expect(!result.ok && result.error).toMatch(message);
+  });
+
+  it("accepts a CSV at the size limit, and real files only where allowed", () => {
+    expect(checkUpload({ ...base, size: 5 * 1024 * 1024 }).ok).toBe(true);
+    expect(checkUpload({ ...base, attestedSynthetic: false, syntheticOnly: false }).ok).toBe(true);
+  });
+
+  it("decodes UTF-8 and refuses other bytes", () => {
+    expect(decodeUpload(new TextEncoder().encode("Patient,Café").buffer as ArrayBuffer)).toBe("Patient,Café");
+    expect(decodeUpload(new Uint8Array([0xff, 0xfe, 0x00]).buffer)).toBeNull();
+  });
+
+  it("knows the last day of a period", () => {
+    expect(periodEnd(2026, 2)).toBe("2026-02-28");
+    expect(periodEnd(2028, 2)).toBe("2028-02-29");
+    expect(periodEnd(2026, 12)).toBe("2026-12-31");
   });
 });

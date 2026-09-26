@@ -49,6 +49,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.
 
+- Revenue cycle imports (before real data, `docs/threat-models/revenue-cycle-imports.md`):
+  sensitivity tags for lines (Part 2/HIV/behavioral CPTs); encrypt account numbers or confirm
+  PM exports never put member IDs there; accept the synthetic-only guard as attestation-level.
 - Revenue cycle: confirm the Capitation rule is meant to be shadowed by the Medicare/Medicaid wrap
   rule, and the GL account / payer-class names (seeded names are descriptive placeholders).
 

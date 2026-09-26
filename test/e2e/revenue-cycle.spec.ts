@@ -34,6 +34,9 @@ test.describe("monthly files", () => {
       await expect(page.getByRole("region", { name: "File control totals" })).toContainText("150");
       const lines = page.getByRole("table", { name: "Classified lines" });
       await expect(lines.getByRole("row")).toHaveCount(51); // header + first page of 50
+      // Compliance sees masked identifiers (minimum necessary).
+      await expect(lines.getByRole("row").nth(1)).toContainText("•••• ");
+      await expect(page.getByText(/^1–50 of 150/)).toBeVisible();
       await page
         .getByRole("table", { name: "Totals by rule" })
         .getByRole("link", { name: "STANDARD" })
@@ -76,7 +79,14 @@ test.describe("monthly files", () => {
     await page.getByRole("button", { name: "Import file" }).click();
     await expect(page).toHaveURL(/\/revenue-cycle\/files\/[0-9a-f-]{36}$/);
     await expect(page.getByRole("region", { name: "File control totals" })).toContainText("150");
-    await expect(page.getByText("synthetic-sample.csv")).toBeVisible();
+    await expect(page.getByText(/^monthly-file-\d{4}-\d{2}\.csv/)).toBeVisible();
+    // Managers work accounts, so they see identifiers unmasked.
+    await expect(page.getByRole("table", { name: "Classified lines" }).getByRole("row").nth(1)).toContainText(
+      "SYN-",
+    );
+    // Paging past the end lands on the last page.
+    await page.goto(`${page.url()}?page=99`);
+    await expect(page).toHaveURL(/page=3$/);
   });
 });
 

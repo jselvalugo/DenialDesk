@@ -7,8 +7,14 @@ import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
 import { EngineConfigError } from "@/domain/revenue-cycle/engine";
 import { importMonthlyFile } from "@/domain/revenue-cycle/imports";
-import { MAX_FILE_BYTES, parseMonthlyFile, type FileProblem } from "@/domain/revenue-cycle/monthly-file";
-import { isProduction } from "@/lib/env";
+import {
+  checkUpload,
+  decodeUpload,
+  parseMonthlyFile,
+  type FileProblem,
+} from "@/domain/revenue-cycle/monthly-file";
+import { auditSystem } from "@/lib/audit";
+import { syntheticDataOnly } from "@/lib/env";
 
 export interface UploadState {
   error?: string;
@@ -23,12 +29,21 @@ const formSchema = z.object({
 
 /**
  * Imports one monthly practice-management CSV: validated in memory (never written to disk),
- * classified, and stored in one transaction. Pre-production accepts synthetic files only.
+ * classified, and stored in one transaction. Pre-production (and anything on Netlify) accepts
+ * synthetic files only. Rejections are audited with counts only.
  */
 export async function uploadMonthlyFile(_: UploadState, formData: FormData): Promise<UploadState> {
   const auth = await requireAuth();
   if (!canRunRevenueCycle(auth.role))
     return { error: "Only administrators and RCM managers can import files." };
+  const rejected = async (reason: string, problems = 0) => {
+    await auditSystem({
+      action: "rcm.file_rejected",
+      actorUserId: auth.userId,
+      tenantId: auth.tenantId,
+      metadata: { reason, problems },
+    });
+  };
 
   const parsed = formSchema.safeParse({
     periodYear: formData.get("periodYear"),
@@ -38,28 +53,31 @@ export async function uploadMonthlyFile(_: UploadState, formData: FormData): Pro
   if (!parsed.success) return { error: "Choose the month the file covers." };
 
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Choose a CSV file to import." };
-  if (!/\.csv$/i.test(file.name))
-    return { error: "Upload the file as CSV (.csv). Excel files aren't supported yet." };
-  if (file.size > MAX_FILE_BYTES)
-    return { error: "The file is larger than 5 MB. Split it by site or month." };
-  const syntheticOnly = !isProduction();
-  if (syntheticOnly && formData.get("syntheticAttestation") !== "on") {
-    return { error: "Confirm that the file contains synthetic data only." };
+  if (!(file instanceof File)) return { error: "Choose a CSV file to import." };
+  const syntheticOnly = syntheticDataOnly();
+  const check = checkUpload({
+    name: file.name,
+    size: file.size,
+    attestedSynthetic: formData.get("syntheticAttestation") === "on",
+    syntheticOnly,
+  });
+  if (!check.ok) {
+    await rejected("upload_check");
+    return { error: check.error };
   }
-
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
-  } catch {
+  const text = decodeUpload(await file.arrayBuffer());
+  if (text === null) {
+    await rejected("encoding");
     return { error: "The file isn't UTF-8 text. Export it from your practice-management system as CSV." };
   }
   const result = parseMonthlyFile(text, { syntheticOnly });
-  if (!result.ok)
+  if (!result.ok) {
+    await rejected("validation", result.problems.length);
     return {
       error: "The file wasn't imported. Fix these rows and upload it again.",
       problems: result.problems,
     };
+  }
 
   let fileId: string;
   try {
@@ -67,7 +85,6 @@ export async function uploadMonthlyFile(_: UploadState, formData: FormData): Pro
       importMonthlyFile(tx, {
         tenantId: auth.tenantId,
         userId: auth.userId,
-        filename: file.name.slice(0, 200),
         periodYear: parsed.data.periodYear,
         periodMonth: parsed.data.periodMonth,
         defaultSiteId: parsed.data.defaultSiteId || null,

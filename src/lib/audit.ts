@@ -32,7 +32,8 @@ export type AuditAction =
   | "operator.demo_reset"
   | "rcm.defaults_loaded"
   | "rcm.file_imported"
-  | "rcm.file_viewed";
+  | "rcm.file_viewed"
+  | "rcm.file_rejected";
 
 export interface AuditEvent {
   action: AuditAction;

@@ -5,11 +5,11 @@ import { requireAuth } from "@/auth/session";
 import { rcmSites } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { generateMonthlyLines, monthlyLinesToCsv } from "@/domain/revenue-cycle/synthetic-file";
-import { isProduction } from "@/lib/env";
+import { syntheticDataOnly } from "@/lib/env";
 
-/** A synthetic sample file for this practice's sites (pre-production only; no PHI). */
+/** A synthetic sample file for this practice's sites (synthetic-only environments; no PHI). */
 export async function GET() {
-  if (isProduction()) notFound();
+  if (!syntheticDataOnly()) notFound();
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
   const sites = await withTenant(auth, (tx) => tx.select({ name: rcmSites.name }).from(rcmSites));

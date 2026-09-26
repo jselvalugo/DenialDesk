@@ -197,7 +197,6 @@ export async function seedPractice(options: {
     await importMonthlyFile(tx, {
       tenantId,
       userId: userIds[0]!,
-      filename: `synthetic-${period.year}-${String(period.month).padStart(2, "0")}.csv`,
       periodYear: period.year,
       periodMonth: period.month,
       defaultSiteId: firstSite?.id ?? null,

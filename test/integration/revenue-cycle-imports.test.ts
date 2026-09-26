@@ -61,6 +61,7 @@ describe("synthetic practices", () => {
           contra: sql<number>`sum(contra_cents)::bigint`.mapWith(Number),
           net: sql<number>`sum(net_cents)::bigint`.mapWith(Number),
           payments: sql<number>`sum(payment_cents)::bigint`.mapWith(Number),
+          balance: sql<number>`sum(balance_cents)::bigint`.mapWith(Number),
         })
         .from(rcmClaimLines)
         .where(eq(rcmClaimLines.fileId, file!.id)),
@@ -71,6 +72,7 @@ describe("synthetic practices", () => {
       contra: file!.contraCents,
       net: file!.netCents,
       payments: file!.paymentCents,
+      balance: file!.balanceCents,
     });
     expect(file!.netCents).toBe(file!.billedCents - file!.contraCents);
     const detail = await withTenant(a, (tx) => getFile(tx, file!.id, { page: 1 }));
@@ -85,7 +87,6 @@ describe("importMonthlyFile", () => {
     const fileId = await withTenant(a, (tx) =>
       importMonthlyFile(tx, {
         ...a,
-        filename: "synthetic-test.csv",
         periodYear: 2026,
         periodMonth: 3,
         defaultSiteId: null,
@@ -127,7 +128,6 @@ describe("importMonthlyFile", () => {
       withTenant(a, (tx) =>
         importMonthlyFile(tx, {
           ...a,
-          filename: "x.csv",
           periodYear: 2026,
           periodMonth: 3,
           defaultSiteId: bSite!.id,
@@ -135,6 +135,51 @@ describe("importMonthlyFile", () => {
         }),
       ),
     ).rejects.toThrow("Unknown site");
+  });
+});
+
+describe("import boundaries", () => {
+  it("flags service dates after the period (day of / after), not earlier late charges", async () => {
+    const fileId = await withTenant(a, (tx) =>
+      importMonthlyFile(tx, {
+        ...a,
+        periodYear: 2026,
+        periodMonth: 3,
+        defaultSiteId: null,
+        lines: [
+          line(2, { serviceDate: "2026-02-15" }),
+          line(3, { serviceDate: "2026-03-31" }),
+          line(4, { serviceDate: "2026-04-01" }),
+        ],
+      }),
+    );
+    const rows = await withTenant(a, (tx) =>
+      tx
+        .select({ flagged: rcmClaimLines.flagged })
+        .from(rcmClaimLines)
+        .where(eq(rcmClaimLines.fileId, fileId))
+        .orderBy(rcmClaimLines.rowNumber),
+    );
+    expect(rows.map((r) => r.flagged)).toEqual([false, false, true]);
+    const [file] = await withTenant(a, (tx) => tx.select().from(rcmFiles).where(eq(rcmFiles.id, fileId)));
+    expect(file!.filename).toBe("monthly-file-2026-03.csv");
+  });
+
+  it("stores nothing when any line fails to insert", async () => {
+    const before = await withTenant(a, (tx) => tx.select({ id: rcmFiles.id }).from(rcmFiles));
+    await expect(
+      withTenant(a, (tx) =>
+        importMonthlyFile(tx, {
+          ...a,
+          periodYear: 2026,
+          periodMonth: 3,
+          defaultSiteId: null,
+          lines: [line(2), line(3, { serviceDate: "2026-13-45" })],
+        }),
+      ),
+    ).rejects.toThrow();
+    const after = await withTenant(a, (tx) => tx.select({ id: rcmFiles.id }).from(rcmFiles));
+    expect(after).toHaveLength(before.length);
   });
 });
 

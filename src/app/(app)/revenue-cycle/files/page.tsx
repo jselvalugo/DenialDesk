@@ -12,7 +12,8 @@ import { Panel } from "@/components/ui/Panel";
 import { rcmSites } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
-import { isProduction } from "@/lib/env";
+import { syntheticDataOnly } from "@/lib/env";
+import { Badge } from "@/components/ui/Badge";
 import { UploadForm } from "./UploadForm";
 
 export const metadata: Metadata = { title: "Monthly files" };
@@ -27,6 +28,12 @@ export default async function FilesPage() {
       .from(rcmSites)
       .orderBy(rcmSites.code),
   }));
+  // More than one import for a month usually means a correction; journal vouchers (B3) must use one.
+  const perPeriod = new Map<string, number>();
+  for (const f of files) {
+    const key = `${f.periodYear}-${f.periodMonth}`;
+    perPeriod.set(key, (perPeriod.get(key) ?? 0) + 1);
+  }
   const [year, month] = todayIn().split("-").map(Number) as [number, number];
   const previous = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
 
@@ -68,6 +75,11 @@ export default async function FilesPage() {
                     >
                       {periodLabel(f.periodYear, f.periodMonth)}
                     </Link>
+                    {(perPeriod.get(`${f.periodYear}-${f.periodMonth}`) ?? 0) > 1 && (
+                      <span className="ml-2">
+                        <Badge tone="warning">Period imported more than once</Badge>
+                      </span>
+                    )}
                   </Td>
                   <Td className="max-w-64 truncate text-muted">{f.filename}</Td>
                   <Td numeric>{f.rowCount.toLocaleString("en-US")}</Td>
@@ -104,9 +116,9 @@ export default async function FilesPage() {
             sites={sites}
             defaultYear={previous.year}
             defaultMonth={previous.month}
-            syntheticOnly={!isProduction()}
+            syntheticOnly={syntheticDataOnly()}
           />
-          {!isProduction() && (
+          {syntheticDataOnly() && (
             <p className="mt-4 text-label text-muted">
               Need a file to try?{" "}
               <a

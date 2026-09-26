@@ -1,7 +1,9 @@
 /**
- * Minimal RFC 4180 CSV parser (quoted fields, escaped quotes, CRLF/LF, BOM). No dependency, no
- * eval, bounded by the caller's size limit. Throws CsvError with a row number, never cell text
- * (cells may hold PHI and error messages can reach logs).
+ * Minimal, strict RFC 4180 CSV parser (quoted fields, escaped quotes, CRLF/LF, BOM). No dependency,
+ * no eval, bounded by row and column limits. Rows carry their physical line number so errors match
+ * what a user sees in a spreadsheet or editor. Throws CsvError with a line number, never cell text
+ * (cells may hold PHI and error messages can reach logs). Rows whose cells are all empty (blank
+ * lines, trailing ",,,," rows from spreadsheet exports) are skipped.
  */
 export class CsvError extends Error {
   constructor(
@@ -13,62 +15,82 @@ export class CsvError extends Error {
   }
 }
 
-export function parseCsv(text: string, options: { maxRows: number }): string[][] {
+export interface CsvRow {
+  line: number;
+  cells: string[];
+}
+
+export function parseCsv(
+  text: string,
+  options: { maxRows: number; maxColumns: number; headerRows?: number },
+): CsvRow[] {
+  const rowLimit = options.maxRows + (options.headerRows ?? 0);
   const input = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-  const rows: string[][] = [];
-  let row: string[] = [];
+  const rows: CsvRow[] = [];
+  let cells: string[] = [];
   let field = "";
   let quoted = false;
-  let i = 0;
-  const endRow = () => {
-    row.push(field);
+  let closedQuote = false;
+  let line = 1;
+  let rowLine = 1;
+
+  const pushField = () => {
+    cells.push(field);
     field = "";
-    // Skip fully blank lines.
-    if (!(row.length === 1 && row[0] === "")) {
-      rows.push(row);
-      if (rows.length > options.maxRows) {
+    closedQuote = false;
+    if (cells.length > options.maxColumns) {
+      throw new CsvError(`A row has more than ${options.maxColumns} columns.`, rowLine);
+    }
+  };
+  const endRow = () => {
+    pushField();
+    if (cells.some((cell) => cell !== "")) {
+      rows.push({ line: rowLine, cells });
+      if (rows.length > rowLimit) {
         throw new CsvError(
-          `The file has more than ${options.maxRows.toLocaleString("en-US")} rows.`,
-          rows.length,
+          `The file has more than ${options.maxRows.toLocaleString("en-US")} ${options.headerRows ? "data rows" : "rows"}.`,
+          rowLine,
         );
       }
     }
-    row = [];
+    cells = [];
   };
 
-  while (i < input.length) {
+  for (let i = 0; i < input.length; i++) {
     const ch = input[i]!;
     if (quoted) {
       if (ch === '"') {
         if (input[i + 1] === '"') {
           field += '"';
-          i += 2;
-          continue;
+          i++;
+        } else {
+          quoted = false;
+          closedQuote = true;
         }
-        quoted = false;
-        i++;
-        continue;
+      } else {
+        if (ch === "\n") line++;
+        field += ch;
       }
-      field += ch;
-      i++;
       continue;
     }
-    if (ch === '"') {
-      if (field !== "") throw new CsvError("A quote appears inside an unquoted field.", rows.length + 1);
-      quoted = true;
-    } else if (ch === ",") {
-      row.push(field);
-      field = "";
+    if (ch === ",") {
+      pushField();
     } else if (ch === "\n" || ch === "\r") {
       if (ch === "\r" && input[i + 1] === "\n") i++;
       endRow();
+      line++;
+      rowLine = line;
+    } else if (closedQuote) {
+      throw new CsvError("Text follows a closing quote.", line);
+    } else if (ch === '"') {
+      if (field !== "") throw new CsvError("A quote appears inside an unquoted field.", line);
+      quoted = true;
     } else {
       field += ch;
     }
-    i++;
   }
-  if (quoted) throw new CsvError("A quoted field is never closed.", rows.length + 1);
-  if (field !== "" || row.length > 0) endRow();
+  if (quoted) throw new CsvError("A quoted field is never closed.", rowLine);
+  if (field !== "" || cells.length > 0 || closedQuote) endRow();
   return rows;
 }
 

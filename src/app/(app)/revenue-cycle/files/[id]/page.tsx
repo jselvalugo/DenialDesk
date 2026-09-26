@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { canViewRevenueCycle } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
@@ -12,7 +12,14 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
-import { getFile, LINES_PAGE_SIZE, periodLabel } from "@/domain/revenue-cycle/imports";
+import {
+  getFile,
+  LINES_PAGE_SIZE,
+  maskAccount,
+  maskPatientName,
+  periodLabel,
+} from "@/domain/revenue-cycle/imports";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { audit } from "@/lib/audit";
 import { formatCents, formatDate } from "@/lib/format";
 
@@ -42,6 +49,8 @@ export default async function FilePage({
   if (!z.uuid().safeParse(id).success) notFound();
   const query = params.parse(await searchParams);
   const filters = { ruleCode: query.rule, flagged: query.flagged === "1", page: query.page };
+  // Minimum necessary (R-3.3.7): compliance reviews totals and classifications, not accounts.
+  const maskIdentifiers = auth.role === "compliance";
 
   const data = await withTenant(auth, async (tx) => {
     const data = await getFile(tx, id, filters);
@@ -52,7 +61,13 @@ export default async function FilePage({
         tenantId: auth.tenantId,
         entityType: "rcm_file",
         entityId: id,
-        metadata: { lines: data.lines.length, page: filters.page },
+        metadata: {
+          lines: data.lines.length,
+          page: filters.page,
+          rule: filters.ruleCode ?? null,
+          flagged: filters.flagged,
+          masked: maskIdentifiers,
+        },
       });
     }
     return data;
@@ -69,6 +84,9 @@ export default async function FilePage({
     return `/revenue-cycle/files/${id}${text ? `?${text}` : ""}`;
   };
   const filtered = Boolean(filters.ruleCode || filters.flagged);
+  if (filters.page > pages) redirect(href({ rule: filters.ruleCode, flagged: filters.flagged, page: pages }));
+  const first = data.total === 0 ? 0 : (filters.page - 1) * LINES_PAGE_SIZE + 1;
+  const last = Math.min(filters.page * LINES_PAGE_SIZE, data.total);
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
@@ -212,70 +230,81 @@ export default async function FilePage({
         }
         flush
       >
-        <Table caption="Classified lines">
-          <thead>
-            <tr>
-              <Th numeric>Row</Th>
-              <Th>Patient</Th>
-              <Th>Account</Th>
-              <Th>Svc date</Th>
-              <Th>CPT</Th>
-              <Th>Class</Th>
-              <Th>Site</Th>
-              <Th>Rule</Th>
-              <Th numeric>Billed</Th>
-              <Th numeric>Contra</Th>
-              <Th numeric>Net</Th>
-              <Th numeric>Paid</Th>
-              <Th numeric>Balance</Th>
-              <Th>AR</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.lines.map((l) => (
-              <Tr key={l.id}>
-                <Td numeric className="text-muted">
-                  {l.rowNumber}
-                </Td>
-                <Td className="whitespace-nowrap">{l.patientName}</Td>
-                <Td className="font-mono text-label">{l.accountNumber}</Td>
-                <Td className="tabular">{formatDate(l.serviceDate)}</Td>
-                <Td>
-                  <Code>{l.cpt || "—"}</Code>
-                </Td>
-                <Td className="font-mono text-label">{l.payerClass}</Td>
-                <Td className="font-mono text-label">{l.siteCode ?? "—"}</Td>
-                <Td>
-                  <span className="flex flex-wrap items-center gap-1">
-                    <span className="font-mono text-label">{l.ruleCode}</span>
-                    {l.flagged && <Badge tone="warning">Review</Badge>}
-                  </span>
-                </Td>
-                <Td numeric>
-                  <Money cents={l.billedCents} />
-                </Td>
-                <Td numeric>
-                  <Money cents={l.contraCents} />
-                </Td>
-                <Td numeric className="font-medium">
-                  <Money cents={l.netCents} />
-                </Td>
-                <Td numeric>
-                  <Money cents={l.paymentCents} />
-                </Td>
-                <Td numeric>
-                  <Money cents={l.balanceCents} />
-                </Td>
-                <Td>
-                  <Code>{l.arGl}</Code>
-                </Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
+        {data.total === 0 ? (
+          <EmptyState
+            title="No lines match this filter"
+            description="Clear the filter to see every line in the file."
+          />
+        ) : (
+          <Table caption="Classified lines">
+            <thead>
+              <tr>
+                <Th numeric>Row</Th>
+                <Th>Patient</Th>
+                <Th>Account</Th>
+                <Th>Svc date</Th>
+                <Th>CPT</Th>
+                <Th>Class</Th>
+                <Th>Site</Th>
+                <Th>Rule</Th>
+                <Th numeric>Billed</Th>
+                <Th numeric>Contra</Th>
+                <Th numeric>Net</Th>
+                <Th numeric>Paid</Th>
+                <Th numeric>Balance</Th>
+                <Th>AR</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.lines.map((l) => (
+                <Tr key={l.id}>
+                  <Td numeric className="text-muted">
+                    {l.rowNumber}
+                  </Td>
+                  <Td className="whitespace-nowrap">
+                    {maskIdentifiers ? maskPatientName(l.patientName) : l.patientName}
+                  </Td>
+                  <Td className="font-mono text-label">
+                    {maskIdentifiers ? maskAccount(l.accountNumber) : l.accountNumber}
+                  </Td>
+                  <Td className="tabular">{formatDate(l.serviceDate)}</Td>
+                  <Td>
+                    <Code>{l.cpt || "—"}</Code>
+                  </Td>
+                  <Td className="font-mono text-label">{l.payerClass}</Td>
+                  <Td className="font-mono text-label">{l.siteCode ?? "—"}</Td>
+                  <Td>
+                    <span className="flex flex-wrap items-center gap-1">
+                      <span className="font-mono text-label">{l.ruleCode}</span>
+                      {l.flagged && <Badge tone="warning">Review</Badge>}
+                    </span>
+                  </Td>
+                  <Td numeric>
+                    <Money cents={l.billedCents} />
+                  </Td>
+                  <Td numeric>
+                    <Money cents={l.contraCents} />
+                  </Td>
+                  <Td numeric className="font-medium">
+                    <Money cents={l.netCents} />
+                  </Td>
+                  <Td numeric>
+                    <Money cents={l.paymentCents} />
+                  </Td>
+                  <Td numeric>
+                    <Money cents={l.balanceCents} />
+                  </Td>
+                  <Td>
+                    <Code>{l.arGl}</Code>
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
         <div className="flex items-center justify-between border-t border-border px-4 py-2.5 text-label text-muted">
           <span>
-            Page {Math.min(filters.page, pages)} of {pages}
+            {first}–{last} of {data.total.toLocaleString("en-US")} · Page {filters.page} of {pages}
           </span>
           <span className="flex gap-3">
             {filters.page > 1 && (

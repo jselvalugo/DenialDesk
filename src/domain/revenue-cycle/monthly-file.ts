@@ -1,4 +1,4 @@
-import { CsvError, parseCsv } from "@/lib/csv/parse";
+import { CsvError, parseCsv, type CsvRow } from "@/lib/csv/parse";
 
 /**
  * Monthly practice-management export (charges and payments by line), as used by RevCycle IQ.
@@ -9,6 +9,7 @@ import { CsvError, parseCsv } from "@/lib/csv/parse";
  */
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const MAX_ROWS = 50_000;
+export const MAX_COLUMNS = 100;
 /** Pre-production accepts synthetic files only: every account number must carry this prefix. */
 export const SYNTHETIC_ACCOUNT_PREFIX = "SYN-";
 
@@ -74,23 +75,32 @@ const normalize = (header: string) =>
     .replace(/[^a-z0-9#]+/g, " ")
     .trim();
 
-/** "$1,234.56", "1234.5", "(12.00)", "-12" → integer cents; null if not a money amount. */
+/** Largest amount accepted on one line ($10,000,000), so file totals stay exact in JavaScript. */
+export const MAX_LINE_CENTS = 1_000_000_000;
+
+const AMOUNT = /^\$?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?$/;
+
+/**
+ * Strict dollar amounts → integer cents: "$1,234.56", "1234.5", "(12.00)", "-$12", "" (= 0).
+ * Rejects misplaced thousands separators ("1,2,3"), mixed signs ("(-5)"), more than two decimals,
+ * and amounts over MAX_LINE_CENTS. Returns null when rejected.
+ */
 export function parseMoney(raw: string): number | null {
-  if (raw.trim() === "") return 0;
-  let text = raw.trim().replace(/[$,\s]/g, "");
+  let text = raw.trim();
+  if (text === "") return 0;
   let negative = false;
-  if (/^\(.*\)$/.test(text)) {
+  if (text.startsWith("(") && text.endsWith(")")) {
     negative = true;
-    text = text.slice(1, -1);
+    text = text.slice(1, -1).trim();
+  } else if (text.startsWith("-")) {
+    negative = true;
+    text = text.slice(1).trim();
   }
-  if (text.startsWith("-")) {
-    negative = !negative;
-    text = text.slice(1);
-  }
-  const match = /^(\d{1,12})(?:\.(\d{1,2}))?$/.exec(text);
+  const match = AMOUNT.exec(text);
   if (!match) return null;
-  const cents = Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
-  return negative ? -cents : cents;
+  const cents = Number(match[1]!.replace(/,/g, "")) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
+  if (cents > MAX_LINE_CENTS) return null;
+  return negative && cents !== 0 ? -cents : cents;
 }
 
 /** MM/DD/YYYY, M/D/YYYY, or YYYY-MM-DD → YYYY-MM-DD; null if not a real calendar date. */
@@ -112,9 +122,9 @@ export function parseServiceDate(raw: string): string | null {
 const MAX_PROBLEMS = 20;
 
 export function parseMonthlyFile(text: string, options: { syntheticOnly: boolean }): ParseResult {
-  let rows: string[][];
+  let rows: CsvRow[];
   try {
-    rows = parseCsv(text, { maxRows: MAX_ROWS + 1 });
+    rows = parseCsv(text, { maxRows: MAX_ROWS, maxColumns: MAX_COLUMNS, headerRows: 1 });
   } catch (error) {
     if (error instanceof CsvError)
       return { ok: false, problems: [{ row: error.row, message: error.message }] };
@@ -122,16 +132,33 @@ export function parseMonthlyFile(text: string, options: { syntheticOnly: boolean
   }
   if (rows.length < 2) return { ok: false, problems: [{ row: 1, message: "The file has no data rows." }] };
 
-  const header = rows[0]!.map(normalize);
+  const headerRow = rows[0]!;
+  const header = headerRow.cells.map(normalize);
   const index = {} as Record<ColumnKey, number>;
   const missing: string[] = [];
+  const ambiguous: string[] = [];
   for (const [key, column] of Object.entries(COLUMNS) as [ColumnKey, (typeof COLUMNS)[ColumnKey]][]) {
-    const at = header.findIndex((h) => (column.aliases as readonly string[]).includes(h));
-    if (at === -1 && column.required) missing.push(column.label);
-    index[key] = at;
+    const matches = header.flatMap((h, i) => ((column.aliases as readonly string[]).includes(h) ? [i] : []));
+    if (matches.length === 0 && column.required) missing.push(column.label);
+    if (matches.length > 1) ambiguous.push(column.label);
+    index[key] = matches[0] ?? -1;
   }
   if (missing.length > 0) {
-    return { ok: false, problems: [{ row: 1, message: `Missing required columns: ${missing.join(", ")}.` }] };
+    return {
+      ok: false,
+      problems: [{ row: headerRow.line, message: `Missing required columns: ${missing.join(", ")}.` }],
+    };
+  }
+  if (ambiguous.length > 0) {
+    return {
+      ok: false,
+      problems: [
+        {
+          row: headerRow.line,
+          message: `More than one column could be ${ambiguous.join(", ")}. Keep one column for each.`,
+        },
+      ],
+    };
   }
 
   const problems: FileProblem[] = [];
@@ -140,12 +167,12 @@ export function parseMonthlyFile(text: string, options: { syntheticOnly: boolean
     if (problems.length < MAX_PROBLEMS) problems.push({ row, message });
   };
   for (let r = 1; r < rows.length; r++) {
-    const cells = rows[r]!;
-    const rowNumber = r + 1;
+    const { cells, line: rowNumber } = rows[r]!;
     const cell = (key: ColumnKey) => (index[key] >= 0 ? (cells[index[key]] ?? "").trim() : "");
     const money = (key: ColumnKey) => {
       const value = parseMoney(cell(key));
-      if (value === null) add(rowNumber, `${COLUMNS[key].label} isn't a dollar amount.`);
+      if (value === null)
+        add(rowNumber, `${COLUMNS[key].label} isn't a valid dollar amount (up to $10,000,000).`);
       return value ?? 0;
     };
     const accountNumber = cell("accountNumber");
@@ -178,14 +205,43 @@ export function parseMonthlyFile(text: string, options: { syntheticOnly: boolean
       balanceCents: money("balance"),
     });
   }
-  if (lines.length > MAX_ROWS) {
-    return {
-      ok: false,
-      problems: [{ row: MAX_ROWS + 2, message: `The file has more than ${MAX_ROWS} rows.` }],
-    };
-  }
   return problems.length > 0 ? { ok: false, problems } : { ok: true, lines };
 }
 
 /** Header row for sample and template files. */
 export const MONTHLY_FILE_HEADER = Object.values(COLUMNS).map((c) => c.label);
+
+export type UploadCheck = { ok: true } | { ok: false; error: string };
+
+/** Checks on the uploaded file itself, before its contents are read. */
+export function checkUpload(file: {
+  name: string;
+  size: number;
+  attestedSynthetic: boolean;
+  syntheticOnly: boolean;
+}): UploadCheck {
+  if (file.size === 0) return { ok: false, error: "Choose a CSV file to import." };
+  if (!/\.csv$/i.test(file.name)) {
+    return { ok: false, error: "Upload the file as CSV (.csv). Excel files aren't supported yet." };
+  }
+  if (file.size > MAX_FILE_BYTES)
+    return { ok: false, error: "The file is larger than 5 MB. Split it by site or month." };
+  if (file.syntheticOnly && !file.attestedSynthetic) {
+    return { ok: false, error: "Confirm that the file contains synthetic data only." };
+  }
+  return { ok: true };
+}
+
+/** Decodes the upload as UTF-8, refusing binary or other encodings. */
+export function decodeUpload(bytes: ArrayBuffer): string | null {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/** Last calendar day of a period, YYYY-MM-DD. */
+export function periodEnd(year: number, month: number): string {
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+}
