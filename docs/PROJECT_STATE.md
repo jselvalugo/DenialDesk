@@ -32,9 +32,9 @@ The product owner delegated technical decisions to the implementing agent ("make
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
-0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger done; next B2
-   monthly file import and processed claims, then B3 journal vouchers, B4 deposits and A/R aging,
-   B5 statements and dashboard.
+0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger and B2 monthly file
+   import done; next B3 journal vouchers (MIP export), B4 deposits and A/R aging, B5 statements
+   and dashboard.
 1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.

@@ -1,9 +1,12 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { asc } from "drizzle-orm";
 import { addCalendarDays } from "@rules/calendar";
 import { appealDeadline } from "@rules/deadlines";
 import { hashPassword } from "@/auth/password";
 import { generateDataset, type SyntheticDataset } from "@/domain/synthetic/generator";
+import { importMonthlyFile } from "@/domain/revenue-cycle/imports";
 import { seedRevenueCycleDefaults } from "@/domain/revenue-cycle/setup";
+import { generateMonthlyLines } from "@/domain/revenue-cycle/synthetic-file";
 import { encryptField } from "@/lib/crypto/field";
 import { systemDb } from "./client";
 import {
@@ -15,6 +18,7 @@ import {
   patients,
   payers,
   providers,
+  rcmSites,
   tenants,
   users,
 } from "./schema";
@@ -182,6 +186,28 @@ export async function seedPractice(options: {
     await insertInChunks(lineRows, (chunk) => tx.insert(claimLines).values(chunk));
     await insertInChunks(denialRows, (chunk) => tx.insert(denials).values(chunk));
     await seedRevenueCycleDefaults(tx, tenantId, userIds[0]!);
+    // Last month's synthetic practice-management file, classified by the default rules.
+    const [year, month] = dataset.asOf.split("-").map(Number) as [number, number];
+    const period = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
+    const [firstSite] = await tx
+      .select({ id: rcmSites.id })
+      .from(rcmSites)
+      .orderBy(asc(rcmSites.code))
+      .limit(1);
+    await importMonthlyFile(tx, {
+      tenantId,
+      userId: userIds[0]!,
+      filename: `synthetic-${period.year}-${String(period.month).padStart(2, "0")}.csv`,
+      periodYear: period.year,
+      periodMonth: period.month,
+      defaultSiteId: firstSite?.id ?? null,
+      lines: generateMonthlyLines({
+        seed: dataset.claims.length,
+        periodYear: period.year,
+        periodMonth: period.month,
+        facilities: dataset.locations.map((l) => l.name),
+      }),
+    });
   });
 
   return { tenantId, userIds };

@@ -53,7 +53,7 @@ export const navigation: NavSection[] = [
     revenueCycle: true,
     items: [
       { label: "RCM dashboard", href: "/revenue-cycle/dashboard", icon: LineChart, available: false },
-      { label: "Monthly files", href: "/revenue-cycle/files", icon: FileSpreadsheet, available: false },
+      { label: "Monthly files", href: "/revenue-cycle/files", icon: FileSpreadsheet, available: true },
       { label: "Journal entries", href: "/revenue-cycle/journal", icon: NotebookPen, available: false },
       { label: "A/R aging", href: "/revenue-cycle/ar-aging", icon: Hourglass, available: false },
       { label: "Deposits", href: "/revenue-cycle/deposits", icon: Landmark, available: false },

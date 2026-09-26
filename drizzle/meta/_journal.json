@@ -71,6 +71,13 @@
       "when": 1790422507695,
       "tag": "0009_revenue_cycle_setup",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790423221902,
+      "tag": "0010_revenue_cycle_imports",
+      "breakpoints": true
     }
   ]
 }

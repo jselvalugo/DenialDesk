@@ -14,3 +14,8 @@ export function canViewRevenueCycle(role: Role): boolean {
 export function canConfigureRevenueCycle(role: Role): boolean {
   return role === "admin";
 }
+
+/** Month-end work: importing files (and, later, preparing journal vouchers). */
+export function canRunRevenueCycle(role: Role): boolean {
+  return role === "admin" || role === "manager";
+}
