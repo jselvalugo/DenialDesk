@@ -49,8 +49,13 @@ export function postedClaimStatus(input: {
   paidTotalCents: number;
   adjustments: RemittanceAdjustment[];
 }): Extract<ClaimStatus, "paid" | "partially_paid" | "denied"> {
-  if (input.statusCode === "4" || input.paidTotalCents <= 0) return "denied";
-  return input.adjustments.every(isExpected) ? "paid" : "partially_paid";
+  const expected = input.adjustments.every(isExpected);
+  if (input.paidTotalCents <= 0) {
+    // Processed with nothing paid because it all went to the patient (e.g. deductible) is not a denial.
+    return input.statusCode !== "4" && expected && input.adjustments.length > 0 ? "paid" : "denied";
+  }
+  // Paid earlier and denied now (or reduced): money came in, so not a full denial.
+  return input.statusCode !== "4" && expected ? "paid" : "partially_paid";
 }
 
 /** Claims paid minus provider-level adjustments must equal the payment (835 balancing). */

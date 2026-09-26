@@ -46,11 +46,17 @@ export async function loadRemittance(
       "The file doesn't identify the payer (N1*PR payer ID). Ask the payer for a corrected file.",
     );
   }
-  const [payer] = await tx
+  const matches = await tx
     .select({ id: payers.id })
     .from(payers)
     .where(eq(payers.ediPayerId, parsed.payer.ediPayerId))
-    .limit(1);
+    .limit(2);
+  if (matches.length > 1) {
+    throw new RemittanceError(
+      `More than one payer has EDI payer ID ${parsed.payer.ediPayerId}. Fix the payer setup, then upload again.`,
+    );
+  }
+  const payer = matches[0];
   if (!payer) {
     throw new RemittanceError(
       `No payer in this practice has EDI payer ID ${parsed.payer.ediPayerId}. Add the payer first, then upload again.`,
@@ -214,7 +220,12 @@ export async function postRemittance(
     await tx.insert(promptPayResponses).values({
       tenantId: input.tenantId,
       claimId: claim.id,
+      // A zero payment still answers the claim (pay-or-deny met); interest applies only to money paid.
       kind: payment.paidCents > 0 ? "payment" : "denial",
+      note:
+        payment.paidCents > 0 || status === "denied"
+          ? null
+          : "Processed with nothing paid (patient responsibility)",
       responseDate: remittance.paymentDate,
       cents: Math.max(0, payment.paidCents),
       remittanceId: remittance.id,
