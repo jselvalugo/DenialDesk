@@ -252,6 +252,19 @@ export function PatientForm({
         </label>
       )}
 
+      {syntheticOnly && (
+        <label className="flex items-start gap-2 text-body text-text">
+          <input
+            type="checkbox"
+            name="syntheticAttestation"
+            required
+            aria-invalid={state.field === "syntheticAttestation" || undefined}
+            className="mt-0.5 size-4 accent-primary"
+          />
+          I confirm this record is synthetic test data, not a real patient.
+        </label>
+      )}
+
       <div className="flex gap-2">
         <Button type="submit" variant="primary" disabled={pending} aria-disabled={pending}>
           {pending ? "Saving…" : editing ? "Save changes" : "Register patient"}

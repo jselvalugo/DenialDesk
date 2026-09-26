@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, ilike, inArray, like, or, sql } from "drizzle-orm";
 import type { TenantTx } from "@/db/tenant";
 import { claims, denials, patients, payers } from "@/db/schema";
-import { encryptField } from "@/lib/crypto/field";
+import { decryptField, encryptField } from "@/lib/crypto/field";
 import { audit } from "@/lib/audit";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { SYNTHETIC_MARKER } from "@/domain/synthetic/generator";
@@ -48,20 +48,29 @@ function literal(term: string): string {
 export async function searchPatients(tx: TenantTx, term: string) {
   const cleaned = term.trim().replace(/\s+/g, " ");
   if (cleaned.length < 2) return [];
-  const [last, first] = cleaned.includes(",")
-    ? cleaned.split(",").map((part) => part.trim())
-    : [cleaned, undefined];
-  const where = first
-    ? and(ilike(patients.lastName, `${literal(last!)}%`), ilike(patients.firstName, `${literal(first)}%`))
-    : or(
-        ilike(patients.lastName, `${literal(cleaned)}%`),
-        ilike(patients.firstName, `${literal(cleaned)}%`),
-        ilike(patients.mrn, `${literal(cleaned)}%`),
-        // "First Last"
-        cleaned.includes(" ")
-          ? sql`(${patients.firstName} || ' ' || ${patients.lastName}) ilike ${`${literal(cleaned)}%`}`
-          : undefined,
-      );
+  if (cleaned.includes(",")) {
+    // "Last, First"; a blank first part ("Smith,") searches the last name only.
+    const [last = "", first = ""] = cleaned.split(",").map((part) => part.trim());
+    if (!last) return [];
+    return listQuery(tx)
+      .where(
+        and(
+          ilike(patients.lastName, `${literal(last)}%`),
+          first ? ilike(patients.firstName, `${literal(first)}%`) : undefined,
+        ),
+      )
+      .orderBy(asc(patients.lastName), asc(patients.firstName), asc(patients.mrn))
+      .limit(SEARCH_LIMIT);
+  }
+  const where = or(
+    ilike(patients.lastName, `${literal(cleaned)}%`),
+    ilike(patients.firstName, `${literal(cleaned)}%`),
+    ilike(patients.mrn, `${literal(cleaned)}%`),
+    // "First Last"
+    cleaned.includes(" ")
+      ? sql`(${patients.firstName} || ' ' || ${patients.lastName}) ilike ${`${literal(cleaned)}%`}`
+      : undefined,
+  );
   return listQuery(tx)
     .where(where)
     .orderBy(asc(patients.lastName), asc(patients.firstName), asc(patients.mrn))
@@ -201,17 +210,13 @@ async function assertMrnFree(tx: TenantTx, mrn: string, exceptId?: string) {
 
 async function generateMrn(tx: TenantTx, syntheticOnly: boolean): Promise<string> {
   const prefix = syntheticOnly ? `${SYNTHETIC_MARKER}-` : "MRN-";
-  // Generated MRNs are zero-padded, so the highest sorts last.
-  const recent = await tx
-    .select({ mrn: patients.mrn })
+  // Highest all-digit suffix; hand-entered MRNs like "SYN-A7" are ignored rather than sorted.
+  const pattern = `^${prefix}([0-9]{1,15})$`;
+  const [row] = await tx
+    .select({ highest: sql<string | null>`max((substring(${patients.mrn} from ${pattern}))::bigint)` })
     .from(patients)
-    .where(like(patients.mrn, `${prefix}%`))
-    .orderBy(desc(patients.mrn))
-    .limit(20);
-  return nextMrn(
-    recent.map((r) => r.mrn),
-    syntheticOnly,
-  );
+    .where(like(patients.mrn, `${prefix}%`));
+  return nextMrn(row?.highest ? [`${prefix}${row.highest}`] : [], syntheticOnly);
 }
 
 interface Actor {
@@ -289,11 +294,16 @@ export async function updatePatient(
   };
   const changed = changedPatientFields(current, next);
   if (changed.length === 0) return { changedFields: [] };
-  if (changed.includes("primaryPayerId")) await assertPracticePayer(tx, next.primaryPayerId);
+  const payerChanged = changed.includes("primaryPayerId");
+  if (payerChanged) await assertPracticePayer(tx, next.primaryPayerId);
   if (changed.includes("mrn")) await assertMrnFree(tx, next.mrn!, patientId);
-  if (!next.memberId && next.primaryPayerId && !current.memberIdLast4) {
+  // A member ID belongs to one payer: a new payer needs its own, never the old payer's.
+  if (next.primaryPayerId && !next.memberId && (payerChanged || !current.memberIdLast4)) {
     throw new PatientRecordError("Enter the member ID for this payer.", "memberId");
   }
+  // Self-pay keeps no member ID (minimum necessary).
+  const clearMemberId = !next.primaryPayerId && Boolean(current.memberIdLast4);
+  if (clearMemberId && !changed.includes("memberId")) changed.push("memberId");
 
   await tx
     .update(patients)
@@ -311,7 +321,9 @@ export async function updatePatient(
       primaryPayerId: next.primaryPayerId,
       ...(next.memberId
         ? { memberIdEnc: encryptField(next.memberId), memberIdLast4: next.memberId.slice(-4) }
-        : {}),
+        : clearMemberId
+          ? { memberIdEnc: encryptField(""), memberIdLast4: "" }
+          : {}),
       sensitivityTags: next.sensitivityTags,
       updatedAt: sql`now()`,
     })
@@ -325,5 +337,66 @@ export async function updatePatient(
     reason,
     metadata: { changedFields: changed.join(",") },
   });
+  if (changed.includes("sensitivityTags")) {
+    // Its own event: removing a tag lowers a record's protection. Tag keys are enum values, not PHI.
+    const before = new Set(current.sensitivityTags);
+    const after = new Set(next.sensitivityTags);
+    await audit(tx, {
+      action: "patient.sensitivity_changed",
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      entityType: "patient",
+      entityId: patientId,
+      reason,
+      metadata: {
+        added: [...after].filter((t) => !before.has(t)).join(","),
+        removed: [...before].filter((t) => !after.has(t)).join(","),
+      },
+    });
+  }
   return { changedFields: changed };
+}
+
+/** Search plus its audit event: result IDs and count, never the terms (CLAUDE.md #4). */
+export async function searchPatientsAudited(
+  tx: TenantTx,
+  actor: { tenantId: string; userId: string },
+  term: string,
+) {
+  const results = await searchPatients(tx, term);
+  await audit(tx, {
+    action: "patient.searched",
+    actorUserId: actor.userId,
+    tenantId: actor.tenantId,
+    metadata: { patientIds: results.map((r) => r.id).join(","), count: results.length },
+  });
+  return results;
+}
+
+export type RevealReason = "appeal" | "eligibility" | "payer_call" | "other";
+
+/** Decrypts a patient's member ID and records who looked and why (R-7.5.1). */
+export async function revealPatientMemberIdFor(
+  tx: TenantTx,
+  actor: { tenantId: string; userId: string },
+  patientId: string,
+  reason: RevealReason,
+): Promise<{ value?: string; error?: string }> {
+  const [row] = await tx
+    .select({ memberIdEnc: patients.memberIdEnc, memberIdLast4: patients.memberIdLast4 })
+    .from(patients)
+    .where(eq(patients.id, patientId))
+    .limit(1);
+  if (!row) return { error: "Not found." };
+  if (!row.memberIdLast4) return { error: "No member ID on file." };
+  await audit(tx, {
+    action: "patient.member_id_revealed",
+    actorUserId: actor.userId,
+    tenantId: actor.tenantId,
+    entityType: "patient",
+    entityId: patientId,
+    reason,
+    metadata: { from: "patient_chart" },
+  });
+  return { value: decryptField(row.memberIdEnc) };
 }

@@ -2,23 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { todayIn } from "@rules/calendar";
 import { canEditPatients, canTagSensitivity, canWorkDenials } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
-import { patients } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import {
   createPatient,
   PatientRecordError,
-  searchPatients,
+  revealPatientMemberIdFor,
+  searchPatientsAudited,
   updatePatient,
   type PatientListRow,
 } from "@/domain/patients/queries";
 import { patientSchema, SENSITIVITY_TAGS } from "@/domain/patients/record";
-import { audit } from "@/lib/audit";
-import { decryptField } from "@/lib/crypto/field";
 import { syntheticDataOnly } from "@/lib/env";
 
 export interface PatientFormState {
@@ -52,6 +49,15 @@ function readForm(formData: FormData) {
   };
 }
 
+/** Pre-production accepts synthetic patients only (R-15.1); the person entering one says so. */
+function missingAttestation(formData: FormData): PatientFormState | null {
+  if (!syntheticDataOnly() || formData.get("syntheticAttestation") === "on") return null;
+  return {
+    error: "Confirm this patient is synthetic. Real patient data is not allowed here.",
+    field: "syntheticAttestation",
+  };
+}
+
 function parse(formData: FormData) {
   const parsed = patientSchema({ today: todayIn(), syntheticOnly: syntheticDataOnly() }).safeParse(
     readForm(formData),
@@ -69,12 +75,14 @@ function isDuplicateMrn(error: unknown): boolean {
 export async function registerPatient(_: PatientFormState, formData: FormData): Promise<PatientFormState> {
   const auth = await requireAuth();
   if (!canEditPatients(auth.role)) return { error: NOT_ALLOWED };
+  const unattested = missingAttestation(formData);
+  if (unattested) return unattested;
   const parsed = parse(formData);
   if (!parsed.data) return parsed.state;
 
   let id: string;
-  try {
-    ({ id } = await withTenant(auth, (tx) =>
+  const register = () =>
+    withTenant(auth, (tx) =>
       createPatient(
         tx,
         {
@@ -85,7 +93,15 @@ export async function registerPatient(_: PatientFormState, formData: FormData): 
         },
         parsed.data,
       ),
-    ));
+    );
+  try {
+    try {
+      ({ id } = await register());
+    } catch (error) {
+      // Two registrations at once can draw the same generated MRN; the second retries once.
+      if (parsed.data.mrn || !isDuplicateMrn(error)) throw error;
+      ({ id } = await register());
+    }
   } catch (error) {
     if (error instanceof PatientRecordError) return { error: error.message, field: error.field };
     if (isDuplicateMrn(error)) return { error: "Another patient already has this MRN.", field: "mrn" };
@@ -109,6 +125,8 @@ export async function savePatient(_: PatientFormState, formData: FormData): Prom
   if (reason.length < 5 || reason.length > 500) {
     return { error: "Say why the record is changing (5 to 500 characters).", field: "reason" };
   }
+  const unattested = missingAttestation(formData);
+  if (unattested) return unattested;
   const parsed = parse(formData);
   if (!parsed.data) return parsed.state;
 
@@ -147,17 +165,8 @@ export async function findPatients(_: SearchState, formData: FormData): Promise<
   const auth = await requireAuth();
   const term = String(formData.get("q") ?? "").slice(0, 100);
   if (term.trim().length < 2) return { error: "Enter at least 2 characters of a name or MRN." };
-  return withTenant(auth, async (tx) => {
-    const results = await searchPatients(tx, term);
-    await audit(tx, {
-      action: "patient.searched",
-      actorUserId: auth.userId,
-      tenantId: auth.tenantId,
-      // IDs and count only; never the search terms.
-      metadata: { patientIds: results.map((r) => r.id).join(","), count: results.length },
-    });
-    return { results };
-  });
+  const results = await withTenant(auth, (tx) => searchPatientsAudited(tx, auth, term));
+  return { results };
 }
 
 /** Returns a patient's full member ID and records who looked and why (R-7.5.1). */
@@ -172,23 +181,7 @@ export async function revealPatientMemberId(
     .object({ patientId: z.uuid(), reason: z.enum(["appeal", "eligibility", "payer_call", "other"]) })
     .safeParse({ patientId, reason });
   if (!parsed.success) return { error: "Choose a reason." };
-  return withTenant(auth, async (tx) => {
-    const [row] = await tx
-      .select({ memberIdEnc: patients.memberIdEnc, memberIdLast4: patients.memberIdLast4 })
-      .from(patients)
-      .where(eq(patients.id, parsed.data.patientId))
-      .limit(1);
-    if (!row) return { error: "Not found." };
-    if (!row.memberIdLast4) return { error: "No member ID on file." };
-    await audit(tx, {
-      action: "patient.member_id_revealed",
-      actorUserId: auth.userId,
-      tenantId: auth.tenantId,
-      entityType: "patient",
-      entityId: parsed.data.patientId,
-      reason: parsed.data.reason,
-      metadata: { from: "patient_chart" },
-    });
-    return { value: decryptField(row.memberIdEnc) };
-  });
+  return withTenant(auth, (tx) =>
+    revealPatientMemberIdFor(tx, auth, parsed.data.patientId, parsed.data.reason),
+  );
 }

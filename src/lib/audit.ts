@@ -30,6 +30,7 @@ export type AuditAction =
   | "patient.viewed"
   | "patient.created"
   | "patient.updated"
+  | "patient.sensitivity_changed"
   | "system.demo_seeded"
   | "system.admin_repaired"
   | "auth.demo_login"

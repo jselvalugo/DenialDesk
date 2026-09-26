@@ -26,7 +26,7 @@ export function PatientTable({ rows, caption }: { rows: PatientListRow[]; captio
               </Link>
               {row.sensitivityTags.length > 0 && (
                 <span className="ml-2">
-                  <Badge tone="warning">Sensitive</Badge>
+                  <Badge tone="warning">Restricted</Badge>
                 </span>
               )}
             </Td>

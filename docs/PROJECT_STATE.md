@@ -74,6 +74,10 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   (force-push of the default branch), or leave it? Owner decision.
 - Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must
   honor; Medicare Advantage filing windows assumed to come from payer contracts (`specs/claims.md`).
+- Patients before real data (`specs/patients.md`, P1 reviews): enforce sensitivity tags in access
+  and masking (R-3.5.1, R-3.5.2) and a Part 2 consent decision before SUD-tagged data; demographic
+  version history for HIPAA amendments (§164.526), P3; confirm compliance needs address and phone.
+  Pre-prod entry relies on the SYN prefixes plus a synthetic attestation checkbox (ADR 0003).
 - Patients: should front-desk registration be its own role? Guarantor now or with statements (§8.6)?
 - Claims before real data: sensitivity masking of diagnosis codes in `claim_versions` snapshots and
   history; retention/legal-hold path for append-only history; PIP/workers' comp/Medicaid filing

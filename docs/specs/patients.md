@@ -46,6 +46,11 @@ denials, and balances.
 - [x] In synthetic-only environments (everything but Azure production) MRNs and member IDs must
       start with `SYN`, and the form says so (R-15.1).
 - [x] Editing requires a reason (amendment trail); the audit event lists changed field names only.
+      Tag changes also write `patient.sensitivity_changed` with the tag keys added and removed.
+- [x] In synthetic-only environments, registering or editing requires ticking "this record is
+      synthetic test data".
+- [x] A member ID belongs to one payer: changing the payer requires a new member ID; self-pay clears it.
+- [x] Only administrators see sensitivity tag names; other roles see "Restricted".
 - [x] MRN is unique per practice; a duplicate is reported as a form error, not a crash.
 - [x] Primary payer must belong to the practice: checked in code and by a tenant-scoped composite
       foreign key `(tenant_id, primary_payer_id) → payers (tenant_id, id)`.

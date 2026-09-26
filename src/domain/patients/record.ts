@@ -176,7 +176,7 @@ export function changedPatientFields(
 export function nextMrn(existing: string[], syntheticOnly: boolean): string {
   const prefix = syntheticOnly ? `${SYNTHETIC_MARKER}-` : "MRN-";
   const highest = existing
-    .filter((mrn) => mrn.startsWith(prefix))
+    .filter((mrn) => mrn.startsWith(prefix) && /^\d+$/.test(mrn.slice(prefix.length)))
     .map((mrn) => Number(mrn.slice(prefix.length)))
     .filter((n) => Number.isSafeInteger(n))
     .reduce((max, n) => Math.max(max, n), 0);

@@ -11,7 +11,9 @@ import {
   getPatientForEdit,
   listPatients,
   PatientRecordError,
+  revealPatientMemberIdFor,
   searchPatients,
+  searchPatientsAudited,
   updatePatient,
 } from "@/domain/patients/queries";
 import { patientSchema } from "@/domain/patients/record";
@@ -211,6 +213,60 @@ describe("updating a patient", () => {
     expect(event!.metadata).toEqual({ changedFields: "city,sensitivityTags" });
   });
 
+  it("requires a new member ID when the payer changes, and clears it for self-pay", async () => {
+    const payerIds = await withTenant(a, async (tx) =>
+      (await tx.select({ id: payers.id }).from(payers)).map((p) => p.id),
+    );
+    const [first, second] = payerIds as [string, string];
+    const { id } = await withTenant(a, (tx) =>
+      createPatient(tx, actor(a), input({ primaryPayerId: first, memberId: "SYN4444" })),
+    );
+    const record = await withTenant(a, (tx) => getPatientForEdit(tx, id));
+    const stamp = record!.updatedAt.toISOString();
+    await expect(
+      withTenant(a, (tx) =>
+        updatePatient(
+          tx,
+          actor(a),
+          id,
+          stamp,
+          input({ mrn: record!.mrn, primaryPayerId: second }),
+          "New plan",
+        ),
+      ),
+    ).rejects.toThrow("Enter the member ID");
+    const result = await withTenant(a, (tx) =>
+      updatePatient(tx, actor(a), id, stamp, input({ mrn: record!.mrn }), "Now self-pay"),
+    );
+    expect(result.changedFields).toEqual(["primaryPayerId", "memberId"]);
+    const after = await withTenant(a, (tx) => getPatientForEdit(tx, id));
+    expect(after!.memberIdLast4).toBe("");
+  });
+
+  it("records sensitivity tag changes as their own audit event", async () => {
+    const { id } = await withTenant(a, (tx) =>
+      createPatient(tx, actor(a), input({ sensitivityTags: ["hiv"] })),
+    );
+    const record = await withTenant(a, (tx) => getPatientForEdit(tx, id));
+    await withTenant(a, (tx) =>
+      updatePatient(
+        tx,
+        actor(a),
+        id,
+        record!.updatedAt.toISOString(),
+        input({ mrn: record!.mrn, sensitivityTags: ["sud"] }),
+        "Tag review by administrator",
+      ),
+    );
+    const [event] = await withTenant(a, (tx) =>
+      tx
+        .select()
+        .from(auditEvents)
+        .where(and(eq(auditEvents.action, "patient.sensitivity_changed"), eq(auditEvents.entityId, id))),
+    );
+    expect(event!.metadata).toEqual({ added: "sud", removed: "hiv" });
+  });
+
   it("rejects an edit from a stale page", async () => {
     const { id } = await withTenant(a, (tx) => createPatient(tx, actor(a), input()));
     const record = await withTenant(a, (tx) => getPatientForEdit(tx, id));
@@ -285,5 +341,66 @@ describe("patient chart and search", () => {
     expect(total).toBeGreaterThanOrEqual(rows.length);
     const names = rows.map((r) => `${r.lastName}\u0000${r.firstName}`);
     expect(names).toEqual([...names].sort((x, y) => x.localeCompare(y, "en", { sensitivity: "base" })));
+  });
+
+  it("finds by 'Last,' with a blank first name", async () => {
+    const { id } = await withTenant(a, (tx) => createPatient(tx, actor(a), input({ lastName: "Wolfsbane" })));
+    for (const term of ["Wolfsbane,", "Wolfsbane, "]) {
+      const results = await withTenant(a, (tx) => searchPatients(tx, term));
+      expect(results.map((r) => r.id)).toEqual([id]);
+    }
+  });
+});
+
+describe("generated MRNs", () => {
+  it("skip past hand-entered MRNs that sort above the numbered ones", async () => {
+    const c = await practice("gamma", 43);
+    for (let i = 0; i < 21; i++) {
+      await withTenant(c, (tx) => createPatient(tx, actor(c), input({ mrn: `SYN-Z${i}` })));
+    }
+    const { id } = await withTenant(c, (tx) => createPatient(tx, actor(c), input()));
+    const record = await withTenant(c, (tx) => getPatientForEdit(tx, id));
+    // The seeded practice has SYN-001000…SYN-001004.
+    expect(record!.mrn).toBe("SYN-001005");
+  });
+});
+
+describe("audited reads", () => {
+  it("search audits result IDs and count, never the terms", async () => {
+    const { id } = await withTenant(a, (tx) =>
+      createPatient(tx, actor(a), input({ lastName: "Umbrafield" })),
+    );
+    const results = await withTenant(a, (tx) => searchPatientsAudited(tx, a, "Umbrafield"));
+    expect(results.map((r) => r.id)).toEqual([id]);
+    const [event] = await withTenant(a, (tx) =>
+      tx
+        .select()
+        .from(auditEvents)
+        .where(eq(auditEvents.action, "patient.searched"))
+        .orderBy(desc(auditEvents.id))
+        .limit(1),
+    );
+    expect(event!.metadata).toEqual({ patientIds: id, count: 1 });
+    expect(JSON.stringify(event)).not.toContain("Umbrafield");
+  });
+
+  it("reveal decrypts, audits the reason, and stays inside the practice", async () => {
+    const payerId = await firstPayer(a);
+    const { id } = await withTenant(a, (tx) =>
+      createPatient(tx, actor(a), input({ primaryPayerId: payerId, memberId: "SYN9990001" })),
+    );
+    expect(await withTenant(a, (tx) => revealPatientMemberIdFor(tx, a, id, "eligibility"))).toEqual({
+      value: "SYN9990001",
+    });
+    const [event] = await withTenant(a, (tx) =>
+      tx
+        .select()
+        .from(auditEvents)
+        .where(and(eq(auditEvents.action, "patient.member_id_revealed"), eq(auditEvents.entityId, id))),
+    );
+    expect(event!.reason).toBe("eligibility");
+    expect(await withTenant(b, (tx) => revealPatientMemberIdFor(tx, b, id, "other"))).toEqual({
+      error: "Not found.",
+    });
   });
 });

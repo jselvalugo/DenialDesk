@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
-import { canEditPatients, canWorkDenials } from "@/auth/permissions";
+import { canEditPatients, canTagSensitivity, canWorkDenials } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { MaskedMemberId } from "@/components/patients/MaskedMemberId";
 import { Badge } from "@/components/ui/Badge";
@@ -78,11 +78,14 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="font-serif text-display font-bold text-primary">{patientName(patient)}</h1>
-            {patient.sensitivityTags.map((tag) => (
-              <Badge key={tag} tone="warning">
-                {SENSITIVITY_TAGS[tag as SensitivityTag] ?? tag}
-              </Badge>
-            ))}
+            {/* Tag names reveal a sensitive category, so only administrators see them (R-3.5.1). */}
+            {canTagSensitivity(auth.role)
+              ? patient.sensitivityTags.map((tag) => (
+                  <Badge key={tag} tone="warning">
+                    {SENSITIVITY_TAGS[tag as SensitivityTag] ?? tag}
+                  </Badge>
+                ))
+              : patient.sensitivityTags.length > 0 && <Badge tone="warning">Restricted</Badge>}
           </div>
           <p className="mt-1 text-body text-muted">
             <span className="font-mono">{patient.mrn}</span> · born {formatDate(patient.birthDate)} ·{" "}

@@ -22,6 +22,7 @@ test.describe("patients", () => {
     await form.getByLabel("Payer").selectOption({ index: 1 });
     // A real-looking member ID is refused in a synthetic-only environment; typed values survive.
     await form.getByLabel("Member ID").fill("W123456789");
+    await form.getByLabel(/I confirm this record is synthetic/).check();
     await form.getByRole("button", { name: "Register patient" }).click();
     await expect(page.getByRole("main").getByRole("alert")).toContainText("must start with SYN");
     await expect(form.getByLabel("Last name")).toHaveValue("Quillfeather");
@@ -53,6 +54,7 @@ test.describe("patients", () => {
     await edit.getByLabel("City").fill("Orlando");
     await edit.getByLabel("ZIP").fill("32801");
     await edit.getByLabel(/Reason for the change/).fill("Patient moved (synthetic)");
+    await edit.getByLabel(/I confirm this record is synthetic/).check();
     await edit.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Quillfeather, Emberly" })).toBeVisible();
     await expect(page.getByText("Orlando, FL 32801")).toBeVisible();

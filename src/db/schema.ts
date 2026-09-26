@@ -204,6 +204,7 @@ export const patients = pgTable(
     /** Primary coverage; the member ID above belongs to this payer. */
     primaryPayerId: uuid("primary_payer_id"),
     createdAt: createdAt(),
+    /** Stale-edit check for the patient form: every update must set it (updatePatient does). */
     updatedAt: updatedAt(),
   },
   (t) => [
