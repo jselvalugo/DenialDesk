@@ -4,9 +4,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { addCalendarDays, todayIn } from "@rules/calendar";
 import { ensureDemoPractice } from "@/auth/demo";
 import type { OperatorContext } from "@/auth/operator";
-import { setUpOperatorAccount } from "@/auth/operator-account";
 import { closeDatabase, systemDb } from "@/db/client";
-import { auditEvents, tenantAgreements, tenants } from "@/db/schema";
+import { auditEvents, tenantAgreements, tenants, users } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import {
   agreementDatesByTenant,
@@ -53,9 +52,18 @@ const input = (tenantId: string, overrides: Partial<AgreementInput> = {}): Agree
 });
 
 beforeAll(async () => {
+  // The operator belongs to no practice (docs/specs/operator-login.md); a bare user row is enough here.
   const email = `operator-agreements-${Date.now()}@synthetic.test`;
-  const { userId } = await setUpOperatorAccount({ email, password: "a synthetic operator passphrase" });
-  operator = { sessionId: "00000000-0000-4000-8000-000000000000", userId, displayName: "Operator", email };
+  const [user] = await systemDb()
+    .insert(users)
+    .values({ email, displayName: "Operator", passwordHash: "unused" })
+    .returning({ id: users.id });
+  operator = {
+    sessionId: "00000000-0000-4000-8000-000000000000",
+    userId: user!.id,
+    displayName: "Operator",
+    email,
+  };
   practice = await createTestTenant("Agreements");
 });
 

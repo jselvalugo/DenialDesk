@@ -1,6 +1,6 @@
 {
-  "id": "4474744a-289c-4fe8-bd4c-c8acf65a2bf8",
-  "prevId": "1707fe2c-cd7b-4c55-9418-32d52cf65eb3",
+  "id": "d26c5b59-ec66-46d7-94e3-a0ac1547c657",
+  "prevId": "7c6a3ac9-989b-4d00-936c-bfa4c62f0a59",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1503,6 +1503,38 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.operator_credentials": {
+      "name": "operator_credentials",
+      "schema": "",
+      "columns": {
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "applied_at": {
+          "name": "applied_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "retired_at": {
+          "name": "retired_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

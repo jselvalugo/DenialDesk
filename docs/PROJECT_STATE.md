@@ -20,9 +20,18 @@ _Last updated: 2026-09-26_
   app launcher as its own app. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
 - Operator console can reset the demo with sample data or empty (setup only) to test features
   from a clean slate.
+- Practice sign-in page shows the owner's DenialDesk reception image in a matted frame beside the
+  card (`specs/sign-in-and-sessions.md`); the operator sign-in has no image.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
   login and a platform operator console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
+  The operator account exists only from hosting configuration (`PLATFORM_OPERATOR_PASSWORD_HASH`,
+  made with `pnpm operator:credential`); no page can create or reset it (owner rebaseline 2026-09-26).
+- Next (owner rebaseline): tenancy lifecycle in the console: Pause for non-payment (read-only +
+  export), Suspend for security, Terminate → offboarding (export, legal hold, certified destruction),
+  BAA-on-file gate in production (later the same day the owner chose
+  to keep that manual for now: the console flags a missing BAA and the owner decides;
+  `specs/practice-agreements.md`). Demo stays on pre-production only.
 - Operator console: each customer practice has a page (`/operator/practices/<id>`) where the
   operator records the signed Business Associate Agreement (PDF, dates, signers) and downloads
   it; renewals supersede, older ones can be back-filled as historical, mistakes are marked
@@ -31,6 +40,8 @@ _Last updated: 2026-09-26_
   decision 2026-09-26: no self-service sign-up; a BAA must be signed before a practice exists).
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
+- Open item (human decision): single-administrator risk acceptance with compensating controls
+  (independent log review, sealed break-glass holder) and R-7.2.6 alerting, before production.
 - Production branch on Netlify: `claude/quirky-feynman-ufql5a` (default). Each session works on its
   own branch and merges through a PR.
 
@@ -77,6 +88,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
 - A vector (SVG) version of the logo from a designer; the app currently uses the PNG.
+- Confirm and record the license and generating tool for the sign-in reception image
+  (`public/brand/README.md`); it is owner-supplied and described as a synthetic render.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.
 

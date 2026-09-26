@@ -767,9 +767,9 @@ export const rateLimits = pgTable(
 // written only by the platform operator through src/domain/platform/agreements.ts. RLS is enabled
 // with no policies (defense in depth: a stray GRANT would still show the app role nothing). Rows are
 // never deleted and their recorded fields never change; the only changes are the status transitions
-// (trigger in drizzle/0020_tenant_agreements_corrections.sql, which also holds the CHECK constraints;
-// 0019 makes the self-referencing key DEFERRABLE INITIALLY DEFERRED, which renewals depend on, so
-// keep both if the table is ever regenerated). Retention per REQUIREMENTS §9.2; classification
+// (trigger and CHECK constraints in drizzle/0020_practice_agreements.sql, which also makes the
+// self-referencing key DEFERRABLE INITIALLY DEFERRED; renewals depend on that, so keep it if the
+// table is ever regenerated). Retention per REQUIREMENTS §9.2; classification
 // Confidential (§9.1), never PHI.
 // ---------------------------------------------------------------------------------------------
 
@@ -779,7 +779,8 @@ export const agreementKindEnum = pgEnum("agreement_kind", ["baa"]);
  * active: the agreement in force (one per practice and kind). superseded: replaced by a newer
  * recording (`supersededById`). historical: recorded for the file after a newer agreement was
  * already active (back-fill). voided: recorded in error, kept for the record with a reason.
- * Text with a CHECK (drizzle/0020) rather than an enum, so values can be added in one migration.
+ * Text with a CHECK (drizzle/0020_practice_agreements.sql) rather than an enum, so values can be
+ * added in one migration.
  */
 export type AgreementStatus = "active" | "superseded" | "historical" | "voided";
 
@@ -830,3 +831,16 @@ export const tenantAgreements = pgTable(
     }),
   ],
 ).enableRLS();
+
+// ---------------------------------------------------------------------------------------------
+// Operator credentials (docs/specs/operator-login.md): fingerprints (SHA-256 of email + hash) of
+// every operator credential ever applied from hosting configuration, so a rotation only moves forward: a
+// deployment still configured with a retired hash can never re-apply it. Not tenant data; no grants
+// to the app role; accessed through the connection owner in src/auth/operator-account.ts.
+// ---------------------------------------------------------------------------------------------
+
+export const operatorCredentials = pgTable("operator_credentials", {
+  fingerprint: text("fingerprint").primaryKey(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+});

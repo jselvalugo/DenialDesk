@@ -23,6 +23,7 @@ Engineering:
 - [x] Platform console with its own sign-in and a practice-free operator account (`specs/operator-login.md`) [R-7.2.3, R-7.2.7, R-7.5.1]
 - [x] Signed BAA on file per customer practice, with status on the practices list (`specs/practice-agreements.md`) [R-5.5.1, R-7.1.3, R-7.5.1, §9.2]
 - [ ] **Production gate:** WebAuthn/passkeys for the operator (TOTP today) and just-in-time, approved, recorded privileged access [R-7.2.2, R-7.2.5] (`threat-models/operator-console.md`)
+- [ ] **Production gate:** break-glass for the operator: alert on `operator.credential_*` events to a channel the owner doesn't solely control, documented after-the-fact review; phishing-resistant MFA on the hosting accounts; written single-administrator risk acceptance [R-7.2.6, R-7.2.8]
 - [x] Immutable audit log skeleton [R-7.5.1]
 - [x] Rules-engine skeleton: versioned, effective-dated rules with citations; business-day
       and holiday calendars in America/New_York [R-15.6, §11]
