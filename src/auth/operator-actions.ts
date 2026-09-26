@@ -8,6 +8,7 @@ import { auditSystem } from "@/lib/audit";
 import { limitCurrentRequest } from "@/lib/rate-limit";
 import {
   claimTotp,
+  clearFailures,
   CODE_MISMATCH,
   CODE_REUSED,
   codeSchema,
@@ -23,6 +24,7 @@ import {
   isOperatorAccount,
   isOperatorEmail,
   operatorConfigurationStatus,
+  operatorMfaSkipped,
   syncOperatorAccount,
   usableSync,
   type SyncResult,
@@ -136,8 +138,23 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
     return { error: SIGN_IN_FAILED };
   }
 
-  // The attempt counter resets only after MFA succeeds.
   await replacePreviousOperatorSession(user.id);
+  if (operatorMfaSkipped()) {
+    // Owner decision (2026-09-26): password alone outside production while the console is set up.
+    await createSession(user.id, { authMethod: "operator", mfaVerified: true });
+    const session = await getOperatorSession();
+    await clearFailures(user.id);
+    await auditSystem({
+      action: "operator.login_succeeded",
+      actorUserId: user.id,
+      entityType: "session",
+      entityId: session?.sessionId ?? null,
+      ipAddress: await clientIp(),
+      metadata: { mfa: "skipped_by_config" },
+    });
+    redirect("/operator");
+  }
+  // The attempt counter resets only after MFA succeeds.
   await createSession(user.id, { authMethod: "operator" });
   redirect(user.mfaEnrolledAt ? "/operator/login/mfa" : "/operator/login/mfa/setup");
 }

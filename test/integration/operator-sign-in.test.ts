@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { hashPassword } from "@/auth/password";
 import { closeDatabase, systemDb } from "@/db/client";
-import { memberships, users } from "@/db/schema";
+import { auditEvents, memberships, sessions, users } from "@/db/schema";
 import { E2E_OPERATOR_PASSWORD_HASH } from "../e2e/operator-credentials";
 import { createTestTenant } from "./helpers";
 
@@ -156,5 +156,34 @@ describe("signInOperator", () => {
       "locked",
       "retired",
     ]);
+  });
+
+  it("with PLATFORM_OPERATOR_MFA=off outside production, signs in on the password alone, audited", async () => {
+    vi.stubEnv("PLATFORM_OPERATOR_EMAIL", email);
+    vi.stubEnv("PLATFORM_OPERATOR_PASSWORD_HASH", hash);
+    vi.stubEnv("PLATFORM_OPERATOR_MFA", "off");
+    vi.stubEnv("APP_ENV", "preview");
+    await expect(signInOperator({}, form(email))).rejects.toThrow("redirect:/operator");
+    const [user] = await systemDb().select().from(users).where(eq(users.email, email));
+    const [session] = await systemDb()
+      .select()
+      .from(sessions)
+      .where(eq(sessions.userId, user!.id))
+      .orderBy(desc(sessions.createdAt))
+      .limit(1);
+    expect(session).toMatchObject({ mfaVerified: true, authMethod: "operator", tenantId: null });
+    const [event] = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(and(eq(auditEvents.action, "operator.login_succeeded"), eq(auditEvents.actorUserId, user!.id)))
+      .orderBy(desc(auditEvents.id))
+      .limit(1);
+    expect(event?.metadata).toMatchObject({ mfa: "skipped_by_config" });
+    expect(refusals()).toEqual([]);
+
+    // Production ignores the switch: two-step is always required there.
+    vi.stubEnv("APP_ENV", "production");
+    vi.stubEnv("NETLIFY", "");
+    await expect(signInOperator({}, form(email))).rejects.toThrow("redirect:/operator/login/mfa/setup");
   });
 });

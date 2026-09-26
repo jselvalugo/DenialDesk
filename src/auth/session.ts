@@ -75,7 +75,7 @@ async function setCookie(token: string, realm: Realm) {
  */
 export async function createSession(
   userId: string,
-  options: { authMethod?: AuthMethod; tenantId?: string } = {},
+  options: { authMethod?: AuthMethod; tenantId?: string; mfaVerified?: boolean } = {},
 ): Promise<void> {
   const operator = options.authMethod === "operator";
   const [membership] = operator
@@ -97,7 +97,9 @@ export async function createSession(
       tokenHash: hashToken(token),
       userId,
       tenantId: membership?.tenantId ?? null,
-      mfaVerified: false,
+      // Only operator sign-in may start verified, and only with two-step switched off by
+      // configuration outside production (operator-actions.ts). No pre-MFA token exists to rotate.
+      mfaVerified: options.mfaVerified === true && operator,
       authMethod: options.authMethod ?? "password_mfa",
       expiresAt: new Date(Date.now() + SESSION_ABSOLUTE_MS),
     });

@@ -22,6 +22,7 @@ Site: https://denialdesk.netlify.app
   | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Admin of the seeded synthetic practice (password secret); not the operator |
   | `PLATFORM_OPERATOR_EMAIL` | The operator account for the platform console; an address used only for the console, never a practice user |
   | `PLATFORM_OPERATOR_PASSWORD_HASH` | The operator's password hash from `pnpm operator:credential` (secret); the only way the operator account is created or reset |
+  | `PLATFORM_OPERATOR_MFA` | `off`: the operator signs in with the password alone (ignored in production). Unset or `on`: two-step required |
   | `RATE_LIMIT_SIGNIN` / `RATE_LIMIT_MFA` | Optional overrides for per-network limits (defaults 30/15 min each) |
 
   If `APP_ENV` is missing the app still treats itself as non-production — safe by default.
