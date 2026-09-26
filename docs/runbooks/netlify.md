@@ -48,7 +48,7 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
 
 ## Demo practice and operator console
 - "Explore the demo practice" signs visitors into a shared synthetic demo practice, created on
-  first use. Reset it any time from `/operator` → *Reset demo practice* (the old one is archived).
+  first use. Reset it any time from `/operator` → *Reset demo with sample data* or *Reset demo empty* (setup only, no claims/denials/files); the old one is archived.
 - `/operator` is visible only to `PLATFORM_OPERATOR_EMAIL` after password + two-step sign-in.
   Everyone else gets a 404.
 

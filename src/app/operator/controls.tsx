@@ -80,11 +80,23 @@ export function SuspendToggle({
   );
 }
 
+/**
+ * Replaces the demo practice: with synthetic claims, denials, and a monthly file, or empty (setup
+ * only) so everything on screen comes from what the visitor does. The old one is archived.
+ */
 export function ResetDemoButton() {
-  const [, action] = useActionState<ActionState, FormData>(() => resetDemo(), {});
+  const [state, action] = useActionState<ActionState, FormData>(resetDemo, {});
   return (
-    <form action={action}>
-      <SubmitButton pendingLabel="Resetting…">Reset demo practice</SubmitButton>
+    <form action={action} className="flex flex-col items-end gap-2">
+      <div className="flex items-center gap-2">
+        <SubmitButton name="mode" value="sample" pendingLabel="Resetting…">
+          Reset demo with sample data
+        </SubmitButton>
+        <SubmitButton name="mode" value="empty" pendingLabel="Resetting…">
+          Reset demo empty
+        </SubmitButton>
+      </div>
+      <FormAlert message={state.error} />
     </form>
   );
 }

@@ -160,10 +160,17 @@ export default async function DenialQueuePage({
         </form>
 
         {rows.length === 0 ? (
-          <EmptyState
-            title="No denials match these filters"
-            description="Try a different status or payer, or reset the filters to see every open denial."
-          />
+          filtersToQuery(filters, { page: 1 }) === "" && summary.open === 0 ? (
+            <EmptyState
+              title="No open denials yet"
+              description="Denials are captured from payer remittances (835 ERAs). Remittance import is next on the roadmap; until then only practices with sample data show denials."
+            />
+          ) : (
+            <EmptyState
+              title="No denials match these filters"
+              description="Try a different status or payer, or reset the filters to see every open denial."
+            />
+          )
         ) : (
           <Table
             caption={`Denials, sorted by ${filters.sort === "deadline" ? "appeal deadline" : filters.sort}`}

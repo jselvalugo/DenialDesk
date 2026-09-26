@@ -61,10 +61,12 @@ export async function toggleSuspended(_: ActionState, formData: FormData): Promi
   return {};
 }
 
-export async function resetDemo(): Promise<ActionState> {
+export async function resetDemo(_: ActionState, formData: FormData): Promise<ActionState> {
   const operator = await requireOperator();
+  const mode = z.enum(["sample", "empty"]).safeParse(formData.get("mode"));
+  if (!mode.success) return { error: "Choose how to reset the demo." };
   try {
-    await reset(operator);
+    await reset(operator, mode.data);
   } catch (error) {
     if (error instanceof PracticeError) return { error: error.message };
     throw error;

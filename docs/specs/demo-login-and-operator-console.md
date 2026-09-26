@@ -38,6 +38,14 @@ Operator console (`/operator`)
       and creates a fresh one; the next demo login uses the new one.
 - [x] Every operator action is audited with the target practice.
 
+Empty demo (owner request, 2026-09-26)
+- [x] The operator can reset the demo **with sample data** or **empty**. Empty keeps the practice
+      setup (locations, providers, payers, accounting rules and GL accounts) but has no patients,
+      claims, denials, or imported files, so every number on screen comes from what the visitor
+      does (e.g. uploading a synthetic monthly file). Named "(demo, empty)"; the reset is audited
+      with its mode; the previous demo practice is archived, never deleted.
+- [x] An empty denial queue says why it's empty (no remittance import yet), not "no matches".
+
 ## Data / API changes
 - `tenants.kind` (`customer` | `demo`), `tenants.suspended_at`.
 - Server actions: `signInDemo`, `createPractice`, `setPracticeSuspended`, `resetDemoPractice`.

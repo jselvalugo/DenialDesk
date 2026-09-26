@@ -12,6 +12,10 @@ import { demoLoginEnabled } from "@/lib/env";
 // through the demo path; that user belongs to no other practice.
 
 const DEMO_NAME = "Sunrise Coast Medical Group (demo)";
+const EMPTY_DEMO_NAME = "Sunrise Coast Medical Group (demo, empty)";
+
+/** "sample" = synthetic claims, denials, and a monthly file; "empty" = setup only. */
+export type DemoMode = "sample" | "empty";
 const GUEST_EMAIL_PREFIX = "guest-";
 const GUEST_EMAIL_DOMAIN = "@demo.denialdesk.test";
 
@@ -39,13 +43,16 @@ async function findDemoGuest(): Promise<{ tenantId: string; userId: string } | n
   return row ?? null;
 }
 
-/** Creates a fresh demo practice with synthetic data and returns its guest user. */
-export async function createDemoPractice(): Promise<{ tenantId: string; userId: string }> {
+/** Creates a fresh demo practice (synthetic data, or setup only) and returns its guest user. */
+export async function createDemoPractice(
+  mode: DemoMode = "sample",
+): Promise<{ tenantId: string; userId: string }> {
   if (!demoLoginEnabled()) throw new Error("The demo practice is disabled in this environment");
   const suffix = randomBytes(4).toString("hex");
   const { tenantId, userIds } = await seedPractice({
-    practiceName: DEMO_NAME,
+    practiceName: mode === "empty" ? EMPTY_DEMO_NAME : DEMO_NAME,
     kind: "demo",
+    withSampleActivity: mode === "sample",
     asOf: todayIn(),
     users: [
       // No usable password: the guest can only sign in through the demo button.

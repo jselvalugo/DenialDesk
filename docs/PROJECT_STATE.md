@@ -9,6 +9,8 @@ _Last updated: 2026-09-26_
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
   rules engine, synthetic data, Netlify config (not yet deployed — see `docs/runbooks/netlify.md`).
 - Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
+- Operator console can reset the demo with sample data or empty (setup only) to test features
+  from a clean slate.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
   login and a platform operator console (`/operator`) for the owner.
 - Working branch: `claude/adoring-hypatia-5co7fz`; production branch on Netlify: `claude/quirky-feynman-ufql5a` (default).
