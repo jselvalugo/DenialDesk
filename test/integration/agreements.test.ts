@@ -201,16 +201,32 @@ describe("recordAgreement", () => {
 
   it("two recordings racing for one practice: one wins, the other gets a plain message with no file bytes", async () => {
     const { tenantId } = await createTestTenant("BAA race");
-    const results = await Promise.allSettled([
-      recordAgreement(
-        input(tenantId, { content: pdf("racer A"), practiceSigner: "Synthetic Racer A" }),
-        operator,
-      ),
-      recordAgreement(
-        input(tenantId, { content: pdf("racer B"), practiceSigner: "Synthetic Racer B" }),
-        operator,
-      ),
-    ]);
+    // Force a real overlap: with no active row, `select … for update` locks nothing, so if one
+    // recording committed before the other started, the second would legitimately supersede it.
+    // A SHARE lock lets both run their select but blocks both inserts until it is released.
+    let racing!: Promise<PromiseSettledResult<unknown>[]>;
+    await systemDb().transaction(async (blocker) => {
+      await blocker.execute(sql`lock table tenant_agreements in share mode`);
+      racing = Promise.allSettled([
+        recordAgreement(
+          input(tenantId, { content: pdf("racer A"), practiceSigner: "Synthetic Racer A" }),
+          operator,
+        ),
+        recordAgreement(
+          input(tenantId, { content: pdf("racer B"), practiceSigner: "Synthetic Racer B" }),
+          operator,
+        ),
+      ]);
+      for (let attempt = 0; ; attempt++) {
+        const { rows } = await systemDb().execute<{ waiting: number }>(sql`
+          select count(*)::int as waiting from pg_locks
+          where relation = 'tenant_agreements'::regclass and not granted`);
+        if (rows[0]?.waiting === 2) break;
+        if (attempt > 100) throw new Error("the two recordings never reached their inserts");
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    });
+    const results = await racing;
     const fulfilled = results.filter((r) => r.status === "fulfilled");
     const rejected = results.filter((r) => r.status === "rejected");
     expect(fulfilled).toHaveLength(1);
