@@ -20,10 +20,19 @@ _Last updated: 2026-09-26_
   app launcher as its own app. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
 - Practice sign-in page shows the owner's DenialDesk reception image in a matted frame beside the
   card (`specs/sign-in-and-sessions.md`); the operator sign-in has no image.
-- Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). A platform operator console (`/operator`) for the owner, with its own sign-in at
+- Whole-product review (2026-09-26, `docs/reviews/2026-09-26-billing-structure-review.md`): the
+  billing lifecycle is implemented only from "denial exists" onward plus claim corrections and the
+  PM-file accounting module; claim status, paid amounts and denials are seed-only. Seven confirmed
+  calculation/display bugs (comma charges, `-$0.00`, "filed on time" with no deadline, prompt-pay
+  "Met" on any notice), missing catalog rules, and a page-by-page record-model gap list with a
+  prioritized order of work (P0–P4). Next session should start with its P0 list.
+- Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). A platform operator
+  console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
   The operator account exists only from hosting configuration (`PLATFORM_OPERATOR_PASSWORD_HASH`,
   made with `pnpm operator:credential`); no page can create or reset it (owner rebaseline 2026-09-26).
+  An unusable value (e.g. the password pasted instead of its hash) switches the console off and is
+  reported once in the function log as `operator.credential_unusable` (runbook has the fix).
 - Next (owner rebaseline): tenancy lifecycle in the console: Pause for non-payment (read-only +
   export), Suspend for security, Terminate → offboarding (export, legal hold, certified destruction),
   BAA-on-file gate in production (later the same day the owner chose
@@ -134,6 +143,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
+- Member-ID reveal on a denial decrypts the patient's primary-payer member ID even when the claim was
+  billed to another payer (R-5.1.2); fix with coverage records (review §6.1), and until then reveal
+  only when the claim's payer is the patient's primary payer (2026-09-26 review, security).
+- `claims.status` / `paid_cents` are not covered by the version trigger, and no DB CHECK enforces
+  0 ≤ paid ≤ billed, 0 < denied ≤ billed, charges ≥ 0; must land with C3 / 835 posting, before the
+  Azure cutover (2026-09-26 review, security; owner decision §8.4).
 
 ## Lessons / conventions learned
 - Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
