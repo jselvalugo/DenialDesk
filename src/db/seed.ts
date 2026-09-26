@@ -48,11 +48,18 @@ export async function seedPractice(options: {
   asOf: string;
   users: SeedUser[];
   dataset?: SyntheticDataset;
+  /**
+   * false = setup only (locations, providers, payers, accounting rules) with no patients, claims,
+   * denials, or imported files, so every number on screen comes from what the user does.
+   */
+  withSampleActivity?: boolean;
 }): Promise<{ tenantId: string; userIds: string[] }> {
   if (process.env.APP_ENV === "production") {
     throw new Error("Refusing to seed synthetic data with APP_ENV=production");
   }
-  const dataset = options.dataset ?? generateDataset({ asOf: options.asOf });
+  const generated = options.dataset ?? generateDataset({ asOf: options.asOf });
+  const withActivity = options.withSampleActivity ?? true;
+  const dataset = withActivity ? generated : { ...generated, patients: [], claims: [] };
   const db = systemDb();
 
   const [tenant] = await db
@@ -170,43 +177,46 @@ export async function seedPractice(options: {
         appealWindowSource: p.appealWindowSource,
       })),
     );
-    await tx.insert(patients).values(
-      dataset.patients.map((p) => ({
-        id: idFor(p.key),
-        tenantId,
-        mrn: p.mrn,
-        firstName: p.firstName,
-        lastName: p.lastName,
-        birthDate: p.birthDate,
-        memberIdEnc: encryptField(p.memberId),
-        memberIdLast4: p.memberId.slice(-4),
-      })),
-    );
+    if (dataset.patients.length > 0)
+      await tx.insert(patients).values(
+        dataset.patients.map((p) => ({
+          id: idFor(p.key),
+          tenantId,
+          mrn: p.mrn,
+          firstName: p.firstName,
+          lastName: p.lastName,
+          birthDate: p.birthDate,
+          memberIdEnc: encryptField(p.memberId),
+          memberIdLast4: p.memberId.slice(-4),
+        })),
+      );
     await insertInChunks(claimRows, (chunk) => tx.insert(claims).values(chunk));
     await insertInChunks(lineRows, (chunk) => tx.insert(claimLines).values(chunk));
     await insertInChunks(denialRows, (chunk) => tx.insert(denials).values(chunk));
     await seedRevenueCycleDefaults(tx, tenantId, userIds[0]!);
-    // Last month's synthetic practice-management file, classified by the default rules.
-    const [year, month] = dataset.asOf.split("-").map(Number) as [number, number];
-    const period = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
-    const [firstSite] = await tx
-      .select({ id: rcmSites.id })
-      .from(rcmSites)
-      .orderBy(asc(rcmSites.code))
-      .limit(1);
-    await importMonthlyFile(tx, {
-      tenantId,
-      userId: userIds[0]!,
-      periodYear: period.year,
-      periodMonth: period.month,
-      defaultSiteId: firstSite?.id ?? null,
-      lines: generateMonthlyLines({
-        seed: dataset.claims.length,
+    if (withActivity) {
+      // Last month's synthetic practice-management file, classified by the default rules.
+      const [year, month] = dataset.asOf.split("-").map(Number) as [number, number];
+      const period = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
+      const [firstSite] = await tx
+        .select({ id: rcmSites.id })
+        .from(rcmSites)
+        .orderBy(asc(rcmSites.code))
+        .limit(1);
+      await importMonthlyFile(tx, {
+        tenantId,
+        userId: userIds[0]!,
         periodYear: period.year,
         periodMonth: period.month,
-        facilities: dataset.locations.map((l) => l.name),
-      }),
-    });
+        defaultSiteId: firstSite?.id ?? null,
+        lines: generateMonthlyLines({
+          seed: dataset.claims.length,
+          periodYear: period.year,
+          periodMonth: period.month,
+          facilities: dataset.locations.map((l) => l.name),
+        }),
+      });
+    }
   });
 
   return { tenantId, userIds };

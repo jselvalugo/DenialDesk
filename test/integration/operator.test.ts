@@ -4,7 +4,21 @@ import { createDemoPractice as ensureDemoPracticeFresh, ensureDemoPractice } fro
 import { verifyPassword } from "@/auth/password";
 import type { AuthContext } from "@/auth/session";
 import { closeDatabase, systemDb } from "@/db/client";
-import { auditEvents, memberships, tenants, users } from "@/db/schema";
+import {
+  auditEvents,
+  businessRules,
+  claims,
+  denials,
+  locations,
+  memberships,
+  patients,
+  payers,
+  rcmFiles,
+  tenants,
+  users,
+} from "@/db/schema";
+import { withTenant } from "@/db/tenant";
+import { DEFAULT_RULES } from "@/domain/revenue-cycle/defaults";
 import {
   createPractice,
   listPractices,
@@ -111,6 +125,45 @@ describe("demo practice", () => {
       .from(tenants)
       .where(and(eq(tenants.kind, "demo"), isNull(tenants.suspendedAt)));
     expect(active.map((t) => t.id)).toEqual([after.tenantId]);
+  });
+
+  it("can reset to an empty practice (setup only) and back to sample data, audited with the mode", async () => {
+    const count = async (ctx: { tenantId: string; userId: string }) =>
+      withTenant(ctx, async (tx) => ({
+        payers: (await tx.select({ id: payers.id }).from(payers)).length,
+        locations: (await tx.select({ id: locations.id }).from(locations)).length,
+        rules: (await tx.select({ id: businessRules.id }).from(businessRules)).length,
+        patients: (await tx.select({ id: patients.id }).from(patients)).length,
+        claims: (await tx.select({ id: claims.id }).from(claims)).length,
+        denials: (await tx.select({ id: denials.id }).from(denials)).length,
+        files: (await tx.select({ id: rcmFiles.id }).from(rcmFiles)).length,
+      }));
+
+    await resetDemoPractice(operator, "empty");
+    const empty = await ensureDemoPractice();
+    const [emptyTenant] = await systemDb().select().from(tenants).where(eq(tenants.id, empty.tenantId));
+    expect(emptyTenant!.name).toMatch(/demo, empty/);
+    const emptyCounts = await count(empty);
+    expect(emptyCounts).toMatchObject({
+      patients: 0,
+      claims: 0,
+      denials: 0,
+      files: 0,
+      rules: DEFAULT_RULES.length,
+    });
+    expect(emptyCounts.payers).toBeGreaterThan(0);
+    expect(emptyCounts.locations).toBeGreaterThan(0);
+    const [event] = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(and(eq(auditEvents.action, "operator.demo_reset"), eq(auditEvents.tenantId, empty.tenantId)));
+    expect(event!.metadata).toEqual({ mode: "empty" });
+
+    await resetDemoPractice(operator, "sample");
+    const sample = await ensureDemoPractice();
+    const sampleCounts = await count(sample);
+    expect(sampleCounts.denials).toBeGreaterThan(0);
+    expect(sampleCounts.files).toBe(1);
   });
 });
 

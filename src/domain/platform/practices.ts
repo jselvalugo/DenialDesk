@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { and, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { createDemoPractice } from "@/auth/demo";
+import { createDemoPractice, type DemoMode } from "@/auth/demo";
 import { hashPassword } from "@/auth/password";
 import type { AuthContext } from "@/auth/session";
 import { systemDb } from "@/db/client";
@@ -129,18 +129,25 @@ export async function setPracticeSuspended(
  * Archives every active demo practice (suspended, never deleted — the audit trail references it)
  * and creates a fresh one. Existing demo sessions end on their next request.
  */
-export async function resetDemoPractice(operator: AuthContext): Promise<void> {
+export async function resetDemoPractice(operator: AuthContext, mode: DemoMode = "sample"): Promise<void> {
   if (!demoLoginEnabled()) throw new PracticeError("The demo practice is disabled in this environment.");
   await systemDb()
     .update(tenants)
     .set({ suspendedAt: new Date() })
     .where(and(eq(tenants.kind, "demo"), isNull(tenants.suspendedAt)));
-  const { tenantId } = await createDemoPractice();
+  const { tenantId } = await createDemoPractice(mode).catch((error: unknown) => {
+    // A guest's first click can create a demo practice between the archive and this create.
+    if ((error as { cause?: { code?: string } })?.cause?.code === "23505") {
+      throw new PracticeError("A demo practice was just created by a visitor. Try the reset again.");
+    }
+    throw error;
+  });
   await auditSystem({
     action: "operator.demo_reset",
     actorUserId: operator.userId,
     tenantId,
     entityType: "tenant",
     entityId: tenantId,
+    metadata: { mode },
   });
 }
