@@ -20,6 +20,12 @@ _Last updated: 2026-09-26_
   app launcher as its own app. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
 - Operator console can reset the demo with sample data or empty (setup only) to test features
   from a clean slate.
+- Whole-product review (2026-09-26, `docs/reviews/2026-09-26-billing-structure-review.md`): the
+  billing lifecycle is implemented only from "denial exists" onward plus claim corrections and the
+  PM-file accounting module; claim status, paid amounts and denials are seed-only. Four confirmed
+  calculation/display bugs (comma charges, `-$0.00`, "filed on time" with no deadline, prompt-pay
+  "Met" on any notice), missing catalog rules, and a page-by-page record-model gap list with a
+  prioritized order of work (P0–P4). Next session should start with its P0 list.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
   login and a platform operator console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
