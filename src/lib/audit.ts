@@ -72,6 +72,10 @@ export type AuditAction =
   | "settings.custom_field_updated"
   | "settings.custom_field_deactivated"
   | "settings.custom_field_reactivated"
+  | "custom_field.value_revealed"
+  | "custom_field.value_integrity_failed"
+  | "custom_field.values_read"
+  | "custom_field.values_updated"
   | "remittance.list_viewed"
   | "remittance.uploaded"
   | "remittance.upload_rejected"
@@ -110,6 +114,7 @@ export interface AuditEvent {
     | "rcm_voucher"
     | "rcm_deposit_file"
     | "custom_field"
+    | "custom_field_value"
     | "remittance"
     | "prompt_pay_response";
   entityId?: string | null;

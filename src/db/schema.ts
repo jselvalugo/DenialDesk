@@ -1053,3 +1053,94 @@ export const customFields = pgTable(
     index("custom_fields_tenant_entity_idx").on(t.tenantId, t.entity, t.position),
   ],
 );
+
+/**
+ * One value of one custom field on one record (patient, claim, denial, or payer): exactly one of
+ * the four record columns is set (database CHECK). Every value is stored only as ciphertext
+ * (`valueEnc`, AES-256-GCM with AAD binding it to its tenant/field/record, ADR 0007); masking at
+ * read time follows the field's sensitivity category, decided in `src/domain/custom-fields/values.ts`.
+ * Never deleted (R-9.2.1): clearing a value sets `valueEnc` to NULL.
+ */
+export const customFieldValues = pgTable(
+  "custom_field_values",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    fieldId: uuid("field_id")
+      .notNull()
+      .references(() => customFields.id),
+    patientId: uuid("patient_id").references(() => patients.id),
+    claimId: uuid("claim_id").references(() => claims.id),
+    denialId: uuid("denial_id").references(() => denials.id),
+    payerId: uuid("payer_id").references(() => payers.id),
+    /** Ciphertext only (`v1.<iv>.<tag>.<ct>`); NULL means the value was cleared. Never PHI in plain. */
+    valueEnc: text("value_enc"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    updatedBy: uuid("updated_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    /** Stale-edit check: values are saved in the same transaction as the record, under its check. */
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("custom_field_values_tenant_field_patient_key")
+      .on(t.tenantId, t.fieldId, t.patientId)
+      .where(sql`${t.patientId} is not null`),
+    uniqueIndex("custom_field_values_tenant_field_claim_key")
+      .on(t.tenantId, t.fieldId, t.claimId)
+      .where(sql`${t.claimId} is not null`),
+    uniqueIndex("custom_field_values_tenant_field_denial_key")
+      .on(t.tenantId, t.fieldId, t.denialId)
+      .where(sql`${t.denialId} is not null`),
+    uniqueIndex("custom_field_values_tenant_field_payer_key")
+      .on(t.tenantId, t.fieldId, t.payerId)
+      .where(sql`${t.payerId} is not null`),
+    index("custom_field_values_tenant_patient_idx").on(t.tenantId, t.patientId),
+    index("custom_field_values_tenant_claim_idx").on(t.tenantId, t.claimId),
+    index("custom_field_values_tenant_denial_idx").on(t.tenantId, t.denialId),
+    index("custom_field_values_tenant_payer_idx").on(t.tenantId, t.payerId),
+    // Target of the version table's tenant-scoped foreign key (FKs bypass RLS).
+    uniqueIndex("custom_field_values_tenant_id_key").on(t.tenantId, t.id),
+  ],
+);
+
+/**
+ * Every prior state of a `custom_field_values` row (owner decision 2026-09-26; ADR 0007 addendum):
+ * written in the same transaction as an update or clear, before the new ciphertext overwrites the
+ * row. Append-only (INSERT + SELECT only, no UPDATE/DELETE grant, and a trigger refuses both) —
+ * the audit trail of what a value used to be, kept under the same encryption as the value itself.
+ */
+export const customFieldValueVersions = pgTable(
+  "custom_field_value_versions",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    valueId: uuid("value_id")
+      .notNull()
+      .references(() => customFieldValues.id),
+    fieldId: uuid("field_id")
+      .notNull()
+      .references(() => customFields.id),
+    patientId: uuid("patient_id").references(() => patients.id),
+    claimId: uuid("claim_id").references(() => claims.id),
+    denialId: uuid("denial_id").references(() => denials.id),
+    payerId: uuid("payer_id").references(() => payers.id),
+    /** The ciphertext the row held just before this change (NULL if it was already cleared). */
+    valueEnc: text("value_enc"),
+    changedBy: uuid("changed_by")
+      .notNull()
+      .references(() => users.id),
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "custom_field_value_versions_value_fk",
+      columns: [t.tenantId, t.valueId],
+      foreignColumns: [customFieldValues.tenantId, customFieldValues.id],
+    }),
+    index("custom_field_value_versions_value_idx").on(t.valueId, t.changedAt),
+  ],
+);
