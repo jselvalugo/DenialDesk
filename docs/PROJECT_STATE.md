@@ -9,10 +9,14 @@ _Last updated: 2026-09-26_
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
   rules engine, synthetic data, Netlify config (not yet deployed — see `docs/runbooks/netlify.md`).
 - Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
+- Claims module C1 (`specs/claims.md`): claims list with timely-filing warnings, claim detail,
+  corrections of draft/rejected claims with a required reason, and append-only version history
+  enforced by database triggers. Next: C2 CSV charge import, C3 837P + filing block, C4 999/277CA.
 - Operator console can reset the demo with sample data or empty (setup only) to test features
   from a clean slate.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
-  login and a platform operator console (`/operator`) for the owner.
+  login and a platform operator console (`/operator`) for the owner. A browser with a demo session
+  can now reach the sign-in form (it used to be trapped: `/operator` 404, `/login` bounced to the demo).
 - Working branch: `claude/adoring-hypatia-5co7fz`; production branch on Netlify: `claude/quirky-feynman-ufql5a` (default).
 
 ## Decisions made (details in `docs/decisions/`)
@@ -42,7 +46,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
-4. Claims list + 837P submission via clearinghouse stub; 999/277CA capture.
+4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
+   stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
 
 ## Open questions for humans
@@ -61,6 +66,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   Accountant to confirm the net-revenue presentation (posted write-offs vs. GAAP price concessions).
 - Git history still contains the reference prototype's names from before C0. Rewrite history
   (force-push of the default branch), or leave it? Owner decision.
+- Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must
+  honor; Medicare Advantage filing windows assumed to come from payer contracts (`specs/claims.md`).
+- Claims before real data: sensitivity masking of diagnosis codes in `claim_versions` snapshots and
+  history; retention/legal-hold path for append-only history; PIP/workers' comp/Medicaid filing
+  rules and the HMO citation for timely filing (`specs/claims.md`).
 
 ### Decisions from the 2026-09-26 agent reviews (need a human)
 1. **MFA enrollment on first sign-in** needs only the password, so a stolen password for a
@@ -78,7 +88,6 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
-- Pin GitHub Actions to commit SHAs (Dependabot now keeps them current).
 
 ## Lessons / conventions learned
 - Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
@@ -96,8 +105,16 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   after being applied"). Add a new migration instead.
 - Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
+- Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):
+  tenant tables FORCE RLS, so a non-superuser migration owner (Netlify, Azure) sees no rows
+  otherwise. Local and CI databases use a superuser and hide this.
+- Server-side validation must reject impossible dates (`z.iso.date()`); `sanitizeDatabaseError`
+  drops messages for SQLSTATE class 22 because they quote values.
 - Local test DB without Docker: `initdb`/`pg_ctl` from `/usr/lib/postgresql/16/bin` as the
   `postgres` user, with the data dir somewhere that user can reach.
 - Playwright in this cloud env: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
 - Azure has no Florida region; § 408.051(3) only requires continental U.S. storage.
+- CI actions are pinned to full commit SHAs with a `# vX.Y.Z` comment (Dependabot bumps both);
+  resolve annotated tags to the commit (`git ls-remote … 'refs/tags/vX.Y.Z^{}'`), not the tag object.
+  Checkout runs with `persist-credentials: false`; gitleaks runs with PR comments off (token is `contents: read`).
 - Local environment: Node 22 is installed; CI and Docker use Node 24 LTS. `engines` allows ≥ 22.

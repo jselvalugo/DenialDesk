@@ -19,3 +19,8 @@ export function canConfigureRevenueCycle(role: Role): boolean {
 export function canRunRevenueCycle(role: Role): boolean {
   return role === "admin" || role === "manager";
 }
+
+/** Correcting draft or rejected claims: the people who bill (compliance reviews, R-5.1.2). */
+export function canCorrectClaims(role: Role): boolean {
+  return role === "admin" || role === "manager" || role === "specialist";
+}

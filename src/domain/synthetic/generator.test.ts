@@ -42,3 +42,30 @@ describe("synthetic data generator", () => {
     }
   });
 });
+
+describe("unsubmitted synthetic claims", () => {
+  const unsubmitted = dataset.claims.filter((c) => c.unsubmitted);
+
+  it("adds draft and rejected claims with no payer receipt or denial", () => {
+    expect(unsubmitted.length).toBe(12);
+    expect(new Set(unsubmitted.map((c) => c.unsubmitted))).toEqual(new Set(["draft", "rejected"]));
+    for (const claim of unsubmitted) {
+      expect(claim.payerReceivedDate).toBeNull();
+      expect(claim.denial).toBeNull();
+      expect(claim.serviceDate < dataset.asOf).toBe(true);
+    }
+  });
+
+  it("covers Florida, Medicare, and regimes without a filing rule", () => {
+    const regimes = new Set(unsubmitted.map((c) => dataset.payers.find((p) => p.key === c.payerKey)!.regime));
+    for (const regime of ["fl_insurer", "fl_hmo", "medicare", "medicare_advantage", "erisa_self_funded"]) {
+      expect(regimes.has(regime as never)).toBe(true);
+    }
+  });
+
+  it("can be turned off", () => {
+    expect(
+      generateDataset({ asOf: "2026-09-26", unsubmittedClaims: 0 }).claims.some((c) => c.unsubmitted),
+    ).toBe(false);
+  });
+});

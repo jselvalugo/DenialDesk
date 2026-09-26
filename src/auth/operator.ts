@@ -18,12 +18,14 @@ export function isPlatformOperator(
 }
 
 /**
- * For the operator console. Signed-out visitors go to sign-in like any other page (the owner needs
- * a way in); every signed-in account that isn't the operator, including demo sessions, gets a 404
- * so the console stays invisible to practice users.
+ * For the operator console. Signed-out visitors and demo sessions go to sign-in (the owner needs a
+ * way in, and a shared demo session must not trap them behind a 404); every signed-in practice
+ * account that isn't the operator gets a 404 so the console stays invisible to practice users.
  */
 export const requireOperator = cache(async (): Promise<AuthContext> => {
-  if (!(await getSession())) redirect("/login");
+  const session = await getSession();
+  if (!session) redirect("/login");
+  if (session.authMethod === "demo") redirect("/login?reason=account");
   const auth = await requireAuth();
   if (!isPlatformOperator(auth)) notFound();
   return auth;
