@@ -91,6 +91,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Next.js renders a hidden `role="alert"` route announcer; scope e2e alert queries to `main`.
 - Once production exists, record tables (imports, vouchers, audit) change by adding columns only;
   C0's column drops were a one-time pre-production change on synthetic data.
+- Never edit a migration once pushed: Netlify deploy previews apply each branch's migrations to a
+  branch database and refuse changed files ("modified after being applied"). Add a new one.
 - Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
 - Local test DB without Docker: `initdb`/`pg_ctl` from `/usr/lib/postgresql/16/bin` as the
