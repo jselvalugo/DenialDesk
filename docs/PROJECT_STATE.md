@@ -12,7 +12,8 @@ _Last updated: 2026-09-26_
   (milestones, interest worksheet, contests with "recorded in error"); claim page Payments panel.
   Migration 0026: append-only history enforced by triggers, RLS + isolation tests. Seed now posts
   synthetic remittances. External data sources to connect are tracked in `docs/data-sources.xlsx`.
-  Next: R2 reversals + denial capture (needs cited CARC mapping), PP2 alerts/demand letter, R3 feed.
+  R2 (reversals, denial capture from posted adjustments, event-row guard; migration 0028) done;
+  CARC mapping is ⚠️ VERIFY (OA-021). Next: R2b line-level + deposit reassociation, PP2 alerts, R3 feed.
   Open (counsel): interest accrual start; paper provider-response window.
 - Welcome page (`specs/welcome-page.md`) now explains how the patient record feeds claims and
   denials (4 steps; charge import and 837P/835 marked Planned) and lists more safeguards (MFA,

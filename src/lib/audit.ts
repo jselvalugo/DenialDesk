@@ -22,6 +22,7 @@ export type AuditAction =
   | "denial.status_changed"
   | "denial.assigned"
   | "denial.note_added"
+  | "denial.captured"
   | "claim.list_viewed"
   | "claim.viewed"
   | "claim.corrected"

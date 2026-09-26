@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, sql, sum, type SQL } from "drizzle-orm";
 import type { TenantTx } from "@/db/tenant";
 import {
   claims,
+  denials,
   patients,
   payers,
   promptPayResponses,
@@ -122,7 +123,21 @@ export async function getRemittance(tx: TenantTx, remittanceId: string) {
     .leftJoin(users, eq(users.id, remittanceEvents.actorId))
     .where(eq(remittanceEvents.remittanceId, remittanceId))
     .orderBy(desc(remittanceEvents.createdAt), desc(remittanceEvents.id));
-  return { ...row, lines, history };
+  const captured = await tx
+    .select({
+      id: denials.id,
+      claimNumber: claims.claimNumber,
+      groupCode: denials.groupCode,
+      carc: denials.carc,
+      category: denials.category,
+      deniedCents: denials.deniedCents,
+      status: denials.status,
+    })
+    .from(denials)
+    .innerJoin(claims, eq(claims.id, denials.claimId))
+    .where(eq(denials.remittanceId, remittanceId))
+    .orderBy(asc(claims.claimNumber));
+  return { ...row, lines, history, captured };
 }
 
 export type RemittanceDetail = NonNullable<Awaited<ReturnType<typeof getRemittance>>>;

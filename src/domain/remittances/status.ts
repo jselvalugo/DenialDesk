@@ -39,7 +39,7 @@ export const CLP_STATUS_LABELS: Record<string, string> = {
  * the contractual fee-schedule reduction (CO-45, "charge exceeds fee schedule/maximum allowable",
  * X12 CARC list). Anything else leaves a claim partially paid.
  */
-function isExpected(adjustment: RemittanceAdjustment): boolean {
+export function isExpected(adjustment: RemittanceAdjustment): boolean {
   return adjustment.group === "PR" || (adjustment.group === "CO" && adjustment.carc === "45");
 }
 

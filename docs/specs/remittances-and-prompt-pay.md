@@ -1,6 +1,6 @@
 # Spec: Remittances and prompt pay
 
-Status: in progress — R1/PP1 approved by delegated technical authority (2026-09-26)
+Status: in progress — R1/PP1 done; R2 approved by delegated technical authority (2026-09-26)
 Roadmap items: Phase 1 → "835 ERA ingestion", "Florida prompt-pay clock"; billing review
 (`docs/reviews/2026-09-26-billing-structure-review.md`) rows 9–10, finding F4, record model §6.1
 Requirement IDs: R-3.1.1, R-3.1.2, R-3.1.3, R-3.1.4, R-3.10.3, R-5.1.2, R-7.5.1, R-9.2.1, §8.2 step 7
@@ -17,7 +17,8 @@ on late payments, with an itemized worksheet per claim. Every record keeps its f
 |---|---|
 | **R1** (this PR) | `remittances` + `remittance_claims` + `remittance_events`; 835 upload (`/remittances/new`), list, record page, post and void with reason; claim page "Payments" panel |
 | **PP1** (this PR) | `prompt_pay_responses` (append-only, "recorded in error" corrections); `/prompt-pay` list, `/prompt-pay/[claimId]` clock record with interest worksheet; record contest page |
-| R2 | Reversals (CLP02 = 22), denial capture from posted adjustments (needs a cited CARC → category mapping), line-level (SVC) detail, ERA ↔ deposit reassociation by TRN |
+| **R2** (in progress) | Reversals (CLP02 = 22) and denial capture from posted adjustments; hardening from R1 review |
+| R2b | Line-level (SVC) detail; ERA ↔ deposit reassociation by TRN (needs bank trace data, DS-04) |
 | R3 | Clearinghouse feed instead of upload (vendor + subcontractor BAA, U.S.-only; `docs/data-sources.xlsx`) |
 | PP2 | Alerts at the configured days (R-3.1.2) in a notification center; demand letter for uncontestable claims (R-3.1.4); evidence package export (R-3.1.7) |
 
@@ -56,6 +57,27 @@ on late payments, with an itemized worksheet per claim. Every record keeps its f
       append-only; a status change without an event row from the same transaction is refused;
       RLS + isolation tests on all three tables.
 - [x] Claim page shows a "Payments" panel (remittance links) and links to its prompt-pay clock.
+
+### Reversals and denial capture (R2)
+- [x] Files with reversals (CLP02 = 22, negative paid) load. Posting a reversal lowers the
+      claim's paid total with a new claim version and marks the earlier payment of the same
+      amount on the prompt-pay clock as recorded in error ("Reversed by remittance <trace>");
+      nothing is deleted. A claim reversed to $0 goes back to "Accepted by payer". A reversal
+      with no matching payment, larger than the amount paid, or of $0 is refused (a person
+      reconciles it).
+- [x] Posting creates one denial per claim-level adjustment the practice didn't expect (any group
+      other than PR, except CO-45), with group, CARC, claim RARCs, amount, notice date = payment
+      date, and the appeal deadline from the rules engine / payer contract (none when the payer's
+      regime is unverified). Category comes from `src/domain/carc.ts` (⚠️ VERIFY, OA-021; shown as
+      "Category unverified"); unknown CARCs are "Other". Each captured denial links to its
+      remittance and is audited (`denial.captured`); each reversal is audited.
+- [x] Post re-checks the balance on the server (defensive: the parser already refuses
+      unbalanced files, so no stored remittance can fail it today).
+- [x] The database refuses a history row without the signed-in user (except seeded remittances),
+      a repeated event, and a second posted/void event.
+- [x] Tests: reversal matching, no match, over-reversal, $0 reversal, to-$0 status; denial
+      capture (CO-97 captured, CO-45 and PR not); specialist can't void; spoofed and blank-actor
+      events refused.
 
 ### Prompt pay (PP1)
 - [x] `/prompt-pay` table of claims with a received date whose payer regime is under Florida
@@ -99,5 +121,6 @@ payer crossover, bank reassociation, clearinghouse connection, alerts and demand
 phases). Data sources to connect are tracked in `docs/data-sources.xlsx`.
 
 ## Open questions
-- Counsel: interest accrual start and whether a contest resets it; paper provider-response window.
+- Counsel: interest accrual start and whether a contest resets it; paper provider-response window (OA-022).
+- Owner/biller: CARC → category mapping and expected adjustments used by denial capture (OA-021).
 - Owner: clearinghouse vendor (835 feed) and bank feed for reassociation (`docs/data-sources.xlsx`).

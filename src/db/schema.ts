@@ -405,10 +405,18 @@ export const denials = pgTable(
     /** Date the appeal was filed; compared with appealDeadline to flag late appeals. */
     appealSubmittedOn: date("appeal_submitted_on", { mode: "string" }),
     assigneeId: uuid("assignee_id").references(() => users.id),
+    /** The posted remittance this denial was captured from; null for denials entered otherwise. */
+    remittanceId: uuid("remittance_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
+    foreignKey({
+      name: "denials_remittance_fk",
+      columns: [t.tenantId, t.remittanceId],
+      foreignColumns: [remittances.tenantId, remittances.id],
+    }),
+    index("denials_remittance_idx").on(t.tenantId, t.remittanceId),
     index("denials_queue_deadline_idx").on(t.tenantId, t.status, t.appealDeadline),
     index("denials_queue_amount_idx").on(t.tenantId, t.status, t.deniedCents),
     index("denials_claim_idx").on(t.claimId),
