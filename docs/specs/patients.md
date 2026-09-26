@@ -58,14 +58,14 @@ denials, and balances.
 - [x] Patient chart: demographics, coverage, totals (claims, billed, paid, open denied amount),
       claims table (links to `/claims/[id]`), denials table (links to `/denials/[id]`).
 - [x] Claim and denial detail pages link the patient name to the chart; the claims list links it too.
-- [x] "Patients" appears in the primary navigation (Work section), available to every role.
+- [x] "Patients" is its own app in the app launcher (`specs/erp-shell.md`), available to every role.
 - [x] Page titles never include patient data (DESIGN.md §12).
 - [x] Audit events: `patient.list_viewed`, `patient.searched`, `patient.viewed`,
       `patient.created`, `patient.updated` (IDs, counts, field names; never values).
 - [x] Tenant isolation: another practice's patient returns 404; tests cover create, update, and read.
 
 ## Data / API changes
-Migration `patients_record`:
+Migration `0018_patients_record`:
 - `patients`: `sex` (F/M/U, default U), `address_line1`, `city`, `state` (2 letters), `postal_code`
   (ZIP or ZIP+4), `phone`, `primary_payer_id`, `updated_at`. CHECKs on sex, state, ZIP, and name/MRN
   lengths.

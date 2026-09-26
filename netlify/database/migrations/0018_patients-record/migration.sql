@@ -1,4 +1,4 @@
--- Generated from drizzle/0017_patients_record.sql by `pnpm netlify:migrations`. Do not edit.
+-- Generated from drizzle/0018_patients_record.sql by `pnpm netlify:migrations`. Do not edit.
 ALTER TABLE "patients" ADD COLUMN "sex" text DEFAULT 'U' NOT NULL;--> statement-breakpoint
 ALTER TABLE "patients" ADD COLUMN "address_line1" text;--> statement-breakpoint
 ALTER TABLE "patients" ADD COLUMN "city" text;--> statement-breakpoint

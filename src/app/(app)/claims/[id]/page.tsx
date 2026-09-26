@@ -84,7 +84,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         <span aria-hidden>/</span> <span className="font-mono">{claim.claimNumber}</span>
       </nav>
 
-      <header className="flex flex-wrap items-start justify-between gap-6 border-b border-border pb-5">
+      <header className="flex flex-wrap items-start justify-between gap-6 rounded-panel border border-border bg-surface px-5 py-4 shadow-xs">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <h1 className="font-mono text-[1.5rem] leading-8 font-bold text-primary">{claim.claimNumber}</h1>

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { openFromLauncher } from "./support";
 
 test.describe("patients", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
@@ -7,7 +8,7 @@ test.describe("patients", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("navigation").getByRole("link", { name: "Patients", exact: true }).click();
+    await openFromLauncher(page, "Patients");
     await expect(page.getByRole("heading", { level: 1, name: "Patients" })).toBeVisible();
     await page.getByRole("link", { name: "Register patient" }).click();
     await expect(page.getByText("Synthetic data only.")).toBeVisible();
@@ -42,7 +43,7 @@ test.describe("patients", () => {
 
     await page.goto("/patients");
     await page.getByLabel("Find a patient").fill("Quillfeather, Em");
-    await page.getByRole("button", { name: "Search" }).click();
+    await page.getByRole("button", { name: "Search", exact: true }).click();
     const results = page.getByRole("region", { name: "Search results" });
     await expect(results.getByRole("link", { name: "Quillfeather, Emberly" })).toBeVisible();
     expect(page.url()).not.toContain("Quillfeather");

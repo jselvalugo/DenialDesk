@@ -103,8 +103,11 @@ export const sessions = pgTable(
       .references(() => users.id),
     tenantId: uuid("tenant_id").references(() => tenants.id),
     mfaVerified: boolean("mfa_verified").notNull().default(false),
-    /** How the session was established. "demo" sessions skip MFA and are limited to the demo practice. */
-    authMethod: text("auth_method", { enum: ["password_mfa", "demo"] })
+    /**
+     * How the session was established. "demo" sessions skip MFA and are limited to the demo practice;
+     * "operator" sessions are the platform console's own (no practice, separate cookie).
+     */
+    authMethod: text("auth_method", { enum: ["password_mfa", "demo", "operator"] })
       .notNull()
       .default("password_mfa"),
     createdAt: createdAt(),
@@ -478,6 +481,11 @@ export const payerClasses = pgTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     payerId: uuid("payer_id").references(() => payers.id),
+    /**
+     * The regulatory regime of the payers in this class; ties DenialDesk denials (whose payers
+     * carry a regime) to the class. Null for classes without one (self-pay).
+     */
+    regime: regimeEnum("regime"),
     /** AR account override for this class; null = the practice's default AR account. */
     arGl: text("ar_gl"),
     createdAt: createdAt(),

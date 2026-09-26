@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { openFromLauncher } from "./support";
 
 test.describe("claims", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
   test("lists unsubmitted claims with timely-filing totals and filters", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("navigation").getByRole("link", { name: "Claims", exact: true }).click();
+    await openFromLauncher(page, "Claims");
     await expect(page.getByRole("heading", { level: 1, name: "Claims" })).toBeVisible();
     const totals = page.getByRole("region", { name: "Unsubmitted claim totals" });
     await expect(totals.getByText("Past filing deadline")).toBeVisible();

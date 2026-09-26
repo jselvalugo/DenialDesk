@@ -32,3 +32,24 @@ export async function signIn(page: Page, user: E2EUser) {
   await page.getByRole("button", { name: "Verify" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
 }
+
+/** Platform console sign-in (its own page and session), ending on the console. */
+export async function signInOperator(page: Page, user: E2EUser, usedSteps = new Set<number>()) {
+  await page.goto("/operator/login");
+  await page.getByLabel("Work email").fill(user.email);
+  await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Two-step verification" })).toBeVisible();
+  await page.getByLabel("6-digit code").fill(await freshCode(user.totpSecret!, usedSteps));
+  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Practices" })).toBeVisible();
+}
+
+/**
+ * Opens a page, or an app ("Revenue cycle app"), through the app launcher: the tab bar only shows
+ * the current app's pages.
+ */
+export async function openFromLauncher(page: Page, name: string) {
+  await page.getByRole("button", { name: "App launcher" }).click();
+  await page.getByRole("dialog", { name: "App launcher" }).getByRole("link", { name, exact: true }).click();
+}

@@ -124,8 +124,15 @@
     {
       "idx": 17,
       "version": "7",
-      "when": 1790433766461,
-      "tag": "0017_patients_record",
+      "when": 1790432984563,
+      "tag": "0017_revenue_cycle_class_regime",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790437723344,
+      "tag": "0018_patients_record",
       "breakpoints": true
     }
   ]

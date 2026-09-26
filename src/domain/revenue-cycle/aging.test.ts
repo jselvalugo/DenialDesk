@@ -210,6 +210,8 @@ describe("parseDepositFile", () => {
     const blank = parseDepositFile("Date,Amount\n03/01/2026,\n", OPEN);
     expect(!blank.ok && blank.problems[0]!.message).toBe("Amount is blank.");
     expect(parseDepositFile("Date,Debit,Credit\n03/01/2026,5.00,\n", OPEN).ok).toBe(false);
+    // A lone Credit column isn't read as the amount either: debit/credit exports are refused.
+    expect(parseDepositFile("Date,Credit\n03/01/2026,5.00\n", OPEN).ok).toBe(false);
   });
 
   it("needs exactly one date and one amount column", () => {

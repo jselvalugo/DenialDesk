@@ -25,7 +25,8 @@ Demo login
 - [x] Demo sessions follow the normal idle/absolute timeouts. Demo logins are audited.
 - [x] The demo user can never be a platform operator.
 
-Operator console (`/operator`)
+Operator console (`/operator`) — sign-in superseded by `operator-login.md` (own sign-in page,
+session, and practice-free account; 2026-09-26)
 - [x] Only the account whose email equals `PLATFORM_OPERATOR_EMAIL`, signed in with password
       **and** MFA, can open it. Every other signed-in practice account gets a 404. Signed-out
       visitors and demo sessions are sent to sign-in (2026-09-26, owner feedback: a browser that

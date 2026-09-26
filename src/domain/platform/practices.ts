@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { and, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createDemoPractice, type DemoMode } from "@/auth/demo";
 import { hashPassword } from "@/auth/password";
-import type { AuthContext } from "@/auth/session";
+import type { OperatorContext } from "@/auth/operator";
 import { systemDb } from "@/db/client";
 import { denials, memberships, tenants, users } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
@@ -24,7 +24,7 @@ export interface PracticeSummary {
   openDenials: number;
 }
 
-export async function listPractices(operator: AuthContext): Promise<PracticeSummary[]> {
+export async function listPractices(operator: OperatorContext): Promise<PracticeSummary[]> {
   const rows = await systemDb()
     .select({
       id: tenants.id,
@@ -57,7 +57,7 @@ export class PracticeError extends Error {}
 /** Creates a customer practice and its first admin. Returns a one-time temporary password. */
 export async function createPractice(
   input: { name: string; adminName: string; adminEmail: string },
-  operator: AuthContext,
+  operator: OperatorContext,
 ): Promise<{ tenantId: string; temporaryPassword: string }> {
   const [existing] = await systemDb()
     .select({ id: users.id })
@@ -103,11 +103,8 @@ export async function createPractice(
 export async function setPracticeSuspended(
   tenantId: string,
   suspended: boolean,
-  operator: AuthContext,
+  operator: OperatorContext,
 ): Promise<void> {
-  if (suspended && tenantId === operator.tenantId) {
-    throw new PracticeError("You can't suspend the practice you're signed in to.");
-  }
   const updated = await systemDb()
     .update(tenants)
     .set({ suspendedAt: suspended ? new Date() : null })
@@ -129,7 +126,7 @@ export async function setPracticeSuspended(
  * Archives every active demo practice (suspended, never deleted — the audit trail references it)
  * and creates a fresh one. Existing demo sessions end on their next request.
  */
-export async function resetDemoPractice(operator: AuthContext, mode: DemoMode = "sample"): Promise<void> {
+export async function resetDemoPractice(operator: OperatorContext, mode: DemoMode = "sample"): Promise<void> {
   if (!demoLoginEnabled()) throw new PracticeError("The demo practice is disabled in this environment.");
   await systemDb()
     .update(tenants)

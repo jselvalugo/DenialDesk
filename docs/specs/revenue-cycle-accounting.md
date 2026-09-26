@@ -114,9 +114,10 @@ else the most recent current-format import (`periodFiles()`); every report uses 
   (undeposited or unposted cash), flagged when it grows month over month.
 
 ### B5 — Statements and dashboard
-- **Income statement** by month: charges, adjustments and write-offs by financial class, voids and
-  corrections, net patient service revenue, prompt-pay interest income.
-- **Receivables summary:** open A/R by class and age, credit balances as a liability. No
+- **Income statement** by month: charges by revenue account less adjustments and write-offs by
+  adjustment account (the rules route each financial class to its own accounts, so voids,
+  prompt-pay interest income and each class show as their own rows), net patient service revenue.
+- **Receivables summary:** open A/R by A/R account (class and age are on the A/R aging page), credit balances as a liability. No
   allowance for doubtful accounts until the practice configures one (never estimated).
 - **Cash summary:** payments posted, deposits, clearing balance by month.
 - **Dashboard KPIs:** net revenue and payments (last month), open A/R, days in A/R (open A/R ÷
@@ -209,7 +210,29 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       synthetic sample only for months without deposits). Demo practices get synthetic deposits
       with a realistic lag. Reports show totals only; they're built from PHI lines, so views
       are audited.
-- [ ] B5
+      Known limitations: the overlap rule assumes one bank account (a second account's deposits
+      on the same dates are refused); a reversed file can't be re-imported unchanged (import the
+      corrected export); the reversal reason is free text with a "no patient information" hint.
+      Only `Amount` / `Deposit amount` headers are read: a Debit/Credit two-column export is
+      refused rather than read one-sided (the earlier `Credit` alias dropped for that reason).
+- [x] **B5** (2026-09-26): pure `statements.ts` (income statement by GL account per month,
+      KPIs, denials by class) and `reporting.ts` (statements and dashboard over the last 12
+      months from `periodFiles()`, totals computed in SQL). `payer_classes.regime` (migration
+      0017, backfilled per practice from the linked payer or the starter class code) maps open
+      DenialDesk denials to financial classes; a regime with no class shows as "No matching
+      class"; when several classes share a regime, the first class by code takes its denials.
+      The starter code-to-regime backfill is a default: each practice confirms its classes'
+      regimes (editing arrives with the rule/GL editing UI). Refused reversals are audited with
+      a coded reason and the file ID. Statements page (income statement, receivables by A/R account with credits
+      apart, payments/deposits/clearing by month; ⚠️ management view pending the accountant's
+      review of the net-revenue presentation) and RCM dashboard (net revenue, payments, open
+      A/R, days in A/R, net collection rate, over-90 share, monthly bars, open denials by class
+      with a link to the queue). Days in A/R uses the same open A/R as the tile (credits excluded);
+      trailing ratios cover the latest and the two calendar months before it, skipping missing
+      months; charts show the 12 most recent months with files. The spec's by-class income and
+      receivables bullets became by-account (each class routes to its own accounts). Both views
+      audited as `rcm.report_viewed` by the report functions; admin, manager and
+      compliance only. 
 
 ## Security notes
 - Uploads: CSV only, size-capped, parsed in memory, never written to disk or object storage;

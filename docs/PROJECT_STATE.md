@@ -12,16 +12,21 @@ _Last updated: 2026-09-26_
 - Claims module C1 (`specs/claims.md`): claims list with timely-filing warnings, claim detail,
   corrections of draft/rejected claims with a required reason, and append-only version history
   enforced by database triggers. Next: C2 CSV charge import, C3 837P + filing block, C4 999/277CA.
+- UI shell is ERP-style (Salesforce-like): global header with search/launcher shortcut, navy app bar
+  with the current app's tabs, and an app launcher (`specs/erp-shell.md`).
 - Patient records P1 (`specs/patients.md`): `/patients` list, POST search (no names in URLs),
   register/edit with primary coverage (encrypted member ID), admin-only sensitivity tags, and a
   patient chart linking claims and denials; claim and denial pages link back. "Patients" is in the
-  primary navigation. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
+  app launcher as its own app. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
 - Operator console can reset the demo with sample data or empty (setup only) to test features
   from a clean slate.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
-  login and a platform operator console (`/operator`) for the owner. A browser with a demo session
-  can now reach the sign-in form (it used to be trapped: `/operator` 404, `/login` bounced to the demo).
-- Working branch: `claude/adoring-hypatia-5co7fz`; production branch on Netlify: `claude/quirky-feynman-ufql5a` (default).
+  login and a platform operator console (`/operator`) for the owner, with its own sign-in at
+  `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
+- Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
+  before production.
+- Production branch on Netlify: `claude/quirky-feynman-ufql5a` (default). Each session works on its
+  own branch and merges through a PR.
 
 ## Decisions made (details in `docs/decisions/`)
 | Date | Decision | Record |
@@ -38,6 +43,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Secrets scanning: gitleaks in CI | `specs/project-skeleton.md` |
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
+| 2026-09-26 | ERP shell: global header, navy app bar with tabs, app launcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -45,7 +51,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 ## Next up
 0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger, B2 monthly file
    import, C0 (own design: month-end activity file, routing-only rules), B3 journal vouchers, and
-   B4 aging/deposits/reconciliation done; next B5 statements and dashboard (denial tie-ins).
+   B4 aging/deposits/reconciliation, and B5 statements and RCM dashboard (denial tie-ins by
+   payer-class regime) done; the module's planned phases are complete. Follow-ups: coded reasons
+   for deposit reversals, credit-balance refund tracking (roadmap), multi-account deposits.
 1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
@@ -70,6 +78,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Revenue cycle: the starter chart of accounts and payer-class codes are illustrative; each practice
   maps them to its own GL and PM financial classes (rule/GL editing UI needs version history first).
   Accountant to confirm the net-revenue presentation (posted write-offs vs. GAAP price concessions).
+  The Statements page and dashboard are labelled a management view until that review.
+- Revenue cycle deposits: the database owner role can still modify deposit rows (insert-only
+  applies to the app role). Accept the risk or add a guard trigger? Owner decision.
 - Git history still contains the reference prototype's names from before C0. Rewrite history
   (force-push of the default branch), or leave it? Owner decision.
 - Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must

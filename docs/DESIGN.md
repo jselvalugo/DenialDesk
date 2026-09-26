@@ -27,7 +27,8 @@ Bloomberg-terminal discipline with modern typography, not a consumer app.
 - Gradients, glows, glassmorphism, blurred blobs, neon, purple-to-blue anything. (The logo keeps
   its gradient; the UI never borrows it.)
 - Emoji in UI, sparkle ✨ "AI magic" icons, exclamation marks in copy.
-- Big rounded "cards with shadows" as the main layout device. Use 1px borders and panels.
+- Big rounded "cards with heavy shadows" as the main layout device. Panels are 1px borders with at
+  most a hairline `shadow-xs`.
 - Pill-shaped everything, radius > 8px, oversized hero headings inside the app.
 - Centered layouts for working screens; fixed-width narrow columns for tables.
 - Fake dashboards: invented metrics, placeholder charts, lorem ipsum, stock avatars.
@@ -39,28 +40,33 @@ Bloomberg-terminal discipline with modern typography, not a consumer app.
 ## 4. Brand
 DenialDesk's visual identity is navy chrome, a teal accent, serif page titles, and mono figures,
 around its own logo (`docs/assets/denialdesk-logo.png`),
-always shown unaltered on a white background (sign-in page, sidebar header). Adopted 2026-09-26,
-ADR 0004 amendment.
+always shown unaltered on a white background (sign-in page, global header). Adopted 2026-09-26,
+ADR 0004 amendment; ERP shell (global header, app bar, app launcher) 2026-09-26, `specs/erp-shell.md`.
 
 | Token | Hex | Use |
 |---|---|---|
-| `navy` / `primary` | `#1A2C4E` | Sidebar, primary buttons, page titles (13.9:1 on white) |
+| `navy` / `primary` | `#1A2C4E` | App bar, primary buttons, page titles (13.9:1 on white) |
 | `primary-hover` | `#13213B` | Hover/pressed on primary |
 | `focus` | `#2E75B6` | Focus ring on light surfaces; chart series 3 |
 | `link` | `#245D93` | Text links, info status (6.9:1 on white, 4.5+ on every surface) |
 | `accent` | `#1F6B75` | Teal accent: chart series 1, progress bars. Never status by itself. |
 | `selected` | `#EAF0F7` | Selected table row |
 
-Sidebar (navy chrome): `sidebar` `#1A2C4E`, text `sidebar-fg` `#E2E8F0` (11.3:1), section labels
-and "Planned" items `sidebar-muted` `#8A9BB5` (4.9:1), active item `sidebar-active` `#243A63` with a
-3px `sidebar-accent` `#5EC4CC` bar; `sidebar-accent` is also the focus ring inside the sidebar.
+App bar (navy chrome; tokens keep their `sidebar-*` names): background `#1A2C4E`, tab text
+`sidebar-fg` `#E2E8F0` (11.3:1), muted text `sidebar-muted` `#8A9BB5` (4.9:1), active tab
+`sidebar-active` `#243A63` with a 3px `sidebar-accent` `#5EC4CC` underline; `sidebar-accent` is also
+the focus ring inside navy chrome.
+
+App tiles (launcher, app bar, page headers) are a white icon on a chart-series color: Denials teal
+`chart-1`, Claims blue `chart-3`, Revenue cycle navy `chart-2`, Insight amber `chart-4` (3.6:1),
+Setup slate `neutral-fg`. Tiles identify the app; they never carry status.
 
 ## 5. Color tokens
 Neutrals are cool slate.
 
 | Token | Hex | Use |
 |---|---|---|
-| `canvas` | `#F7F9FB` | App background behind panels |
+| `canvas` | `#F3F6F9` | App background behind panels |
 | `surface` | `#FFFFFF` | Panels, tables, inputs |
 | `surface-muted` | `#F1F5F9` | Table header, toolbars, read-only fields |
 | `border` | `#E2E8F0` | Default 1px borders and dividers |
@@ -108,16 +114,26 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 
 ## 7. Space, shape, elevation
 - 4px grid. Common steps: 4, 8, 12, 16, 24, 32, 48.
-- Radius: 4px controls, 5px panels and dialogs (≈ 0.3rem). Nothing larger.
-- Borders do the work. Shadows only for floating layers: menus/popovers `shadow-sm`, dialogs `shadow-lg`.
+- Radius: 6px controls, 8px panels and dialogs. Nothing larger (avatars are the one circle).
+- Borders do the work. Panels, stat tiles, and page headers add a hairline `shadow-xs`; floating
+  layers: menus/popovers `shadow-sm`, dialogs `shadow-lg`.
 - Focus: 2px `focus` ring with 2px offset, always visible on keyboard focus. Inside navy chrome
   (mark the container `data-chrome="dark"`) the ring is `sidebar-accent` (≥ 5.5:1 on navy).
 
 ## 8. Layout
-- **App shell:** navy left sidebar 256px with icons (logo header on white), top bar 56px, content on `canvas`.
+- **App shell (ERP layout, `specs/erp-shell.md`):**
+  - *Global header*, 56px white: logo, "Search apps and pages" (opens the launcher; Ctrl/⌘ K),
+    practice name, demo badge, and the user menu (name, role, practice, sign out).
+  - *App bar*, 44px navy: app launcher button (grid icon), the current app's tile and name, then the
+    app's shipped pages as tabs (`nav` "Primary"). Planned pages are not tabs.
+  - *App launcher*: modal dialog with a search field, app tiles (name + one-line description), and
+    every page grouped by app; planned pages are listed as "Planned", never links.
+  - Apps: Denials, Claims, Revenue cycle (roles that can view it), Insight, Setup (operator console,
+    style guide; only when available). Defined once in `src/components/shell/navigation.ts`.
+- **Page header:** white band (panel style) with the app tile, an uppercase "App · Page" eyebrow,
+  the serif title, a one-line description, and actions on the right.
 - **Preview banner:** 32px strip above everything in non-production (ADR 0003).
-- **Page:** header (title, one-line description, primary action right-aligned), then filters
-  toolbar, then content. Page padding 24px (16px under 1024px).
+- **Page:** page header, then filters toolbar, then content. Page padding 24px (16px under 1024px).
 - Tables use the full content width. Forms max 720px wide, labels above fields.
 - Minimum supported viewport 1280×800 for working screens; usable down to 1024px.
 

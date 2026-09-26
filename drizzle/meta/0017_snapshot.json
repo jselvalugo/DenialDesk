@@ -1,5 +1,5 @@
 {
-  "id": "8cd72424-4b97-4e9c-a834-782879f19323",
+  "id": "0a7a05ee-af20-4c38-8762-8eb4fd35a2c3",
   "prevId": "d5c73b4b-a6b5-4dc2-9c5d-bc556997c419",
   "version": "7",
   "dialect": "postgresql",
@@ -738,27 +738,6 @@
             },
             {
               "expression": "payer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "claims_tenant_patient_idx": {
-          "name": "claims_tenant_patient_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "patient_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1569,58 +1548,8 @@
           "notNull": true,
           "default": "'{}'::text[]"
         },
-        "sex": {
-          "name": "sex",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'U'"
-        },
-        "address_line1": {
-          "name": "address_line1",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "city": {
-          "name": "city",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "postal_code": {
-          "name": "postal_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "phone": {
-          "name": "phone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "primary_payer_id": {
-          "name": "primary_payer_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -1648,33 +1577,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "patients_tenant_name_idx": {
-          "name": "patients_tenant_name_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "last_name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "first_name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -1686,21 +1588,6 @@
             "tenant_id"
           ],
           "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "patients_primary_payer_fk": {
-          "name": "patients_primary_payer_fk",
-          "tableFrom": "patients",
-          "tableTo": "payers",
-          "columnsFrom": [
-            "tenant_id",
-            "primary_payer_id"
-          ],
-          "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -1745,6 +1632,13 @@
         "payer_id": {
           "name": "payer_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "regime": {
+          "name": "regime",
+          "type": "regulatory_regime",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
         },
@@ -1875,29 +1769,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "payers_tenant_id_key": {
-          "name": "payers_tenant_id_key",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "payers_tenant_id_tenants_id_fk": {
           "name": "payers_tenant_id_tenants_id_fk",

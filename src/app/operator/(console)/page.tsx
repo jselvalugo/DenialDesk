@@ -69,12 +69,7 @@ export default async function OperatorPage() {
           <tbody>
             {practices.map((practice) => (
               <Tr key={practice.id}>
-                <Td className="font-medium">
-                  {practice.name}
-                  {practice.id === operator.tenantId && (
-                    <span className="ml-2 text-label font-normal text-muted">(your practice)</span>
-                  )}
-                </Td>
+                <Td className="font-medium">{practice.name}</Td>
                 <Td>
                   <Badge tone={practice.kind === "demo" ? "info" : "neutral"} dot={false}>
                     {practice.kind === "demo" ? "Demo" : "Customer"}

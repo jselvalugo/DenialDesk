@@ -18,10 +18,10 @@ Site: https://denialdesk.netlify.app
   |---|---|
   | `APP_ENV` | `preview` — shows the synthetic-data banner, enables the seed endpoint |
   | `FIELD_ENCRYPTION_KEY` | AES-256 key for member IDs and MFA secrets (secret; pre-prod only) |
-  | `SEED_TOKEN` | Bearer token for the one-time seed endpoint (secret) |
-  | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Demo admin account created by the seed (password secret) |
+  | `SEED_TOKEN` | Bearer token for the seed endpoint, and the setup code at `/operator/setup` (secret) |
+  | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Admin of the seeded synthetic practice (password secret); not the operator |
   | `DEMO_LOGIN_ENABLED` | `true` shows "Explore the demo practice" on sign-in (ignored in production) |
-  | `PLATFORM_OPERATOR_EMAIL` | The one account allowed into the platform console at `/operator` |
+  | `PLATFORM_OPERATOR_EMAIL` | The operator account for the platform console; an address used only for the console, never a practice user |
   | `RATE_LIMIT_DEMO` / `RATE_LIMIT_SIGNIN` / `RATE_LIMIT_MFA` | Optional overrides for per-network limits (defaults 10/10 min, 30/15 min, 30/15 min) |
 
   If `APP_ENV` is missing the app still treats itself as non-production — safe by default.
@@ -60,12 +60,17 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
 - After a release that changes the revenue cycle starter configuration or file layout (e.g. C0,
   2026-09-26), reset the demo so it carries the new configuration and sample files. Other
   pre-production practices keep their stored rules; an admin can review them on the Rules page.
-- `/operator` is visible only to `PLATFORM_OPERATOR_EMAIL` after password + two-step sign-in.
-  Signed-out visitors and demo sessions are sent to sign-in; other practice users get a 404.
-- Can't get in? Sign in at `/login` as `SEED_ADMIN_EMAIL` (it must equal `PLATFORM_OPERATOR_EMAIL`),
-  then use *Platform console* in the sidebar. Forgotten password, lockout, or lost authenticator:
-  call the seed endpoint again (with `{"resetMfa": true}` for a lost authenticator) to repair the account.
-  Pre-production only: production access recovery follows the approved access-management procedure.
+- The platform console has its own sign-in at `/operator/login` (spec: `docs/specs/operator-login.md`).
+  Only the `PLATFORM_OPERATOR_EMAIL` account can use it, with password + two-step verification. That
+  account belongs to no practice and can't sign in at `/login`; practice users can't sign in to the console.
+  Operator and practice/demo sessions are separate, so one browser can hold both.
+- **Upgrading from before 2026-09-26:** `PLATFORM_OPERATOR_EMAIL` used to equal `SEED_ADMIN_EMAIL`
+  (the demo admin). Change it to a new, console-only address before deploying (the seed endpoint now
+  refuses when the two match), then run `/operator/setup`. The demo admin keeps signing in at `/login`.
+- First time, forgotten password, lockout, or lost authenticator: open `/operator/setup`, enter the
+  operator email and the setup code (`SEED_TOKEN`), and choose a password. This signs the account out
+  everywhere and restarts two-step setup. Pre-production only (404 in production); production
+  access recovery follows the approved access-management procedure.
 
 ## Checks after each deploy
 - `https://denialdesk.netlify.app/api/health` returns `{"status":"ok","appEnv":"preview","db":"up"}`.

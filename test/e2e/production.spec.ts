@@ -28,3 +28,8 @@ test("production never offers the demo login, even with DEMO_LOGIN_ENABLED set",
   await page.goto("/login");
   await expect(page.getByRole("button", { name: "Explore the demo practice" })).toHaveCount(0);
 });
+
+test("the operator setup page does not exist in production", async ({ request }) => {
+  const response = await request.get("/operator/setup");
+  expect(response.status()).toBe(404);
+});

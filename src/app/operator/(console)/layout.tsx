@@ -1,7 +1,6 @@
 import Image from "next/image";
-import Link from "next/link";
 import { requireOperator } from "@/auth/operator";
-import { signOut } from "@/auth/actions";
+import { keepOperatorSessionAlive, signOutOperator } from "@/auth/operator-actions";
 import { SessionTimeout } from "@/components/shell/SessionTimeout";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -23,11 +22,8 @@ export default async function OperatorLayout({ children }: { children: React.Rea
           <Badge tone="warning">Operator</Badge>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="/" className="text-body font-medium text-white/85 hover:text-white hover:underline">
-            Back to {operator.tenantName}
-          </Link>
           <span className="text-body text-white/85">{operator.displayName}</span>
-          <form action={signOut}>
+          <form action={signOutOperator}>
             <Button type="submit" size="sm" variant="secondary">
               Sign out
             </Button>
@@ -41,7 +37,11 @@ export default async function OperatorLayout({ children }: { children: React.Rea
       >
         {children}
       </main>
-      <SessionTimeout />
+      <SessionTimeout
+        keepAlive={keepOperatorSessionAlive}
+        signOutAction={signOutOperator}
+        timeoutHref="/operator/login?reason=timeout"
+      />
     </div>
   );
 }

@@ -20,6 +20,8 @@ Engineering:
 - [x] Synthetic data generator: practices, providers, payers, patients, claims, denials [R-15.1]
 - [x] Tenancy + RBAC skeleton with row-level security and isolation tests [R-7.2.3, R-7.2.4]
 - [x] Auth: OIDC SSO behind an interface (Entra ID at cutover), MFA, session timeouts [R-7.2.1, R-7.2.2, R-7.2.7]
+- [x] Platform console with its own sign-in and a practice-free operator account (`specs/operator-login.md`) [R-7.2.3, R-7.2.7, R-7.5.1]
+- [ ] **Production gate:** WebAuthn/passkeys for the operator (TOTP today) and just-in-time, approved, recorded privileged access [R-7.2.2, R-7.2.5] (`threat-models/operator-console.md`)
 - [x] Immutable audit log skeleton [R-7.5.1]
 - [x] Rules-engine skeleton: versioned, effective-dated rules with citations; business-day
       and holiday calendars in America/New_York [R-15.6, §11]
