@@ -4,15 +4,19 @@ import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
 import {
   auditEvents,
+  businessRules,
   claimLines,
   claims,
   denialNotes,
   denials,
+  glAccounts,
   locations,
   memberships,
   patients,
+  payerClasses,
   payers,
   providers,
+  rcmSites,
   tenants,
   users,
 } from "@/db/schema";
@@ -52,7 +56,20 @@ beforeAll(async () => {
 
 afterAll(() => closeDatabase());
 
-const tenantTables = { locations, providers, payers, patients, claims, claimLines, denials, denialNotes };
+const tenantTables = {
+  locations,
+  providers,
+  payers,
+  patients,
+  claims,
+  claimLines,
+  denials,
+  denialNotes,
+  rcmSites,
+  glAccounts,
+  payerClasses,
+  businessRules,
+};
 
 describe.each(Object.entries(tenantTables))("row-level security on %s", (_name, table) => {
   it("shows a tenant only its own rows", async () => {

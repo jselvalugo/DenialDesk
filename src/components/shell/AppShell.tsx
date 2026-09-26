@@ -7,11 +7,13 @@ export function AppShell({
   user,
   showDesignSystem,
   showOperatorConsole = false,
+  showRevenueCycle = false,
   children,
 }: {
   user: ShellUser | null;
   showDesignSystem: boolean;
   showOperatorConsole?: boolean;
+  showRevenueCycle?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -22,7 +24,11 @@ export function AppShell({
       >
         Skip to content
       </a>
-      <Sidebar showDesignSystem={showDesignSystem} showOperatorConsole={showOperatorConsole} />
+      <Sidebar
+        showDesignSystem={showDesignSystem}
+        showOperatorConsole={showOperatorConsole}
+        showRevenueCycle={showRevenueCycle}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar user={user} />
         {user?.demo && (

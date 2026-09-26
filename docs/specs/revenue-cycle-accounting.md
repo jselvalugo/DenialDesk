@@ -4,7 +4,7 @@ Status: approved (2026-09-26) — requested by the product owner; delivered in p
 Roadmap item: Phase 1 → claims, remittance, reporting (new module "Revenue cycle")
 Requirement IDs: §8.2 (charge capture via CSV, reconciliation to bank deposits), §8.7 (A/R aging
 by payer and bucket, days in A/R, net collection rate), §8.8 (accounting integration), §11 (data
-accuracy: batch totals, control counts, reconciliation), R-7.2.3 (tenant isolation), R-7.5.1
+accuracy: batch totals, control counts, reconciliation), R-7.2.4 (tenant isolation), R-7.5.1
 (audit), R-15.1 (synthetic data only)
 
 ## Goal
@@ -47,7 +47,25 @@ per-tenant tables, not in `rules/`. Each seeded default is labeled with that sou
       records the rule that matched.
 - [ ] Journal vouchers can't be approved unless all five checks pass; the approver can't be the
       preparer.
-- [ ] Rule and GL-account edits are limited to admins and audited (a later phase adds editing UI).
+- [ ] Rule and GL-account edits are limited to admins and audited, and keep a version history of
+      every rule change (who, when, before/after) before any editing UI ships (PI1, CC8.1).
+- [x] Loading the default rule set: administrators only, practices without rules only, audited.
+- [x] Contra amounts round half away from zero to the cent. The engine compares codes exactly
+      (case-sensitive, untrimmed) like the source; the importer trims cells.
+
+## Phase status
+- [x] **B1** (2026-09-26): `rcm_sites`, `payer_classes`, `gl_accounts`, `business_rules` with FORCE RLS,
+      no DELETE, check constraints (contra 0–10000 bps, one default AR, AR accounts carry routing);
+      pure engine `src/domain/revenue-cycle/engine.ts` with a fixed condition vocabulary; the 12
+      defaults + GL routing in `defaults.ts`, proven identical to the original RevCycle IQ engine on
+      5,000 generated lines; defaults seeded (audited) with every synthetic practice and loadable
+      (audited, admin only) for practices without rules; read-only Rules and ledger page (admin, manager,
+      compliance; hidden from specialists).
+- [ ] B2 · [ ] B3 · [ ] B4 · [ ] B5
+
+Finding from the port (⚠️ VERIFY with the owner): in the original order, rule 9 (Medicare/Medicaid
+PPS wrap) matches every class rule 11 (Capitation) lists, so Capitation never fires. Ported as is;
+the Rules page says so.
 
 ## Security notes
 - Uploads: CSV only, size-capped, parsed in memory, never written to disk or object storage;

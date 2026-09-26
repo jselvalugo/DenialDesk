@@ -343,6 +343,95 @@ export const denialNotes = pgTable(
 );
 
 // ---------------------------------------------------------------------------------------------
+// Revenue cycle accounting (docs/specs/revenue-cycle-accounting.md). Practice accounting
+// configuration: sites, payer classes, GL accounts, and business rules. Not PHI; still tenant data.
+// ---------------------------------------------------------------------------------------------
+
+export const glKindEnum = pgEnum("gl_account_kind", ["cash", "ar", "revenue", "adjustment"]);
+
+/** Accounting site / cost center, optionally tied to a DenialDesk location. */
+export const rcmSites = pgTable(
+  "rcm_sites",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    locationId: uuid("location_id").references(() => locations.id),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("rcm_sites_tenant_code_key").on(t.tenantId, t.code)],
+);
+
+export const glAccounts = pgTable(
+  "gl_accounts",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    number: text("number").notNull(),
+    name: text("name").notNull(),
+    kind: glKindEnum("kind").notNull(),
+    /** For AR accounts: where revenue and contractual adjustments post by default. */
+    revenueGl: text("revenue_gl"),
+    adjustmentGl: text("adjustment_gl"),
+    /** The AR account used when no rule or payer class says otherwise (one per practice). */
+    isDefaultAr: boolean("is_default_ar").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("gl_accounts_tenant_number_key").on(t.tenantId, t.number),
+    uniqueIndex("gl_accounts_one_default_ar")
+      .on(t.tenantId)
+      .where(sql`is_default_ar`),
+  ],
+);
+
+/** Practice-management payer class (e.g. MCR), optionally linked to a DenialDesk payer. */
+export const payerClasses = pgTable(
+  "payer_classes",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    payerId: uuid("payer_id").references(() => payers.id),
+    /** AR account override for this class; null = the practice's default AR account. */
+    arGl: text("ar_gl"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("payer_classes_tenant_code_key").on(t.tenantId, t.code)],
+);
+
+export const businessRules = pgTable(
+  "business_rules",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    /** Lower runs first; the first matching active rule wins. */
+    priority: integer("priority").notNull(),
+    active: boolean("active").notNull().default(true),
+    /** Validated with `ruleMatchSchema` (src/domain/revenue-cycle/engine.ts) on read and write. */
+    match: jsonb("match").notNull(),
+    /** Contractual adjustment in basis points (0–10000). */
+    contraBps: integer("contra_bps").notNull(),
+    excluded: boolean("excluded").notNull().default(false),
+    arGl: text("ar_gl"),
+    revenueGl: text("revenue_gl"),
+    adjustmentGl: text("adjustment_gl"),
+    source: text("source").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("business_rules_tenant_code_key").on(t.tenantId, t.code),
+    uniqueIndex("business_rules_tenant_priority_key").on(t.tenantId, t.priority),
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------
 // Audit log (R-7.5.1): append-only, enforced by trigger and grants in drizzle/0002_security.sql
 // ---------------------------------------------------------------------------------------------
 
