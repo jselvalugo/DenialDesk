@@ -28,4 +28,24 @@ describe("parseFilters", () => {
     const result = parseFilters({ payerId: id });
     expect(result.payerId).toBe(id);
   });
+
+  it("rejects a date that doesn't exist (Feb 31) with a visible error", () => {
+    const result = parseFilters({ dateFrom: "2026-02-31", dateTo: "2026-03-01" });
+    expect(result.error).toMatch(/doesn't exist/i);
+  });
+
+  it("rejects a malformed end date with a visible error", () => {
+    const result = parseFilters({ dateFrom: "2026-01-01", dateTo: "not-a-date" });
+    expect(result.error).toMatch(/doesn't exist/i);
+  });
+
+  it("caps the range at 3 years", () => {
+    const result = parseFilters({ dateFrom: "2020-01-01", dateTo: "2026-01-01" });
+    expect(result.error).toMatch(/3 years/i);
+  });
+
+  it("accepts a range just under 3 years", () => {
+    const result = parseFilters({ dateFrom: "2023-09-27", dateTo: "2026-09-26" });
+    expect(result.error).toBeNull();
+  });
 });

@@ -1,5 +1,5 @@
-import { and, eq, exists, gte, inArray, lte, sql } from "drizzle-orm";
-import { todayIn } from "@rules/calendar";
+import { and, eq, exists, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { easternDayBoundsUtc, todayIn } from "@rules/calendar";
 import type { TenantTx } from "@/db/tenant";
 import { claims, denials, payers } from "@/db/schema";
 import { audit } from "@/lib/audit";
@@ -32,6 +32,7 @@ export async function recordReportViewed(
   actor: Actor,
   reportId: ReportId,
   filters: ReportFilters,
+  route: string,
 ) {
   await audit(tx, {
     action: "insight.report_viewed",
@@ -42,6 +43,8 @@ export async function recordReportViewed(
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo,
       payerId: filters.payerId ?? null,
+      route,
+      purpose: "operational_reporting",
     },
   });
 }
@@ -52,6 +55,7 @@ export async function recordReportExported(
   reportId: ReportId | "all",
   filters: ReportFilters,
   rowCount: number,
+  route: string,
 ) {
   await audit(tx, {
     action: "insight.report_exported",
@@ -64,6 +68,8 @@ export async function recordReportExported(
       payerId: filters.payerId ?? null,
       rowCount,
       format: "xlsx",
+      route,
+      purpose: "operational_reporting",
     },
   });
 }
@@ -110,16 +116,30 @@ export async function fetchDenialsByPayer(tx: TenantTx, filters: ReportFilters) 
   );
 }
 
-/** "Submitted" = not draft, with submittedAt (falling back to serviceDate) in range (spec #3). */
-function submittedDateExpr() {
-  return sql<string>`coalesce(${claims.submittedAt}::date, ${claims.serviceDate})`;
+/**
+ * "Submitted" = not draft, with submittedAt (falling back to serviceDate when not yet submitted)
+ * in the Eastern calendar-day range (spec #3, R-11 legal-clock time zone). Compares the bounds
+ * (converted to UTC instants once) against the raw `submittedAt` column — never `submittedAt::date`
+ * or another function wrapping the column — so a btree index on `(tenant_id, submitted_at)` can
+ * still range-scan it (sargable).
+ */
+function submittedInRange(filters: ReportFilters) {
+  const from = easternDayBoundsUtc(filters.dateFrom).start;
+  const toExclusive = easternDayBoundsUtc(filters.dateTo).endExclusive;
+  return or(
+    and(gte(claims.submittedAt, from), lt(claims.submittedAt, toExclusive)),
+    and(
+      isNull(claims.submittedAt),
+      gte(claims.serviceDate, filters.dateFrom),
+      lte(claims.serviceDate, filters.dateTo),
+    ),
+  );
 }
 
 export async function fetchDenialRate(tx: TenantTx, filters: ReportFilters) {
   const submittedWhere = and(
     sql`${claims.status} <> 'draft'`,
-    gte(submittedDateExpr(), filters.dateFrom),
-    lte(submittedDateExpr(), filters.dateTo),
+    submittedInRange(filters),
     filters.payerId ? eq(claims.payerId, filters.payerId) : undefined,
   );
   const [submittedRow] = await tx
@@ -132,11 +152,13 @@ export async function fetchDenialRate(tx: TenantTx, filters: ReportFilters) {
     .where(
       and(
         submittedWhere,
+        // The denial counts by its own noticeDate, which may fall after the claim's submission
+        // range boundary (spec #3) — never re-restricted to the date range here.
         exists(
           tx
             .select({ one: sql`1` })
             .from(denials)
-            .where(and(eq(denials.claimId, claims.id), noticeDateRange(filters))),
+            .where(eq(denials.claimId, claims.id)),
         ),
       ),
     );

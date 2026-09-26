@@ -1,6 +1,13 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
-import { buildReportWorkbook, sanitizeCellText, type SheetSpec, type WorkbookAbout } from "./workbook";
+import {
+  buildAllReportsWorkbook,
+  buildReportWorkbook,
+  sanitizeCellText,
+  uniqueSheetName,
+  type SheetSpec,
+  type WorkbookAbout,
+} from "./workbook";
 
 const about: WorkbookAbout = {
   reportName: "Denial summary by category and CARC",
@@ -97,5 +104,55 @@ describe("buildReportWorkbook", () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
     expect(workbook.worksheets[1]!.name.length).toBeLessThanOrEqual(31);
+  });
+
+  it("writes an emptyMessage instead of a blank data area when there are no rows", async () => {
+    const emptySheet: SheetSpec = {
+      ...sheet,
+      rows: [],
+      totals: undefined,
+      emptyMessage: "No decided appeals in this period",
+    };
+    const buffer = await buildReportWorkbook(about, [emptySheet]);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+    const dataSheet = workbook.getWorksheet("Denials by category")!;
+    expect(dataSheet.getCell(2, 1).value).toBe("No decided appeals in this period");
+  });
+});
+
+describe("uniqueSheetName", () => {
+  it("strips characters Excel forbids in a sheet name", () => {
+    const used = new Set<string>();
+    expect(uniqueSheetName("appeal-outcomes: Appeal outcomes", used)).not.toMatch(/[*?:\\/[\]]/);
+  });
+
+  it("resolves a collision after truncation to two distinct names", () => {
+    const used = new Set<string>();
+    // Both names share the same first 31 characters after their differing suffix is cut off.
+    const a = uniqueSheetName("Appeal outcomes by payer of the practice, long", used);
+    const b = uniqueSheetName("Appeal outcomes by category of the practice, long", used);
+    expect(a).not.toBe(b);
+    expect(a.length).toBeLessThanOrEqual(31);
+    expect(b.length).toBeLessThanOrEqual(31);
+  });
+
+  it("never produces the same name twice across many collisions", () => {
+    const used = new Set<string>();
+    const names = Array.from({ length: 15 }, (_, i) => uniqueSheetName(`Report ${i}`.padEnd(40, "x"), used));
+    expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+describe("buildAllReportsWorkbook", () => {
+  it("builds a workbook with a unique sheet per report plus About", async () => {
+    const sheetA: SheetSpec = { ...sheet, name: "appeal-outcomes - Appeal outcomes by payer" };
+    const sheetB: SheetSpec = { ...sheet, name: "appeal-outcomes - Appeal outcomes by category" };
+    const buffer = await buildAllReportsWorkbook(about, [sheetA, sheetB]);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+    const names = workbook.worksheets.map((w) => w.name);
+    expect(names[0]).toBe("About");
+    expect(new Set(names).size).toBe(names.length);
   });
 });

@@ -1,8 +1,9 @@
-import { todayIn, addCalendarDays } from "@rules/calendar";
+import { addCalendarDays, daysBetween, isValidIsoDate, todayIn } from "@rules/calendar";
 import { z } from "zod";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID = z.uuid();
+const MAX_RANGE_DAYS = 366 * 3; // 3 years, generous for a leap year in the middle.
 
 export interface ParsedFilters {
   dateFrom: string;
@@ -16,9 +17,15 @@ export function defaultDateRange(today = todayIn()): { dateFrom: string; dateTo:
   return { dateFrom: addCalendarDays(today, -90), dateTo: today };
 }
 
+function isRealDate(value: string | null | undefined): value is string {
+  return !!value && ISO_DATE.test(value) && isValidIsoDate(value);
+}
+
 /**
- * Parses non-PHI query params (report id, ISO date range, payer UUID — R-7.4.8). An end date
- * before the start date is a validation error, not a query error.
+ * Parses non-PHI query params (report id, ISO date range, payer UUID — R-7.4.8). A malformed or
+ * non-existent date (e.g. "2026-02-31"), an end date before the start date, and a range over 3
+ * years are all validation errors, surfaced to the person, never a query error or a silent
+ * fallback to the default range.
  */
 export function parseFilters(input: {
   dateFrom?: string | null;
@@ -26,12 +33,34 @@ export function parseFilters(input: {
   payerId?: string | null;
 }): ParsedFilters {
   const defaults = defaultDateRange();
-  const dateFrom = input.dateFrom && ISO_DATE.test(input.dateFrom) ? input.dateFrom : defaults.dateFrom;
-  const dateTo = input.dateTo && ISO_DATE.test(input.dateTo) ? input.dateTo : defaults.dateTo;
   const payerParse = input.payerId ? UUID.safeParse(input.payerId) : undefined;
   const payerId = payerParse?.success ? payerParse.data : null;
+
+  if (input.dateFrom != null && input.dateFrom !== "" && !isRealDate(input.dateFrom)) {
+    return {
+      dateFrom: defaults.dateFrom,
+      dateTo: defaults.dateTo,
+      payerId,
+      error: "That start date doesn't exist.",
+    };
+  }
+  if (input.dateTo != null && input.dateTo !== "" && !isRealDate(input.dateTo)) {
+    return {
+      dateFrom: defaults.dateFrom,
+      dateTo: defaults.dateTo,
+      payerId,
+      error: "That end date doesn't exist.",
+    };
+  }
+
+  const dateFrom = isRealDate(input.dateFrom) ? input.dateFrom : defaults.dateFrom;
+  const dateTo = isRealDate(input.dateTo) ? input.dateTo : defaults.dateTo;
+
   if (dateTo < dateFrom) {
     return { dateFrom, dateTo, payerId, error: "The end date must be on or after the start date." };
+  }
+  if (daysBetween(dateFrom, dateTo) > MAX_RANGE_DAYS) {
+    return { dateFrom, dateTo, payerId, error: "The date range cannot be more than 3 years." };
   }
   return { dateFrom, dateTo, payerId, error: null };
 }

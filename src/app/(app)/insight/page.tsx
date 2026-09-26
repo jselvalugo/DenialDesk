@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { canExportInsight } from "@/auth/permissions";
+import { notFound } from "next/navigation";
+import { canExportInsight, canViewInsight } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +16,7 @@ export default async function InsightPage() {
   // Every role can view the report list (owner decision 2026-09-26); each report page enforces
   // its own access, and the export button is gated separately.
   const auth = await requireAuth();
+  if (!canViewInsight(auth.role)) notFound();
   const { dateFrom, dateTo } = defaultDateRange();
   return (
     <div className="flex flex-col gap-4">

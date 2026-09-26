@@ -5,10 +5,12 @@ import { withTenant } from "@/db/tenant";
 import { parseFilters } from "@/domain/insight/filters";
 import { recordReportExported } from "@/domain/insight/queries";
 import { buildAllReportsWorkbookFor } from "@/domain/insight/report";
+import { isSameOrigin } from "@/lib/same-origin";
 
 const XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 export async function POST(request: Request) {
+  if (!isSameOrigin(request)) return new NextResponse("Forbidden", { status: 403 });
   const auth = await requireAuth();
   if (!canExportInsight(auth.role)) return new NextResponse("Forbidden", { status: 403 });
 
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
       practiceName: auth.tenantName,
       userId: auth.userId,
     });
-    await recordReportExported(tx, auth, "all", filters, result.rowCount);
+    await recordReportExported(tx, auth, "all", filters, result.rowCount, "/insight/export-all");
     return result;
   });
 

@@ -35,6 +35,8 @@ export interface SheetSpec {
   rows: Record<string, string | number | null>[];
   /** Values for the totals row, keyed by column key; omitted keys are left blank. */
   totals?: Record<string, string | number | null>;
+  /** Shown instead of an empty data area (e.g. "No decided appeals in this period"). */
+  emptyMessage?: string;
 }
 
 export interface WorkbookAbout {
@@ -106,10 +108,17 @@ function addAboutSheet(workbook: ExcelJS.Workbook, about: WorkbookAbout) {
     sheet.getCell(row, 1).alignment = { wrapText: true };
     row += 1;
   }
+  row += 1;
+  sheet.getCell(row, 1).value = sanitizeCellText(
+    "Contains confidential practice data; handle per your practice's policy.",
+  );
+  sheet.getCell(row, 1).font = { italic: true };
+  sheet.mergeCells(row, 1, row, 2);
+  sheet.getCell(row, 1).alignment = { wrapText: true };
 }
 
-function addDataSheet(workbook: ExcelJS.Workbook, spec: SheetSpec) {
-  const sheet = workbook.addWorksheet(spec.name.slice(0, 31)); // Excel sheet-name limit.
+function addDataSheet(workbook: ExcelJS.Workbook, spec: SheetSpec, sheetName: string) {
+  const sheet = workbook.addWorksheet(sheetName);
   sheet.columns = spec.columns.map((c) => ({ header: c.header, key: c.key, width: c.width ?? 18 }));
   const headerRow = sheet.getRow(1);
   headerRow.font = { bold: true };
@@ -117,6 +126,14 @@ function addDataSheet(workbook: ExcelJS.Workbook, spec: SheetSpec) {
     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8ECF1" } };
   });
   sheet.views = [{ state: "frozen", ySplit: 1 }];
+
+  if (spec.rows.length === 0 && spec.emptyMessage) {
+    const cell = sheet.getCell(2, 1);
+    cell.value = sanitizeCellText(spec.emptyMessage);
+    cell.font = { italic: true };
+    sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: spec.columns.length } };
+    return;
+  }
 
   for (const row of spec.rows) {
     const values: Record<string, string | number | Date | null> = {};
@@ -150,13 +167,37 @@ function addDataSheet(workbook: ExcelJS.Workbook, spec: SheetSpec) {
   };
 }
 
+/**
+ * A unique, Excel-legal (<=31 char) sheet name for `name`, avoiding any name already in `used`.
+ * Truncating independently derived names can produce identical prefixes (e.g. two "Appeal
+ * outcomes by ..." sheets); this always resolves to a distinct name, numbering when it must.
+ */
+const SHEET_NAME_FORBIDDEN = /[*?:\\/[\]]/g;
+
+export function uniqueSheetName(name: string, used: Set<string>): string {
+  const base = name.replace(SHEET_NAME_FORBIDDEN, "-").slice(0, 31) || "Sheet";
+  if (!used.has(base)) {
+    used.add(base);
+    return base;
+  }
+  for (let n = 2; ; n++) {
+    const suffix = ` (${n})`;
+    const candidate = base.slice(0, 31 - suffix.length) + suffix;
+    if (!used.has(candidate)) {
+      used.add(candidate);
+      return candidate;
+    }
+  }
+}
+
 /** One workbook holding a single report's About sheet and its data sheet(s). */
 export async function buildReportWorkbook(about: WorkbookAbout, sheets: SheetSpec[]): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "DenialDesk";
   workbook.created = about.generatedAt;
   addAboutSheet(workbook, about);
-  for (const sheet of sheets) addDataSheet(workbook, sheet);
+  const used = new Set<string>(["About"]);
+  for (const sheet of sheets) addDataSheet(workbook, sheet, uniqueSheetName(sheet.name, used));
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 

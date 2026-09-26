@@ -55,7 +55,8 @@ R-7.4.8 (no PHI in URLs/logs).
 ## Goal
 A signed-in practice user with the right role can open `/insight`, see a list of STANDARD
 (fixed, pre-built) reports the practice can run today, run one with a date range and payer
-filter, see it as an on-screen aggregate table, and export it to CSV — all computed from data
+filter, see it as an on-screen aggregate table, and export it to a formatted Excel (.xlsx)
+workbook — all computed from data
 that already exists in `claims`, `denials`, `payers`, and the revenue-cycle tables. Insight
 becomes a real module (its "Reports" nav item flips from "planned" to a working page). Building
 a *custom* report (user-chosen columns/grouping) is a later slice and is explicitly out of scope
@@ -71,7 +72,8 @@ here.
   not a replacement for the queue).
 - As an RCM manager, I can see claims by status and an A/R aging summary, so I know how much is
   outstanding and how old it is.
-- As a compliance officer or RCM manager, I can export any standard report to CSV for a board
+- As a compliance officer or RCM manager, I can export any standard report to a formatted Excel
+  workbook for a board
   packet or an OIR complaint, and that export is audited.
 - As a practice administrator, I can see which reports are "available now" vs. "planned" (data
   not captured yet), so I know what to expect from the product today.
@@ -92,7 +94,7 @@ carried as **non-PHI query params** (report id, ISO date range, payer UUID) or a
 never a patient name, MRN, or free-text search term in the URL (R-7.4.8). Because these are
 tenant-scoped aggregate reports (not a patient search), GET with non-PHI query params is
 acceptable per the existing pattern used by `/claims` and `/denials` list filters; POST is used
-only for CSV export to keep filter state out of browser history/analytics for the export action.
+only for the Excel export to keep filter state out of browser history/analytics for the export action.
 
 ### 1. Denial summary by category and CARC
 - **Purpose:** where denial dollars and volume concentrate, by root cause.
@@ -339,8 +341,10 @@ here), `denials`, `payers`. New indexes to support the filters/grouping without 
 
 New audit actions in `src/lib/audit.ts`'s `AuditAction` union: `insight.report_viewed`,
 `insight.report_exported`. Metadata fields: `reportId`, `dateFrom`, `dateTo`, `payerId` (nullable),
-and for exports `rowCount`. No patient, claim, or denial IDs in metadata (these are aggregate
-reports; if a future drill-down slice adds row-level IDs, it must also add
+`route` (the page or API route the event came from, e.g. `/insight/denial-rate` or
+`/insight/denial-rate/export`), `purpose` (fixed value `"operational_reporting"`), and for exports
+`format` (`"xlsx"`) and `rowCount`. No patient, claim, or denial IDs in metadata (these are
+aggregate reports; if a future drill-down slice adds row-level IDs, it must also add
 `patient.*_viewed`-style handling and reassess minimum-necessary access, R-5.1.2).
 
 Data classification (REQUIREMENTS §9.1): the report *queries* touch Restricted PHI tables
@@ -351,7 +355,7 @@ Confidential (not Restricted-Sensitive) for the rendered/exported output.
 New route surface (exact paths are a builder decision within this spec's intent):
 - `GET /insight` — report list.
 - `GET /insight/<report-id>` — report view with filters as non-PHI query params.
-- `POST /insight/<report-id>/export` — CSV export, filters in body.
+- `POST /insight/<report-id>/export` — Excel (.xlsx) export, filters in body.
 
 ## Legal rules used
 

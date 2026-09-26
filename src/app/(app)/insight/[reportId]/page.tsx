@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { canExportInsight } from "@/auth/permissions";
+import { canExportInsight, canViewInsight } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -34,7 +34,9 @@ function formatCell(type: ColumnType, value: string | number | null): string {
 
 function ReportTable({ sheet }: { sheet: SheetSpec }) {
   if (sheet.rows.length === 0) {
-    return (
+    return sheet.emptyMessage ? (
+      <EmptyState title={sheet.emptyMessage} description="No rows match the current filters." />
+    ) : (
       <EmptyState title="No data for this range" description="Try a wider date range or a different payer." />
     );
   }
@@ -88,6 +90,7 @@ export default async function ReportPage({
   if (!isAvailableReportId(reportId)) notFound();
   const entry = catalogEntry(reportId)!;
   const auth = await requireAuth();
+  if (!canViewInsight(auth.role)) notFound();
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const filters = parseFilters({
@@ -99,7 +102,7 @@ export default async function ReportPage({
   const { sheets, payers } = await withTenant(auth, async (tx) => {
     const payers = await listPayers(tx);
     if (filters.error) return { sheets: [] as SheetSpec[], payers };
-    await recordReportViewed(tx, auth, reportId, filters);
+    await recordReportViewed(tx, auth, reportId, filters, `/insight/${reportId}`);
     const { sheets } = await runReport(tx, reportId, filters);
     return { sheets, payers };
   });

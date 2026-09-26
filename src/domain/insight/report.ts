@@ -121,26 +121,37 @@ export async function buildAllReportsWorkbookFor(
   ctx: WorkbookContext,
 ): Promise<{ buffer: Buffer; filename: string; rowCount: number }> {
   const availableIds = REPORT_CATALOG.filter((r) => r.available).map((r) => r.id as ReportId);
-  const payerName = await payerNameFor(tx, filters.payerId);
   let rowCount = 0;
   const allSheets: SheetSpec[] = [];
   for (const id of availableIds) {
     const { sheets, rowCount: count } = await runReport(tx, id, filters);
     rowCount += count;
-    // Each sheet keeps a unique, identifiable name in the combined workbook (Excel requires uniqueness).
+    // Each sheet's name is prefixed with its report id so it's identifiable in the combined
+    // workbook; `buildAllReportsWorkbook` (via `uniqueSheetName`) guarantees uniqueness even after
+    // Excel's 31-character truncation, which two similarly-named sheets (e.g. appeal outcomes' two
+    // sheets) could otherwise collide on.
     for (const sheet of sheets) {
-      const name = sheets.length > 1 ? `${id}-${sheet.name}` : id;
-      allSheets.push({ ...sheet, name: name.slice(0, 31) });
+      allSheets.push({ ...sheet, name: sheets.length > 1 ? `${id} - ${sheet.name}` : id });
     }
   }
+  // The combined workbook covers reports with different payer-filter behavior (e.g. denials-by-payer
+  // ignores it entirely), so its own About sheet never claims a single payer filter applies to all of
+  // them — each report's own sheet states its own filters via its data caveats where relevant.
   const about: WorkbookAbout = {
     reportName: "All Insight reports",
     practiceName: ctx.practiceName,
-    filtersApplied: filtersDescription(filters, payerName, true),
+    filtersApplied: filtersDescription(filters, null, false),
     generatedAt: new Date(),
     generatedByUserId: ctx.userId,
     definitions: availableIds.flatMap((id) => METRIC_DEFINITIONS[id]),
-    caveats: availableIds.flatMap((id) => DATA_CAVEATS[id]),
+    caveats: [
+      ...(filters.payerId
+        ? [
+            "The payer filter was applied where each report supports one; denials-by-payer always shows every payer.",
+          ]
+        : []),
+      ...availableIds.flatMap((id) => DATA_CAVEATS[id]),
+    ],
   };
   const buffer = await buildAllReportsWorkbook(about, allSheets);
   return { buffer, filename: filenameFor("all-reports", filters.dateFrom, filters.dateTo), rowCount };

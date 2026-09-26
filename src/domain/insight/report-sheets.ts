@@ -74,21 +74,24 @@ export function denialsByPayerSheet(groups: PayerGroup[]): SheetSpec {
   };
 }
 
+/**
+ * One row of typed metrics (never text-formatted numbers), so both the on-screen table and the
+ * workbook render the rate as a real percentage (e.g. 25.00%), not the string "0.25". With a zero
+ * denominator, the sheet is empty with a message instead of a row of blanks.
+ */
 export function denialRateSheet(result: DenialRateResult): SheetSpec {
+  const columns: SheetSpec["columns"] = [
+    { header: "Claims submitted in range", key: "submitted", type: "number", width: 24 },
+    { header: "Claims with a denial (by notice date)", key: "denied", type: "number", width: 30 },
+    { header: "Denial rate", key: "rate", type: "percent", width: 16 },
+  ];
+  if (result.submittedClaims === 0) {
+    return { name: "Denial rate", columns, rows: [], emptyMessage: "No claims submitted in this period" };
+  }
   return {
     name: "Denial rate",
-    columns: [
-      { header: "Metric", key: "metric", type: "text", width: 32 },
-      { header: "Value", key: "value", type: "text", width: 20 },
-    ],
-    rows: [
-      { metric: "Claims submitted in range", value: result.submittedClaims },
-      { metric: "Claims with a denial (by notice date)", value: result.deniedClaims },
-      {
-        metric: "Denial rate",
-        value: result.rate === null ? "No claims submitted in this period" : result.rate,
-      },
-    ],
+    columns,
+    rows: [{ submitted: result.submittedClaims, denied: result.deniedClaims, rate: result.rate }],
   };
 }
 
@@ -171,8 +174,14 @@ export function appealOutcomesSheets(byPayer: OutcomeGroup[], byCategory: Outcom
     { header: "Overturn rate", key: "overturnRate", type: "percent", width: 16 },
     { header: "Denied amount reversed ($)", key: "reversedCents", type: "currency", width: 24 },
   ];
+  const NO_DECIDED_APPEALS = "No decided appeals in this period";
   return [
-    { name: "Appeal outcomes by payer", columns, rows: outcomeRows(byPayer) },
+    {
+      name: "Appeal outcomes by payer",
+      columns,
+      rows: outcomeRows(byPayer),
+      emptyMessage: NO_DECIDED_APPEALS,
+    },
     {
       name: "Appeal outcomes by category",
       columns,
@@ -180,6 +189,7 @@ export function appealOutcomesSheets(byPayer: OutcomeGroup[], byCategory: Outcom
         ...r,
         group: CATEGORY_LABELS[r.group as never] ?? r.group,
       })),
+      emptyMessage: NO_DECIDED_APPEALS,
     },
   ];
 }
