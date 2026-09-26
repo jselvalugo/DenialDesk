@@ -7,12 +7,14 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 // The real field allow-list still runs (a rejected field would throw and break every console
 // request), only the write to stderr is replaced.
 vi.mock("@/lib/log", async () => {
-  const { buildLogRecord } = await vi.importActual<typeof import("@/lib/log")>("@/lib/log");
+  const actual = await vi.importActual<typeof import("@/lib/log")>("@/lib/log");
+  const { buildLogRecord } = actual;
   const capture = (level: "debug" | "info" | "warn" | "error") =>
     vi.fn((event: string, fields?: Record<string, string | number | boolean>) => {
       buildLogRecord(level, event, fields);
     });
   return {
+    ...actual,
     log: { debug: capture("debug"), info: capture("info"), warn: capture("warn"), error: capture("error") },
   };
 });

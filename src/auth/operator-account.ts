@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { systemDb } from "@/db/client";
+import { isUniqueViolation } from "@/db/errors";
 import { auditEvents, memberships, operatorCredentials, sessions, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { isProduction, onNetlify } from "@/lib/env";
@@ -312,10 +313,7 @@ export async function syncOperatorAccount(trigger: SyncTrigger): Promise<SyncRes
     })
     .catch((error: unknown) => {
       // A concurrent request applied the same configuration first (unique email or fingerprint).
-      const code =
-        (error as { cause?: { code?: string }; code?: string })?.cause?.code ??
-        (error as { code?: string })?.code;
-      if (code === "23505") return "current";
+      if (isUniqueViolation(error)) return "current";
       throw error;
     });
 }

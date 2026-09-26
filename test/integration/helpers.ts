@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { systemDb } from "@/db/client";
+import { DatabaseError } from "@/db/errors";
 import { memberships, tenants, users } from "@/db/schema";
 
 /** Creates an isolated synthetic tenant with one admin user. */
@@ -21,15 +22,15 @@ export async function createTestTenant(label = "Test") {
   return { tenantId: tenant!.id, userId: user!.id };
 }
 
-/** Asserts a query fails with a database error matching `pattern` (Drizzle wraps it in `cause`). */
+/** Asserts a query fails with a sanitized database error whose message matches `pattern`. */
 export async function expectDbError(promise: Promise<unknown>, pattern: RegExp): Promise<void> {
   try {
     await promise;
   } catch (error) {
-    // withTenant errors are already sanitized; system queries still carry Drizzle's wrapper.
-    const messages = [(error as Error).message, ((error as Error).cause as Error | undefined)?.message ?? ""];
-    if (messages.some((message) => pattern.test(message))) return;
-    throw new Error(`Expected database error matching ${pattern}, got: ${messages.join(" | ")}`);
+    // Every query error is a DatabaseError without a cause (src/db/errors.ts).
+    const message = (error as Error).message;
+    if (error instanceof DatabaseError && pattern.test(message)) return;
+    throw new Error(`Expected database error matching ${pattern}, got: ${(error as Error).name}: ${message}`);
   }
   throw new Error(`Expected database error matching ${pattern}, but the query succeeded`);
 }
