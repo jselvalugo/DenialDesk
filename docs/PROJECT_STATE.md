@@ -114,6 +114,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Shell differentiated from any vendor's product; no third-party design IP; competitor names out of product copy and public docs | ADR 0005 |
 | 2026-09-26 | Every DB error sanitized where Drizzle creates it (system and tenant); kept messages opt-in (owner: fix both in PR #28) | ADR 0006 |
 | 2026-09-26 | Custom field values on records (settings S2) are in the Phase 1 MVP; sensitivity checkboxes hidden from the patient form (owner, 2026-09-26; R-3.5.1 tagging gap accepted, compliance sign-off pending) | `specs/settings-and-custom-fields.md` |
+| 2026-09-26 | Owner answers on the billing-structure review's open questions (§8) — **pending counsel confirmation; not yet implemented in rule logic**: (1) timely filing counts from the submission date, evidenced by the clearinghouse acknowledgement (not the payer's receipt date); (2) a deadline landing on a weekend or Florida/federal holiday rolls to the next business day; (4) Medicare Advantage is not under Florida prompt pay per the owner — MA payment timing follows the plan contract (⚠️ VERIFY: 42 CFR § 422.520 sets a 30-day clean-claim rule for non-contracted providers; counsel to confirm this doesn't reintroduce a statutory clock); (5) late-payment interest starts accruing the first calendar day after the prompt-pay deadline passes. Item (3), month-end clamping of the 6-/12-month timely-filing windows, is still open and being researched separately. | `docs/reviews/2026-09-26-billing-structure-review.md` §8 |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -131,13 +132,15 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): ADR 0007 and threat model accepted; PR 1
-   (encrypted storage, value history, role-gated reveal) in review on branch
-   `claude/custom-field-values-storage`. Next: PR 2 patient form, PR 3 claims/denials, PR 4 payers.
+   (encrypted storage, value history, role-gated reveal) merged as #53. Next: PR 2 patient form,
+   PR 3 claims/denials, PR 4 payers.
 7. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
+- Month-end clamping of the 6- and 12-month timely-filing windows (billing-structure review §3.4,
+  §8 item 3): being researched separately; not yet decided.
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
