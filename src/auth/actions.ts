@@ -10,7 +10,15 @@ import { limitCurrentRequest, retryMessage, type Bucket, type RateLimitResult } 
 import { decryptField } from "@/lib/crypto/field";
 import { decoyHash, hashPassword, passwordProblem, verifyPassword } from "./password";
 import { LOCKOUT_MS, MAX_FAILED_ATTEMPTS } from "./policy";
-import { clientIp, completeMfa, createSession, endSession, getSession, touchSession } from "./session";
+import {
+  clientIp,
+  completeMfa,
+  createSession,
+  endSession,
+  getSession,
+  revokeSession,
+  touchSession,
+} from "./session";
 import { verifyTotp } from "./totp";
 import { ensureDemoPractice } from "./demo";
 import { demoLoginEnabled } from "@/lib/env";
@@ -71,6 +79,26 @@ async function recordFailure(userId: string, action: "auth.login_failed" | "auth
   });
 }
 
+/**
+ * Ends the browser's current session, if any, before a new one replaces it (e.g. the owner signing
+ * in from a browser that explored the demo). Runs only after a correct password, so a wrong one
+ * never ends the existing session. Audited so every session has a recorded end.
+ */
+async function replacePreviousSession(actorUserId: string): Promise<void> {
+  const previous = await getSession();
+  if (!previous) return;
+  await revokeSession(previous.sessionId);
+  await auditSystem({
+    action: "auth.session_replaced",
+    actorUserId,
+    tenantId: previous.tenantId,
+    entityType: "session",
+    entityId: previous.sessionId,
+    ipAddress: await clientIp(),
+    metadata: { previousUserId: previous.userId, previousAuthMethod: previous.authMethod },
+  });
+}
+
 const loginSchema = z.object({
   email: z.email().max(254),
   password: z.string().min(1).max(128),
@@ -115,6 +143,7 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
     return { error: "This practice's access is suspended. Contact DenialDesk support." };
   }
 
+  await replacePreviousSession(user.id);
   await createSession(user.id);
   redirect(
     user.mustChangePassword ? "/login/password" : user.mfaEnrolledAt ? "/login/mfa" : "/login/mfa/setup",
@@ -224,6 +253,7 @@ export async function signInDemo(): Promise<FormState> {
   const limited = await limitCurrentRequest("demo_login");
   if (!limited.allowed) return rateLimited("demo_login", "demo sessions", limited);
   const { tenantId, userId } = await ensureDemoPractice();
+  await replacePreviousSession(userId);
   await createSession(userId, { authMethod: "demo", tenantId });
   await auditSystem({
     action: "auth.demo_login",

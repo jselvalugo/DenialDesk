@@ -56,7 +56,11 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
 - "Explore the demo practice" signs visitors into a shared synthetic demo practice, created on
   first use. Reset it any time from `/operator` → *Reset demo with sample data* or *Reset demo empty* (setup only, no claims/denials/files); the old one is archived.
 - `/operator` is visible only to `PLATFORM_OPERATOR_EMAIL` after password + two-step sign-in.
-  Everyone else gets a 404.
+  Signed-out visitors and demo sessions are sent to sign-in; other practice users get a 404.
+- Can't get in? Sign in at `/login` as `SEED_ADMIN_EMAIL` (it must equal `PLATFORM_OPERATOR_EMAIL`),
+  then use *Platform console* in the sidebar. Forgotten password, lockout, or lost authenticator:
+  call the seed endpoint again (with `{"resetMfa": true}` for a lost authenticator) to repair the account.
+  Pre-production only: production access recovery follows the approved access-management procedure.
 
 ## Checks after each deploy
 - `https://denialdesk.netlify.app/api/health` returns `{"status":"ok","appEnv":"preview","db":"up"}`.

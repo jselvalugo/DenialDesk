@@ -97,8 +97,13 @@ export async function completeMfa(sessionId: string): Promise<void> {
   await setCookie(token);
 }
 
-export async function endSession(sessionId: string): Promise<void> {
+/** Revokes a session without touching the cookie (for when a new session replaces it). */
+export async function revokeSession(sessionId: string): Promise<void> {
   await systemDb().update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, sessionId));
+}
+
+export async function endSession(sessionId: string): Promise<void> {
+  await revokeSession(sessionId);
   (await cookies()).delete(SESSION_COOKIE);
 }
 
