@@ -108,18 +108,18 @@ patients,revenue-cycle,synthetic}/**`, `src/db/seed.ts`, every page under `src/a
 
 | # | Where | What happens | Should | Fix |
 |---|---|---|---|---|
-| C1 | `src/domain/claims/correction.ts:28-33` | `dollarsToCents` strips every comma before validating: `"12,50"` → 125000 cents ($1,250.00); `"1,2,3.00"` → 12300 | Reject malformed grouping like `parseMoney` in `monthly-file.ts:82` does (tested at `monthly-file.test.ts:47`) | Reuse the strict grouping regex; add tests |
-| C2 | `src/app/(app)/revenue-cycle/statements/page.tsx:52,111-114`; `src/lib/format.ts` | Deductions are negated for display; months with zero adjustments become −0 and render as `-$0.00` | `$0.00` | Normalise −0 in `formatCents`; add a test |
-| C3 | `src/app/(app)/denials/page.tsx:227-231` | "Appeal filed on time" shows whenever `appealSubmittedOn` is set and `appealDeadline` is null. The demo hits this: ERISA payers have `appealWindowDays: null` (`generator.ts:124,140`) and the seed stamps an appeal date on submitted/overturned/upheld denials (`seed.ts:158-160`) | Never state a legal conclusion without a deadline (`specs/denial-queue.md` "never guessing") | Show "Appeal filed · no deadline configured"; test it |
-| C4 | `src/app/(app)/denials/[id]/page.tsx:309-311` with `rules/deadlines.ts:101-107` | Every prompt-pay milestone (20-day pay/contest, 90-day pay/deny, 120-day uncontestable) is compared with the denial notice date. A contest or request for information (e.g. CARC 16 + N290, CARC 252 + N706 in the generator) satisfies only the 20-day obligation under § 627.6131(4)(b)–(e); the 90/120-day clocks keep running and the provider's 35-day response clock starts | Day 20 met by any response; days 90/120 met only by payment or denial; "uncontestable" flagged when day 120 (140 paper) passes without pay or deny (R-3.1.4) | Classify each notice (payment / denial / contest) from CARC+RARC with a cited mapping; start `fl.promptpay.electronic.provider_response` from a contest; add boundary tests |
+| F1 | `src/domain/claims/correction.ts:28-33` | `dollarsToCents` strips every comma before validating: `"12,50"` → 125000 cents ($1,250.00); `"1,2,3.00"` → 12300 | Reject malformed grouping like `parseMoney` in `monthly-file.ts:82` does (tested at `monthly-file.test.ts:47`) | Reuse the strict grouping regex; add tests |
+| F2 | `src/app/(app)/revenue-cycle/statements/page.tsx:52,111-114`; `src/lib/format.ts` | Deductions are negated for display; months with zero adjustments become −0 and render as `-$0.00` | `$0.00` | Normalise −0 in `formatCents`; add a test |
+| F3 | `src/app/(app)/denials/page.tsx:227-231` | "Appeal filed on time" shows whenever `appealSubmittedOn` is set and `appealDeadline` is null. The demo hits this: ERISA payers have `appealWindowDays: null` (`generator.ts:124,140`) and the seed stamps an appeal date on submitted/overturned/upheld denials (`seed.ts:158-160`) | Never state a legal conclusion without a deadline (`specs/denial-queue.md` "never guessing") | Show "Appeal filed · no deadline configured"; test it |
+| F4 | `src/app/(app)/denials/[id]/page.tsx:309-311` with `rules/deadlines.ts:101-107` | Every prompt-pay milestone (20-day pay/contest, 90-day pay/deny, 120-day uncontestable) is compared with the denial notice date. A contest or request for information (e.g. CARC 16 + N290, CARC 252 + N706 in the generator) satisfies only the 20-day obligation under § 627.6131(4)(b)–(e) as summarised in REQUIREMENTS §3.1 (35 and 140 days are ⚠️ VERIFY there); the 90/120-day clocks keep running and the provider's 35-day response clock starts. Which CARC/RARC combinations count as a contest has no cited source yet | Day 20 met by any response; days 90/120 met only by payment or denial; "uncontestable" flagged when day 120 (140 paper) passes without pay or deny (R-3.1.4) | Classify each notice (payment / denial / contest) from CARC+RARC with a cited mapping; start `fl.promptpay.electronic.provider_response` from a contest; add boundary tests |
 
 Also confirmed by tracing (no repro needed):
 
 | # | Where | What happens |
 |---|---|---|
-| C5 | `denials/[id]/actions.ts:50-53` + `denials/page.tsx:227` | Moving a denial appeal_submitted → in_review keeps `appealSubmittedOn`. The "Past deadline" tile (ACTION_STATUSES) then counts it while its row says "Appeal filed on time"; re-submitting later keeps the *original* date, so a late refiling shows as on time |
-| C6 | `src/app/(app)/revenue-cycle/ar-aging/page.tsx:79,133-142` | The "Undeposited payments / Unposted deposits" tile reads `reconciliation.at(-1)`, the latest month, while the page header says "at the end of {selected month}" |
-| C7 | `src/app/(app)/denials/[id]/page.tsx:288` | The payer-contract explanation prints the payer's *current* `appealWindowDays`/`appealWindowSource` next to a deadline stored once at seed time. Once payer setup ships, editing the window makes the text contradict the date; a cleared window renders "null days" |
+| F5 | `denials/[id]/actions.ts:50-53` + `denials/page.tsx:227` | Moving a denial appeal_submitted → in_review keeps `appealSubmittedOn`. The "Past deadline" tile (ACTION_STATUSES) then counts it while its row says "Appeal filed on time"; re-submitting later keeps the *original* date, so a late refiling shows as on time |
+| F6 | `src/app/(app)/revenue-cycle/ar-aging/page.tsx:79,133-142` | The "Undeposited payments / Unposted deposits" tile reads `reconciliation.at(-1)`, the latest month, while the page header says "at the end of {selected month}" |
+| F7 | `src/app/(app)/denials/[id]/page.tsx:288` | The payer-contract explanation prints the payer's *current* `appealWindowDays`/`appealWindowSource` next to a deadline stored once at seed time. Once payer setup ships, editing the window makes the text contradict the date; a cleared window renders "null days" |
 
 ### 3.2 Likely bugs and design gaps
 
@@ -140,7 +140,8 @@ Also confirmed by tracing (no repro needed):
 
 Calendar math (UTC midnights, Eastern "today", DST-safe); `daysUntil` sign; Medicare appeal =
 notice + 5 + 120; rule version resolved by the right anchor date; prompt pay excluded for
-Medicare, MA and ERISA; "due in 7 days" = today..today+7 and matches `deadlineTone`; queue and
+Medicare, MA and ERISA (REQUIREMENTS §1.3 names Medicare and self-funded ERISA; the MA exclusion
+is a code assumption for counsel, §8); "due in 7 days" = today..today+7 and matches `deadlineTone`; queue and
 claims counts use the same WHERE as their tables; "filed after deadline" (`>`) and "on time"
 (`<=`) consistent between list and detail; filing-state boundaries (tomorrow / today / yesterday);
 version numbering under a row lock; patient chart totals use `OPEN_STATUSES` like the queue's
@@ -154,8 +155,8 @@ billed = Σ lines, 0 < denied ≤ billed, notice ≥ receipt, receipt ≤ asOf, 
 ### 3.4 Correct but untested at the boundaries (Definition of Done requires them)
 
 - Month-end and leap-year timely filing (verified by hand: 2026-08-29/30/31 + 6 months all →
-  2027-02-28; 2027-08-31 + 6 → 2028-02-29; 2028-02-29 + 12 → 2029-02-28). Clamping is the
-  conservative choice but is undocumented in the spec and untested.
+  2027-02-28; 2027-08-31 + 6 → 2028-02-29; 2028-02-29 + 12 → 2029-02-28). Clamping to the last day of the target month is a legal reading
+  that counsel has not confirmed (§8); it is undocumented in the spec and untested.
 - Electronic 90-day and all three paper milestones (40/120/140): only the dates are asserted, no
   day-before/of/after (`rules/deadlines.test.ts:42-45`).
 - Payer-contract appeal deadline (used for FL insurer, FL HMO, MA): no boundary test.
@@ -198,6 +199,10 @@ comments and display thresholds).
 | Medicare redetermination 120 d (+5-day receipt presumption) | encoded | queue and detail |
 | Medicare reconsideration 180 d, ALJ 60 d, Council 60 d, court 60 d (R-4.2.1) | **Missing** | – |
 | Medicare amount-in-controversy thresholds | **Missing**; no value in REQUIREMENTS | – |
+
+All values above are copied from REQUIREMENTS, not confirmed law. The ones REQUIREMENTS marks
+⚠️ VERIFY (35 days, paper 120/140 days, 6 months, 40-day overpayment response, 30-month look-back,
+12 % interest, 1-year retroactive denial) stay ⚠️ VERIFY when encoded (R-15.6).
 
 ### 4.2 Model gaps
 
@@ -279,7 +284,7 @@ comments and display thresholds).
   line `role` hidden; no drill-down to file lines; other versions (superseded) not shown; no
   audit history; the page view is not audited.
 - **A/R aging**: no drill-down from any cell, credit row or roll-forward month to lines; no link
-  to the month's file (`selected.fileId` is available); undeposited tile bug (C6).
+  to the month's file (`selected.fileId` is available); undeposited tile bug (F6).
 - **Deposits**: no deposit-file detail; individual deposits never listed; a reversal doesn't
   link the file it reverses; Status column mixes badges with an action form.
 - **Dashboard / statements**: tiles and rows are not links; "last month" wording means the latest
@@ -348,17 +353,23 @@ so the accounting half and the claims half describe the same money.
   name, and a label dictionary for shared columns.
 - Every record type in the schema gets a list and a detail page, and every reference on a page is
   a link: payers, providers, locations, team, GL accounts, payer classes, rules, sites, deposit
-  files and deposits, audit log.
+  files and deposits, audit log. Each new page or reveal is role-gated (R-5.1.2): a member-ID
+  reveal always requires a reason and an audit event; the audit viewer is limited to compliance
+  and admin roles (R-7.5.4); a sessions page never shows tokens.
 
 ## 7. Recommended order of work
 
-**P0 — fix now (small, no spec change):** C1 comma charges; C2 −0; C3 "filed on time" with no
-deadline; C5 clear/re-stamp the appeal date on status change and sort awaiting-action first (D1);
-C6 undeposited tile; denial → claim link; over-90 share and threshold in one place (D7); missing
-boundary tests in §3.4 (rules first).
+**P0 — fix now (small, no spec change):** F1 comma charges; F2 −0; F3 "filed on time" with no
+deadline; F5 re-stamp the appeal date on status change, keeping the previous value in the audit
+event (R-7.5.1, R-3.10.3), and sort awaiting-action first (D1); F6 undeposited tile; denial →
+claim link; over-90 share and threshold in one place (D7); audit the record IDs shown on the
+monthly-file detail and files list (PM lines hold patient names, so views are PHI reads, R-7.5.1);
+missing boundary tests in §3.4 (rules first).
 
-**P1 — legal correctness (florida-rules-engine, spec update):** C4 notice classification and
-uncontestable flag; add the missing catalog rules from §4.1 with REQUIREMENTS values and ⚠️ VERIFY;
+**P1 — legal correctness and minimum necessary (florida-rules-engine, spec update):** F4 notice
+classification and uncontestable flag; show the member ID of the *claim's* payer on the denial
+page, or hide the reveal when the claim's payer is not the patient's primary payer (R-5.1.2, §2.1
+item 6); add the missing catalog rules from §4.1 with REQUIREMENTS values and ⚠️ VERIFY;
 split HMO rules; add anchor / day-count / confirmation fields to the rule type; regime check
 before lookup; decide and document roll-forward and month-end clamping; wire `locations.time_zone`.
 
@@ -369,28 +380,35 @@ machine as records; coverage records; audit viewer (R-7.5.4).
 **P3 — close the lifecycle (edi-x12-specialist):** C2 CSV charge import, C3 837P + filing
 block, C4 999/277CA → `claim_submissions`; 835 → `remittances` → paid amounts, denial capture,
 credit balances; ERA-to-deposit reassociation linking the two halves of the product.
+Prerequisites: an ADR and threat model for the clearinghouse path, a signed subcontractor BAA with
+U.S.-only processing (R-2.2, R-5.5.2, R-3.3), and field-level encryption for bank data in 835
+remittances (BPR account and routing numbers, CLAUDE.md #6).
 
-**P4 — appeals, prompt pay, reporting:** `appeals` records with Medicare levels; prompt-pay
-alerts, interest worksheet, demand letter; overpayment and refund clocks; denial rate,
+**P4 — appeals, prompt pay, reporting:** `appeals` records with Medicare levels, with a named
+user's recorded approval before any letter or corrected claim goes to a payer (R-7.11.2,
+R-3.10.2); prompt-pay alerts, interest worksheet, demand letter; overpayment and refund clocks; denial rate,
 clean-claim, first-pass, scorecard, underpayment variance from the new records.
 
 ## 8. Decisions for the owner
 
-1. Sent-vs-received for timely filing (D2) and weekend/holiday roll-forward (§4.2) go to counsel
-   before C3; until then the claim page should use neutral wording.
+1. Sent-vs-received for timely filing (D2), weekend/holiday roll-forward (§4.2), month-end
+   clamping of the 6- and 12-month windows (§3.4), and whether Medicare Advantage is outside
+   Florida prompt pay (§3.3) go to counsel before C3; until then the claim page should use neutral
+   wording.
 2. Net collection rate definition (D6): keep the management view, or add an adjustment-type
    column and compute the standard rate.
 3. Link the accounting module to claims (patient account number on the patient record and a
    claim reference on PM lines), or keep it as a separate reporting product.
 4. Enforce state machines and money invariants in the database (as vouchers do) before the
    Azure cutover.
+5. Clearinghouse vendor and subcontractor BAA before P3 (R-2.2, R-5.5.2).
 
 ## Evidence
 
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check`: clean.
 - `pnpm test`: 29 files, 283 tests passed. `pnpm test:integration` (Postgres 16, 18 migrations):
   15 files, 200 tests passed.
-- Repros for C1 and C2 run with a throwaway vitest file (removed): `dollarsToCents("12,50")` =
+- Repros for F1 and F2 run with a throwaway vitest file (removed): `dollarsToCents("12,50")` =
   125000; `formatCents(-0)` = `-$0.00`.
 - Review lanes: process coverage, calculated fields, legal clocks (florida-rules-engine, read-only),
   pages and records. Findings were cross-checked against the code before inclusion.
