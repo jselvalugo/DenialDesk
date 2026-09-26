@@ -88,7 +88,7 @@ Design: ADR `docs/decisions/0007-custom-field-value-storage.md`. Threat model:
 Ship as small PRs in this order: **PR 1** crypto AAD + table + domain; **PR 2** patients UI;
 **PR 3** claims and denials; **PR 4** payers.
 
-### Data model: `drizzle/0026_custom_field_values.sql` (values and value history in one migration; 0025 is the payer catalog) (+ `src/db/schema` entry)
+### Data model: `drizzle/0027_custom_field_values.sql` (values and value history in one migration) (+ `src/db/schema` entry)
 `custom_field_values`: `id uuid pk`, `tenant_id uuid not null -> tenants`, `field_id uuid not null
 -> custom_fields`, `patient_id`, `claim_id`, `denial_id`, `payer_id` (nullable FKs), `value_enc text`
 (NULL = cleared), `created_by`, `updated_by -> users`, `created_at`, `updated_at`.

@@ -39,3 +39,18 @@ export function canTagSensitivity(role: Role): boolean {
 export function canConfigureSettings(role: Role): boolean {
   return role === "admin";
 }
+
+/** Loading and posting remittances (835): the people who bill (compliance reviews, R-5.1.2). */
+export function canPostRemittances(role: Role): boolean {
+  return role === "admin" || role === "manager" || role === "specialist";
+}
+
+/** Voiding a remittance loaded in error: administrators and managers. */
+export function canVoidRemittances(role: Role): boolean {
+  return role === "admin" || role === "manager";
+}
+
+/** Recording payer contests on a prompt-pay clock: the people who bill (R-5.1.2). */
+export function canRecordPromptPay(role: Role): boolean {
+  return role === "admin" || role === "manager" || role === "specialist";
+}

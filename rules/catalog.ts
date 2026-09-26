@@ -107,7 +107,8 @@ export const catalog: Rule[] = [
     effectiveFrom: null,
     effectiveTo: null,
     verify: true,
-    verifyNote: "REQUIREMENTS §3.1: verify current rate and accrual start.",
+    verifyNote:
+      "REQUIREMENTS §3.1: verify current rate and accrual start. Accrual start assumed = payment due date (pay-or-contest, or pay-or-deny once contested); confirm with counsel.",
   },
   // Timely filing (provider obligations)
   {

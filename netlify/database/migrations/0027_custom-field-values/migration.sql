@@ -1,4 +1,4 @@
--- Generated from drizzle/0026_custom_field_values.sql by `pnpm netlify:migrations`. Do not edit.
+-- Generated from drizzle/0027_custom_field_values.sql by `pnpm netlify:migrations`. Do not edit.
 CREATE TABLE "custom_field_values" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
