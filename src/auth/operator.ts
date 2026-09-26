@@ -19,7 +19,7 @@ export interface OperatorContext {
 }
 
 /**
- * For the platform console. Reads only the operator session (its own cookie), so practice and demo
+ * For the platform console. Reads only the operator session (its own cookie), so practice
  * sessions in the same browser neither grant access nor get in the way. Anyone without a verified
  * operator session is sent to /operator/login. A session whose account stopped qualifying (console
  * no longer configured, email changed, or it gained a practice membership) is ended, audited.

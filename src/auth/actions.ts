@@ -30,14 +30,12 @@ import {
   revokeSession,
   touchSession,
 } from "./session";
-import { ensureDemoPractice } from "./demo";
-import { demoLoginEnabled } from "@/lib/env";
 
 export type { FormState };
 
 /**
- * Ends the browser's current session, if any, before a new one replaces it (e.g. the owner signing
- * in from a browser that explored the demo). Runs only after a correct password, so a wrong one
+ * Ends the browser's current session, if any, before a new one replaces it (e.g. someone else's
+ * half-finished sign-in on a shared computer). Runs only after a correct password, so a wrong one
  * never ends the existing session. Audited so every session has a recorded end.
  */
 async function replacePreviousSession(actorUserId: string): Promise<void> {
@@ -187,29 +185,10 @@ export async function signOut(): Promise<void> {
 /** "Stay signed in" from the session-timeout warning. */
 export async function keepSessionAlive(): Promise<boolean> {
   const session = await getSession();
-  if (!session?.mfaVerified) return false;
+  // A leftover demo session (the demo was removed) is never extended.
+  if (!session?.mfaVerified || session.authMethod === "demo") return false;
   await touchSession(session.sessionId);
   return true;
-}
-
-/**
- * One-click demo sign-in (non-production only, DEMO_LOGIN_ENABLED=true). The only path that skips
- * MFA, and it can only reach the synthetic demo practice.
- */
-export async function signInDemo(): Promise<FormState> {
-  if (!demoLoginEnabled()) return { error: "The demo isn't available here." };
-  const limited = await limitCurrentRequest("demo_login");
-  if (!limited.allowed) return rateLimited("demo_login", "demo sessions", limited);
-  const { tenantId, userId } = await ensureDemoPractice();
-  await replacePreviousSession(userId);
-  await createSession(userId, { authMethod: "demo", tenantId });
-  await auditSystem({
-    action: "auth.demo_login",
-    actorUserId: userId,
-    tenantId,
-    ipAddress: await clientIp(),
-  });
-  redirect("/");
 }
 
 const newPasswordSchema = z.object({ password: z.string().max(128), confirm: z.string().max(128) });

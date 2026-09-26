@@ -9,10 +9,9 @@ import { requestContext } from "./request-context";
  * Counters live in PostgreSQL so limits hold across serverless instances. Security policy,
  * not legal rules.
  */
-export type Bucket = "demo_login" | "sign_in" | "mfa" | "seed";
+export type Bucket = "sign_in" | "mfa" | "seed";
 
 const POLICY: Record<Bucket, { limit: number; windowSeconds: number; env?: string }> = {
-  demo_login: { limit: 10, windowSeconds: 10 * 60, env: "RATE_LIMIT_DEMO" },
   sign_in: { limit: 30, windowSeconds: 15 * 60, env: "RATE_LIMIT_SIGNIN" },
   mfa: { limit: 30, windowSeconds: 15 * 60, env: "RATE_LIMIT_MFA" },
   seed: { limit: 5, windowSeconds: 60 * 60 },

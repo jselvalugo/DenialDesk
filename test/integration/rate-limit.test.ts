@@ -9,35 +9,34 @@ afterAll(() => closeDatabase());
 const now = new Date("2026-09-26T10:00:30Z");
 
 describe("rate limiter", () => {
-  it("allows up to the limit and blocks the next attempt (demo: 10 per 10 minutes)", async () => {
+  it("allows up to the limit and blocks the next attempt (sign-in: 30 per 15 minutes)", async () => {
     const ip = `203.0.113.${Math.floor(Math.random() * 250)}-${randomUUID()}`;
-    const { limit } = limitFor("demo_login");
-    expect(limit).toBe(10);
-    for (let i = 1; i <= limit; i++)
-      expect((await hit("demo_login", ip, now)).allowed, `hit ${i}`).toBe(true);
-    const blocked = await hit("demo_login", ip, now);
+    const { limit } = limitFor("sign_in");
+    expect(limit).toBe(30);
+    for (let i = 1; i <= limit; i++) expect((await hit("sign_in", ip, now)).allowed, `hit ${i}`).toBe(true);
+    const blocked = await hit("sign_in", ip, now);
     expect(blocked.allowed).toBe(false);
-    expect(blocked.retryAfterSeconds).toBe(570); // window ends at 10:10:00
+    expect(blocked.retryAfterSeconds).toBe(870); // window ends at 10:15:00
   });
 
   it("starts fresh in the next window", async () => {
     const ip = randomUUID();
-    for (let i = 0; i < 11; i++) await hit("demo_login", ip, now);
-    expect((await hit("demo_login", ip, new Date("2026-09-26T10:10:00Z"))).allowed).toBe(true);
+    for (let i = 0; i < 31; i++) await hit("sign_in", ip, now);
+    expect((await hit("sign_in", ip, new Date("2026-09-26T10:15:00Z"))).allowed).toBe(true);
   });
 
   it("keeps networks and buckets separate", async () => {
     const a = randomUUID();
     const b = randomUUID();
-    for (let i = 0; i < 11; i++) await hit("demo_login", a, now);
-    expect((await hit("demo_login", b, now)).allowed).toBe(true);
-    expect((await hit("sign_in", a, now)).allowed).toBe(true);
+    for (let i = 0; i < 31; i++) await hit("sign_in", a, now);
+    expect((await hit("sign_in", b, now)).allowed).toBe(true);
+    expect((await hit("mfa", a, now)).allowed).toBe(true);
   });
 
   it("counts atomically under concurrent hits", async () => {
     const ip = randomUUID();
-    const results = await Promise.all(Array.from({ length: 25 }, () => hit("demo_login", ip, now)));
-    expect(results.filter((r) => r.allowed)).toHaveLength(10);
+    const results = await Promise.all(Array.from({ length: 45 }, () => hit("sign_in", ip, now)));
+    expect(results.filter((r) => r.allowed)).toHaveLength(30);
   });
 
   it("stores hashed keys, never raw IPs", async () => {
@@ -59,8 +58,8 @@ describe("rate limiter", () => {
   });
 
   it("explains when to try again", () => {
-    expect(retryMessage("demo sessions", { allowed: false, retryAfterSeconds: 570 })).toBe(
-      "Too many demo sessions from your network. Try again in 10 minutes.",
+    expect(retryMessage("verification attempts", { allowed: false, retryAfterSeconds: 570 })).toBe(
+      "Too many verification attempts from your network. Try again in 10 minutes.",
     );
     expect(retryMessage("sign-in attempts", { allowed: false, retryAfterSeconds: 20 })).toBe(
       "Too many sign-in attempts from your network. Try again in 1 minute.",

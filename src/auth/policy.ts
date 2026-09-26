@@ -11,5 +11,5 @@ export const SESSION_TOUCH_MS = 60 * 1000;
 export const MAX_FAILED_ATTEMPTS = 5;
 export const LOCKOUT_MS = 15 * 60 * 1000;
 export const SESSION_COOKIE = "__Host-dd_session";
-/** The platform console's own session cookie, separate from practice and demo sessions. */
+/** The platform console's own session cookie, separate from practice sessions. */
 export const OPERATOR_SESSION_COOKIE = "__Host-dd_operator";

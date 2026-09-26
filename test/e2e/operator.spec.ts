@@ -6,45 +6,33 @@ import { systemDb } from "@/db/client";
 import { auditEvents, users } from "@/db/schema";
 import { e2eUser, freshCode, signInOperator, signInWithPassword } from "./support";
 
-test.describe("demo login", () => {
-  test("one click opens the demo practice without MFA", async ({ page }) => {
+test.describe("sign-in", () => {
+  test("there is no demo practice: sign-in offers only the practice account form", async ({ page }) => {
     await page.goto("/login");
-    await page.getByRole("button", { name: "Explore the demo practice" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
-    await expect(page.getByText("Sunrise Coast Medical Group (demo)")).toBeVisible();
-    await expect(page.getByText(/Demo practice · shared/)).toBeVisible();
-    await expect(page.getByRole("note", { name: "Demo practice notice" })).toContainText(
-      "Never enter real patient information",
-    );
-    await page.goto("/denials");
-    await expect(page.getByRole("table").getByRole("row")).not.toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Explore the demo practice" })).toHaveCount(0);
   });
 
-  test("a practice sign-in from a demo session ends the demo session, audited", async ({ page, browser }) => {
+  test("a sign-in ends a half-finished sign-in in the same browser, audited", async ({ page, browser }) => {
     test.setTimeout(60_000); // may wait up to 30 s for a TOTP step the setup sign-in didn't use
     const startedAt = new Date(Date.now() - 1000);
-    await page.goto("/login");
-    await page.getByRole("button", { name: "Explore the demo practice" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
-    await page.getByRole("button", { name: /, switch module$/ }).click();
-    await expect(page.getByRole("dialog", { name: "Go to" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Platform console" })).toHaveCount(0);
+    // One person enters a password and walks away before two-step verification.
+    await signInWithPassword(page, e2eUser("viewer"));
+    await expect(page.getByRole("heading", { name: "Two-step verification" })).toBeVisible();
+    const abandoned = (await page.context().cookies()).find((c) => c.name === SESSION_COOKIE)!;
 
-    // The sign-in page doesn't bounce a demo session back to the demo.
-    await page.goto("/login");
-    await expect(page.getByRole("status")).toContainText("Signing in ends the demo session");
-    await expect(page.getByRole("button", { name: "Explore the demo practice" })).toHaveCount(0);
-    const demoCookie = (await page.context().cookies()).find((c) => c.name === SESSION_COOKIE)!;
+    // Someone else signs in on the same browser.
     const worker = e2eUser("worker");
     await signInWithPassword(page, worker);
     await page.getByLabel("6-digit code").fill(await freshCode(worker.totpSecret!, new Set([currentStep()])));
     await page.getByRole("button", { name: "Verify" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
 
+    // The abandoned session no longer works anywhere, and its end is audited.
     const replay = await browser.newContext();
-    await replay.addCookies([demoCookie]);
+    await replay.addCookies([abandoned]);
     const replayPage = await replay.newPage();
-    await replayPage.goto("/");
+    await replayPage.goto("/login/mfa");
     await expect(replayPage).toHaveURL(/\/login$/);
     await replay.close();
     const [workerRow] = await systemDb().select().from(users).where(eq(users.email, worker.email));
@@ -59,7 +47,7 @@ test.describe("demo login", () => {
         ),
       );
     expect(replaced).toHaveLength(1);
-    expect(replaced[0]!.metadata).toMatchObject({ previousAuthMethod: "demo" });
+    expect(replaced[0]!.metadata).toMatchObject({ previousAuthMethod: "password_mfa" });
   });
 });
 
@@ -104,11 +92,14 @@ test.describe("operator console access", () => {
   });
 });
 
-test.describe("operator and demo sessions side by side", () => {
-  test("the operator signs in while a demo session in the same browser keeps working", async ({ page }) => {
+test.describe("operator and practice sessions side by side", () => {
+  test.use({ storageState: "test/e2e/.auth/worker.json" });
+
+  test("the operator signs in while a practice session in the same browser keeps working", async ({
+    page,
+  }) => {
     test.setTimeout(60_000); // may wait up to 30 s for a TOTP step the setup sign-in didn't use
-    await page.goto("/login");
-    await page.getByRole("button", { name: "Explore the demo practice" }).click();
+    await page.goto("/");
     await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
 
     await page.goto("/operator");
@@ -117,15 +108,15 @@ test.describe("operator and demo sessions side by side", () => {
     const names = (await page.context().cookies()).map((c) => c.name);
     expect(names).toEqual(expect.arrayContaining([SESSION_COOKIE, OPERATOR_SESSION_COOKIE]));
 
-    // The demo session is untouched, and the console has no link into a practice.
+    // The practice session is untouched, and signing out of the console leaves it alone.
     await page.goto("/");
-    await expect(page.getByText(/Demo practice · shared/)).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
     await page.goto("/operator");
     await expect(page.getByRole("heading", { level: 1, name: "Practices" })).toBeVisible();
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/operator\/login$/);
     await page.goto("/");
-    await expect(page.getByText(/Demo practice · shared/)).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   });
 });
 

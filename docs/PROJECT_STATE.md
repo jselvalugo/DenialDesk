@@ -20,8 +20,6 @@ _Last updated: 2026-09-26_
   register/edit with primary coverage (encrypted member ID), admin-only sensitivity tags, and a
   patient chart linking claims and denials; claim and denial pages link back. "Patients" is in the
   module switcher as its own module. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
-- Operator console can reset the demo with sample data or empty (setup only) to test features
-  from a clean slate.
 - Practice sign-in page shows the owner's DenialDesk reception image in a matted frame beside the
   card (`specs/sign-in-and-sessions.md`); the operator sign-in has no image.
 - Whole-product review (2026-09-26, `docs/reviews/2026-09-26-billing-structure-review.md`): the
@@ -30,8 +28,8 @@ _Last updated: 2026-09-26_
   calculation/display bugs (comma charges, `-$0.00`, "filed on time" with no deadline, prompt-pay
   "Met" on any notice), missing catalog rules, and a page-by-page record-model gap list with a
   prioritized order of work (P0–P4). Next session should start with its P0 list.
-- Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
-  login and a platform operator console (`/operator`) for the owner, with its own sign-in at
+- Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). A platform operator
+  console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
   The operator account exists only from hosting configuration (`PLATFORM_OPERATOR_PASSWORD_HASH`,
   made with `pnpm operator:credential`); no page can create or reset it (owner rebaseline 2026-09-26).
@@ -41,13 +39,18 @@ _Last updated: 2026-09-26_
   export), Suspend for security, Terminate → offboarding (export, legal hold, certified destruction),
   BAA-on-file gate in production (later the same day the owner chose
   to keep that manual for now: the console flags a missing BAA and the owner decides;
-  `specs/practice-agreements.md`). Demo stays on pre-production only.
+  `specs/practice-agreements.md`).
 - Operator console: each customer practice has a page (`/operator/practices/<id>`) where the
   operator records the signed Business Associate Agreement (PDF, dates, signers) and downloads
   it; renewals supersede, older ones can be back-filled as historical, mistakes are marked
   "recorded in error" with a reason; nothing is deleted; the practices list shows BAA status
   (`specs/practice-agreements.md`). Practices are still created by the operator only (owner
   decision 2026-09-26: no self-service sign-up; a BAA must be signed before a practice exists).
+- The one-click demo practice was removed entirely (owner request, 2026-09-26); migration 0021
+  archived any live demo practice and ended demo sessions; 0022 disabled demo-only accounts and
+  audited each retired demo practice (`system.demo_retired`). Practices are created from the console.
+- Open item (owner decision): retention of the archived demo practices (synthetic). Proposed: keep
+  them until the Terminate → offboarding flow exists, then terminate them through it.
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
 - Open item (human decision): single-administrator risk acceptance with compensating controls
@@ -92,7 +95,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
 6. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
-   disclosures export (R-5.1.1), sensitivity-tag enforcement. Reset the demo after P1 deploys so
+   disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
