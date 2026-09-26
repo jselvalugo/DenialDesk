@@ -1,6 +1,6 @@
 # ADR 0002: Host on Microsoft Azure, U.S. regions only
 
-Status: proposed — human confirms the regions below
+Status: proposed — primary region leaning East US 2 (2026-09-26); confirm at landing-zone build
 
 ## Context
 We handle PHI for Florida practices. We need a HIPAA-eligible cloud under a BAA (R-7.1.1),
@@ -15,7 +15,8 @@ complies; we default to U.S.-only.
 - **Cloud:** Microsoft Azure, under the Microsoft HIPAA BAA (included in the Product Terms /
   DPA). Only services Microsoft lists as in scope for HIPAA may hold PHI. ⚠️ VERIFY each
   service against Microsoft's current HIPAA/HITRUST scope list before first use.
-- **Regions (proposed):** primary **East US 2** (Virginia), DR **Central US** (Iowa). These are
+- **Regions:** primary **East US 2** (Virginia) — the team's likely choice, to be confirmed
+  before the Azure landing-zone roadmap item is built. DR **Central US** (Iowa), proposed. These are
   an Azure region pair, so geo-redundant storage replicates within the U.S. Alternative:
   South Central US (Texas) + North Central US if we want primary closer to Florida.
 - **Guardrail:** Azure Policy "Allowed locations" assigned at the management-group root,
