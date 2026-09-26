@@ -59,6 +59,21 @@ async function replacePreviousOperatorSession(actorUserId: string): Promise<void
   });
 }
 
+/** The fixed words a refused operator sign-in is logged with (docs/specs/operator-login.md). */
+export type RefusalStatus =
+  | "email_missing"
+  | "hash_missing"
+  | "hash_malformed"
+  | "hash_test"
+  | "retired"
+  | "refused"
+  | "unknown_email"
+  | "other_email"
+  | "disabled"
+  | "practice_account"
+  | "locked"
+  | "wrong_password";
+
 /**
  * Why a sign-in was refused, for the operator alone (the server log; visitors see only the generic
  * error). `status` is a fixed word, never the email tried or anything from the configuration, so
@@ -67,18 +82,18 @@ async function replacePreviousOperatorSession(actorUserId: string): Promise<void
 function refusalStatus(
   sync: SyncResult,
   user: { email: string; disabledAt: Date | null } | undefined,
-  isOperator: boolean,
-): string {
+): RefusalStatus {
   if (sync === "unconfigured") {
     const { email, passwordHash } = operatorConfigurationStatus();
     if (email === "missing") return "email_missing";
-    return passwordHash === "test_hash" ? "hash_test" : `hash_${passwordHash}`;
+    if (passwordHash === "malformed") return "hash_malformed";
+    if (passwordHash === "test_hash") return "hash_test";
+    return "hash_missing";
   }
-  if (sync !== "current" && sync !== "provisioned" && sync !== "rotated") return sync;
+  if (sync === "retired" || sync === "refused") return sync;
   if (!user) return "unknown_email";
   if (user.disabledAt) return "disabled";
-  if (!isOperatorEmail(user.email)) return "other_email";
-  return isOperator ? "unknown" : "practice_account";
+  return isOperatorEmail(user.email) ? "practice_account" : "other_email";
 }
 
 export async function signInOperator(_: FormState, formData: FormData): Promise<FormState> {
@@ -101,7 +116,7 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
   if (!user || !isOperator) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing
     await auditSystem({ action: "operator.login_failed", ipAddress: await clientIp() });
-    log.warn("operator.sign_in_refused", { status: refusalStatus(sync, user, isOperator) });
+    log.warn("operator.sign_in_refused", { status: refusalStatus(sync, user) });
     return { error: SIGN_IN_FAILED };
   }
   if (!(await reserveAttempt(user.id))) {

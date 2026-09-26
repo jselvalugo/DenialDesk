@@ -85,5 +85,10 @@ describe("GET /api/preview/operator-status", () => {
       .set({ lockedUntil: new Date(Date.now() + 60_000) })
       .where(eq(users.id, user!.id));
     expect(await (await GET(request(token))).json()).toMatchObject({ account: "current", locked: true });
+    await systemDb()
+      .update(users)
+      .set({ lockedUntil: new Date(Date.now() - 1_000) })
+      .where(eq(users.id, user!.id));
+    expect(await (await GET(request(token))).json()).toMatchObject({ account: "current", locked: false });
   });
 });

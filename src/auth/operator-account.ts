@@ -135,6 +135,9 @@ export type SyncResult = "current" | "provisioned" | "rotated" | "unconfigured" 
 export const usableSync = (result: SyncResult) =>
   result === "current" || result === "provisioned" || result === "rotated";
 
+/** What caused a sync: a sign-in attempt, a console request, or the pre-production status endpoint. */
+export type SyncTrigger = "sign_in" | "console_request" | "status_check";
+
 /**
  * Makes the operator account match infrastructure configuration (PLATFORM_OPERATOR_EMAIL and
  * PLATFORM_OPERATOR_PASSWORD_HASH). No page or endpoint can create or reset the operator: only
@@ -146,8 +149,6 @@ export const usableSync = (result: SyncResult) =>
  * configuration as the source (no user actor; the request IP is only what triggered the sync).
  * Cheap when nothing changed (one indexed lookup), so it runs on every console request and sign-in.
  */
-export type SyncTrigger = "sign_in" | "console_request" | "status_check";
-
 export async function syncOperatorAccount(trigger: SyncTrigger): Promise<SyncResult> {
   const email = operatorEmail();
   const hash = configuredOperatorHash();

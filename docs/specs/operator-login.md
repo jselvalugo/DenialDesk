@@ -77,8 +77,8 @@ Provisioning from infrastructure configuration (owner rebaseline, 2026-09-26)
       the same question in one request: `{ email: set|missing, passwordHash:
       usable|missing|malformed|test_hash, account: <sync result>, locked: true|false|null }`. It
       syncs the account from configuration exactly as a sign-in does, so it also provisions or
-      rotates. 404 in production, without the token or with a wrong one; rate limited like the seed
-      endpoint (5 per hour per network); `Cache-Control: no-store`. It never returns a value, only
+      rotates. 404 in production, without the token or with a wrong one; rate limited in the seed
+      endpoint's bucket (5 per hour per network, shared); `Cache-Control: no-store`. It never returns a value, only
       these words, so `SEED_TOKEN` still has no operator power.
 - [x] Production bootstrap and recovery are the same infrastructure step; production sign-in moves
       to Microsoft Entra ID with a hardware key (ROADMAP production gate).

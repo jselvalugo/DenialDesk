@@ -96,16 +96,24 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
      | `passwordHash` | `missing` | Same for `PLATFORM_OPERATOR_PASSWORD_HASH`. With "different value per deploy context", check the **Production** value: the live site uses that one. |
      | `passwordHash` | `malformed` | The value isn't the hash `pnpm operator:credential` prints (it must start with `scrypt$131072$8$1$`, about 127 characters, no spaces). Usually the password itself or a truncated paste; see above, choose a new password. |
      | `passwordHash` | `test_hash` | The public e2e test hash; make a real one. |
+     | `account` | `unconfigured` | See the `email` and `passwordHash` rows: one of them isn't usable. |
      | `account` | `refused` | The configured email already belongs to a practice user or a disabled account (e.g. a retired demo admin, or `SEED_ADMIN_EMAIL`). Use an address that has never been a practice user. |
      | `account` | `retired` | This deployment carries a hash that was already replaced (old deploy link or rollback). Open the current deploy, or set the current hash here. |
      | `account` | `current` / `provisioned` / `rotated` | Configuration is fine. Then it is the password typed, the email typed (must equal `PLATFORM_OPERATOR_EMAIL`, case doesn't matter), or the lockout below. |
      | `locked` | `true` | Too many wrong attempts: wait 15 minutes, or replace the hash (a rotation clears the lockout). |
-     The endpoint is 404 in production, without the token or with a wrong one, and allows 5 calls
-     per hour per network. It syncs the account from configuration exactly like a sign-in does.
-  2. The function log (*Logs → Functions → Next.js Server Handler*) shows one
-     `operator.sign_in_refused` line per refused attempt with `status` = `email_missing`,
-     `hash_missing`, `hash_malformed`, `hash_test`, `retired`, `refused`, `unknown_email`,
-     `other_email`, `disabled`, `practice_account`, `locked` or `wrong_password`, and nothing else.
+
+     The endpoint is 404 in production, without the token or with a wrong one. It shares the seed
+     endpoint's budget of 5 calls per hour per network, so a few status checks can delay a seed
+     call by up to an hour. It syncs the account from configuration exactly like a sign-in does.
+  2. The function log (_Logs → Functions → Next.js Server Handler_) shows one
+     `operator.sign_in_refused` line per refused attempt with a `status` and nothing else:
+     `email_missing`, `hash_missing`, `hash_malformed`, `hash_test`, `retired` and `refused` mean
+     the same as the table above; `unknown_email` (no account has the email typed) and
+     `other_email` (an account has it, but it isn't the operator's email) mean the email typed
+     isn't `PLATFORM_OPERATOR_EMAIL`; `disabled` (the account with the email typed is disabled) and
+     `practice_account` (the operator's account gained a practice membership) mean the account no
+     longer qualifies: use an address that has never been a practice user; `locked` and
+     `wrong_password` are what they say (the lockout clears after 15 minutes or with a rotation).
   Netlify notes: a value marked *secret* must include the **Functions** scope (the UI's default
   "All scopes" does); a value or scope change reaches running functions only after a redeploy
   (*Deploys → Trigger deploy*); the Netlify UI never alters `$` characters, but a shell would, so
