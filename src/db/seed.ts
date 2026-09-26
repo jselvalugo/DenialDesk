@@ -3,6 +3,7 @@ import { asc } from "drizzle-orm";
 import { addCalendarDays } from "@rules/calendar";
 import { appealDeadline } from "@rules/deadlines";
 import { hashPassword } from "@/auth/password";
+import { snapshotOf } from "@/domain/claims/correction";
 import { generateDataset, type SyntheticDataset } from "@/domain/synthetic/generator";
 import { importMonthlyFile } from "@/domain/revenue-cycle/imports";
 import { seedRevenueCycleDefaults } from "@/domain/revenue-cycle/setup";
@@ -12,6 +13,7 @@ import { systemDb } from "./client";
 import {
   claimLines,
   claims,
+  claimVersions,
   denials,
   locations,
   memberships,
@@ -110,10 +112,10 @@ export async function seedPractice(options: {
       serviceDate: c.serviceDate,
       diagnosisCodes: c.diagnosisCodes,
       billedCents: billed,
-      paidCents: billed - denied,
-      status: !c.denial ? "paid" : denied < billed ? "partially_paid" : "denied",
+      paidCents: c.unsubmitted ? 0 : billed - denied,
+      status: c.unsubmitted ?? (!c.denial ? "paid" : denied < billed ? "partially_paid" : "denied"),
       electronic: c.electronic,
-      submittedAt: new Date(`${c.serviceDate}T14:00:00Z`),
+      submittedAt: c.unsubmitted === "draft" ? null : new Date(`${c.serviceDate}T14:00:00Z`),
       payerReceivedDate: c.payerReceivedDate,
     });
     const lineIds = c.lines.map((line, lineIndex) => {
@@ -192,6 +194,29 @@ export async function seedPractice(options: {
       );
     await insertInChunks(claimRows, (chunk) => tx.insert(claims).values(chunk));
     await insertInChunks(lineRows, (chunk) => tx.insert(claimLines).values(chunk));
+    // Version 1 of every claim (R-3.10.3), recorded by the system.
+    const linesByClaim = new Map<string, typeof lineRows>();
+    for (const line of lineRows)
+      linesByClaim.set(line.claimId, [...(linesByClaim.get(line.claimId) ?? []), line]);
+    await insertInChunks(
+      claimRows.map((claim) => ({
+        tenantId,
+        claimId: claim.id!,
+        version: 1,
+        snapshot: snapshotOf(
+          { ...claim, status: claim.status },
+          (linesByClaim.get(claim.id!) ?? []).map((l) => ({
+            lineNumber: l.lineNumber,
+            procedureCode: l.procedureCode,
+            modifiers: l.modifiers ?? [],
+            units: l.units,
+            chargeCents: l.chargeCents,
+          })),
+        ),
+        reason: "Synthetic claim created",
+      })),
+      (chunk) => tx.insert(claimVersions).values(chunk),
+    );
     await insertInChunks(denialRows, (chunk) => tx.insert(denials).values(chunk));
     await seedRevenueCycleDefaults(tx, tenantId, userIds[0]!);
     if (withActivity) {

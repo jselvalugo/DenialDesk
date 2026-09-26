@@ -192,7 +192,10 @@ export interface SyntheticDataset {
     serviceDate: string;
     diagnosisCodes: string[];
     electronic: boolean;
-    payerReceivedDate: string;
+    /** Null until the payer acknowledges receipt (unsubmitted or rejected claims). */
+    payerReceivedDate: string | null;
+    /** Set for claims the payer has not accepted yet; others are adjudicated (paid or denied). */
+    unsubmitted?: "draft" | "rejected";
     lines: Array<{ procedureCode: string; units: number; chargeCents: number }>;
     denial: null | {
       groupCode: "CO" | "PR" | "OA";
@@ -212,6 +215,8 @@ export function generateDataset(options: {
   seed?: number;
   patients?: number;
   claims?: number;
+  /** Draft and rejected claims, spread across the timely-filing window. */
+  unsubmittedClaims?: number;
 }): SyntheticDataset {
   const random = createRandom(options.seed ?? 20260926);
   const { asOf } = options;
@@ -322,6 +327,30 @@ export function generateDataset(options: {
       payerReceivedDate: received,
       lines,
       denial,
+    });
+  }
+
+  // Unsubmitted claims at ages that straddle the 6- and 12-month filing windows, so the claims list
+  // shows every filing state. Generated after the adjudicated claims to keep their sequence stable.
+  const ages = [12, 45, 90, 140, 160, 172, 178, 183, 195, 240, 330, 380];
+  const unsubmittedCount = options.unsubmittedClaims ?? ages.length;
+  for (let i = 0; i < unsubmittedCount; i++) {
+    const payer = SYNTHETIC_PAYERS[i % SYNTHETIC_PAYERS.length]!;
+    const [procedureCode, charge] = random.pick(PROCEDURES);
+    claims.push({
+      key: `unsub${i}`,
+      claimNumber: `CLM-${SYNTHETIC_MARKER}-${String(20_000 + i)}`,
+      patientKey: random.pick(patients).key,
+      providerKey: random.pick(providers).key,
+      locationKey: random.pick(locations).key,
+      payerKey: payer.key,
+      serviceDate: addCalendarDays(asOf, -ages[i % ages.length]!),
+      diagnosisCodes: [random.pick(DIAGNOSES)],
+      electronic: true,
+      payerReceivedDate: null,
+      unsubmitted: i % 3 === 2 ? "rejected" : "draft",
+      lines: [{ procedureCode, units: 1, chargeCents: charge }],
+      denial: null,
     });
   }
 
