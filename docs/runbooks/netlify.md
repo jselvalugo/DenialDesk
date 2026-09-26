@@ -35,11 +35,17 @@ Site: https://denialdesk.netlify.app
 - **Manual:** from the repo root, run the command the Netlify connector's `deploy-site` returns
   (`npx @netlify/mcp … --site-id …`), which uploads the working tree and builds on Netlify.
 
-## Seeding the demo practice (once per database)
+## Seeding the demo practice, and recovering the admin account
 ```bash
 curl -X POST -H "Authorization: Bearer $SEED_TOKEN" https://denialdesk.netlify.app/api/preview/seed
-# {"status":"seeded"}  — or {"status":"exists"} if already done
+# first call: {"status":"seeded"}
+# later calls: {"status":"repaired"} — the SEED_ADMIN_EMAIL account's password is reset to
+# SEED_ADMIN_PASSWORD, its lockout cleared and its sessions ended. Add -d '{"resetMfa": true}'
+# (with -H "Content-Type: application/json") to clear two-step enrollment and set it up again.
 ```
+Refused (409) if that email belongs to a user of any other practice. Every repair is audited
+(`system.admin_repaired`). ⚠️ Anyone holding `SEED_TOKEN` can reset the admin's password and MFA
+in pre-production: treat it like the admin password and rotate it after use.
 With site password protection on, send the site password too (Netlify accepts it as HTTP basic
 auth), or seed before turning protection on. The endpoint returns 404 in production, without the
 token, or with a wrong token.

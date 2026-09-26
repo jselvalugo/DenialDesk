@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { seedDemoPractice } from "@/db/demo";
+import { SeedRefusedError, seedDemoPractice } from "@/db/demo";
 import { auditSystem } from "@/lib/audit";
 import { isProduction } from "@/lib/env";
 import { limitCurrentRequest } from "@/lib/rate-limit";
@@ -7,6 +7,7 @@ import { limitCurrentRequest } from "@/lib/rate-limit";
 // Pre-production only (ADR 0003): seeds the synthetic demo practice where the database is only
 // reachable from inside the platform (Netlify Database). Locked three ways: 404 in production,
 // a secret bearer token (SEED_TOKEN, ≥ 32 chars), and it only ever creates the demo practice once.
+// Calling it again repairs the seeded admin (password from env, lockout cleared, optional MFA reset).
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -35,7 +36,15 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const status = await seedDemoPractice({ email, password });
+  const body = (await request.json().catch(() => ({}))) as { resetMfa?: unknown };
+  let status: Awaited<ReturnType<typeof seedDemoPractice>>;
+  try {
+    status = await seedDemoPractice({ email, password }, { resetMfa: body.resetMfa === true });
+  } catch (error) {
+    if (error instanceof SeedRefusedError) return Response.json({ error: error.message }, { status: 409 });
+    throw error;
+  }
+  // Repairs are audited inside their own transaction (src/db/demo.ts).
   if (status === "seeded") await auditSystem({ action: "system.demo_seeded" });
   return Response.json({ status }, { headers: { "Cache-Control": "no-store" } });
 }
