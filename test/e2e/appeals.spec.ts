@@ -24,11 +24,16 @@ test.describe("appeal lifecycle", () => {
     await expect(page.getByText("REF-SYN-001")).toBeVisible();
 
     await expect(page.getByRole("heading", { name: "Record decision" })).toBeVisible();
-    await page.getByLabel("Outcome").selectOption("upheld");
+    await page.getByLabel("Outcome").selectOption("overturned_full");
+    // Regression guard: the recovered-amount field must reach the server under whatever name the
+    // form and the server action agree on (it was silently dropped once when they briefly diverged).
+    await page.getByLabel(/Recovered amount/).fill("42.50");
     await page.getByRole("button", { name: "Record decision" }).click();
     // The decision was recorded: the "Record decision" form (only shown pre-decision) is gone.
     await expect(page.getByRole("heading", { name: "Record decision" })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Decision", exact: true })).toBeVisible();
+    await expect(page.getByText("$42.50")).toBeVisible();
+    await expect(page.getByText("Overturned in full")).toBeVisible();
 
     const denialLink = page.getByRole("link", { name: "View the denial" });
     await denialLink.click();

@@ -1,13 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { addCalendarDays, todayIn } from "@rules/calendar";
 import { daysUntil } from "@rules/deadlines";
 import { closeDatabase } from "@/db/client";
 import { appeals, claims, denials, payers } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { withTenant, type TenantTx } from "@/db/tenant";
+import { recordSubmission } from "@/domain/appeals/actions";
 import { appealQueueSummary, getAppeal, listAppeals, openAppealsForDenial } from "@/domain/appeals/queries";
 import { DEFAULT_APPEAL_FOLLOW_UP_DAYS } from "@/domain/appeals/settings";
+import { submissionTimeliness } from "@/domain/appeals/status";
 import { generateDataset } from "@/domain/synthetic/generator";
 import { describeDaysRemaining } from "@/lib/deadline";
 
@@ -28,16 +30,21 @@ beforeAll(async () => {
 
 afterAll(() => closeDatabase());
 
-/** Finds an open, awaiting-action denial for a payer whose regime is verified (a computable deadline). */
+/**
+ * Any denial with a valid claim/payer join, for attaching a fresh test appeal to. Not filtered by
+ * status: earlier tests in this file may have moved some denials on from "new", and a denial can
+ * still be appealed (or re-appealed, in these tests) regardless of its current status.
+ */
 async function pickDenial(tx: TenantTx) {
   const [row] = await tx
     .select({ id: denials.id, deniedCents: denials.deniedCents, claimId: denials.claimId })
     .from(denials)
     .innerJoin(claims, eq(claims.id, denials.claimId))
     .innerJoin(payers, eq(payers.id, claims.payerId))
-    .where(eq(denials.status, "new"))
+    .orderBy(sql`random()`)
     .limit(1);
-  return row!;
+  if (!row) throw new Error("Seeded practice has no denials to attach a test appeal to.");
+  return row;
 }
 
 describe("appeal lifecycle", () => {
@@ -198,7 +205,7 @@ describe("appeal queue summary and boundaries", () => {
     expect(describeDaysRemaining(daysUntil(deadline, today))).toBe(label);
   });
 
-  it("a submission recorded on, before, and after the deadline is still accepted (A1: recorded and flagged, not blocked)", async () => {
+  it("recordSubmission on, before, and after the deadline all succeed (A1: recorded and flagged, not blocked)", async () => {
     for (const offset of [-1, 0, 1]) {
       const { appealId, deadline } = await withTenant(ctx, async (tx) => {
         const denial = await pickDenial(tx);
@@ -216,21 +223,19 @@ describe("appeal queue summary and boundaries", () => {
           .returning({ id: appeals.id });
         return { appealId: inserted!.id, deadline };
       });
-      await withTenant(ctx, (tx) =>
-        tx
-          .update(appeals)
-          .set({ status: "submitted", submittedMethod: "portal", submittedOn: today })
-          .where(eq(appeals.id, appealId)),
+
+      // Goes through the real recordSubmission domain logic (the same function the server action
+      // calls), not ad hoc SQL, so this boundary test exercises the actual on-time/late rule.
+      const result = await withTenant(ctx, (tx) =>
+        recordSubmission(tx, ctx, { appealId, method: "portal", submittedOn: today }),
       );
-      const [row] = await withTenant(ctx, (tx) =>
-        tx
-          .select({ status: appeals.status, submittedOn: appeals.submittedOn })
-          .from(appeals)
-          .where(eq(appeals.id, appealId)),
+      expect(result.ok).toBe(true);
+
+      const row = await withTenant(ctx, (tx) => getAppeal(tx, appealId));
+      expect(row?.appeal.status).toBe("submitted");
+      expect(submissionTimeliness(row!.appeal.submittedOn!, deadline)).toBe(
+        today <= deadline ? "on_time" : "late",
       );
-      expect(row?.status).toBe("submitted");
-      const onTime = row!.submittedOn! <= deadline;
-      expect(onTime).toBe(today <= deadline);
     }
   });
 });
