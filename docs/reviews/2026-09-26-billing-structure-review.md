@@ -11,7 +11,7 @@ refer to the tree above. Requirement IDs refer to `docs/REQUIREMENTS.md`.
 ## 1. Verdict
 
 **Baseline health is good.** Typecheck, lint and format are clean; 283 unit and 200 integration
-tests pass on a fresh Postgres 16 with all 18 migrations applied.
+tests pass on a fresh Postgres 16 with all 19 migrations (0000–0018) applied.
 
 **The billing process is not yet met.** Of the eight MVP steps in `docs/PRODUCT_BRIEF.md`, the
 product implements the *work denials* step (queue, detail, assignment, notes), the *claim history*
@@ -24,7 +24,7 @@ no providers, no locations and no payers and no screen to add them.
 
 **Calculated fields are mostly right where they exist.** The rules-engine arithmetic, queue totals,
 aging buckets, roll-forward, voucher checks and KPIs were traced and are correct at their
-boundaries. Four confirmed bugs, six likely bugs or design gaps, and a set of missing
+boundaries. Seven confirmed bugs (four reproduced, three traced), ten likely bugs or design gaps, and a set of missing
 day-before/day-of/day-after tests are listed in §3. Two legal-clock findings matter most: the
 prompt-pay panel reports "Met" on the 90- and 120-day pay-or-deny milestones for *any* denial
 notice, including contests, and the queue says "Appeal filed on time" for denials that have no
@@ -32,7 +32,7 @@ deadline at all.
 
 **The platform is only partly record-based.** Patients → claims → denials is the one chain of
 records that works end to end, and even it is broken in one direction (denial detail has no link
-to the claim). 12 of 24 schema tables have no list page and no detail page. There is no shared
+to the claim). 12 of the 24 application tables (`rate_limits` aside) have no list page and no detail page. There is no shared
 list component: every list builds its own filters, sort and pagination, in four styles. §5 lists
 the gaps per page and §6 sets out the target record model.
 
@@ -91,7 +91,8 @@ The MVP claim lifecycle (REQUIREMENTS §8.2) against what exists. "Records" mean
    prompt pay would be applied to that carrier's ERISA claims.
 5. **Money invariants live in application code only.** Nothing in the database enforces
    billed = Σ line charges, 0 ≤ paid ≤ billed, 0 < denied ≤ billed, or non-negative charges
-   (`drizzle/0001_core_schema.sql:41-42,69`); `versions.ts:214` is the only check. The claim
+   (`drizzle/0001_core_schema.sql:41-42,69`); `src/domain/claims/versions.ts:59` (billed = Σ line
+   charges) and `correction.ts:42-46` (charge ≥ $0.01) are the only checks. The claim
    version trigger (`drizzle/0011_claim_versions.sql:61-93`) ignores `status` and `paid_cents`,
    so those can change without a history row.
 6. **Member-ID reveal is bound to the patient, not the claim's coverage.** The denial page
@@ -110,7 +111,7 @@ patients,revenue-cycle,synthetic}/**`, `src/db/seed.ts`, every page under `src/a
 |---|---|---|---|---|
 | F1 | `src/domain/claims/correction.ts:28-33` | `dollarsToCents` strips every comma before validating: `"12,50"` → 125000 cents ($1,250.00); `"1,2,3.00"` → 12300 | Reject malformed grouping like `parseMoney` in `monthly-file.ts:82` does (tested at `monthly-file.test.ts:47`) | Reuse the strict grouping regex; add tests |
 | F2 | `src/app/(app)/revenue-cycle/statements/page.tsx:52,111-114`; `src/lib/format.ts` | Deductions are negated for display; months with zero adjustments become −0 and render as `-$0.00` | `$0.00` | Normalise −0 in `formatCents`; add a test |
-| F3 | `src/app/(app)/denials/page.tsx:227-231` | "Appeal filed on time" shows whenever `appealSubmittedOn` is set and `appealDeadline` is null. The demo hits this: ERISA payers have `appealWindowDays: null` (`generator.ts:124,140`) and the seed stamps an appeal date on submitted/overturned/upheld denials (`seed.ts:158-160`) | Never state a legal conclusion without a deadline (`specs/denial-queue.md` "never guessing") | Show "Appeal filed · no deadline configured"; test it |
+| F3 | `src/app/(app)/denials/page.tsx:227-231` | "Appeal filed on time" shows whenever `appealSubmittedOn` is set and `appealDeadline` is null. The demo hits this: ERISA payers have `appealWindowDays: null` (`generator.ts:140`) and the seed stamps an appeal date on submitted/overturned/upheld denials (`seed.ts:158-160`) | Never state a legal conclusion without a deadline (`specs/denial-queue.md` "never guessing") | Show "Appeal filed · no deadline configured"; test it |
 | F4 | `src/app/(app)/denials/[id]/page.tsx:309-311` with `rules/deadlines.ts:101-107` | Every prompt-pay milestone (20-day pay/contest, 90-day pay/deny, 120-day uncontestable) is compared with the denial notice date. A contest or request for information (e.g. CARC 16 + N290, CARC 252 + N706 in the generator) satisfies only the 20-day obligation under § 627.6131(4)(b)–(e) as summarised in REQUIREMENTS §3.1 (35 and 140 days are ⚠️ VERIFY there); the 90/120-day clocks keep running and the provider's 35-day response clock starts. Which CARC/RARC combinations count as a contest has no cited source yet | Day 20 met by any response; days 90/120 met only by payment or denial; "uncontestable" flagged when day 120 (140 paper) passes without pay or deny (R-3.1.4) | Classify each notice (payment / denial / contest) from CARC+RARC with a cited mapping; start `fl.promptpay.electronic.provider_response` from a contest; add boundary tests |
 
 Also confirmed by tracing (no repro needed):
@@ -126,10 +127,10 @@ Also confirmed by tracing (no repro needed):
 | # | Where | Finding |
 |---|---|---|
 | D1 | `src/domain/denials/queries.ts:53` | Deadline sort puts `appeal_submitted` denials (deadline already met) above `new` ones with sooner deadlines. Order by awaiting-action first |
-| D2 | `src/app/(app)/claims/[id]/page.tsx:71-75,233-248` | A `submitted` claim with no receipt date is measured against *today*; once today passes the deadline it says "The filing window has closed… likely to deny" though it may have been sent on time. Compare `submittedAt` (or receipt, per counsel) with the deadline. The claims list excludes `submitted` claims from filing totals (`queries.ts:173,253`), so list and detail disagree. Line 235 also asserts a legal position ("met once the payer confirms receipt") that `specs/claims.md:106-107` lists as an open question |
+| D2 | `src/app/(app)/claims/[id]/page.tsx:71-75,233-248` | A `submitted` claim with no receipt date is measured against *today*; once today passes the deadline it says "The filing window has closed… likely to deny" though it may have been sent on time. Compare `submittedAt` (or receipt, per counsel) with the deadline. The claims list excludes `submitted` claims from filing totals (`queries.ts:63,143`; `status.ts:20` defines unsubmitted as draft and rejected), so list and detail disagree. Line 235 also asserts a legal position ("met once the payer confirms receipt") that `specs/claims.md:106-107` lists as an open question |
 | D3 | `src/domain/denials/queries.ts:119-140` | "Next appeal deadlines" includes deadlines up to 30 days overdue and shows 8 rows, so with 8+ recently overdue denials no upcoming deadline appears; denials over 30 days overdue are dropped here but counted in "Past deadline" |
-| D4 | `src/domain/claims/queries.ts:64,174-183` | The 5,000-row cap keeps the oldest *service dates* across regimes, so a 7-month-old Medicare claim (12-month window) is kept ahead of a 5.9-month Florida claim about to expire. `truncated` is true at exactly 5,000 |
-| D5 | `queries.ts:92`, `claims/queries.ts:198` | Tiles ignore list filters by design; with status=closed or a payer filter the tiles still show tenant-wide open totals. Either follow the filters or label tiles "all open …" |
+| D4 | `src/domain/claims/queries.ts:52-73` | The 5,000-row cap keeps the oldest *service dates* across regimes, so a 7-month-old Medicare claim (12-month window) is kept ahead of a 5.9-month Florida claim about to expire. `truncated` is true at exactly 5,000 |
+| D5 | `denials/queries.ts:92`, `claims/queries.ts:87-99` | Tiles ignore list filters by design; with status=closed or a payer filter the tiles still show tenant-wide open totals. Either follow the filters or label tiles "all open …" |
 | D6 | `src/domain/revenue-cycle/statements.ts:122` | Net collection rate = payments ÷ (charges − *all* write-offs). Industry practice removes only contractual adjustments; including bad-debt and small-balance write-offs inflates the rate. Needs an adjustment-type column (spec ⚠️) |
 | D7 | `ar-aging/page.tsx:120,124` vs `dashboard/page.tsx:24,83` | Over-90 share computed two ways (float vs basis points): 451/1001 shows 45.1% on one page and 45.0% on the other; the 25% warning threshold is defined twice |
 | D8 | `statements.ts:148` | `denialsByClass` picks the "first class by code" with JS code-unit order and uses the sentinel `"Unmapped"`, which would collide with a real class of that code |
@@ -196,7 +197,7 @@ comments and display thresholds).
 | Retroactive denial 1 yr, (11) | **Missing** | – |
 | Patient refund 30 d, § 456.0625, effective 2026-01-01 (R-3.6.2) | **Missing** | – |
 | Medicare filing 12 months | `medicare.timely_filing` | claims |
-| Medicare redetermination 120 d (+5-day receipt presumption) | encoded | queue and detail |
+| Medicare redetermination 120 d (+5-day receipt presumption, from `rules/catalog.ts`, not REQUIREMENTS §4.2) | encoded | queue and detail |
 | Medicare reconsideration 180 d, ALJ 60 d, Council 60 d, court 60 d (R-4.2.1) | **Missing** | – |
 | Medicare amount-in-controversy thresholds | **Missing**; no value in REQUIREMENTS | – |
 
@@ -406,7 +407,7 @@ clean-claim, first-pass, scorecard, underpayment variance from the new records.
 ## Evidence
 
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check`: clean.
-- `pnpm test`: 29 files, 283 tests passed. `pnpm test:integration` (Postgres 16, 18 migrations):
+- `pnpm test`: 29 files, 283 tests passed. `pnpm test:integration` (Postgres 16, migrations 0000–0018):
   15 files, 200 tests passed.
 - Repros for F1 and F2 run with a throwaway vitest file (removed): `dollarsToCents("12,50")` =
   125000; `formatCents(-0)` = `-$0.00`.
