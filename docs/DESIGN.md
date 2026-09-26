@@ -138,9 +138,11 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
     first control (accessible name "<Module>, switch module"; opens the switcher; the module name is
     carried by the tabs and the page-header eyebrow), then the module's shipped pages as tabs (`nav`
     "Primary"). Planned pages are not tabs. No grid or "waffle" icon.
-  - *Module switcher* ("Go to"): modal dialog with a search field and one grouped list: each module
-    row (tinted tile, name, one-line description) links to its home, and its pages follow as compact
-    links; planned modules and pages are shown as "Planned" with a dashed border, never links.
+  - *Module switcher* ("Go to"): modal dialog with a large borderless search field and a two-column
+    table (Module | Pages): each row is a module (tinted tile, name, description; links to its home;
+    the current module is tinted and tagged "Current") beside its pages as one aligned column of
+    rows. Planned modules and pages are muted with a "Planned" tag, never links. Matches are
+    highlighted; a footer shows the result count and keyboard hints.
   - Modules ("apps" in code): Denials, Patients, Claims, Revenue cycle (roles that can view it),
     Insight, Settings (section tabs: General, Custom fields, and planned sections; the design
     style guide in pre-production; `specs/settings-and-custom-fields.md`). Defined once in
