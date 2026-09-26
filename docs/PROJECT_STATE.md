@@ -36,6 +36,21 @@ _Last updated: 2026-09-26_
   calculation/display bugs (comma charges, `-$0.00`, "filed on time" with no deadline, prompt-pay
   "Met" on any notice), missing catalog rules, and a page-by-page record-model gap list with a
   prioritized order of work (P0–P4). Next session should start with its P0 list.
+- Insight standard reports (`specs/insight-standard-reports.md`): `/insight` lists 6 available
+  reports (denials by category/CARC, denials by payer, denial rate, open denials by appeal-deadline
+  bucket, claims by status/A/R summary, appeal outcomes) plus 2 planned (prompt-pay scorecard,
+  underpayment variance). Every role can view; export (owner decision 2026-09-26) is limited to
+  admin/manager/compliance. Reports are aggregate-only (no patient/claim drill-down), tenant-scoped
+  through `withTenant`, and every view/export is audited (`insight.report_viewed`,
+  `insight.report_exported`). The primary export is a formatted **.xlsx workbook** (not CSV — owner
+  decision 2026-09-26: "business people need to export the data"), built server-side with the new
+  `exceljs` dependency (MIT, `src/domain/insight/workbook.ts`): an About cover sheet plus data
+  sheet(s) with a bold frozen header, autofilter, real numeric/date/percent cells, a totals row, and
+  formula-injection sanitization; an "All reports" workbook is also offered. New indexes:
+  `denials(tenant_id, notice_date)`, `claims(tenant_id, submitted_at)`,
+  `claims(tenant_id, service_date)` (migration 0026). Navigation's Insight "Reports" item now
+  points at `/insight` and is `available: true`. Next: custom/user-built reports, drill-down once
+  sensitivity-tag enforcement lands (R-3.5.1), and the two planned reports once their blockers clear.
 - Payer catalog P1 (`specs/payer-catalog.md`): `payers.edi_payer_id`/`regime` are now nullable plus
   a `payers.source` column; a payer missing either is "unverified". Starter Florida insurer catalog
   by name only (`src/domain/payers/florida-catalog.ts`, no payer IDs/regimes) loaded per-tenant,
@@ -98,6 +113,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Secrets scanning: gitleaks in CI | `specs/project-skeleton.md` |
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
+| 2026-09-26 | Insight standard reports: all roles view, export limited to admin/manager/compliance, aggregate-only (no drill-down), primary export is a formatted .xlsx workbook (not CSV); `exceljs` added | `specs/insight-standard-reports.md` |
 | 2026-09-26 | ERP shell: global header, navy tab bar, module switcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
 | 2026-09-26 | Operator two-step is off on the Netlify console for now (`PLATFORM_OPERATOR_MFA=off`; ignored in production); unset the variable to turn it back on | `specs/operator-login.md` |
 | 2026-09-26 | No self-service sign-up; the operator creates practices after the BAA is signed, and records the BAA on the practice page | `specs/practice-agreements.md` |

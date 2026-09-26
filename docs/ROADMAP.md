@@ -78,7 +78,11 @@ Evidence and security:
 - [ ] Payer overpayment-demand inbox [R-3.1.6]
 - [ ] Patient refund 30-day tracker [R-3.6]
 - [ ] Sensitivity tags and masking [R-3.5]
-- [ ] Reporting: A/R aging, denial rate, prompt-pay scorecard, underpayment variance [§8.7]
+- [x] Insight standard reports: denial summary by category/CARC and by payer, denial rate, open
+  denials by appeal-deadline bucket, claims by status/A/R summary, appeal outcomes — aggregate-only,
+  exported as formatted .xlsx workbooks (`specs/insight-standard-reports.md`) [§8.7]
+- [ ] Prompt-pay scorecard and underpayment variance — planned, blocked on notice-classification
+  fix and a `payer_contracts`/fee-schedule table (`specs/insight-standard-reports.md` #7–8) [§8.7]
 - [ ] Eligibility (270/271) and claim status (276/277)
 - [ ] SOC 2 Type II observation window → report (human)
 

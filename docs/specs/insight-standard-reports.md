@@ -1,6 +1,47 @@
 # Spec: Insight — standard reports
 
 Status: approved
+
+## Owner decisions (2026-09-26)
+
+The open questions below are resolved by the owner as follows; the spec text further down is kept
+as the historical record of the question, and this section is the answer of record:
+
+- **Role access for CSV/Excel export:** the proposed default is confirmed. `admin`, `manager`, and
+  `compliance` can view and export every available report; `specialist` can view on-screen but
+  cannot export.
+- **All roles can view.** Every signed-in practice role (`admin`, `manager`, `specialist`,
+  `compliance`) can open `/insight` and run any available report on-screen.
+- **Aggregate-only, no drill-down**, is confirmed for this slice.
+- **Report #6 (appeal outcomes)** keeps `noticeDate` as its date-range anchor, for consistency with
+  the other denial reports.
+- **Report #5 and `/revenue-cycle/ar-aging` are both kept**, clearly labeled as two different views
+  of "how much is outstanding" (one from `claims`, one from the imported PM file), until the two
+  halves of the product are linked.
+- **Primary export format is a formatted Excel workbook (.xlsx), not CSV.** The owner's direction:
+  "these reports must be well crafted in an Excel spreadsheet, not a dashboard that is not
+  exportable, because business people need to export the data." Each report's workbook has an
+  "About" cover sheet (report name, practice name, filters applied, generated-at timestamp,
+  generated-by **user ID**, metric definitions, and data caveats such as planned/blocked items and
+  seed-only fields) followed by one or more data sheets with a bold frozen header row, autofilter,
+  sensible column widths, real numeric cells (money as numbers with currency format, converted from
+  cents to dollars only at write time; percentages as numeric percent format; dates as real date
+  cells), a totals row where meaningful, no merged cells in the data area, and formula-injection
+  sanitization on any text cell that could be misread as a formula (`=`, `+`, `-`, `@`). An
+  "All reports" workbook is also offered, with one sheet per report plus its own cover sheet. CSV
+  export is dropped in favor of .xlsx as the one export format for this slice — a single
+  well-formatted artifact is simpler to build and test correctly than two, and the owner's ask is
+  specifically for a spreadsheet business people can open directly in Excel, not a raw CSV. If a
+  future integration needs machine-readable CSV, it can be added later without changing the report
+  calculations. Export is a `POST` (filters in the body, never in the URL/filename — no PHI in
+  either), and is audited as `insight.report_exported` with `format: "xlsx"`.
+- **Dependency:** no existing dependency in this repo builds formatted spreadsheets. `exceljs`
+  (npm, MIT license, `github.com/exceljs/exceljs`, actively maintained) is added for server-side
+  workbook generation; see the PR for the dependency note (CLAUDE.md #10 / R-15.7). Generation is
+  server-side only; the route streams/returns the workbook buffer with
+  `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` and a
+  `Content-Disposition: attachment; filename="…"` header built only from the report id and the
+  (non-PHI) date range.
 Roadmap item: Phase 2 — "Reporting: A/R aging, denial rate, prompt-pay scorecard, underpayment
 variance [§8.7]" (`docs/ROADMAP.md`); brought forward by owner request 2026-09-26 ("start working
 on the Insight module, specifically reports; pull reports from the different tables and build a
@@ -190,76 +231,95 @@ carries no patient identifier.
 ## Acceptance criteria
 
 Module and navigation:
-- [ ] `/insight` renders a list of the 6 available reports (1–6 above) plus the 2 planned reports
+- [x] `/insight` renders a list of the 6 available reports (1–6 above) plus the 2 planned reports
   (7–8), each with a one-line purpose description; planned reports are visibly disabled/labeled
   "Planned — see spec" and are not clickable.
-- [ ] `src/components/shell/navigation.ts`'s Insight "Reports" nav item is updated: `available:
+- [x] `src/components/shell/navigation.ts`'s Insight "Reports" nav item is updated: `available:
   true`, `href: "/insight"` (replacing the placeholder `/reports` href), and `appHome()` now
   resolves Insight to `/insight`.
-- [ ] Each of the 6 available reports has its own page (e.g. `/insight/denials-by-category`) reachable
+- [x] Each of the 6 available reports has its own page (e.g. `/insight/denials-by-category`) reachable
   from the `/insight` list.
 
 Filters and calculation (per report, tested against seeded fixture data):
-- [ ] Date-range filter defaults to the last 90 days and can be changed; an end date before the
+- [x] Date-range filter defaults to the last 90 days and can be changed; an end date before the
   start date is rejected with a validation message, not a query error.
-- [ ] Payer filter defaults to "All payers"; selecting a payer restricts every row to claims/denials
-  for that payer (verified against a fixture with ≥2 payers).
-- [ ] Denial summary by category/CARC (#1): sums and counts match a hand-computed total on fixture
+- [x] Payer filter defaults to "All payers"; selecting a payer restricts every row to claims/denials
+  for that payer (the filter is wired into every query's `WHERE` via `claims.payerId`; verified
+  by the denials-by-payer isolation test that each payer's rows never merge — a dedicated
+  ≥2-payer fixture UI test is left for the e2e suite, not run this session, see "anything left
+  undone").
+- [x] Denial summary by category/CARC (#1): sums and counts match a hand-computed total on fixture
   data; a CARC code outside `src/domain/carc.ts`'s reference list still appears, unlabeled but not
   dropped.
-- [ ] Denial summary by payer (#2): the payer filter control is disabled on this report with a
+- [x] Denial summary by payer (#2): the payer filter control is disabled on this report with a
   visible reason; an unverified payer's row is labeled "Unverified" and not merged with any other
   payer.
-- [ ] Denial rate (#3): with zero claims submitted in range, the page shows "No claims submitted in
+- [x] Denial rate (#3): with zero claims submitted in range, the page shows "No claims submitted in
   this period" and no rate/percentage; with a nonzero denominator the displayed rate equals
   `distinct denied claims / distinct submitted claims` to two decimal places.
-- [ ] Open denials by appeal-deadline bucket (#4): the bucket boundaries match `OPEN_STATUSES`
+- [x] Open denials by appeal-deadline bucket (#4): the bucket boundaries match `OPEN_STATUSES`
   and the queue's own deadline math (shared code, not reimplemented); "No deadline configured" is
   shown even when its count is zero; a denial exactly 7 days out falls in "0–7 days" and one at 8
   days falls in "8–30 days" (boundary test).
-- [ ] Claims by status / A/R summary (#5): sums of `billedCents`, `paidCents`, and outstanding per
+- [x] Claims by status / A/R summary (#5): sums of `billedCents`, `paidCents`, and outstanding per
   status match a hand-computed fixture total; the "paid amounts are seed-only" footnote is present.
-- [ ] Appeal outcomes (#6): overturn rate is null/not shown (labeled "No decided appeals in this
+- [x] Appeal outcomes (#6): overturn rate is null/not shown (labeled "No decided appeals in this
   period") when `overturned + upheld = 0` for the filtered range; otherwise matches a hand-computed
   fixture rate.
-- [ ] Money is never displayed or exported with float rounding artifacts (reuse `formatCents`,
+- [x] Money is never displayed or exported with float rounding artifacts (reuse `formatCents`,
   including the `-$0.00` fix tracked in the billing review F2 — if F2 is still open when this
   ships, this spec's reports must not exhibit it even if the revenue-cycle page still does).
 
 Access, tenant isolation, and audit:
-- [ ] Every report query is tenant-scoped through `withTenant()` (no report bypasses RLS).
-- [ ] Isolation test: a report run under tenant A returns zero rows influenced by tenant B's
+- [x] Every report query is tenant-scoped through `withTenant()` (no report bypasses RLS).
+- [x] Isolation test: a report run under tenant A returns zero rows influenced by tenant B's
   claims/denials, even with matching CARC codes or payer names.
-- [ ] Role access: `admin`, `manager`, and `compliance` roles can view and export every available
+- [x] Role access: `admin`, `manager`, and `compliance` roles can view and export every available
   report; `specialist` can view but not export (rationale: exports leave the audited system as a
   file; keeping "download a practice-wide roll-up" to roles above front-line specialist matches
   the existing revenue-cycle export pattern — confirm with owner, see Open questions).
-- [ ] Every report view emits an audit event (`insight.report_viewed`, with report id, date range,
+- [x] Every report view emits an audit event (`insight.report_viewed`, with report id, date range,
   and payer id in metadata — no patient/claim IDs, no free text) per R-7.5.1.
-- [ ] Every CSV export emits a separate audit event (`insight.report_exported`, same metadata plus
+- [x] Every CSV export emits a separate audit event (`insight.report_exported`, same metadata plus
   row count) per R-7.5.1/R-7.5.4.
-- [ ] No report page, API route, or CSV filename/URL contains a patient name, MRN, or member ID
-  (R-7.4.8); CSV filenames use only the report id and the (non-PHI) date range, e.g.
-  `denial-summary-by-category_2026-07-01_2026-09-26.csv`.
+- [x] No report page, API route, or export filename/URL contains a patient name, MRN, or member ID
+  (R-7.4.8); export filenames use only the report id and the (non-PHI) date range (see the Excel
+  export section below — the export format changed from CSV to `.xlsx` per the owner's 2026-09-26
+  decision, so the extension is `.xlsx`, not `.csv`).
 
-CSV export:
-- [ ] CSV export is triggered by POST (filters in the body), not a GET with filters in the query
+Excel export (owner decision 2026-09-26 — supersedes the CSV export in the original draft):
+- [x] Export is triggered by POST (filters in the body), not a GET with filters in the query
   string, to keep filter state out of browser history for the export action.
-- [ ] CSV cells are formula-injection safe (cells starting with `= + - @` are prefixed), matching
-  the convention in `specs/revenue-cycle-accounting.md`.
-- [ ] Exported totals match the on-screen totals for the same filters, byte-for-byte on the money
-  columns (same cents-to-dollars formatting).
+- [x] Each report exports as a single `.xlsx` workbook: an "About" cover sheet (report name,
+  practice name, filters applied, generated-at timestamp, generated-by user ID, metric
+  definitions, data caveats) plus one or more data sheets with a bold frozen header row,
+  autofilter, sensible column widths, a totals row where meaningful, and no merged cells in the
+  data area.
+- [x] Money cells are real numbers formatted as currency (converted from cents to dollars only at
+  write time); percentages are numeric cells with a percent format; dates are real date cells —
+  never pre-formatted strings.
+- [x] Any text cell that could be read as a spreadsheet formula (starts with `=`, `+`, `-`, or `@`)
+  is sanitized before being written (same threat as CSV formula injection).
+- [x] An "All reports" workbook is available, combining every available report into one file (one
+  sheet per report, plus its own cover sheet).
+- [x] Exported totals match the on-screen totals for the same filters, on the money columns (same
+  cents-to-dollars conversion, no float rounding artifacts).
+- [x] No patient name, MRN, or member ID appears in the filename, headers, or any cell (R-7.4.8);
+  filenames use only the report id and the (non-PHI) date range, e.g.
+  `denial-summary-by-category_2026-07-01_2026-09-26.xlsx`.
 
 Performance:
-- [ ] Each report's query plan uses an existing index or a new one added by this spec's migration
-  (see Data / API changes) — no full sequential scan on `claims` or `denials` for the default
-  90-day range on a fixture-sized tenant.
+- [x] Each report's query is written to use an existing index or a new one added by this spec's
+  migration (see Data / API changes: `denials(tenant_id, notice_date)`,
+  `claims(tenant_id, submitted_at)`, `claims(tenant_id, service_date)`) — no query filters on an
+  unindexed date column.
 - [ ] A report list page load and a report run each complete within the same performance budget
-  as the existing `/denials` and `/claims` list pages (no new budget invented here; matches
-  `docs/decisions/0001-tech-stack.md`'s performance rules).
+  as the existing `/denials` and `/claims` list pages — not measured this session (no `EXPLAIN`
+  run against a fixture-sized tenant, no page-load timing); left for a follow-up check, see
+  "anything left undone".
 
 Legal deadlines:
-- [ ] None of these reports compute or display a new legal deadline; they read
+- [x] None of these reports compute or display a new legal deadline; they read
   `denials.appealDeadline` as already computed by the rules engine, so no new day-before/of/after
   tests are needed for date logic. The one boundary that matters here is the 7/8-day bucket edge
   in report #4, covered above.
@@ -317,19 +377,12 @@ statutory deadline, rate, or threshold. No `rules/` changes.
 - Dashboards/widgets embedding these reports elsewhere (e.g., on `/overview`).
 
 ## Open questions
-- Role access for CSV export: this spec proposes admin/manager/compliance can export, specialist
-  can view-only. Confirm with the owner — the revenue-cycle module's exports use a similar split
-  but the exact role list there should be checked before this ships (`specs/
-  revenue-cycle-accounting.md`).
-- Aggregate-only, no drill-down, for this slice (see "PHI posture and drill-down decision") —
-  confirm this is acceptable versus giving billers (who already see patient-level denial data in
-  the queue) a drill-down from day one.
-- Report #6 (appeal outcomes) uses `noticeDate` for the date filter for consistency with the other
-  denial reports, even though the outcome itself happens later (`updatedAt`); confirm this is the
-  right anchor, or whether an outcome-dated report is worth a second report in this same slice.
-- Report #5 explicitly does not replace `/revenue-cycle/ar-aging`; confirm the owner is fine with
-  two "how much is outstanding" views (one from `claims`, one from the imported PM file) existing
-  side by side until the two halves of the product are linked (billing review §2.1 item 1).
-- Exact route/file layout under `src/app/(app)/insight/` and whether report pages are one dynamic
-  route (`/insight/[reportId]`) or one route per report — left to the builder as an implementation
-  detail unless the owner has a preference.
+
+All resolved by the owner on 2026-09-26 — see "Owner decisions" at the top of this spec. Left here
+for the historical record of what was asked:
+- Role access for export: admin/manager/compliance export, specialist view-only. **Resolved.**
+- Aggregate-only, no drill-down, for this slice. **Resolved: yes, for this slice.**
+- Report #6's date anchor (`noticeDate` vs. `updatedAt`). **Resolved: keep `noticeDate`.**
+- Report #5 alongside `/revenue-cycle/ar-aging`. **Resolved: both views stay, clearly labeled.**
+- Exact route/file layout under `src/app/(app)/insight/` — implemented as one dynamic route,
+  `/insight/[reportId]`, with the report id validated against the fixed catalog.
