@@ -5,7 +5,7 @@ import { startTransition, useActionState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { TextField } from "@/components/ui/TextField";
-import { SENSITIVITY_TAGS, SEX_LABELS } from "@/domain/patients/record";
+import { SEX_LABELS } from "@/domain/patients/record";
 import { registerPatient, savePatient, type PatientFormState } from "./actions";
 
 const selectClass =
@@ -33,13 +33,11 @@ export interface PatientFormValues {
 export function PatientForm({
   patient,
   payers,
-  canTag,
   syntheticOnly,
   today,
 }: {
   patient?: PatientFormValues;
   payers: Array<{ id: string; name: string }>;
-  canTag: boolean;
   syntheticOnly: boolean;
   today: string;
 }) {
@@ -208,33 +206,10 @@ export function PatientForm({
         </div>
       </fieldset>
 
-      {canTag ? (
-        <fieldset>
-          <legend className="mb-1 text-heading font-semibold text-text">Sensitivity</legend>
-          <p className="mb-3 text-label text-muted">
-            Tags mark records that need stricter access and masking under Florida and federal law.
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {Object.entries(SENSITIVITY_TAGS).map(([value, label]) => (
-              <label key={value} className="flex items-center gap-2 text-body text-text">
-                <input
-                  type="checkbox"
-                  name="sensitivityTags"
-                  value={value}
-                  defaultChecked={patient?.sensitivityTags.includes(value)}
-                  className="size-4 accent-primary"
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-      ) : (
-        // Non-administrators keep whatever tags are stored (the server ignores their input).
-        patient?.sensitivityTags.map((tag) => (
-          <input key={tag} type="hidden" name="sensitivityTags" value={tag} />
-        ))
-      )}
+      {/* Sensitivity checkboxes are hidden for now; stored tags are carried through unchanged. */}
+      {patient?.sensitivityTags.map((tag) => (
+        <input key={tag} type="hidden" name="sensitivityTags" value={tag} />
+      ))}
 
       {editing && (
         <label className="flex flex-col gap-1.5 text-label font-medium text-text">
