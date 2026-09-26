@@ -6,6 +6,9 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
+- Welcome page (`specs/welcome-page.md`) now explains how the patient record feeds claims and
+  denials (4 steps; charge import and 837P/835 marked Planned) and lists more safeguards (MFA,
+  field encryption, BAA on file). Wording passed `compliance-checker`; owner sign-off on copy pending.
 - Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
   section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
   planned; Design system in pre-production). Administrators define custom fields on patients,

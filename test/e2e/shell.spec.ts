@@ -166,7 +166,12 @@ test.describe("signed in", () => {
     await page.getByRole("link", { name: "DenialDesk home" }).click();
     await expect(page).toHaveURL(/\/welcome$/);
     await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
-    for (const name of ["How DenialDesk works", "Your modules", "Safeguards"]) {
+    for (const name of [
+      "How DenialDesk works",
+      "From patient record to claim and denial",
+      "Your modules",
+      "Safeguards",
+    ]) {
       await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
     }
     // Shipped steps link to their page; planned steps are labelled, never linked.
@@ -175,6 +180,14 @@ test.describe("signed in", () => {
     }
     for (const step of [4, 5]) {
       const item = page.locator(`[data-step="${step}"]`);
+      await expect(item.getByRole("link")).toHaveCount(0);
+      await expect(item.getByText("Planned")).toBeVisible();
+    }
+    for (const step of [1, 4]) {
+      await expect(page.locator(`[data-record-step="${step}"]`).getByRole("link")).toHaveCount(1);
+    }
+    for (const step of [2, 3]) {
+      const item = page.locator(`[data-record-step="${step}"]`);
       await expect(item.getByRole("link")).toHaveCount(0);
       await expect(item.getByText("Planned")).toBeVisible();
     }
