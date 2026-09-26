@@ -55,6 +55,18 @@ DECLARE
   field_entity text;
   record_tenant_id uuid;
 BEGIN
+  -- Checked first, before any lookup: a change to an identity column is refused outright, even
+  -- one that also happens to point at a bogus or cross-tenant id (which would otherwise surface as
+  -- a confusing "does not belong to this tenant" instead of the real problem).
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.field_id IS DISTINCT FROM OLD.field_id
+       OR NEW.patient_id IS DISTINCT FROM OLD.patient_id OR NEW.claim_id IS DISTINCT FROM OLD.claim_id
+       OR NEW.denial_id IS DISTINCT FROM OLD.denial_id OR NEW.payer_id IS DISTINCT FROM OLD.payer_id
+       OR NEW.created_by IS DISTINCT FROM OLD.created_by OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+      RAISE EXCEPTION 'custom_field_values identity is immutable';
+    END IF;
+  END IF;
+
   SELECT tenant_id, entity INTO field_tenant_id, field_entity
     FROM custom_fields WHERE id = NEW.field_id;
   IF field_tenant_id IS NULL OR field_tenant_id != NEW.tenant_id THEN
@@ -88,15 +100,6 @@ BEGIN
     RAISE EXCEPTION 'custom_field_values: record does not belong to this tenant';
   END IF;
 
-  IF TG_OP = 'UPDATE' THEN
-    IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.field_id IS DISTINCT FROM OLD.field_id
-       OR NEW.patient_id IS DISTINCT FROM OLD.patient_id OR NEW.claim_id IS DISTINCT FROM OLD.claim_id
-       OR NEW.denial_id IS DISTINCT FROM OLD.denial_id OR NEW.payer_id IS DISTINCT FROM OLD.payer_id
-       OR NEW.created_by IS DISTINCT FROM OLD.created_by OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
-      RAISE EXCEPTION 'custom_field_values identity is immutable';
-    END IF;
-  END IF;
-
   RETURN NEW;
 END
 $$;--> statement-breakpoint
@@ -124,9 +127,9 @@ ALTER TABLE "custom_field_value_versions" ADD CONSTRAINT "custom_field_value_ver
 ALTER TABLE "custom_field_value_versions" ADD CONSTRAINT "custom_field_value_versions_denial_id_denials_id_fk" FOREIGN KEY ("denial_id") REFERENCES "public"."denials"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "custom_field_value_versions" ADD CONSTRAINT "custom_field_value_versions_payer_id_payers_id_fk" FOREIGN KEY ("payer_id") REFERENCES "public"."payers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "custom_field_value_versions" ADD CONSTRAINT "custom_field_value_versions_changed_by_users_id_fk" FOREIGN KEY ("changed_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "custom_field_values_tenant_id_key" ON "custom_field_values" USING btree ("tenant_id","id");--> statement-breakpoint
 ALTER TABLE "custom_field_value_versions" ADD CONSTRAINT "custom_field_value_versions_value_fk" FOREIGN KEY ("tenant_id","value_id") REFERENCES "public"."custom_field_values"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "custom_field_value_versions_value_idx" ON "custom_field_value_versions" USING btree ("value_id","changed_at");--> statement-breakpoint
-CREATE UNIQUE INDEX "custom_field_values_tenant_id_key" ON "custom_field_values" USING btree ("tenant_id","id");--> statement-breakpoint
 
 -- Same one-record-column shape as the parent table (docs/decisions/0007-custom-field-value-storage.md
 -- addendum 2026-09-26): a version row is a snapshot of one custom_field_values row.

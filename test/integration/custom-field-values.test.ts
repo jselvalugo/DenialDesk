@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
 import { decryptField, encryptField } from "@/lib/crypto/field";
@@ -201,6 +201,11 @@ describe("custom field values", () => {
     );
     expect(await withTenant(b.ctx, (tx) => tx.select().from(customFieldValues))).toEqual([]);
 
+    // Two layers reject this: RLS's WITH CHECK (tenant_id must equal the session's tenant, B) and
+    // the guard trigger (looking up the field under RLS as session B, so A's field is invisible
+    // and looks like it "doesn't belong" to the tenant on the row). Either message is a correct
+    // rejection; which one surfaces depends on trigger-vs-RLS evaluation order in Postgres.
+    const rejectsCrossTenantWrite = /row-level security|does not belong to this tenant/;
     await expectDbError(
       withTenant(b.ctx, (tx) =>
         tx.insert(customFieldValues).values({
@@ -211,8 +216,25 @@ describe("custom field values", () => {
           updatedBy: b.ctx.userId,
         }),
       ),
-      /row-level security/,
+      rejectsCrossTenantWrite,
     );
+
+    // An UPDATE naming tenant A's row succeeds as a no-op: RLS's USING clause filters the row out
+    // before the WHERE clause is even evaluated, so tenant B's session simply can't see it to
+    // target it — no rows change, which is the update side of the same isolation.
+    const [aliceRow] = await withTenant(a.ctx, (tx) =>
+      tx.select().from(customFieldValues).where(eq(customFieldValues.fieldId, fieldId)),
+    );
+    await withTenant(b.ctx, (tx) =>
+      tx
+        .update(customFieldValues)
+        .set({ valueEnc: "tampered" })
+        .where(eq(customFieldValues.id, aliceRow!.id)),
+    );
+    const [stillAlices] = await withTenant(a.ctx, (tx) =>
+      tx.select().from(customFieldValues).where(eq(customFieldValues.id, aliceRow!.id)),
+    );
+    expect(stillAlices!.valueEnc).toBe(aliceRow!.valueEnc); // untouched
   });
 
   it("the guard trigger rejects a field/record from another tenant and an entity mismatch", async () => {
@@ -298,9 +320,10 @@ describe("custom field values", () => {
       .from(customFieldValues)
       .where(eq(customFieldValues.fieldId, fieldId));
 
-    // A second patient on the same tenant to copy the ciphertext onto.
+    // A second patient on the same tenant to copy the ciphertext onto. Sensitive, so
+    // revealCustomFieldValue actually attempts a decrypt instead of refusing as "not locked".
     const otherFieldId = await withTenant(a.ctx, (tx) =>
-      createCustomField(tx, a.ctx, field({ key: "aad_bound_target" })),
+      createCustomField(tx, a.ctx, field({ key: "aad_bound_target", sensitivity: "hiv" })),
     );
     const [otherPatient] = await withTenant(a.ctx, (tx) =>
       tx
@@ -338,10 +361,10 @@ describe("custom field values", () => {
   });
 
   it("has no DELETE grant", async () => {
-    const rows = (await systemDb().execute(
+    const result = await systemDb().execute<{ has_delete: boolean }>(
       sql`select has_table_privilege('denialdesk_app', 'custom_field_values', 'DELETE') as has_delete`,
-    )) as unknown as { has_delete: boolean }[];
-    expect(rows[0]!.has_delete).toBe(false);
+    );
+    expect(result.rows[0]!.has_delete).toBe(false);
   });
 
   it("works for claims, denials, and payers too", async () => {
@@ -504,7 +527,7 @@ describe("custom field values", () => {
       .select()
       .from(auditEvents)
       .where(eq(auditEvents.action, "custom_field.values_read"))
-      .orderBy(sql`created_at desc`)
+      .orderBy(desc(auditEvents.occurredAt))
       .limit(1);
     expect(event).toBeDefined();
     expect(event!.metadata).toMatchObject({ entity: "patient", recordId: a.patientId });
@@ -525,7 +548,7 @@ describe("custom field values", () => {
       .select()
       .from(auditEvents)
       .where(eq(auditEvents.action, "custom_field.values_updated"))
-      .orderBy(sql`created_at desc`)
+      .orderBy(desc(auditEvents.occurredAt))
       .limit(1);
     expect(event!.metadata).toMatchObject({
       entity: "patient",
@@ -597,6 +620,8 @@ describe("custom field values", () => {
     );
     const [version] = await systemDb().select().from(customFieldValueVersions).limit(1);
 
+    // The app role has no UPDATE/DELETE grant at all, so it's blocked before ever reaching the
+    // trigger — the first layer of "append-only".
     await expectDbError(
       withTenant(a.ctx, (tx) =>
         tx
@@ -604,20 +629,32 @@ describe("custom field values", () => {
           .set({ valueEnc: "tampered" })
           .where(eq(customFieldValueVersions.id, version!.id)),
       ),
-      /append-only/,
+      /permission denied/,
     );
     await expectDbError(
       withTenant(a.ctx, (tx) =>
         tx.delete(customFieldValueVersions).where(eq(customFieldValueVersions.id, version!.id)),
       ),
+      /permission denied/,
+    );
+    // The trigger is the second layer, reached by a role that does hold UPDATE/DELETE (the
+    // connection owner via systemDb, same pattern as audit_events in tenancy.test.ts).
+    await expectDbError(
+      systemDb().execute(
+        sql`update custom_field_value_versions set value_enc = 'tampered' where id = ${version!.id}`,
+      ),
+      /append-only/,
+    );
+    await expectDbError(
+      systemDb().execute(sql`delete from custom_field_value_versions where id = ${version!.id}`),
       /append-only/,
     );
 
     expect(await withTenant(b.ctx, (tx) => tx.select().from(customFieldValueVersions))).toEqual([]);
-    const deleteGrant = (await systemDb().execute(
+    const deleteGrant = await systemDb().execute<{ has_delete: boolean }>(
       sql`select has_table_privilege('denialdesk_app', 'custom_field_value_versions', 'DELETE') as has_delete`,
-    )) as unknown as { has_delete: boolean }[];
-    expect(deleteGrant[0]!.has_delete).toBe(false);
+    );
+    expect(deleteGrant.rows[0]!.has_delete).toBe(false);
   });
 
   it("the version guard trigger rejects a version whose field or record doesn't match its parent value row", async () => {
@@ -709,12 +746,12 @@ describe("custom field values", () => {
     await expect
       .poll(
         async () => {
-          const rows = (await systemDb().execute(
+          const result = await systemDb().execute<{ waiting: number }>(
             sql`select count(*)::int as waiting from pg_stat_activity
                 where datname = current_database() and wait_event_type = 'Lock'
                   and query ilike 'insert into "custom_field_values"%'`,
-          )) as unknown as { waiting: number }[];
-          return rows[0]?.waiting;
+          );
+          return result.rows[0]?.waiting;
         },
         { timeout: 10_000, interval: 25 },
       )
@@ -749,7 +786,7 @@ describe("custom field values", () => {
       `${a.ctx.tenantId}|${fieldId}|${a.patientId}`,
     );
     expect(finalPlain).toBe("loser value"); // the loser's write still lands, on top of a kept history
-  });
+  }, 20_000);
 });
 
 // Guard against a regression this table is designed to avoid: values must never be joined into
