@@ -5,6 +5,7 @@ import { systemDb } from "@/db/client";
 import { auditEvents, memberships, operatorCredentials, sessions, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { isProduction, onNetlify } from "@/lib/env";
+import { log } from "@/lib/log";
 import type { TenantTx } from "@/db/tenant";
 import { isOperatorEmail, operatorEmail } from "./operator-email";
 import { SCRYPT_PARAMS } from "./password";
@@ -59,11 +60,34 @@ function wellFormed(hash: string): boolean {
   );
 }
 
+/** Fingerprints of unusable configured values already warned about (once per process each). */
+const warnedUnusable = new Set<string>();
+
+/**
+ * A configured value that can't be used switches the console off silently for visitors (sign-in
+ * shows the generic error), so the operator learns why from the server log: `status` says whether
+ * the value is malformed (e.g. the password itself instead of the hash `pnpm operator:credential`
+ * prints) or the public e2e test hash. The value never reaches the log, only its fingerprint prefix.
+ */
+function warnUnusable(hash: string, status: "malformed" | "test_hash"): void {
+  const fingerprint = sha256(hash);
+  if (warnedUnusable.has(fingerprint)) return;
+  warnedUnusable.add(fingerprint);
+  log.warn("operator.credential_unusable", { status, credentialId: fingerprint.slice(0, 8) });
+}
+
 /** The operator's password hash from infrastructure configuration, or null if unset or unusable. */
 export function configuredOperatorHash(): string | null {
   const hash = process.env.PLATFORM_OPERATOR_PASSWORD_HASH?.trim();
-  if (!hash || !wellFormed(hash)) return null;
-  if ((isProduction() || onNetlify()) && sha256(hash) === PUBLIC_TEST_HASH_FINGERPRINT) return null;
+  if (!hash) return null;
+  if (!wellFormed(hash)) {
+    warnUnusable(hash, "malformed");
+    return null;
+  }
+  if ((isProduction() || onNetlify()) && sha256(hash) === PUBLIC_TEST_HASH_FINGERPRINT) {
+    warnUnusable(hash, "test_hash");
+    return null;
+  }
   return hash;
 }
 
