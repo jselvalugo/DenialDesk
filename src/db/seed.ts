@@ -3,6 +3,7 @@ import { addCalendarDays } from "@rules/calendar";
 import { appealDeadline } from "@rules/deadlines";
 import { hashPassword } from "@/auth/password";
 import { generateDataset, type SyntheticDataset } from "@/domain/synthetic/generator";
+import { seedRevenueCycleDefaults } from "@/domain/revenue-cycle/setup";
 import { encryptField } from "@/lib/crypto/field";
 import { systemDb } from "./client";
 import {
@@ -180,6 +181,7 @@ export async function seedPractice(options: {
     await insertInChunks(claimRows, (chunk) => tx.insert(claims).values(chunk));
     await insertInChunks(lineRows, (chunk) => tx.insert(claimLines).values(chunk));
     await insertInChunks(denialRows, (chunk) => tx.insert(denials).values(chunk));
+    await seedRevenueCycleDefaults(tx, tenantId);
   });
 
   return { tenantId, userIds };

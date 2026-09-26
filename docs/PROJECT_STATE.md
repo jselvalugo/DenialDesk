@@ -32,7 +32,9 @@ The product owner delegated technical decisions to the implementing agent ("make
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
-0. Revenue cycle module phases B1–B5 (`specs/revenue-cycle-accounting.md`).
+0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger done; next B2
+   monthly file import and processed claims, then B3 journal vouchers, B4 deposits and A/R aging,
+   B5 statements and dashboard.
 1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
@@ -46,6 +48,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - A vector (SVG) version of the logo from a designer; the app currently uses the PNG.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.
+
+- Revenue cycle: confirm the Capitation rule is meant to be shadowed by the Medicare/Medicaid wrap
+  rule, and the GL account / payer-class names (seeded names are descriptive placeholders).
 
 ### Decisions from the 2026-09-26 agent reviews (need a human)
 1. **MFA enrollment on first sign-in** needs only the password, so a stolen password for a

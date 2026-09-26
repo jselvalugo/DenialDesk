@@ -49,6 +49,20 @@ per-tenant tables, not in `rules/`. Each seeded default is labeled with that sou
       preparer.
 - [ ] Rule and GL-account edits are limited to admins and audited (a later phase adds editing UI).
 
+## Phase status
+- [x] **B1** (2026-09-26): `rcm_sites`, `payer_classes`, `gl_accounts`, `business_rules` with FORCE RLS,
+      no DELETE, check constraints (contra 0–10000 bps, one default AR, AR accounts carry routing);
+      pure engine `src/domain/revenue-cycle/engine.ts` with a fixed condition vocabulary; the 12
+      defaults + GL routing in `defaults.ts`, proven identical to the original RevCycle IQ engine on
+      5,000 generated lines; defaults seeded with every synthetic practice and loadable (audited,
+      admin/manager) for practices without rules; read-only Rules and ledger page (admin, manager,
+      compliance; hidden from specialists).
+- [ ] B2 · [ ] B3 · [ ] B4 · [ ] B5
+
+Finding from the port (⚠️ VERIFY with the owner): in the original order, rule 9 (Medicare/Medicaid
+PPS wrap) matches every class rule 11 (Capitation) lists, so Capitation never fires. Ported as is;
+the Rules page says so.
+
 ## Security notes
 - Uploads: CSV only, size-capped, parsed in memory, never written to disk or object storage;
   formula-injection safe on export (cells starting with `= + - @` are prefixed).

@@ -1,4 +1,5 @@
 import { isPlatformOperator } from "@/auth/operator";
+import { canViewRevenueCycle } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { AppShell } from "@/components/shell/AppShell";
 import { isProduction } from "@/lib/env";
@@ -16,6 +17,7 @@ export default async function SignedInLayout({ children }: { children: React.Rea
       }}
       showDesignSystem={!isProduction()}
       showOperatorConsole={isPlatformOperator(auth)}
+      showRevenueCycle={canViewRevenueCycle(auth.role)}
     >
       {children}
     </AppShell>

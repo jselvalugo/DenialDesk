@@ -41,9 +41,11 @@ function NavEntry({ item, active }: { item: NavItem; active: boolean }) {
 export function Sidebar({
   showDesignSystem,
   showOperatorConsole = false,
+  showRevenueCycle = false,
 }: {
   showDesignSystem: boolean;
   showOperatorConsole?: boolean;
+  showRevenueCycle?: boolean;
 }) {
   const pathname = usePathname();
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
@@ -57,20 +59,22 @@ export function Sidebar({
         </Link>
       </div>
       <nav aria-label="Primary" className="flex-1 overflow-y-auto px-3 py-5">
-        {navigation.map((section) => (
-          <div key={section.label} className="mb-6">
-            <p className="mb-1.5 px-3 text-label font-semibold tracking-wider text-sidebar-muted uppercase">
-              {section.label}
-            </p>
-            <ul className="space-y-0.5">
-              {section.items.map((item) => (
-                <li key={item.href}>
-                  <NavEntry item={item} active={item.available && isActive(item.href)} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        {navigation
+          .filter((section) => showRevenueCycle || !section.revenueCycle)
+          .map((section) => (
+            <div key={section.label} className="mb-6">
+              <p className="mb-1.5 px-3 text-label font-semibold tracking-wider text-sidebar-muted uppercase">
+                {section.label}
+              </p>
+              <ul className="space-y-0.5">
+                {section.items.map((item) => (
+                  <li key={item.href}>
+                    <NavEntry item={item} active={item.available && isActive(item.href)} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
       </nav>
       {(showDesignSystem || showOperatorConsole) && (
         <div className="space-y-0.5 border-t border-sidebar-border px-3 py-3">

@@ -29,7 +29,8 @@ export type AuditAction =
   | "operator.practice_created"
   | "operator.practice_suspended"
   | "operator.practice_reactivated"
-  | "operator.demo_reset";
+  | "operator.demo_reset"
+  | "rcm.defaults_loaded";
 
 export interface AuditEvent {
   action: AuditAction;
