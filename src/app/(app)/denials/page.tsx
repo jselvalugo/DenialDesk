@@ -190,7 +190,7 @@ export default async function DenialQueuePage({
                     <Td>
                       <Link
                         href={`/denials/${row.id}`}
-                        className="font-mono text-label font-medium whitespace-nowrap text-brand-600 hover:underline"
+                        className="font-mono text-label font-medium whitespace-nowrap text-link hover:underline"
                       >
                         {row.claimNumber}
                       </Link>

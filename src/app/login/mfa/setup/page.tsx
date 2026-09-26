@@ -27,7 +27,9 @@ export default async function MfaSetupPage() {
 
   return (
     <>
-      <h1 className="text-title font-semibold text-text">Set up two-step verification</h1>
+      <h1 className="font-serif text-[1.375rem] leading-8 font-bold text-primary">
+        Set up two-step verification
+      </h1>
       <p className="mt-1 mb-6 text-body text-muted">
         Required for every account. Scan this code with an authenticator app such as Microsoft Authenticator,
         then enter the 6-digit code it shows.

@@ -5,49 +5,70 @@
  * Components use these via Tailwind classes (bg-surface, text-muted, …), never raw hex.
  */
 :root {
-  --dd-ink: #0b1a33;
-  --dd-brand-700: #0a3fa8;
-  --dd-brand-600: #0b5cd5;
-  --dd-brand-500: #1e7bf0;
-  --dd-brand-50: #eef4fe;
-  --dd-care-500: #12b8a2;
+  /* Brand (RevCycle IQ family, docs/DESIGN.md §4). The DenialDesk logo keeps its own colors. */
+  --dd-navy: #1a2c4e;
+  --dd-navy-700: #13213b;
+  --dd-blue: #2e75b6;
+  --dd-blue-700: #245d93;
+  --dd-teal: #1f6b75;
+  --dd-teal-50: #e6f2f3;
+  --dd-selected: #eaf0f7;
 
-  --dd-canvas: #f6f8fb;
+  --dd-canvas: #f7f9fb;
   --dd-surface: #ffffff;
-  --dd-surface-muted: #f1f4f8;
-  --dd-border: #dde3eb;
-  --dd-border-strong: #8592a6;
-  --dd-text: #0b1a33;
-  --dd-text-muted: #4a5a73;
-  --dd-text-subtle: #5f6e84;
+  --dd-surface-muted: #f1f5f9;
+  --dd-border: #e2e8f0;
+  --dd-border-strong: #8492a6;
+  --dd-text: #0f172a;
+  --dd-text-muted: #475569;
+  --dd-text-subtle: #5b6b82;
 
-  --dd-danger-fg: #b42318;
-  --dd-danger-bg: #fef3f2;
-  --dd-danger-border: #fecdca;
-  --dd-warning-fg: #b54708;
-  --dd-warning-bg: #fffaeb;
-  --dd-warning-border: #fedf89;
-  --dd-success-fg: #067647;
-  --dd-success-bg: #ecfdf3;
-  --dd-success-border: #abefc6;
-  --dd-info-fg: #0b5cd5;
-  --dd-info-bg: #eef4fe;
-  --dd-info-border: #c7dafc;
-  --dd-neutral-fg: #4a5a73;
-  --dd-neutral-bg: #f1f4f8;
-  --dd-neutral-border: #dde3eb;
+  /* Sidebar (navy chrome) */
+  --dd-sidebar: #1a2c4e;
+  --dd-sidebar-fg: #e2e8f0;
+  --dd-sidebar-muted: #8a9bb5;
+  --dd-sidebar-active: #243a63;
+  --dd-sidebar-border: #2a3d63;
+  --dd-sidebar-accent: #5ec4cc;
+
+  --dd-danger-fg: #a32d2d;
+  --dd-danger-bg: #fbeded;
+  --dd-danger-border: #f0c4c4;
+  --dd-warning-fg: #854f0b;
+  --dd-warning-bg: #fbf3e6;
+  --dd-warning-border: #eed3a6;
+  --dd-success-fg: #0f6e56;
+  --dd-success-bg: #e7f4ef;
+  --dd-success-border: #b5ddcd;
+  --dd-info-fg: #245d93;
+  --dd-info-bg: #eaf2fa;
+  --dd-info-border: #c3d9ee;
+  --dd-neutral-fg: #475569;
+  --dd-neutral-bg: #f1f5f9;
+  --dd-neutral-border: #e2e8f0;
+
+  /* Chart series (DESIGN.md §9): teal, navy, blue, amber, orange; red for past-due. */
+  --dd-chart-1: #1f6b75;
+  --dd-chart-2: #1a2c4e;
+  --dd-chart-3: #2e75b6;
+  --dd-chart-4: #d9a441;
+  --dd-chart-5: #e8844a;
+  --dd-chart-danger: #a32d2d;
 }
 
 @theme inline {
-  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-playfair), ui-serif, Georgia, serif;
+  --font-mono: var(--font-space-mono), ui-monospace, monospace;
 
-  --color-ink: var(--dd-ink);
-  --color-brand-700: var(--dd-brand-700);
-  --color-brand-600: var(--dd-brand-600);
-  --color-brand-500: var(--dd-brand-500);
-  --color-brand-50: var(--dd-brand-50);
-  --color-care-500: var(--dd-care-500);
+  --color-navy: var(--dd-navy);
+  --color-primary: var(--dd-navy);
+  --color-primary-hover: var(--dd-navy-700);
+  --color-link: var(--dd-blue-700);
+  --color-focus: var(--dd-blue);
+  --color-accent: var(--dd-teal);
+  --color-accent-50: var(--dd-teal-50);
+  --color-selected: var(--dd-selected);
 
   --color-canvas: var(--dd-canvas);
   --color-surface: var(--dd-surface);
@@ -57,6 +78,13 @@
   --color-text: var(--dd-text);
   --color-muted: var(--dd-text-muted);
   --color-subtle: var(--dd-text-subtle);
+
+  --color-sidebar: var(--dd-sidebar);
+  --color-sidebar-fg: var(--dd-sidebar-fg);
+  --color-sidebar-muted: var(--dd-sidebar-muted);
+  --color-sidebar-active: var(--dd-sidebar-active);
+  --color-sidebar-border: var(--dd-sidebar-border);
+  --color-sidebar-accent: var(--dd-sidebar-accent);
 
   --color-danger-fg: var(--dd-danger-fg);
   --color-danger-bg: var(--dd-danger-bg);
@@ -74,9 +102,16 @@
   --color-neutral-bg: var(--dd-neutral-bg);
   --color-neutral-border: var(--dd-neutral-border);
 
+  --color-chart-1: var(--dd-chart-1);
+  --color-chart-2: var(--dd-chart-2);
+  --color-chart-3: var(--dd-chart-3);
+  --color-chart-4: var(--dd-chart-4);
+  --color-chart-5: var(--dd-chart-5);
+  --color-chart-danger: var(--dd-chart-danger);
+
   /* Type scale (DESIGN.md §6): size / line-height */
-  --text-display: 1.5rem;
-  --text-display--line-height: 2rem;
+  --text-display: 1.75rem;
+  --text-display--line-height: 2.25rem;
   --text-title: 1.125rem;
   --text-title--line-height: 1.625rem;
   --text-heading: 0.9375rem;
@@ -90,7 +125,7 @@
 
   /* Shape (DESIGN.md §7) */
   --radius-control: 4px;
-  --radius-panel: 6px;
+  --radius-panel: 5px;
 }
 
 @layer base {
@@ -106,7 +141,7 @@
     line-height: var(--text-body--line-height);
   }
   :focus-visible {
-    outline: 2px solid var(--dd-brand-600);
+    outline: 2px solid var(--dd-blue);
     outline-offset: 2px;
   }
   @media (prefers-reduced-motion: reduce) {

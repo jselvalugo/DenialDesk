@@ -44,7 +44,7 @@ export default async function OverviewPage() {
         actions={
           <Link
             href="/denials"
-            className="inline-flex h-8 items-center rounded-control border border-brand-600 bg-brand-600 px-3 text-body font-medium text-white hover:bg-brand-700"
+            className="inline-flex h-8 items-center rounded-control border border-primary bg-primary px-3 text-body font-medium text-white hover:bg-primary-hover"
           >
             Open denial queue
           </Link>
@@ -91,7 +91,7 @@ export default async function OverviewPage() {
                     <Td>
                       <Link
                         href={`/denials/${row.id}`}
-                        className="font-mono text-label font-medium whitespace-nowrap text-brand-600 hover:underline"
+                        className="font-mono text-label font-medium whitespace-nowrap text-link hover:underline"
                       >
                         {row.claimNumber}
                       </Link>
@@ -146,7 +146,7 @@ export default async function OverviewPage() {
                       <Td>
                         <Link
                           href={`/denials?category=${row.category}`}
-                          className="font-medium text-text hover:text-brand-600 hover:underline"
+                          className="font-medium text-text hover:text-link hover:underline"
                         >
                           {CATEGORY_LABELS[row.category]}
                         </Link>
@@ -162,7 +162,7 @@ export default async function OverviewPage() {
                             className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-muted"
                           >
                             <span
-                              className="block h-full bg-brand-600"
+                              className="block h-full bg-chart-1"
                               style={{ width: `${Math.round(share * 100)}%` }}
                             />
                           </span>

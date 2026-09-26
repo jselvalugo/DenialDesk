@@ -10,7 +10,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="mb-8 flex justify-center">
           <Image src="/brand/denialdesk-logo.png" alt="DenialDesk" width={188} height={45} priority />
         </div>
-        <div className="rounded-panel border border-border bg-surface p-8">{children}</div>
+        <div className="rounded-panel border border-t-4 border-border border-t-primary bg-surface p-8">
+          {children}
+        </div>
         <p className="mt-6 text-center text-label text-muted">
           Authorized use only. Access to this system is monitored and logged.
         </p>

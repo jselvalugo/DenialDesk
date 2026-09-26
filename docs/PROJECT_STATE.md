@@ -21,7 +21,9 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Stack: TypeScript, Next.js, PostgreSQL + Drizzle, Vitest, Playwright | ADR 0001 |
 | 2026-09-26 | Production on Azure, U.S. only; primary likely East US 2 (confirm at cutover) | ADR 0002 |
 | 2026-09-26 | Pre-production on Netlify, synthetic data only | ADR 0003 |
-| 2026-09-26 | Enterprise design system; Tailwind v4 + own components + Radix; IBM Plex | ADR 0004, `DESIGN.md` |
+| 2026-09-26 | Enterprise design system; Tailwind v4 + own components + Radix | ADR 0004, `DESIGN.md` |
+| 2026-09-26 | RevCycle IQ look and feel (navy/teal, Playfair/Inter/Space Mono, lucide icons); logo unchanged | ADR 0004 amendment, `specs/revcycle-look-and-feel.md` |
+| 2026-09-26 | Port RevCycle IQ accounting (rules engine, JVs, FIFO A/R, deposits, statements) as a tenant-scoped module, phases B1–B5 | `specs/revenue-cycle-accounting.md` |
 | 2026-09-26 | Secrets scanning: gitleaks in CI | `specs/project-skeleton.md` |
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
@@ -30,6 +32,7 @@ The product owner delegated technical decisions to the implementing agent ("make
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
+0. Revenue cycle module phases B1–B5 (`specs/revenue-cycle-accounting.md`).
 1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.

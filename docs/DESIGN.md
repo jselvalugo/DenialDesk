@@ -37,68 +37,82 @@ Bloomberg-terminal discipline with modern typography, not a consumer app.
 - Inconsistent capitalization. Sentence case everywhere except proper nouns and codes.
 
 ## 4. Brand
-From `docs/assets/denialdesk-logo.png`.
+DenialDesk shares the look of the owner's **RevCycle IQ** product family (navy chrome, teal
+accent, serif page titles, mono figures) and keeps its own logo (`docs/assets/denialdesk-logo.png`),
+always shown unaltered on a white background (sign-in page, sidebar header). Adopted 2026-09-26,
+ADR 0004 amendment.
 
 | Token | Hex | Use |
 |---|---|---|
-| `ink` | `#0B1A33` | Wordmark navy. Primary text, headings. |
-| `brand-700` | `#0A3FA8` | Logo mark deep blue. Selected nav, pressed states. |
-| `brand-600` | `#0B5CD5` | Primary actions, links, focus ring. AA on white (5.6:1). |
-| `brand-500` | `#1E7BF0` | Hover on brand surfaces; charts series 1. |
-| `brand-50`  | `#EEF4FE` | Selected row, subtle brand background. |
-| `care-500`  | `#12B8A2` | Logo cross teal. **Brand accent only** (logo, onboarding). Never status. |
+| `navy` / `primary` | `#1A2C4E` | Sidebar, primary buttons, page titles (13.9:1 on white) |
+| `primary-hover` | `#13213B` | Hover/pressed on primary |
+| `focus` | `#2E75B6` | Focus ring on light surfaces; chart series 3 |
+| `link` | `#245D93` | Text links, info status (6.9:1 on white, 4.5+ on every surface) |
+| `accent` | `#1F6B75` | Teal accent: chart series 1, progress bars. Never status by itself. |
+| `selected` | `#EAF0F7` | Selected table row |
+
+Sidebar (navy chrome): `sidebar` `#1A2C4E`, text `sidebar-fg` `#E2E8F0` (11.3:1), section labels
+and "Planned" items `sidebar-muted` `#8A9BB5` (4.9:1), active item `sidebar-active` `#243A63` with a
+3px `sidebar-accent` `#5EC4CC` bar; `sidebar-accent` is also the focus ring inside the sidebar.
 
 ## 5. Color tokens
-Neutrals are cool slate, tuned to the navy ink.
+Neutrals are cool slate.
 
 | Token | Hex | Use |
 |---|---|---|
-| `canvas` | `#F6F8FB` | App background behind panels |
+| `canvas` | `#F7F9FB` | App background behind panels |
 | `surface` | `#FFFFFF` | Panels, tables, inputs |
-| `surface-muted` | `#F1F4F8` | Table header, toolbars, read-only fields |
-| `border` | `#DDE3EB` | Default 1px borders and dividers |
-| `border-strong` | `#8592A6` | Input and checkbox borders (3:1 on white, WCAG 1.4.11) |
-| `text` | `#0B1A33` | Primary text (ink) |
-| `text-muted` | `#4A5A73` | Secondary text, labels (AA on white and canvas) |
-| `text-subtle` | `#5F6E84` | Placeholder, metadata (≥ 4.5:1 on white and muted surfaces) |
+| `surface-muted` | `#F1F5F9` | Table header, toolbars, read-only fields |
+| `border` | `#E2E8F0` | Default 1px borders and dividers |
+| `border-strong` | `#8492A6` | Input and checkbox borders (3.2:1 on white, WCAG 1.4.11) |
+| `text` | `#0F172A` | Primary text |
+| `text-muted` | `#475569` | Secondary text, labels (AA on white and canvas) |
+| `text-subtle` | `#5B6B82` | Placeholder, metadata (≥ 4.5:1 on white and muted surfaces) |
+
+Chart series: `chart-1` teal `#1F6B75`, `chart-2` navy `#1A2C4E`, `chart-3` blue `#2E75B6`,
+`chart-4` amber `#D9A441`, `chart-5` orange `#E8844A`, `chart-danger` `#A32D2D`. Charts always
+have a text or table equivalent; color never carries meaning alone.
 
 Status (each has `-fg` text, `-bg` tint, `-border`):
 
 | Status | fg | bg | Meaning |
 |---|---|---|---|
-| `danger` | `#B42318` | `#FEF3F2` | Overdue, denied, blocking error, uncontestable-obligation reached |
-| `warning` | `#B54708` | `#FFFAEB` | Due soon, needs review |
-| `success` | `#067647` | `#ECFDF3` | Paid, overturned, complete |
-| `info` | `#0B5CD5` | `#EEF4FE` | In progress, submitted, informational |
-| `neutral` | `#4A5A73` | `#F1F4F8` | Draft, closed, not applicable |
+| `danger` | `#A32D2D` | `#FBEDED` | Overdue, denied, blocking error, uncontestable-obligation reached |
+| `warning` | `#854F0B` | `#FBF3E6` | Due soon, needs review |
+| `success` | `#0F6E56` | `#E7F4EF` | Paid, overturned, complete |
+| `info` | `#245D93` | `#EAF2FA` | In progress, submitted, informational |
+| `neutral` | `#475569` | `#F1F5F9` | Draft, closed, not applicable |
 
 Rules: status is never shown by color alone — always a label or icon too (WCAG 1.4.1).
 
 ## 6. Typography
-- **UI:** IBM Plex Sans (400, 500, 600). Designed for enterprise software; excellent numerals.
-- **Codes and identifiers:** IBM Plex Mono (400, 500) for claim IDs, CARC/RARC, CPT/ICD, NPI,
-  control numbers.
+- **Page titles:** Playfair Display (600, 700), serif, navy. Page `h1` and the sign-in card title
+  only; never in tables, forms, or body text.
+- **UI:** Inter (400–700). Tabular figures in tables, amounts, and dates.
+- **Codes, identifiers, headline figures:** Space Mono (400, 700) for claim IDs, CARC/RARC,
+  CPT/ICD, NPI, control numbers, and stat-tile values.
 - Self-hosted via `next/font` (no runtime requests to Google).
-- Numbers: `font-variant-numeric: tabular-nums` in tables, amounts, dates.
+- Stat tiles and table headers use uppercase, letter-spaced labels (the one exception to sentence
+  case, §3).
 
 | Style | Size / line | Weight | Use |
 |---|---|---|---|
-| `display` | 24 / 32 | 600 | Page title (one per page) |
+| `display` | 28 / 36 | 700 serif | Page title (one per page) |
 | `title` | 18 / 26 | 600 | Section / panel title |
 | `heading` | 15 / 22 | 600 | Sub-section, dialog title |
 | `body` | 14 / 20 | 400 | Default text |
 | `table` | 13 / 18 | 400 | Table cells (500 for primary column) |
-| `label` | 12 / 16 | 500 | Form labels, column headers (sentence case, muted) |
+| `label` | 12 / 16 | 500 | Form labels (sentence case, muted); column headers and stat labels uppercase 600 |
 | `caption` | 12 / 16 | 400 | Metadata, helper text |
 
 ## 7. Space, shape, elevation
 - 4px grid. Common steps: 4, 8, 12, 16, 24, 32, 48.
-- Radius: 4px controls, 6px panels and dialogs. Nothing larger.
+- Radius: 4px controls, 5px panels and dialogs (≈ 0.3rem). Nothing larger.
 - Borders do the work. Shadows only for floating layers: menus/popovers `shadow-sm`, dialogs `shadow-lg`.
-- Focus: 2px `brand-600` ring with 2px offset, always visible on keyboard focus.
+- Focus: 2px `focus` ring with 2px offset (`sidebar-accent` inside the sidebar), always visible on keyboard focus.
 
 ## 8. Layout
-- **App shell:** left sidebar 240px (collapsible to 64px), top bar 56px, content on `canvas`.
+- **App shell:** navy left sidebar 256px with icons (logo header on white), top bar 56px, content on `canvas`.
 - **Preview banner:** 32px strip above everything in non-production (ADR 0003).
 - **Page:** header (title, one-line description, primary action right-aligned), then filters
   toolbar, then content. Page padding 24px (16px under 1024px).
@@ -113,7 +127,7 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 | `DeadlineIndicator` | Date + days remaining + tone: overdue → danger, within the configured "due soon" window → warning, otherwise neutral. Windows are product settings, never legal values. |
 | `Money` | Integer cents in, formatted USD out, tabular, right-aligned; negatives with a minus sign, never red-only. |
 | `Code` | Mono, small, `surface-muted` background, for CARC/RARC/CPT/ICD/IDs. |
-| `DataTable` | Sticky header, 40px rows (32px compact), zebra off, row hover `surface-muted`, selected `brand-50`, sortable headers with arrow, numeric columns right-aligned, pagination footer with counts. |
+| `DataTable` | Sticky header, 40px rows (32px compact), zebra off, row hover `surface-muted`, selected `selected`, sortable headers with arrow, numeric columns right-aligned, pagination footer with counts. |
 | `PageHeader`, `Panel`, `EmptyState`, `Skeleton` | Layout primitives. |
 | `MaskedValue` | Member ID / SSN / MBI shown as `•••• 1234`; "Reveal" is an audited action (R-7.5.1). |
 | `AIContent` | Labeled "AI draft — review before sending" with the approving user recorded (R-7.11.2). Phase 3. |

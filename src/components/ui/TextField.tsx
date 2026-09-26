@@ -25,7 +25,7 @@ export function TextField({ label, name, hint, error, className, id, ...props }:
         aria-describedby={describedBy}
         className={cn(
           "h-9 rounded-control border bg-surface px-3 text-body text-text placeholder:text-subtle",
-          "focus:border-brand-600 focus:outline-2 focus:outline-offset-0 focus:outline-brand-600",
+          "focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus",
           error ? "border-danger-fg" : "border-border-strong",
           className,
         )}

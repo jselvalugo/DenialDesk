@@ -22,7 +22,7 @@ export function Th({
     <th
       scope="col"
       className={cn(
-        "sticky top-0 h-9 border-b border-border bg-surface-muted px-3 text-label font-medium whitespace-nowrap text-muted",
+        "sticky top-0 h-9 border-b border-border bg-surface-muted px-3 text-label font-semibold tracking-wider whitespace-nowrap text-muted uppercase",
         numeric ? "text-right" : "text-left",
         className,
       )}
@@ -37,7 +37,7 @@ export function Tr({ selected, children }: { selected?: boolean; children: React
       aria-selected={selected || undefined}
       className={cn(
         "border-b border-border last:border-b-0",
-        selected ? "bg-brand-50" : "hover:bg-surface-muted",
+        selected ? "bg-selected" : "hover:bg-surface-muted",
       )}
     >
       {children}

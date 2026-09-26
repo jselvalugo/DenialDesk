@@ -15,11 +15,15 @@ export function StatTile({
 }) {
   return (
     <div className="rounded-panel border border-border bg-surface px-4 py-3.5">
-      <p className="text-label font-medium text-muted">{label}</p>
+      <p className="text-label font-semibold tracking-wider text-muted uppercase">{label}</p>
       <p
         className={cn(
-          "tabular mt-1 text-display font-semibold",
-          emphasis === "danger" ? "text-danger-fg" : emphasis === "warning" ? "text-warning-fg" : "text-text",
+          "mt-1.5 font-mono text-[1.5rem] leading-8 font-bold",
+          emphasis === "danger"
+            ? "text-danger-fg"
+            : emphasis === "warning"
+              ? "text-warning-fg"
+              : "text-primary",
         )}
       >
         {value}

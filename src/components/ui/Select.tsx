@@ -22,7 +22,7 @@ export function Select({ label, name, options, hideLabel, className, id, ...prop
         name={name}
         className={cn(
           "h-8 rounded-control border border-border-strong bg-surface pr-8 pl-2.5 text-body text-text",
-          "focus:border-brand-600 focus:outline-2 focus:outline-offset-0 focus:outline-brand-600",
+          "focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus",
           className,
         )}
         {...props}
