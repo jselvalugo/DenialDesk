@@ -56,8 +56,9 @@ test("the module switcher searches modules and pages and opens one", async ({ pa
   await expect(switcher).toBeHidden();
   await page.getByRole("button", { name: /, switch module$/ }).click();
   await switcher.getByRole("link", { name: "Settings module" }).click();
+  // Signed out, Settings holds only the style guide (practice settings need a signed-in user).
   await expect(
-    page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Settings" }),
+    page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Design system" }),
   ).toHaveAttribute("aria-current", "page");
 });
 
