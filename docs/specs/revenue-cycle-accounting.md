@@ -169,7 +169,7 @@ else the most recent current-format import (`periodFiles()`); every report uses 
 - [x] **C0** (2026-09-26): DenialDesk's own design replaces everything carried over from the
       reference prototype. Month-end activity file layout (charges, payments, adjustments posted in
       the month; balance at month-end) with `adjustment_cents` and `format_version` on files;
-      routing-only rules (percentage contra and line exclusion retired, migration 0011);
+      routing-only rules (percentage contra and line exclusion retired, migration 0012);
       `review_reasons` on lines (DB-checked vocabulary); starter chart, classes, and three rules;
       a month-by-month synthetic simulation (lagged adjudication, patient balances, later voids,
       invalid codes paid later) whose files roll forward exactly; three consecutive months seeded

@@ -1,6 +1,6 @@
 {
-  "id": "58e9a0f4-b5c6-41e1-a7ae-71a54ec1c6f0",
-  "prevId": "1c20fc06-8a03-4cc4-8ad2-68b10665a28d",
+  "id": "dcd30a23-f493-428f-9a1c-8bd88d3f8324",
+  "prevId": "94e4c23b-dde0-4ac8-928b-7f40596922fa",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1844,13 +1844,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "adjustment_cents": {
-          "name": "adjustment_cents",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "balance_cents": {
           "name": "balance_cents",
           "type": "bigint",
@@ -1898,13 +1891,6 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true
-        },
-        "review_reasons": {
-          "name": "review_reasons",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
         }
       },
       "indexes": {
@@ -2057,13 +2043,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "adjustment_cents": {
-          "name": "adjustment_cents",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "balance_cents": {
           "name": "balance_cents",
           "type": "bigint",
@@ -2075,13 +2054,6 @@
           "type": "bigint",
           "primaryKey": false,
           "notNull": true
-        },
-        "format_version": {
-          "name": "format_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
         },
         "flagged_count": {
           "name": "flagged_count",

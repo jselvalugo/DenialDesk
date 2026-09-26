@@ -1,5 +1,5 @@
 {
-  "id": "1c20fc06-8a03-4cc4-8ad2-68b10665a28d",
+  "id": "94e4c23b-dde0-4ac8-928b-7f40596922fa",
   "prevId": "47a75206-c9f9-40a6-9847-f5d0d0ef8de2",
   "version": "7",
   "dialect": "postgresql",
@@ -207,6 +207,27 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "contra_basis": {
+          "name": "contra_basis",
+          "type": "contra_basis",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'percent'"
+        },
+        "contra_bps": {
+          "name": "contra_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "excluded": {
+          "name": "excluded",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "ar_gl": {
           "name": "ar_gl",
@@ -1862,6 +1883,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "contra_bps": {
+          "name": "contra_bps",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contra_cents": {
+          "name": "contra_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
         "net_cents": {
           "name": "net_cents",
           "type": "bigint",
@@ -1883,6 +1916,12 @@
         "adjustment_gl": {
           "name": "adjustment_gl",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "excluded": {
+          "name": "excluded",
+          "type": "boolean",
           "primaryKey": false,
           "notNull": true
         },
@@ -2049,9 +2088,21 @@
           "primaryKey": false,
           "notNull": true
         },
+        "contra_cents": {
+          "name": "contra_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
         "net_cents": {
           "name": "net_cents",
           "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "excluded_count": {
+          "name": "excluded_count",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
@@ -2551,6 +2602,14 @@
         "partially_paid",
         "denied",
         "closed"
+      ]
+    },
+    "public.contra_basis": {
+      "name": "contra_basis",
+      "schema": "public",
+      "values": [
+        "percent",
+        "posted"
       ]
     },
     "public.denial_category": {
