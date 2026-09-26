@@ -162,6 +162,13 @@
       "when": 1790444037486,
       "tag": "0022_retire_demo_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790455130648,
+      "tag": "0023_settings_custom_fields",
+      "breakpoints": true
     }
   ]
 }

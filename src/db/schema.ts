@@ -844,3 +844,48 @@ export const operatorCredentials = pgTable("operator_credentials", {
   appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
   retiredAt: timestamp("retired_at", { withTimezone: true }),
 });
+
+// ---------------------------------------------------------------------------------------------
+// Practice settings (docs/specs/settings-and-custom-fields.md)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * A field a practice administrator added to one of its records (patients, claims, denials,
+ * payers). Definitions only: labels and choices are configuration, never PHI. Fields are
+ * deactivated, never deleted (R-9.2.1), so values recorded later keep their meaning.
+ */
+export const customFields = pgTable(
+  "custom_fields",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    /** Which record the field is added to. */
+    entity: text("entity", { enum: ["patient", "claim", "denial", "payer"] }).notNull(),
+    /** Stable machine name, unique per record type; never changes after creation. */
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    fieldType: text("field_type", {
+      enum: ["text", "long_text", "number", "date", "checkbox", "select"],
+    }).notNull(),
+    /** Choices for `select` fields, in display order; empty otherwise. */
+    options: text("options")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    required: boolean("required").notNull().default(false),
+    helpText: text("help_text"),
+    /** Display order within the record type (lower first). */
+    position: integer("position").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    /** Stale-edit check for the field form: every update must set it. */
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("custom_fields_tenant_entity_key").on(t.tenantId, t.entity, t.key),
+    index("custom_fields_tenant_entity_idx").on(t.tenantId, t.entity, t.position),
+  ],
+);

@@ -6,6 +6,11 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
+- Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
+  section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
+  planned; Design system in pre-production). Administrators define custom fields on patients,
+  claims, denials, and payers (`custom_fields`, migration 0023, RLS + isolation test, audited).
+  Next: S2 render and store field values on record forms.
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
   rules engine, synthetic data, Netlify config (not yet deployed — see `docs/runbooks/netlify.md`).
 - Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
