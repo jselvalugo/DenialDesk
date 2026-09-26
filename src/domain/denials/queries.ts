@@ -16,6 +16,7 @@ import {
 } from "@/db/schema";
 import { ACTION_STATUSES, OPEN_STATUSES } from "@/domain/denial-status";
 import type { DenialCategory } from "@/domain/carc";
+import { isPayerVerified } from "@/domain/payers/verification";
 
 export const PAGE_SIZE = 25;
 /** Queue "due soon" window: a display setting, not a legal value. */
@@ -153,8 +154,13 @@ export async function openByCategory(tx: TenantTx) {
     .orderBy(desc(sql`sum(${denials.deniedCents})`));
 }
 
+/** Every payer the practice can pick from, alphabetical, flagged when it isn't yet verified. */
 export async function payerOptions(tx: TenantTx) {
-  return tx.select({ id: payers.id, name: payers.name }).from(payers).orderBy(asc(payers.name));
+  const rows = await tx
+    .select({ id: payers.id, name: payers.name, ediPayerId: payers.ediPayerId, regime: payers.regime })
+    .from(payers)
+    .orderBy(asc(payers.name));
+  return rows.map((p) => ({ id: p.id, name: p.name, verified: isPayerVerified(p) }));
 }
 
 export async function teamMembers(tx: TenantTx, tenantId: string) {

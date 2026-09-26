@@ -1,6 +1,6 @@
 # Spec: Payer catalog (MVP)
 
-Status: approved by owner in chat (2026-09-26) — P1 in progress
+Status: approved by owner in chat (2026-09-26) — P1 done
 Roadmap item: Phase 1 → practice setup, payer master (REQUIREMENTS §8.1 "Payer master with regulatory regime tag")
 Requirement IDs: R-2.2, R-15.1, §8.1
 
@@ -25,28 +25,34 @@ carry a name and source only; their EDI payer ID and regulatory regime stay **un
   payer ID has not been verified.
 
 ## Acceptance criteria (P1)
-- [ ] `payers.edi_payer_id` and `payers.regime` become nullable; a payer with either missing is
+- [x] `payers.edi_payer_id` and `payers.regime` become nullable; a payer with either missing is
       **unverified**. Existing rows are unchanged.
-- [ ] `payers.source` (text, nullable) records where a catalog name came from.
-- [ ] A versioned starter catalog of Florida insurers (names only, each with a source note and
+- [x] `payers.source` (text, nullable) records where a catalog name came from.
+- [x] A versioned starter catalog of Florida insurers (names only, each with a source note and
       ⚠️ VERIFY) lives in code (`src/domain/payers/florida-catalog.ts`). No payer IDs or regimes
       are invented (CLAUDE.md #9).
-- [ ] Each practice gets the catalog entries it does not already have (matched by name,
+- [x] Each practice gets the catalog entries it does not already have (matched by name,
       case-insensitive) via an idempotent step run by the seed and available to setup; RLS and
       tenant scoping unchanged.
-- [ ] The Payer field in Primary Insurance is searchable and lists all of the practice's payers
+- [x] The Payer field in Primary Insurance is searchable and lists all of the practice's payers
       alphabetically; unverified payers are labelled "unverified".
-- [ ] Anywhere a regime label is shown, a null regime shows "Regime not verified".
-- [ ] Filing and appeal deadlines are not computed for an unverified payer; the UI shows
+- [x] Anywhere a regime label is shown, a null regime shows "Regime not verified".
+- [x] Filing and appeal deadlines are not computed for an unverified payer; the UI shows
       "No deadline — payer not verified" instead of a date. Tests cover null regime.
-- [ ] Claim submission/837P generation (when built) must refuse unverified payers — enforced by a
+- [x] Claim submission/837P generation (when built) must refuse unverified payers — enforced by a
       guard function with a unit test.
-- [ ] Payer names are public reference data, not PHI; no audit or logging change needed beyond
+- [x] Payer names are public reference data, not PHI; no audit or logging change needed beyond
       existing patient-write audit.
 
 ## Data / API changes
 - Migration: `ALTER TABLE payers ALTER COLUMN edi_payer_id DROP NOT NULL, ALTER COLUMN regime DROP NOT NULL, ADD COLUMN source text`.
 - Data classification: payer names = Public reference data (REQUIREMENTS §9.1). No PHI.
+- The future 837P builder/submit path (edi-x12-specialist) must call
+  `assertPayerVerified`/`isPayerVerified` (`src/domain/payers/verification.ts`) before building or
+  sending a claim, and refuse an unverified payer. Any caller of `rules/deadlines.ts`'s
+  `appealDeadline` (or `timelyFilingDeadline`/`promptPayMilestones`) must first confirm
+  `payer.regime !== null` — those functions take a verified `Regime` and must never be handed a
+  guessed one.
 
 ## Legal rules used
 None added. Unverified payers deliberately get **no** legal clock rather than a guessed one.
@@ -57,3 +63,7 @@ Clearinghouse integration, eligibility (270/271), payer admin UI, secondary cove
 ## Open questions
 - Which clearinghouse supplies payer IDs (see `docs/research/clearinghouse-requirements.pdf`).
 - Owner to verify the starter catalog against the Florida OIR licensee list and AHCA SMMC plan list.
+- `ensureCatalogPayers` re-adds a catalog payer by name whenever setup runs, including one a
+  practice deliberately deleted or renamed. P2 (payer admin screen) should decide whether a
+  practice can opt a catalog entry out permanently, e.g. a "do not re-add" marker, rather than
+  relying on setup never running again.

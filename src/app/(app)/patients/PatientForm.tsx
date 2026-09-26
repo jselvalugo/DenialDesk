@@ -1,15 +1,99 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useActionState } from "react";
+import { startTransition, useActionState, useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { TextField } from "@/components/ui/TextField";
 import { SENSITIVITY_TAGS, SEX_LABELS } from "@/domain/patients/record";
+import { resolvePayerByName, type PayerOption } from "@/domain/payers/resolve";
 import { registerPatient, savePatient, type PatientFormState } from "./actions";
 
 const selectClass =
   "h-9 rounded-control border border-border-strong bg-surface px-2.5 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus";
+
+const SELF_PAY = "";
+
+/**
+ * Searchable payer picker: a text input filtered against `<datalist>` (no new dependency), backed
+ * by a hidden field carrying the payer id the server expects. Resolution is a pure function
+ * (`resolvePayerByName`, unit-tested): empty text is self-pay, text matching one or more payers
+ * (by trimmed, case-insensitive name — preferring a verified one when names collide) uses that
+ * payer, and text matching nothing is a blocking field error — it must never silently fall back to
+ * self-pay, and the hidden id is left at its last valid value while the error is showing.
+ */
+function PayerPicker({
+  payers,
+  defaultPayerId,
+  invalid,
+  onValidityChange,
+}: {
+  payers: PayerOption[];
+  defaultPayerId: string;
+  invalid: boolean;
+  onValidityChange: (valid: boolean) => void;
+}) {
+  const listId = useId();
+  const initial = useMemo(() => payers.find((p) => p.id === defaultPayerId), [payers, defaultPayerId]);
+  const [text, setText] = useState(initial?.name ?? "");
+  const [payerId, setPayerId] = useState(defaultPayerId);
+  const resolution = useMemo(() => resolvePayerByName(payers, text), [payers, text]);
+
+  const unverifiedHintId = `${listId}-unverified`;
+  const errorId = `${listId}-error`;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor="field-primaryPayer" className="text-label font-medium text-text">
+        Payer
+      </label>
+      <input
+        id="field-primaryPayer"
+        type="text"
+        list={listId}
+        value={text}
+        placeholder="No insurance on file (self-pay)"
+        aria-invalid={invalid || resolution.status === "unmatched" || undefined}
+        aria-describedby={
+          resolution.status === "unmatched"
+            ? errorId
+            : resolution.status === "matched" && !resolution.payer.verified
+              ? unverifiedHintId
+              : undefined
+        }
+        onChange={(event) => {
+          const value = event.target.value;
+          setText(value);
+          // Only a resolvable value (self-pay or a matched payer) updates the id the server
+          // receives; unmatched text leaves it at its last valid value rather than reverting to
+          // self-pay, and blocks submit via `onValidityChange` until it's fixed.
+          const next = resolvePayerByName(payers, value);
+          if (next.status === "self_pay") setPayerId(SELF_PAY);
+          else if (next.status === "matched") setPayerId(next.payer.id);
+          onValidityChange(next.status !== "unmatched");
+        }}
+        className={selectClass}
+      />
+      <datalist id={listId}>
+        {payers.map((p) => (
+          <option key={p.id} value={p.name} label={p.verified ? p.name : `${p.name} (unverified)`} />
+        ))}
+      </datalist>
+      {resolution.status === "unmatched" && (
+        <p id={errorId} className="text-label font-medium text-danger-fg">
+          No payer matches &ldquo;{text.trim()}&rdquo;. Pick one from the list, or clear the field for
+          self-pay.
+        </p>
+      )}
+      {resolution.status === "matched" && !resolution.payer.verified && (
+        <p id={unverifiedHintId} className="text-label text-muted">
+          Unverified payer — no payer ID or regulatory regime on file yet.
+        </p>
+      )}
+      <input type="hidden" name="primaryPayerId" value={payerId} />
+    </div>
+  );
+}
 
 export interface PatientFormValues {
   id: string;
@@ -38,7 +122,7 @@ export function PatientForm({
   today,
 }: {
   patient?: PatientFormValues;
-  payers: Array<{ id: string; name: string }>;
+  payers: PayerOption[];
   canTag: boolean;
   syntheticOnly: boolean;
   today: string;
@@ -49,6 +133,7 @@ export function PatientForm({
     {},
   );
   const err = (field: string) => (state.field === field ? state.error : undefined);
+  const [payerValid, setPayerValid] = useState(true);
 
   return (
     // Submitted via onSubmit (not the action prop) so React keeps the typed values when the server
@@ -56,6 +141,9 @@ export function PatientForm({
     <form
       onSubmit={(event) => {
         event.preventDefault();
+        // The payer picker's own field error blocks submission client-side: unmatched text must
+        // never be silently sent as self-pay (spec: payer-catalog P1).
+        if (!payerValid) return;
         const formData = new FormData(event.currentTarget);
         startTransition(() => action(formData));
       }}
@@ -172,23 +260,12 @@ export function PatientForm({
         <legend className="mb-3 text-heading font-semibold text-text">Primary insurance</legend>
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="field-primaryPayerId" className="text-label font-medium text-text">
-              Payer
-            </label>
-            <select
-              id="field-primaryPayerId"
-              name="primaryPayerId"
-              defaultValue={patient?.primaryPayerId ?? ""}
-              aria-invalid={state.field === "primaryPayerId" || undefined}
-              className={selectClass}
-            >
-              <option value="">No insurance on file (self-pay)</option>
-              {payers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <PayerPicker
+              payers={payers}
+              defaultPayerId={patient?.primaryPayerId ?? ""}
+              invalid={state.field === "primaryPayerId"}
+              onValidityChange={setPayerValid}
+            />
             {state.field === "primaryPayerId" && (
               <p className="text-label font-medium text-danger-fg">{state.error}</p>
             )}
@@ -266,7 +343,12 @@ export function PatientForm({
       )}
 
       <div className="flex gap-2">
-        <Button type="submit" variant="primary" disabled={pending} aria-disabled={pending}>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={pending || !payerValid}
+          aria-disabled={pending || !payerValid}
+        >
           {pending ? "Saving…" : editing ? "Save changes" : "Register patient"}
         </Button>
         <Link

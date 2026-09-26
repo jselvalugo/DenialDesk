@@ -162,6 +162,13 @@
       "when": 1790444037486,
       "tag": "0022_retire_demo_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790454824300,
+      "tag": "0023_nosy_flatman",
+      "breakpoints": true
     }
   ]
 }
