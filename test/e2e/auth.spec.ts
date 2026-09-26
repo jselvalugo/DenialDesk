@@ -86,3 +86,16 @@ test.describe("signed in", () => {
     await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
   });
 });
+
+test("the sign-in page fits 1280×800 and the console sign-in has no picture", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  const main = page.getByRole("main");
+  await expect(main.locator('img[src*="denialdesk-reception"]')).toBeVisible();
+  expect(await main.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
+
+  await page.goto("/operator/login");
+  await expect(page.getByRole("heading", { name: "Operator sign-in" })).toBeVisible();
+  await expect(page.locator('img[src*="denialdesk-reception"]')).toHaveCount(0);
+});
