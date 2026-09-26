@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { FILING_WARNING_DAYS, filingStatus, isUnsubmitted } from "./status";
 
 // Florida: 6 months from 2026-03-31 → 2026-09-30 (fl.timely_filing.initial, ⚠️ VERIFY).
-// Medicare: 12 months from 2026-02-15 → 2027-02-15 (medicare.timely_filing, ⚠️ VERIFY).
+// Medicare: 1 year from 2026-02-15 → 2027-02-15, Washington's Birthday (federal holiday) → rolls to
+// 2027-02-16 (medicare.timely_filing, ⚠️ VERIFY).
 describe("timely-filing status (R-3.1.5)", () => {
   it.each([
     ["2026-09-29", "due_soon", 1], // day before the deadline
@@ -16,12 +17,12 @@ describe("timely-filing status (R-3.1.5)", () => {
   });
 
   it.each([
-    ["2027-02-14", "due_soon"],
     ["2027-02-15", "due_soon"],
-    ["2027-02-16", "past_deadline"],
+    ["2027-02-16", "due_soon"],
+    ["2027-02-17", "past_deadline"],
   ])("Medicare claim on %s is %s", (today, state) => {
     const status = filingStatus("medicare", "2026-02-15", today);
-    expect(status.deadline?.date).toBe("2027-02-15");
+    expect(status.deadline?.date).toBe("2027-02-16");
     expect(status.state).toBe(state);
   });
 

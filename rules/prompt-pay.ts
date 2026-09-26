@@ -1,6 +1,6 @@
-import { addCalendarDays, daysBetween } from "./calendar";
+import { daysBetween } from "./calendar";
 import { catalog } from "./catalog";
-import { payerResponseStatus } from "./deadlines";
+import { floridaRuleSet, payerResponseStatus, promptPayRuleIds, ruleDueDate } from "./deadlines";
 import { appliesTo, resolveRule } from "./engine";
 import type { Regime, Rule } from "./types";
 
@@ -64,8 +64,6 @@ export interface PromptPayClock {
   state: "open" | "met" | "late" | "uncontestable";
 }
 
-const INTEREST_RULE = "fl.promptpay.interest_rate";
-
 function tryResolve(id: string, asOf: string, rules: Rule[]): Rule | null {
   try {
     return resolveRule(id, asOf, rules);
@@ -75,7 +73,7 @@ function tryResolve(id: string, asOf: string, rules: Rule[]): Rule | null {
 }
 
 function milestone(rule: Rule, receivedDate: string, metOn: string | null, today: string): ClockMilestone {
-  const due = addCalendarDays(receivedDate, rule.value);
+  const due = ruleDueDate(rule, receivedDate);
   const base = { ruleId: rule.id, title: rule.title, citation: rule.citation, verify: rule.verify, due };
   if (metOn !== null) {
     // Reuse payerResponseStatus: a response on the due date itself counts as met.
@@ -110,7 +108,9 @@ export function simpleInterestCents(paidCents: number, ratePercent: number, days
  * - pay_or_contest is met by the first payment, denial or contest; pay_or_deny and uncontestable
  *   are met only by the first payment or denial — a contest does not stop them (F4).
  * - contested: a contest dated on/before the pay_or_contest due date.
+ * - Due dates roll forward past weekends and Florida legal holidays (rule.rollForward, ⚠️ VERIFY).
  * - paymentDue (⚠️ VERIFY, accrual start): pay_or_deny due if contested, else pay_or_contest due.
+ *   Interest runs from the first calendar day after it (owner 2026-09-26).
  * - uncontestable (R-3.1.4): no payment or denial by the uncontestable due date.
  * - providerResponseDue: `fl.promptpay.<electronic|paper>.provider_response` counted from the first
  *   contest date (taken as the payer's notice date); null when there is no contest or no such rule
@@ -144,8 +144,11 @@ export function evaluatePromptPay(input: {
     state: "met",
   };
 
+  // Regime check before rule lookup: MA, Medicare, ERISA etc. never resolve Florida rules.
+  const ids = promptPayRuleIds(input.regime, electronic);
+  const set = floridaRuleSet(input.regime);
+  if (ids === null || set === null) return empty;
   const kind = electronic ? "electronic" : "paper";
-  const ids = ["pay_or_contest", "pay_or_deny", "uncontestable"].map((m) => `fl.promptpay.${kind}.${m}`);
   const [contestRule, denyRule, uncontestableRule] = ids.map((id) =>
     resolveRule(id, receivedDate, rules),
   ) as [Rule, Rule, Rule];
@@ -175,10 +178,12 @@ export function evaluatePromptPay(input: {
   const uncontestable = uncontestableM.state === "late" || uncontestableM.state === "overdue";
 
   const responseRule =
-    firstContest === null ? null : tryResolve(`fl.promptpay.${kind}.provider_response`, receivedDate, rules);
+    firstContest === null
+      ? null
+      : tryResolve(`${set}.promptpay.${kind}.provider_response`, receivedDate, rules);
   const providerResponseDue =
     responseRule && firstContest && appliesTo(responseRule, input.regime)
-      ? addCalendarDays(firstContest, responseRule.value)
+      ? ruleDueDate(responseRule, firstContest)
       : null;
 
   const interest: InterestLine[] = [];
@@ -186,7 +191,7 @@ export function evaluatePromptPay(input: {
     if (r.kind !== "payment") continue;
     const daysLate = daysBetween(paymentDue, r.date);
     if (daysLate <= 0) continue;
-    const rate = resolveRule(INTEREST_RULE, r.date, rules);
+    const rate = resolveRule(`${set}.promptpay.interest_rate`, r.date, rules);
     interest.push({
       paymentDate: r.date,
       paidCents: r.cents!,

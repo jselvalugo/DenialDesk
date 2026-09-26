@@ -5,14 +5,17 @@ import type { Regime, Rule } from "./types";
 
 // Received 2026-03-02. Electronic: 20 → 03-22, 90 → 05-31, 120 → 06-30.
 // Paper: 40 → 04-11, 120 → 06-30, 140 → 07-20. (Values come from the catalog.)
+// These tests check day counting, so they run on the catalog with roll-forward switched off;
+// weekend/holiday roll-forward is tested separately below with the real catalog.
 const RECEIVED = "2026-03-02";
+const NO_ROLL: Rule[] = catalog.map((r) => ({ ...r, rollForward: "none" }));
 
 function run(
   responses: PayerResponse[],
   today: string,
   electronic = true,
   regime: Regime = "fl_insurer",
-  rules?: Rule[],
+  rules: Rule[] = NO_ROLL,
 ) {
   return evaluatePromptPay({ regime, electronic, receivedDate: RECEIVED, responses, today, rules });
 }
@@ -192,8 +195,25 @@ describe("regime exclusion", () => {
     },
   );
 
-  it("applies to FL HMO", () => {
-    expect(run([], RECEIVED, true, "fl_hmo").applies).toBe(true);
+  it("applies to FL HMO, using the HMO rule set (§ 641.3155)", () => {
+    const c = run([{ kind: "payment", date: "2026-03-23", cents: 100_000 }], "2026-12-31", true, "fl_hmo");
+    expect(c.applies).toBe(true);
+    expect(c.milestones[0]!.ruleId).toBe("fl.hmo.promptpay.electronic.pay_or_contest");
+    expect(c.milestones[0]!.citation).toMatch(/§ 641\.3155/);
+    expect(c.interest[0]!.ruleId).toBe("fl.hmo.promptpay.interest_rate");
+  });
+
+  it("MA never resolves Florida rules, even if the Florida rules have a gap (regime check first)", () => {
+    const gappy = catalog.filter((r) => !r.id.startsWith("fl."));
+    const c = evaluatePromptPay({
+      regime: "medicare_advantage",
+      electronic: true,
+      receivedDate: RECEIVED,
+      responses: [],
+      today: RECEIVED,
+      rules: gappy,
+    });
+    expect(c.applies).toBe(false);
   });
 });
 
@@ -230,7 +250,7 @@ describe("effective-dated rule resolution (injected catalog)", () => {
       today: "2026-03-02",
       rules,
     });
-    expect(before.milestones[0]!.due).toBe("2026-03-21"); // old value (20)
+    expect(before.milestones[0]!.due).toBe("2026-03-23"); // old value (20): Sat 03-21 rolls to Mon
     expect(on.milestones[0]!.due).toBe("2026-03-17"); // new value (15)
   });
 
@@ -261,5 +281,41 @@ describe("DST", () => {
       today: "2026-03-20",
     });
     expect(c.milestones[0]).toMatchObject({ due: "2026-03-20", state: "open", daysRemaining: 0 });
+  });
+});
+
+describe("weekend/holiday roll-forward (Fla. R. Gen. Prac. & Jud. Admin. 2.514, ⚠️ VERIFY)", () => {
+  const real = (responses: PayerResponse[], today: string) =>
+    run(responses, today, true, "fl_insurer", catalog);
+
+  it("a day-20 deadline on Sunday 2026-03-22 moves to Monday 03-23", () => {
+    expect(real([], RECEIVED).milestones.map((m) => m.due)).toEqual([
+      "2026-03-23",
+      "2026-06-01",
+      "2026-06-30",
+    ]);
+  });
+
+  it.each([
+    ["2026-03-22", "met", 0],
+    ["2026-03-23", "met", 0],
+    ["2026-03-24", "late", 1],
+  ] as const)("response on %s against the rolled due date: %s", (date, state, late) => {
+    expect(real([{ kind: "denial", date }], "2026-12-31").milestones[0]).toMatchObject({
+      state,
+      daysLate: late,
+    });
+  });
+
+  it("interest starts the first calendar day after the rolled due date (owner, ⚠️ counsel)", () => {
+    expect(real([{ kind: "payment", date: "2026-03-23", cents: 100_000 }], "2026-12-31").interest).toEqual(
+      [],
+    );
+    expect(
+      real([{ kind: "payment", date: "2026-03-24", cents: 100_000 }], "2026-12-31").interest[0],
+    ).toMatchObject({
+      dueDate: "2026-03-23",
+      daysLate: 1,
+    });
   });
 });

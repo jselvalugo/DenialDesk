@@ -10,6 +10,9 @@ const base: Rule = {
   regimes: ["fl_insurer"],
   value: 10,
   unit: "calendar_days",
+  anchor: "payer_receipt",
+  rollForward: "none",
+  confirmedBy: null,
   effectiveFrom: null,
   effectiveTo: "2027-01-01",
   verify: true,
@@ -43,6 +46,35 @@ describe("catalog", () => {
     for (const rule of catalog) {
       const asOf = rule.effectiveFrom ?? "2026-09-26";
       expect(() => resolveRule(rule.id, asOf)).not.toThrow();
+    }
+  });
+
+  it("never records a confirmation while verify is still true, and every date period has an anchor", () => {
+    for (const rule of catalog) {
+      expect(rule.confirmedBy, rule.id).toBeNull();
+      if (rule.unit !== "percent_per_year") expect(rule.anchor, rule.id).not.toBeNull();
+    }
+  });
+
+  it("keeps Florida insurer and HMO rule sets separate, with HMO rules citing § 641.3155", () => {
+    for (const rule of catalog.filter((r) => r.id.startsWith("fl.hmo."))) {
+      expect(rule.regimes, rule.id).toEqual(["fl_hmo"]);
+      expect(rule.citation, rule.id).toMatch(/§ 641\.3155/);
+      expect(
+        catalog.some((r) => r.id === rule.id.replace("fl.hmo.", "fl.")),
+        rule.id,
+      ).toBe(true);
+    }
+    for (const rule of catalog.filter((r) => r.id.startsWith("fl.") && !r.id.startsWith("fl.hmo."))) {
+      expect(rule.regimes.includes("fl_hmo") && rule.regimes.length < 9, rule.id).toBe(false);
+    }
+  });
+
+  it("never lets Florida rules apply to Medicare, MA or self-funded ERISA, except the patient refund rule", () => {
+    for (const rule of catalog.filter((r) => r.id.startsWith("fl.") && r.id !== "fl.patient_refund")) {
+      for (const regime of ["medicare", "medicare_advantage", "erisa_self_funded"] as const) {
+        expect(rule.regimes.includes(regime), `${rule.id} ${regime}`).toBe(false);
+      }
     }
   });
 });

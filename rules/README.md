@@ -21,3 +21,12 @@ The rules engine: every legal deadline, rate, and threshold, versioned and effec
 - Interest ⚠️ VERIFY accrual start: assumed to run from the payment due date (pay-or-contest, or
   pay-or-deny once contested). Simple interest per late payment:
   cents × rate% × days late / 365, rounded half-up to whole cents in integer arithmetic.
+
+## Rule shape and date math (`types.ts`, `deadlines.ts`)
+
+- Each rule version carries `anchor`, `unit` (day-count), `rollForward` and `confirmedBy`.
+- `ruleDueDate(rule, anchorDate)` counts the period (months/years clamp to month-end) and then
+  rolls a weekend/holiday last day forward: Florida legal holidays for `fl.*`, federal for
+  Medicare (⚠️ VERIFY). Decisions: `docs/specs/rules-engine-skeleton.md` (P1).
+- FL insurer rules are `fl.*` (§ 627.6131); FL HMO rules are `fl.hmo.*` (§ 641.3155). The regime is
+  checked before lookup (`floridaRuleSet`).

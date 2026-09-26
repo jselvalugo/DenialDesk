@@ -90,6 +90,44 @@ export function federalHolidays(year: number): string[] {
   ];
 }
 
+/**
+ * Florida legal holidays for deadline roll-forward. Fla. R. Gen. Prac. & Jud. Admin. 2.514(a)(6)
+ * defines "legal holiday" to include days set aside by Fla. Stat. § 110.117 as paid holidays for
+ * state employees; those are listed here with § 110.117(2) observance (Saturday → Friday,
+ * Sunday → Monday).
+ * ⚠️ VERIFY with counsel: the rule text and § 110.117 list were not fetched from a primary source;
+ * § 683.01 names more legal holidays (e.g. Good Friday, Columbus Day) that are not state paid
+ * holidays, and 2.514 also counts days the clerk's office is closed. Which list governs prompt-pay
+ * and filing clocks outside court is open (OA item, spec rules-engine-skeleton).
+ */
+export function floridaHolidays(year: number): string[] {
+  const pad = (m: number, d: number) => `${year}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const thanksgiving = nthWeekday(year, 10, 4, 4);
+  return [
+    observed(pad(1, 1)),
+    nthWeekday(year, 0, 1, 3), // Birthday of Martin Luther King, Jr.
+    lastWeekday(year, 4, 1), // Memorial Day
+    observed(pad(7, 4)),
+    nthWeekday(year, 8, 1, 1), // Labor Day
+    observed(pad(11, 11)), // Veterans' Day
+    thanksgiving,
+    addCalendarDays(thanksgiving, 1), // Friday after Thanksgiving
+    observed(pad(12, 25)),
+  ];
+}
+
+export const holidayCalendars = {
+  fl_legal_holiday: floridaHolidays,
+  federal_holiday: federalHolidays,
+} as const;
+
+/** `iso` if it is a business day under `holidays`, else the next business day after it. */
+export function rollForwardToBusinessDay(iso: string, holidays: (year: number) => string[]): string {
+  let date = iso;
+  while (!isBusinessDay(date, holidays)) date = addCalendarDays(date, 1);
+  return date;
+}
+
 export function isBusinessDay(iso: string, holidays: (year: number) => string[] = federalHolidays): boolean {
   const date = toUtc(iso);
   const day = date.getUTCDay();
