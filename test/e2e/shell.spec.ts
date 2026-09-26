@@ -47,7 +47,7 @@ test("the module switcher searches modules and pages and opens one", async ({ pa
   // A module match keeps all of its pages; a page match shows only its module and that page.
   await launcher.getByLabel("Search modules and pages").fill("claims");
   await expect(launcher.getByRole("link", { name: "Claims module" })).toBeVisible();
-  await expect(launcher.getByText("Remittances")).toBeVisible();
+  await expect(launcher.getByText("Remittances", { exact: true })).toBeVisible();
   await expect(launcher.getByRole("link", { name: "Denials module" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(launcher).toBeHidden();

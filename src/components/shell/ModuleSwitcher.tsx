@@ -169,7 +169,7 @@ export function ModuleSwitcher({
                             ) : (
                               <span className={cn(row, "border-dashed border-border text-muted")}>
                                 {icon}
-                                {item.label}
+                                <span>{item.label}</span>
                                 <span className="text-label text-subtle">Planned</span>
                               </span>
                             )}
