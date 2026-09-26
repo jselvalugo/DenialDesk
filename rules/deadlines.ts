@@ -15,6 +15,11 @@ export interface Deadline {
  * - Medicare Part B: redetermination window from presumed receipt of the notice (42 CFR § 405.942).
  * - Everyone else: the appeal window configured from the payer contract, if any. We don't infer
  *   commercial or Medicare Advantage appeal windows — they come from contracts and plan documents.
+ *
+ * `regime` here is a verified `Regime`, never null: callers must not invoke this for a payer whose
+ * regime hasn't been verified (spec: payer-catalog P1 — a payer's `regime` column is nullable until
+ * a human confirms it). Check `payer.regime !== null` (or `assertPayerVerified` /
+ * `isPayerVerified`, `src/domain/payers/verification.ts`) before calling.
  */
 export function appealDeadline(input: {
   regime: Regime;

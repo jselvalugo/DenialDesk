@@ -26,7 +26,7 @@ export function isUnsubmitted(status: ClaimStatus): boolean {
 /** "Filing window closing" warning: a display setting, not a legal value. */
 export const FILING_WARNING_DAYS = 30;
 
-export type FilingState = "open" | "due_soon" | "past_deadline" | "not_configured";
+export type FilingState = "open" | "due_soon" | "past_deadline" | "not_configured" | "payer_unverified";
 
 export interface FilingStatus {
   state: FilingState;
@@ -38,9 +38,12 @@ export interface FilingStatus {
 /**
  * Timely-filing status of an unsubmitted claim (R-3.1.5). The deadline comes from the rules engine
  * by the payer's regime; regimes without a statutory rule (payer contract) are "not configured".
- * Filing on the deadline itself is on time.
+ * A null regime means the payer itself is unverified (spec: payer-catalog P1) — DenialDesk never
+ * guesses a deadline for it, so no deadline is computed at all. Filing on the deadline itself is
+ * on time.
  */
-export function filingStatus(regime: Regime, serviceDate: string, today: string): FilingStatus {
+export function filingStatus(regime: Regime | null, serviceDate: string, today: string): FilingStatus {
+  if (regime === null) return { state: "payer_unverified", deadline: null, daysRemaining: null };
   const deadline = timelyFilingDeadline(regime, serviceDate);
   if (!deadline) return { state: "not_configured", deadline: null, daysRemaining: null };
   const daysRemaining = daysUntil(deadline.date, today);

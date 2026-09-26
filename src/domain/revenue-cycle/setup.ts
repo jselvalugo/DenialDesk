@@ -4,6 +4,8 @@ import type { Role } from "@/auth/session";
 import { withTenant, type TenantTx } from "@/db/tenant";
 import { audit } from "@/lib/audit";
 import { businessRules, glAccounts, locations, payerClasses, payers, rcmSites } from "@/db/schema";
+import { ensureCatalogPayers } from "@/domain/payers/catalog";
+import { CATALOG_VERSION } from "@/domain/payers/florida-catalog";
 import { DEFAULT_GL_ACCOUNTS, DEFAULT_PAYER_CLASSES, DEFAULTS_SOURCE, DEFAULT_RULES } from "./defaults";
 import { EngineConfigError, ruleMatchSchema, type EngineConfig } from "./engine";
 
@@ -19,6 +21,20 @@ export async function seedRevenueCycleDefaults(
   actorUserId: string,
 ): Promise<boolean> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`rcm_defaults:${tenantId}`}))`);
+  // Independent of the business-rules setup below: gives the practice any starter-catalog payer
+  // it doesn't already have (spec: payer-catalog P1), every time setup runs.
+  const catalogAdded = await ensureCatalogPayers(tx, tenantId);
+  if (catalogAdded > 0) {
+    await audit(tx, {
+      action: "payer.catalog_loaded",
+      actorUserId,
+      tenantId,
+      entityType: "tenant",
+      entityId: tenantId,
+      reason: "Starter payer catalog loaded",
+      metadata: { count: catalogAdded, catalogVersion: CATALOG_VERSION },
+    });
+  }
   const [{ rules } = { rules: 0 }] = await tx.select({ rules: count() }).from(businessRules);
   if (rules > 0) return false;
 

@@ -33,6 +33,16 @@ _Last updated: 2026-09-26_
   calculation/display bugs (comma charges, `-$0.00`, "filed on time" with no deadline, prompt-pay
   "Met" on any notice), missing catalog rules, and a page-by-page record-model gap list with a
   prioritized order of work (P0–P4). Next session should start with its P0 list.
+- Payer catalog P1 (`specs/payer-catalog.md`): `payers.edi_payer_id`/`regime` are now nullable plus
+  a `payers.source` column; a payer missing either is "unverified". Starter Florida insurer catalog
+  by name only (`src/domain/payers/florida-catalog.ts`, no payer IDs/regimes) loaded per-tenant,
+  idempotently, by `ensureCatalogPayers` (`src/domain/payers/catalog.ts`), called from the seed and
+  from `seedRevenueCycleDefaults`/practice setup. Primary Insurance's Payer field is a searchable
+  input+datalist (`PatientForm.tsx`) labelling unverified payers. `regimeLabel()`
+  (`domain/denial-status.ts`) and `filingStatus()` (`domain/claims/status.ts`, new
+  `"payer_unverified"` state) handle a null regime everywhere it's shown; unverified payers get no
+  computed deadline. `assertPayerVerified` (`domain/payers/verification.ts`) guards future 837P
+  submission. Next: P2 clearinghouse payer IDs + admin regime verification + payer admin screen.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). A platform operator
   console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
