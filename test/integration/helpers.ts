@@ -26,6 +26,7 @@ export async function expectDbError(promise: Promise<unknown>, pattern: RegExp):
   try {
     await promise;
   } catch (error) {
+    // withTenant errors are already sanitized; system queries still carry Drizzle's wrapper.
     const messages = [(error as Error).message, ((error as Error).cause as Error | undefined)?.message ?? ""];
     if (messages.some((message) => pattern.test(message))) return;
     throw new Error(`Expected database error matching ${pattern}, got: ${messages.join(" | ")}`);

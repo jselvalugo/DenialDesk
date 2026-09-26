@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { keepSessionAlive, signOut } from "@/auth/actions";
-import { SESSION_IDLE_MS, SESSION_WARNING_MS } from "@/auth/policy";
+import { SESSION_IDLE_MS, SESSION_TOUCH_MS, SESSION_WARNING_MS } from "@/auth/policy";
+
+// Sign out before the server could, given its activity clock may lag by up to SESSION_TOUCH_MS.
+const CLIENT_IDLE_MS = SESSION_IDLE_MS - SESSION_TOUCH_MS;
 import { Button } from "@/components/ui/Button";
 
 /**
@@ -32,7 +35,7 @@ export function SessionTimeout() {
     window.addEventListener("popstate", onActivity);
     document.addEventListener("submit", onActivity);
     const timer = window.setInterval(() => {
-      const remaining = SESSION_IDLE_MS - (Date.now() - lastActive.current);
+      const remaining = CLIENT_IDLE_MS - (Date.now() - lastActive.current);
       if (remaining <= 0) {
         window.clearInterval(timer);
         router.push("/login?reason=timeout");

@@ -1,43 +1,103 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
+import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
-import { auditEvents, locations, payers } from "@/db/schema";
-import { withTenant } from "@/db/tenant";
+import {
+  auditEvents,
+  claimLines,
+  claims,
+  denialNotes,
+  denials,
+  locations,
+  memberships,
+  patients,
+  payers,
+  providers,
+  tenants,
+  users,
+} from "@/db/schema";
+import { seedPractice } from "@/db/seed";
+import { DatabaseError, withTenant } from "@/db/tenant";
+import { generateDataset } from "@/domain/synthetic/generator";
 import { audit } from "@/lib/audit";
-import { createTestTenant, expectDbError } from "./helpers";
+import { expectDbError } from "./helpers";
 
-// R-7.2.4: tenant isolation is enforced by the database, not just by application code.
-let a: Awaited<ReturnType<typeof createTestTenant>>;
-let b: Awaited<ReturnType<typeof createTestTenant>>;
+// R-7.2.4 / CLAUDE.md #5: isolation is enforced by the database for every tenant-owned table.
+type Ctx = { tenantId: string; userId: string };
+let a: Ctx;
+let b: Ctx;
+
+async function practice(label: string, seed: number): Promise<Ctx> {
+  const suffix = `${label}-${Date.now()}-${seed}`;
+  const { tenantId, userIds } = await seedPractice({
+    practiceName: `Isolation ${suffix} (synthetic)`,
+    asOf: todayIn(),
+    users: [{ email: `iso-${suffix}@synthetic.test`, displayName: `Iso ${label}`, role: "specialist" }],
+    dataset: generateDataset({ asOf: todayIn(), seed, patients: 4, claims: 12 }),
+  });
+  const ctx = { tenantId, userId: userIds[0]! };
+  await withTenant(ctx, async (tx) => {
+    const [denial] = await tx.select({ id: denials.id }).from(denials).limit(1);
+    await tx
+      .insert(denialNotes)
+      .values({ tenantId, denialId: denial!.id, authorId: ctx.userId, body: "Synthetic note" });
+  });
+  return ctx;
+}
 
 beforeAll(async () => {
-  a = await createTestTenant("Alpha");
-  b = await createTestTenant("Beta");
-  await withTenant(a, (tx) =>
-    tx.insert(locations).values({ tenantId: a.tenantId, name: "Alpha main", city: "Tampa" }),
-  );
-  await withTenant(b, (tx) =>
-    tx.insert(locations).values({ tenantId: b.tenantId, name: "Beta main", city: "Miami" }),
-  );
+  a = await practice("alpha", 11);
+  b = await practice("beta", 22);
 });
 
 afterAll(() => closeDatabase());
 
-describe("row-level security", () => {
+const tenantTables = { locations, providers, payers, patients, claims, claimLines, denials, denialNotes };
+
+describe.each(Object.entries(tenantTables))("row-level security on %s", (_name, table) => {
   it("shows a tenant only its own rows", async () => {
-    const rows = await withTenant(a, (tx) => tx.select().from(locations));
-    expect(rows.map((r) => r.tenantId)).toEqual([a.tenantId]);
+    const rows = await withTenant(a, (tx) => tx.select({ tenantId: table.tenantId }).from(table));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(new Set(rows.map((r) => r.tenantId))).toEqual(new Set([a.tenantId]));
   });
 
-  it("hides another tenant's rows even when queried by ID", async () => {
-    const [betaLocation] = await withTenant(b, (tx) => tx.select().from(locations));
+  it("hides another tenant's rows even when asked for them directly", async () => {
     const rows = await withTenant(a, (tx) =>
-      tx.select().from(locations).where(eq(locations.id, betaLocation!.id)),
+      tx.select({ id: table.id }).from(table).where(eq(table.tenantId, b.tenantId)),
     );
     expect(rows).toHaveLength(0);
   });
 
-  it("rejects inserting a row for another tenant", async () => {
+  it("can't update another tenant's rows", async () => {
+    const updated = await withTenant(a, (tx) =>
+      tx
+        .update(table)
+        .set({ tenantId: b.tenantId })
+        .where(eq(table.tenantId, b.tenantId))
+        .returning({ id: table.id }),
+    );
+    expect(updated).toHaveLength(0);
+  });
+
+  it("can't move its own rows to another tenant", async () => {
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.update(table).set({ tenantId: b.tenantId }).where(eq(table.tenantId, a.tenantId)),
+      ),
+      /row-level security/,
+    );
+  });
+
+  it("can't hard-delete practice data (no delete until legal hold exists)", async () => {
+    await expectDbError(
+      withTenant(a, (tx) => tx.delete(table)),
+      /permission denied/,
+    );
+  });
+});
+
+describe("cross-tenant inserts", () => {
+  it("rejects a row stamped with another tenant", async () => {
     await expectDbError(
       withTenant(a, (tx) =>
         tx.insert(locations).values({ tenantId: b.tenantId, name: "Sneaky", city: "Orlando" }),
@@ -46,39 +106,50 @@ describe("row-level security", () => {
     );
   });
 
-  it("cannot move a row to another tenant", async () => {
+  it("rejects a note on another tenant's denial", async () => {
+    const [bDenial] = await withTenant(b, (tx) => tx.select({ id: denials.id }).from(denials).limit(1));
     await expectDbError(
       withTenant(a, (tx) =>
-        tx.update(locations).set({ tenantId: b.tenantId }).where(eq(locations.tenantId, a.tenantId)),
+        tx
+          .insert(denialNotes)
+          .values({ tenantId: b.tenantId, denialId: bDenial!.id, authorId: a.userId, body: "x" }),
       ),
       /row-level security/,
     );
   });
+});
 
-  it("cannot update or delete another tenant's rows", async () => {
-    const updated = await withTenant(a, (tx) =>
-      tx.update(locations).set({ name: "Changed" }).where(eq(locations.tenantId, b.tenantId)).returning(),
+describe("identity tables", () => {
+  it("show only the current practice, its memberships, and its team", async () => {
+    const [visibleTenants, visibleMemberships, visibleUsers] = await withTenant(a, (tx) =>
+      Promise.all([
+        tx.select({ id: tenants.id }).from(tenants),
+        tx.select({ tenantId: memberships.tenantId }).from(memberships),
+        tx.select({ id: users.id }).from(users),
+      ]),
     );
-    const deleted = await withTenant(a, (tx) =>
-      tx.delete(locations).where(eq(locations.tenantId, b.tenantId)).returning(),
-    );
-    expect(updated).toHaveLength(0);
-    expect(deleted).toHaveLength(0);
+    expect(visibleTenants.map((t) => t.id)).toEqual([a.tenantId]);
+    expect(new Set(visibleMemberships.map((m) => m.tenantId))).toEqual(new Set([a.tenantId]));
+    expect(visibleUsers.map((u) => u.id)).toEqual([a.userId]);
   });
 
-  it("returns nothing when no tenant is bound", async () => {
-    const rows = await systemDb().transaction(async (tx) => {
-      await tx.execute(sql`set local role denialdesk_app`);
-      return tx.select().from(payers);
-    });
-    expect(rows).toHaveLength(0);
-  });
-
-  it("does not let the app role read password hashes", async () => {
+  it("never expose password hashes or MFA secrets to the app role", async () => {
     await expectDbError(
-      withTenant(a, (tx) => tx.execute(sql`select password_hash from users limit 1`)),
+      withTenant(a, (tx) => tx.execute(sql`select password_hash from users`)),
       /permission denied/,
     );
+    await expectDbError(
+      withTenant(a, (tx) => tx.execute(sql`select totp_secret_enc from users`)),
+      /permission denied/,
+    );
+  });
+
+  it("return nothing when no tenant is bound", async () => {
+    const rows = await systemDb().transaction(async (tx) => {
+      await tx.execute(sql`set local role denialdesk_app`);
+      return Promise.all([tx.select().from(payers), tx.select({ id: tenants.id }).from(tenants)]);
+    });
+    expect(rows.flat()).toHaveLength(0);
   });
 });
 
@@ -99,5 +170,21 @@ describe("audit log", () => {
     await expectDbError(systemDb().execute(sql`update audit_events set action = 'tampered'`), /append-only/);
     await expectDbError(systemDb().execute(sql`delete from audit_events`), /append-only/);
     await expectDbError(systemDb().execute(sql`truncate audit_events`), /append-only/);
+  });
+});
+
+describe("database errors from tenant queries", () => {
+  it("drop query parameters, which can contain PHI", async () => {
+    const secret = "SYN-SECRET-PARAM-4242";
+    try {
+      await withTenant(a, (tx) =>
+        tx.insert(locations).values({ tenantId: b.tenantId, name: secret, city: "Tampa" }),
+      );
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(DatabaseError);
+      expect((error as Error).message).not.toContain(secret);
+      expect((error as Error).cause).toBeUndefined();
+    }
   });
 });

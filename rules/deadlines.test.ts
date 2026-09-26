@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { appealDeadline, daysUntil, promptPayMilestones, timelyFilingDeadline } from "./deadlines";
+import {
+  appealDeadline,
+  daysUntil,
+  payerResponseStatus,
+  promptPayMilestones,
+  rulesForBasis,
+  timelyFilingDeadline,
+} from "./deadlines";
 
 describe("Florida prompt-pay milestones (electronic)", () => {
   const milestones = promptPayMilestones({
@@ -97,5 +104,29 @@ describe("timely filing", () => {
 
   it("does not guess for regimes without a rule", () => {
     expect(timelyFilingDeadline("erisa_self_funded", "2026-02-15")).toBeNull();
+  });
+});
+
+describe("payer response against a milestone", () => {
+  it.each([
+    ["2026-03-21", true, 0], // day before
+    ["2026-03-22", true, 0], // day of
+    ["2026-03-23", false, 1], // day after
+  ])("responding on %s: met=%s, late by %i", (response, met, daysLate) => {
+    expect(payerResponseStatus("2026-03-22", response)).toEqual({ met, daysLate });
+  });
+});
+
+describe("rulesForBasis", () => {
+  it("resolves each rule behind a stored basis", () => {
+    const rules = rulesForBasis(
+      "medicare.redetermination.receipt_presumption+medicare.redetermination.filing_window",
+      "2026-06-01",
+    );
+    expect(rules.map((r) => r.value)).toEqual([5, 120]);
+  });
+
+  it("has no rules for contract-based deadlines", () => {
+    expect(rulesForBasis("payer_contract", "2026-06-01")).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { addCalendarDays } from "@rules/calendar";
 import { appealDeadline } from "@rules/deadlines";
 import { hashPassword } from "@/auth/password";
 import { generateDataset, type SyntheticDataset } from "@/domain/synthetic/generator";
@@ -17,6 +18,8 @@ import {
   users,
 } from "./schema";
 import { withTenant } from "./tenant";
+
+const minDate = (a: string, b: string) => (a < b ? a : b);
 
 export interface SeedUser {
   email: string;
@@ -161,6 +164,9 @@ export async function seedPractice(options: {
           appealDeadline: deadline?.date ?? null,
           appealDeadlineBasis: deadline?.basis ?? null,
           status: c.denial.status,
+          appealSubmittedOn: ["appeal_submitted", "overturned", "upheld"].includes(c.denial.status)
+            ? minDate(addCalendarDays(c.denial.noticeDate, 21), dataset.asOf)
+            : null,
           assigneeId: assignee,
         });
       }

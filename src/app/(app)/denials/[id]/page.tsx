@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
-import { daysBetween, todayIn } from "@rules/calendar";
-import { daysUntil, promptPayMilestones } from "@rules/deadlines";
+import { todayIn } from "@rules/calendar";
+import { daysUntil, payerResponseStatus, promptPayMilestones, rulesForBasis } from "@rules/deadlines";
 import { canWorkDenials } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
@@ -82,7 +82,13 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
         receivedDate: claim.payerReceivedDate,
       })
     : null;
-  const deadlineVerify = denial.appealDeadlineBasis?.startsWith("medicare.");
+  // Deadline explanation comes from the rules that produced it, never from text in this page.
+  const basisRules =
+    denial.appealDeadlineBasis && denial.appealDeadlineBasis !== "payer_contract"
+      ? rulesForBasis(denial.appealDeadlineBasis, denial.noticeDate)
+      : [];
+  const deadlineVerify = basisRules.some((rule) => rule.verify);
+  const milestonesVerify = milestones?.some(({ rule }) => rule.verify) ?? false;
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
@@ -258,6 +264,16 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
           <Panel title="Appeal deadline">
             {denial.appealDeadline ? (
               <div className="flex flex-col gap-3">
+                {denial.appealSubmittedOn && (
+                  <p className="flex items-center gap-2 text-body text-text">
+                    Appeal filed {formatDate(denial.appealSubmittedOn)}
+                    {denial.appealSubmittedOn <= denial.appealDeadline ? (
+                      <Badge tone="success">On time</Badge>
+                    ) : (
+                      <Badge tone="danger">After deadline</Badge>
+                    )}
+                  </p>
+                )}
                 {status.awaitingAction ? (
                   <DeadlineIndicator
                     dueDate={denial.appealDeadline}
@@ -270,7 +286,9 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                 <p className="text-label text-muted">
                   {denial.appealDeadlineBasis === "payer_contract"
                     ? `From the payer contract: ${payer.appealWindowDays} days after the notice date${payer.appealWindowSource ? ` (${payer.appealWindowSource})` : ""}.`
-                    : "Medicare redetermination: 120 days after presumed receipt of the notice (5 days after its date), 42 CFR § 405.942."}
+                    : basisRules
+                        .map((rule) => `${rule.title}: ${rule.value} days (${rule.citation}).`)
+                        .join(" ")}
                 </p>
                 {deadlineVerify && <Badge tone="warning">Pending counsel verification</Badge>}
               </div>
@@ -290,7 +308,7 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
               <ol className="flex flex-col gap-3">
                 {milestones.map(({ rule, date }) => {
                   // The denial notice is the payer's response; compare it to each obligation.
-                  const lateBy = daysBetween(date, denial.noticeDate);
+                  const response = payerResponseStatus(date, denial.noticeDate);
                   return (
                     <li key={rule.id} className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -301,11 +319,11 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                       </div>
                       <span className="shrink-0 text-right">
                         <span className="tabular block text-body">{formatDate(date)}</span>
-                        {lateBy <= 0 ? (
+                        {response.met ? (
                           <span className="block text-label font-medium text-success-fg">Met</span>
                         ) : (
                           <span className="tabular block text-label font-medium text-danger-fg">
-                            Payer late by {lateBy} {lateBy === 1 ? "day" : "days"}
+                            Payer late by {response.daysLate} {response.daysLate === 1 ? "day" : "days"}
                           </span>
                         )}
                       </span>
@@ -314,7 +332,8 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                 })}
               </ol>
               <p className="mt-4 border-t border-border pt-3 text-label text-muted">
-                Deadlines are payer obligations under Florida law. Values are pending counsel verification.
+                Deadlines are payer obligations under Florida law.
+                {milestonesVerify && " Values are pending counsel verification."}
               </p>
             </Panel>
           )}
@@ -331,7 +350,11 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                 <span className="font-mono">{patient.mrn}</span>
               </Field>
               <Field label="Member ID">
-                <MaskedMemberId denialId={denial.id} last4={patient.memberIdLast4} />
+                {canWork ? (
+                  <MaskedMemberId denialId={denial.id} last4={patient.memberIdLast4} />
+                ) : (
+                  <span className="font-mono">•••• {patient.memberIdLast4}</span>
+                )}
               </Field>
             </dl>
           </Panel>

@@ -7,6 +7,7 @@ export const metadata: Metadata = { title: "Sign in" };
 
 const notices: Record<string, string> = {
   timeout: "You were signed out after 15 minutes without activity.",
+  locked: "Too many attempts. Try again in 15 minutes or contact your administrator.",
 };
 const errors: Record<string, string> = {
   "no-practice": "Your account isn't linked to a practice yet. Contact your administrator.",

@@ -22,6 +22,20 @@
       "when": 1790413682185,
       "tag": "0002_security",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790415258638,
+      "tag": "0003_review_fixes",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790415259602,
+      "tag": "0004_tenant_identity_rls",
+      "breakpoints": true
     }
   ]
 }

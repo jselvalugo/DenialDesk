@@ -37,6 +37,26 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
 - A vector (SVG) version of the logo from a designer; the app currently uses the PNG.
+- The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
+  to `main` and protect it (R-7.4.4) before more PRs land.
+
+### Decisions from the 2026-09-26 agent reviews (need a human)
+1. **MFA enrollment on first sign-in** needs only the password, so a stolen password for a
+   never-enrolled account could enroll an attacker's authenticator. Recommended: admin-issued,
+   expiring one-time enrollment links. (security #4)
+2. **Separate database roles:** the app connects as the schema owner, which could disable RLS or
+   the audit trigger if the app were compromised. Recommended: a migration-only owner and a
+   non-owner runtime login; required before the Azure cutover. (security #6, R-15.9)
+3. **Role/field matrix (R-5.1.2):** compliance can no longer reveal member IDs; every role still
+   sees name, DOB, MRN, and diagnoses. Confirm who should see what. (compliance #5)
+4. **Synthetic NPIs** pass the check digit and could coincide with real NPIs. Keep, or use a
+   reserved/marked range? (compliance #7)
+
+### Deferred review findings (tracked, not blocking pre-prod)
+- Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
+- Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
+- WORM audit export at Azure cutover (owner can still drop the trigger).
+- Pin GitHub Actions to commit SHAs (Dependabot now keeps them current).
 
 ## Lessons / conventions learned
 - Tenant data only through `withTenant()` (src/db/tenant.ts); FK references from user input must be

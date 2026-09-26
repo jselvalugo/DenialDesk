@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { systemDb } from "@/db/client";
 import { users } from "@/db/schema";
@@ -16,30 +16,33 @@ export interface FormState {
   error?: string;
 }
 
-const GENERIC_FAILURE = "Email or password is incorrect.";
-const LOCKED = "Too many attempts. Try again in 15 minutes or contact your administrator.";
+// One message for wrong password, unknown account, and locked account, so responses never reveal
+// which accounts exist (security review finding 3). Locked users are told how to recover.
+const SIGN_IN_FAILED =
+  "Email or password is incorrect, or the account is temporarily locked. Try again in 15 minutes or contact your administrator.";
 
 /**
- * Counts a failed attempt atomically (concurrent attempts can't overwrite each other's count) and
- * locks the account once the limit is reached. Returns true when the account is now locked.
+ * Reserves one sign-in attempt atomically before any credential is checked. Every password and
+ * MFA attempt counts; only a completed sign-in (password + MFA) resets the counter. Because the
+ * reservation and the lock happen in one UPDATE, parallel attempts can't exceed the limit and a
+ * correct password can't reset the count between MFA guesses (security review findings 1–2).
+ * Returns false when the account is locked.
  */
-async function recordFailure(userId: string, action: "auth.login_failed" | "auth.mfa_failed") {
-  const result = await systemDb().execute<{ locked: boolean }>(sql`
+async function reserveAttempt(userId: string): Promise<boolean> {
+  const result = await systemDb().execute<{ id: string; locked_now: boolean }>(sql`
+    with counted as (
+      select id, (case when locked_until <= now() then 0 else failed_login_count end) + 1 as attempts
+      from users where id = ${userId} and (locked_until is null or locked_until <= now())
+      for update
+    )
     update users set
-      failed_login_count = case when failed_login_count + 1 >= ${MAX_FAILED_ATTEMPTS} then 0 else failed_login_count + 1 end,
-      locked_until = case when failed_login_count + 1 >= ${MAX_FAILED_ATTEMPTS}
-        then now() + make_interval(secs => ${LOCKOUT_MS / 1000}) else locked_until end
-    where id = ${userId}
-    returning coalesce(locked_until > now(), false) as locked`);
-  const locked = result.rows[0]?.locked === true;
-  await auditSystem({
-    action,
-    actorUserId: userId,
-    entityType: "user",
-    entityId: userId,
-    ipAddress: await clientIp(),
-  });
-  if (locked) {
+      failed_login_count = counted.attempts,
+      locked_until = case when counted.attempts >= ${MAX_FAILED_ATTEMPTS}
+        then now() + make_interval(secs => ${LOCKOUT_MS / 1000}) else null end
+    from counted where users.id = counted.id
+    returning users.id, counted.attempts >= ${MAX_FAILED_ATTEMPTS} as locked_now`);
+  const row = result.rows[0];
+  if (row?.locked_now) {
     await auditSystem({
       action: "auth.locked_out",
       actorUserId: userId,
@@ -47,7 +50,17 @@ async function recordFailure(userId: string, action: "auth.login_failed" | "auth
       entityId: userId,
     });
   }
-  return locked;
+  return row !== undefined;
+}
+
+async function recordFailure(userId: string, action: "auth.login_failed" | "auth.mfa_failed") {
+  await auditSystem({
+    action,
+    actorUserId: userId,
+    entityType: "user",
+    entityId: userId,
+    ipAddress: await clientIp(),
+  });
 }
 
 const loginSchema = z.object({
@@ -68,18 +81,19 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
   if (!user || user.disabledAt) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing for unknown accounts
     await auditSystem({ action: "auth.login_failed", ipAddress: await clientIp() });
-    return { error: GENERIC_FAILURE };
+    return { error: SIGN_IN_FAILED };
   }
-  if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+  if (!(await reserveAttempt(user.id))) {
+    await verifyPassword(parsed.data.password, await decoyHash()); // equal timing while locked
     await auditSystem({ action: "auth.login_failed", actorUserId: user.id, metadata: { locked: true } });
-    return { error: LOCKED };
+    return { error: SIGN_IN_FAILED };
   }
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
-    const locked = await recordFailure(user.id, "auth.login_failed");
-    return { error: locked ? LOCKED : GENERIC_FAILURE };
+    await recordFailure(user.id, "auth.login_failed");
+    return { error: SIGN_IN_FAILED };
   }
 
-  await systemDb().update(users).set({ failedLoginCount: 0, lockedUntil: null }).where(eq(users.id, user.id));
+  // The attempt counter is deliberately NOT reset here: it resets only after MFA succeeds.
   await createSession(user.id);
   redirect(user.mfaEnrolledAt ? "/login/mfa" : "/login/mfa/setup");
 }
@@ -104,22 +118,33 @@ async function checkCode(formData: FormData, enrolling: boolean): Promise<FormSt
   if (!user?.totpSecretEnc || (enrolling ? user.mfaEnrolledAt !== null : user.mfaEnrolledAt === null)) {
     redirect("/login");
   }
-  if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) return { error: LOCKED };
+  if (!(await reserveAttempt(user.id))) {
+    await endSession(session.sessionId);
+    redirect("/login?reason=locked");
+  }
 
   const step = verifyTotp(decryptField(user.totpSecretEnc), parsed.data.code, user.totpLastStep);
   if (step === null) {
-    const locked = await recordFailure(user.id, "auth.mfa_failed");
-    if (locked) {
-      await endSession(session.sessionId);
-      return { error: LOCKED };
-    }
+    await recordFailure(user.id, "auth.mfa_failed");
     return { error: "That code didn't match. Check your authenticator app and try again." };
   }
 
-  await systemDb()
+  // Claim the code's time step atomically so two simultaneous submissions of the same code can't
+  // both succeed (single-use codes).
+  const claimed = await systemDb()
     .update(users)
-    .set({ totpLastStep: step, failedLoginCount: 0, ...(enrolling ? { mfaEnrolledAt: new Date() } : {}) })
-    .where(eq(users.id, user.id));
+    .set({
+      totpLastStep: step,
+      failedLoginCount: 0,
+      lockedUntil: null,
+      ...(enrolling ? { mfaEnrolledAt: new Date() } : {}),
+    })
+    .where(and(eq(users.id, user.id), or(isNull(users.totpLastStep), lt(users.totpLastStep, step))))
+    .returning({ id: users.id });
+  if (claimed.length === 0) {
+    await recordFailure(user.id, "auth.mfa_failed");
+    return { error: "That code was already used. Wait for the next code and try again." };
+  }
   await completeMfa(session.sessionId);
   const ip = await clientIp();
   if (enrolling) {

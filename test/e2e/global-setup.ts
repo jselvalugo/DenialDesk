@@ -29,11 +29,12 @@ export default async function globalSetup() {
       { email: make("viewer"), displayName: "Quinn Viewer", role: "compliance", password },
       { email: make("newbie"), displayName: "Sage Newbie", role: "specialist", password },
       { email: make("locked"), displayName: "Casey Locked", role: "specialist", password },
+      { email: make("guesser"), displayName: "Parker Guesser", role: "specialist", password },
     ],
   });
 
   const enrolled: Record<string, E2EUser> = {};
-  for (const [index, key] of ["worker", "viewer", "newbie", "locked"].entries()) {
+  for (const [index, key] of ["worker", "viewer", "newbie", "locked", "guesser"].entries()) {
     const secret = key === "newbie" ? null : generateTotpSecret();
     if (secret) {
       await systemDb()

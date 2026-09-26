@@ -20,6 +20,8 @@ import type { DenialCategory } from "@/domain/carc";
 export const PAGE_SIZE = 25;
 /** Queue "due soon" window: a display setting, not a legal value. */
 export const DUE_SOON_DAYS = 7;
+/** Overview "next deadlines" also shows denials overdue by up to this many days (display window). */
+export const RECENTLY_OVERDUE_DAYS = 30;
 
 export interface QueueFilters {
   status: "open" | "closed" | "all";
@@ -64,6 +66,7 @@ export async function listDenials(tx: TenantTx, filters: QueueFilters, userId: s
       category: denials.category,
       deniedCents: denials.deniedCents,
       appealDeadline: denials.appealDeadline,
+      appealSubmittedOn: denials.appealSubmittedOn,
       status: denials.status,
       assigneeName: users.displayName,
     })
@@ -128,7 +131,10 @@ export async function upcomingDeadlines(tx: TenantTx, today: string, limit = 5) 
     .innerJoin(claims, eq(claims.id, denials.claimId))
     .innerJoin(payers, eq(payers.id, claims.payerId))
     .where(
-      and(inArray(denials.status, ACTION_STATUSES), gte(denials.appealDeadline, addCalendarDays(today, -30))),
+      and(
+        inArray(denials.status, ACTION_STATUSES),
+        gte(denials.appealDeadline, addCalendarDays(today, -RECENTLY_OVERDUE_DAYS)),
+      ),
     )
     .orderBy(asc(denials.appealDeadline))
     .limit(limit);

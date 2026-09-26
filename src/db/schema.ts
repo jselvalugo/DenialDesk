@@ -290,6 +290,8 @@ export const denials = pgTable(
     /** Rule ID from rules/ or "payer_contract"; explains where the deadline came from. */
     appealDeadlineBasis: text("appeal_deadline_basis"),
     status: denialStatusEnum("status").notNull().default("new"),
+    /** Date the appeal was filed; compared with appealDeadline to flag late appeals. */
+    appealSubmittedOn: date("appeal_submitted_on", { mode: "string" }),
     assigneeId: uuid("assignee_id").references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -333,6 +335,7 @@ export const auditEvents = pgTable(
     entityId: uuid("entity_id"),
     reason: text("reason"),
     ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
     /** IDs and enum values only — never PHI. */
     metadata: jsonb("metadata").$type<Record<string, string | number | boolean | null>>(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),

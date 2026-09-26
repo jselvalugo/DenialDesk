@@ -34,3 +34,16 @@ test("health endpoint reports status without leaking config", async ({ request }
   expect(Object.keys(body).sort()).toEqual(["appEnv", "db", "status"]);
   expect(JSON.stringify(body)).not.toContain("postgres://");
 });
+
+test("pages send a nonce-based Content-Security-Policy and load without violations", async ({ page }) => {
+  const violations: string[] = [];
+  page.on("console", (message) => {
+    if (message.text().includes("Content Security Policy")) violations.push(message.text());
+  });
+  const response = await page.goto("/login");
+  const csp = response?.headers()["content-security-policy"] ?? "";
+  expect(csp).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
+  expect(csp).toContain("frame-ancestors 'none'");
+  await page.getByLabel("Work email").fill("csp-check@e2e.denialdesk.test");
+  expect(violations).toEqual([]);
+});

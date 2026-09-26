@@ -20,6 +20,13 @@ PostgreSQL, and every PHI access can be recorded in an append-only audit log.
 - [x] Member IDs stored AES-256-GCM encrypted with last-4 for display (R-7.3.3); tests for
       round-trip, randomized IV, tamper and wrong-key rejection.
 
+## Review follow-ups (2026-09-26, done)
+- [x] RLS on tenants, memberships, users (app role sees only its own practice and team).
+- [x] Isolation tests for every tenant-owned table and the identity tables.
+- [x] DELETE revoked on practice data until legal hold exists (R-9.2.1).
+- [x] Audit events record IP (platform-set header) and user agent; queue views record the IDs shown.
+- [x] Tenant-query errors drop query parameters (PHI) before anything can log them.
+
 ## Known limits
 - Foreign keys don't check tenant (PostgreSQL FK checks bypass RLS). Application code must
   validate that referenced IDs (assignee, payer, …) belong to the current tenant.

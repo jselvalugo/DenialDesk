@@ -12,7 +12,11 @@ Requirement IDs: R-7.2.2, R-7.2.7, R-7.2.9, R-7.5.1
 - [x] Password alone never opens the app; session token rotated after MFA.
 - [x] Sessions: DB-backed, hashed token, `__Host-` cookie (HttpOnly, Secure, SameSite=Lax);
       15-minute idle and 12-hour absolute timeouts; warning dialog 2 minutes before idle logout.
-- [x] Lockout: 5 failed password or MFA attempts → 15 minutes; counted atomically.
+- [x] Lockout: 5 attempts (password or MFA) → 15 minutes. Each attempt is reserved atomically
+      before checking; only a completed sign-in resets the count. Lock responses reuse the
+      wrong-password message so they don't reveal which accounts exist.
+- [x] MFA codes claimed atomically (no double use under concurrent submissions).
+- [x] Nonce-based Content-Security-Policy on every page.
 - [x] Sign-in, failures, lockouts, MFA enrollment, sign-out, and expiry are audit events.
 - [x] Roles: admin, manager, specialist, compliance (read-only for denials).
 - [x] E2E tests: redirect when signed out, wrong password, unknown account, password-only,

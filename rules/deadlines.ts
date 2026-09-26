@@ -87,3 +87,21 @@ export function timelyFilingDeadline(regime: Regime, serviceDate: string): Deadl
 export function daysUntil(deadline: string, today: string): number {
   return daysBetween(today, deadline);
 }
+
+/** The rules behind a stored deadline basis ("ruleA+ruleB"), as in force on `asOf`. */
+export function rulesForBasis(basis: string, asOf: string): Rule[] {
+  if (basis === "payer_contract") return [];
+  return basis.split("+").map((id) => resolveRule(id, asOf));
+}
+
+/**
+ * Whether a payer response (e.g. the denial notice date) met a prompt-pay milestone.
+ * Responding on the milestone date itself counts as met.
+ */
+export function payerResponseStatus(
+  milestoneDate: string,
+  responseDate: string,
+): { met: boolean; daysLate: number } {
+  const daysLate = Math.max(0, daysBetween(milestoneDate, responseDate));
+  return { met: daysLate === 0, daysLate };
+}

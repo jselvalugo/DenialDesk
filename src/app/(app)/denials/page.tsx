@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { daysUntil } from "@rules/deadlines";
 import { todayIn } from "@rules/calendar";
 import { requireAuth } from "@/auth/session";
@@ -48,11 +49,20 @@ export default async function DenialQueuePage({
       action: "denial.queue_viewed",
       actorUserId: auth.userId,
       tenantId: auth.tenantId,
-      metadata: { count: list.rows.length, page: filters.page },
+      // "What" was shown: the denial IDs on this page (IDs only, no PHI) and the filters used.
+      metadata: {
+        denialIds: list.rows.map((row) => row.id).join(","),
+        count: list.rows.length,
+        page: filters.page,
+        filters: filtersToQuery(filters, { page: 1 }) || "default",
+      },
     });
     return { ...list, summary, payers };
   });
 
+  if (total > 0 && filters.page > Math.ceil(total / PAGE_SIZE)) {
+    redirect(`/denials${filtersToQuery(filters, { page: Math.ceil(total / PAGE_SIZE) })}`);
+  }
   const first = total === 0 ? 0 : (filters.page - 1) * PAGE_SIZE + 1;
   const last = Math.min(filters.page * PAGE_SIZE, total);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -207,8 +217,12 @@ export default async function DenialQueuePage({
                       <Money cents={row.deniedCents} />
                     </Td>
                     <Td>
-                      {row.status === "appeal_submitted" ? (
-                        <span className="text-label text-muted">Appeal filed</span>
+                      {row.appealSubmittedOn ? (
+                        row.appealDeadline && row.appealSubmittedOn > row.appealDeadline ? (
+                          <span className="text-label font-medium text-danger-fg">Filed after deadline</span>
+                        ) : (
+                          <span className="text-label text-muted">Appeal filed on time</span>
+                        )
                       ) : row.appealDeadline ? (
                         status.awaitingAction ? (
                           <DeadlineIndicator

@@ -5,7 +5,7 @@ claims, or a real clearinghouse to this environment.
 
 ## One-time setup
 1. **Create the site.** In Netlify: *Add new site → Import from Git →* `jselvalugo/denialdesk`.
-   Netlify detects Next.js; `netlify.toml` sets the build command (`pnpm db:migrate && pnpm build`).
+   Netlify detects Next.js. Per `netlify.toml`, only the main deploy runs `pnpm db:migrate`; PR deploy previews just build.
 2. **Create the database.** Use Netlify DB (Neon) or a Neon project in a **U.S. East** region,
    the same region as the site's functions (co-location keeps pages fast — ADR 0001).
 3. **Set environment variables** (*Site configuration → Environment variables*, scope: Builds
@@ -21,7 +21,10 @@ claims, or a real clearinghouse to this environment.
    synthetic-data banner — safe by default.
 4. **Functions region.** *Site configuration → Functions → Region*: pick the U.S. East region
    closest to the database.
-5. **Deploy**, then seed the demo practice once from your machine against the same database:
+5. **Restrict access** (ADR 0003). The app already requires sign-in with two-step verification.
+   On a paid Netlify plan, also turn on *Site configuration → Access & security → Password
+   protection* for the whole site so the sign-in page itself isn't public.
+6. **Deploy**, then seed the demo practice once from your machine against the same database:
    ```bash
    DATABASE_URL=... FIELD_ENCRYPTION_KEY=... APP_ENV=preview \
    SEED_ADMIN_EMAIL=you@yourpractice.test SEED_ADMIN_PASSWORD='a-long-passphrase' pnpm db:seed

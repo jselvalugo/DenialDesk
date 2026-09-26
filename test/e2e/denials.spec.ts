@@ -71,5 +71,23 @@ test.describe("compliance role", () => {
     await expect(page.getByText("You have read-only access to denials.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Update status" })).toBeDisabled();
     await expect(page.getByLabel("Add a note")).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Reveal" })).toHaveCount(0);
+  });
+
+  test("the server rejects changes even if the disabled controls are re-enabled", async ({ page }) => {
+    await page.goto("/denials");
+    await page.getByRole("table").getByRole("link").first().click();
+    await expect(page.getByText("You have read-only access to denials.")).toBeVisible();
+    await page.waitForLoadState("networkidle"); // let React hydrate before tampering
+    // Simulate a user tampering with the page: re-enable the form and submit it.
+    await page.evaluate(() =>
+      document.querySelectorAll("textarea, button, select").forEach((el) => el.removeAttribute("disabled")),
+    );
+    await page.getByLabel("Add a note").fill("Should not be saved (synthetic)");
+    await page.getByRole("button", { name: "Save note" }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
+      "Your role can view denials but not change them.",
+    );
+    await expect(page.getByText("Should not be saved (synthetic)")).toHaveCount(0);
   });
 });

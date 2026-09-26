@@ -1,13 +1,14 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { systemDb } from "@/db/client";
 import { memberships, sessions, tenants, users } from "@/db/schema";
 import { auditSystem } from "@/lib/audit";
-import { SESSION_ABSOLUTE_MS, SESSION_COOKIE, SESSION_IDLE_MS } from "./policy";
+import { requestContext } from "@/lib/request-context";
+import { SESSION_ABSOLUTE_MS, SESSION_COOKIE, SESSION_IDLE_MS, SESSION_TOUCH_MS } from "./policy";
 
 export type Role = (typeof memberships.$inferSelect)["role"];
 
@@ -32,8 +33,7 @@ export interface AuthContext {
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 export async function clientIp(): Promise<string | null> {
-  const forwarded = (await headers()).get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() || null;
+  return (await requestContext()).ip;
 }
 
 async function setCookie(token: string) {
@@ -117,7 +117,7 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
     return null;
   }
   // Sliding idle window; write at most once a minute.
-  if (now - row.lastSeenAt.getTime() > 60_000) {
+  if (now - row.lastSeenAt.getTime() > SESSION_TOUCH_MS) {
     await systemDb().update(sessions).set({ lastSeenAt: new Date() }).where(eq(sessions.id, row.sessionId));
   }
   return {

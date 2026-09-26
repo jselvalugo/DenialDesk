@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { todayIn } from "@rules/calendar";
 import { canWorkDenials } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { claims, denialNotes, denials, memberships, patients } from "@/db/schema";
@@ -33,15 +34,25 @@ export async function changeStatus(_: ActionState, formData: FormData): Promise<
   if (!parsed.success) return { error: "Choose a valid status." };
 
   const result = await withTenant(auth, async (tx) => {
+    // Lock the row so concurrent edits record the correct "from" status in the audit trail.
     const [current] = await tx
-      .select({ status: denials.status })
+      .select({ status: denials.status, appealSubmittedOn: denials.appealSubmittedOn })
       .from(denials)
-      .where(eq(denials.id, parsed.data.denialId));
+      .where(eq(denials.id, parsed.data.denialId))
+      .for("update");
     if (!current) return { error: "This denial no longer exists." };
     if (current.status === parsed.data.status) return { ok: true };
     await tx
       .update(denials)
-      .set({ status: parsed.data.status, updatedAt: new Date() })
+      .set({
+        status: parsed.data.status,
+        // Record when the appeal was filed so a late filing stays visible.
+        appealSubmittedOn:
+          parsed.data.status === "appeal_submitted"
+            ? (current.appealSubmittedOn ?? todayIn())
+            : current.appealSubmittedOn,
+        updatedAt: new Date(),
+      })
       .where(eq(denials.id, parsed.data.denialId));
     await audit(tx, {
       action: "denial.status_changed",
@@ -137,7 +148,9 @@ export async function revealMemberId(
   denial: string,
   reason: string,
 ): Promise<{ value?: string; error?: string }> {
-  const auth = await requireAuth();
+  // Minimum necessary (R-5.1.2): only people who work denials need the full member ID.
+  const { auth, allowed } = await authorize();
+  if (!allowed) return { error: NOT_ALLOWED };
   const parsed = z
     .object({ denial: denialId, reason: z.enum(["appeal", "eligibility", "payer_call", "other"]) })
     .safeParse({ denial, reason });
