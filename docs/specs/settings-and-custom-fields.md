@@ -67,9 +67,10 @@ tab per section; administrators add their own fields to patients, claims, denial
 None.
 
 ## Out of scope
-- Capturing values on records (S2). Formula or computed fields. Reordering by drag and drop (fields
+- Formula or computed fields. Reordering by drag and drop (fields
   keep creation order for now). Custom fields on accounting tables.
 
 ## Open questions
+- Resolved 2026-09-26 (owner): S2 (values on records) is part of the Phase 1 MVP.
 - Resolved 2026-09-26 (owner): administrators only create and change fields; role permissions
   are intentionally unchanged.

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { todayIn } from "@rules/calendar";
-import { canEditPatients, canTagSensitivity } from "@/auth/permissions";
+import { canEditPatients } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
@@ -60,7 +60,6 @@ export default async function EditPatientPage({ params }: { params: Promise<{ id
         <PatientForm
           patient={{ ...patient, updatedAt: patient.updatedAt.toISOString() }}
           payers={payers}
-          canTag={canTagSensitivity(auth.role)}
           syntheticOnly={syntheticDataOnly()}
           today={todayIn()}
         />

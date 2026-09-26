@@ -90,6 +90,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | BAA handling is manual by design: no sign-in blocking without a BAA, no template version, corrections via "recorded in error", nothing automatic at termination | `specs/practice-agreements.md` (Decisions) |
 | 2026-09-26 | Shell differentiated from any vendor's product; no third-party design IP; competitor names out of product copy and public docs | ADR 0005 |
 | 2026-09-26 | Every DB error sanitized where Drizzle creates it (system and tenant); kept messages opt-in (owner: fix both in PR #28) | ADR 0006 |
+| 2026-09-26 | Custom field values on records (settings S2) are in the Phase 1 MVP; sensitivity checkboxes hidden from the patient form (owner, 2026-09-26; R-3.5.1 tagging gap accepted, compliance sign-off pending) | `specs/settings-and-custom-fields.md` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -106,7 +107,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
-6. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
+6. Custom field values on records, settings S2 (MVP): threat model first (value encryption, masking), then `custom_field_values` with RLS + isolation test.
+7. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
