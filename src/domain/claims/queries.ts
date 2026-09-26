@@ -81,6 +81,8 @@ export interface FilingSummary {
   dueSoon: number;
   pastDeadline: number;
   notConfigured: number;
+  /** Unsubmitted claims whose payer is unverified (no regime), so no deadline was computed at all. */
+  payerUnverified: number;
 }
 
 /**
@@ -100,6 +102,7 @@ export async function claimsOverview(
     dueSoon: index.filter((row) => row.filing.state === "due_soon").length,
     pastDeadline: index.filter((row) => row.filing.state === "past_deadline").length,
     notConfigured: index.filter((row) => row.filing.state === "not_configured").length,
+    payerUnverified: index.filter((row) => row.filing.state === "payer_unverified").length,
   };
   const offset = (filters.page - 1) * CLAIMS_PAGE_SIZE;
 

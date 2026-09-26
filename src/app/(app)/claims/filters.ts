@@ -4,7 +4,10 @@ import type { ClaimFilters } from "@/domain/claims/queries";
 const schema = z.object({
   group: z.enum(["unsubmitted", "in_process", "all"]).catch("unsubmitted"),
   payer: z.uuid().optional().catch(undefined),
-  filing: z.enum(["due_soon", "past_deadline", "not_configured"]).optional().catch(undefined),
+  filing: z
+    .enum(["due_soon", "past_deadline", "not_configured", "payer_unverified"])
+    .optional()
+    .catch(undefined),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });
 

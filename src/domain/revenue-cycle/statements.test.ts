@@ -110,4 +110,18 @@ describe("denialsByClass", () => {
       { payerClass: "Unmapped", count: 1, deniedCents: 700 },
     ]);
   });
+
+  it("reports an unverified payer's denials (null regime) as Unmapped, not a crash (spec: payer-catalog P1)", () => {
+    const result = denialsByClass(
+      [
+        { regime: "fl_insurer", count: 1, deniedCents: 1_000 },
+        { regime: null, count: 3, deniedCents: 4_400 },
+      ],
+      [{ code: "COMM", regime: "fl_insurer" }],
+    );
+    expect(result).toEqual([
+      { payerClass: "Unmapped", count: 3, deniedCents: 4_400 },
+      { payerClass: "COMM", count: 1, deniedCents: 1_000 },
+    ]);
+  });
 });

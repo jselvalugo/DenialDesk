@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase } from "@/db/client";
-import { auditEvents, claimLines, claims, claimVersions } from "@/db/schema";
+import { auditEvents, claimLines, claims, claimVersions, payers } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { DatabaseError, withTenant } from "@/db/tenant";
 import { claimsOverview, getClaim } from "@/domain/claims/queries";
@@ -458,6 +458,50 @@ describe("claims list and timely-filing summary (R-3.1.5)", () => {
       expect(expected).toBeGreaterThan(0);
       expect(list.rows.every((r) => r.filing?.state === filing)).toBe(true);
     }
+  });
+
+  it("counts an unverified payer's unsubmitted claims separately, with no computed deadline", async () => {
+    const { claim } = await draftClaim(a);
+    const before = await withTenant(a, (tx) => claimsOverview(tx, { group: "all", page: 1 }, today));
+
+    const unverifiedPayerId = await withTenant(a, async (tx) => {
+      const [payer] = await tx
+        .insert(payers)
+        .values({ tenantId: a.tenantId, name: `Unverified test payer ${Date.now()}` })
+        .returning();
+      await tx.insert(claims).values({
+        tenantId: a.tenantId,
+        claimNumber: `UNVER-${Date.now()}`,
+        patientId: claim.patientId,
+        providerId: claim.providerId,
+        locationId: claim.locationId,
+        payerId: payer!.id,
+        serviceDate: claim.serviceDate,
+        diagnosisCodes: claim.diagnosisCodes,
+        billedCents: claim.billedCents,
+        status: "draft",
+      });
+      return payer!.id;
+    });
+
+    const after = await withTenant(a, (tx) => claimsOverview(tx, { group: "all", page: 1 }, today));
+    expect(after.summary.payerUnverified).toBe(before.summary.payerUnverified + 1);
+
+    const filtered = await withTenant(a, (tx) =>
+      claimsOverview(tx, { group: "unsubmitted", filing: "payer_unverified", page: 1 }, today),
+    );
+    expect(filtered.rows.some((r) => r.payerName.startsWith("Unverified test payer"))).toBe(true);
+    expect(filtered.rows.every((r) => r.filing?.state === "payer_unverified")).toBe(true);
+
+    const byPayer = await withTenant(a, (tx) =>
+      claimsOverview(tx, { group: "unsubmitted", payerId: unverifiedPayerId, page: 1 }, today),
+    );
+    expect(byPayer.rows).toHaveLength(1);
+    expect(byPayer.rows[0]!.filing).toEqual({
+      state: "payer_unverified",
+      deadline: null,
+      daysRemaining: null,
+    });
   });
 
   it("shows no filing status for claims already with the payer", async () => {

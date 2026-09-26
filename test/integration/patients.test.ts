@@ -213,6 +213,35 @@ describe("updating a patient", () => {
     expect(event!.metadata).toEqual({ changedFields: "city,sensitivityTags" });
   });
 
+  it("refuses another tenant's payer on save too (code check and tenant-scoped FK)", async () => {
+    const payerId = await firstPayer(a);
+    const foreignPayer = await firstPayer(b);
+    const { id } = await withTenant(a, (tx) =>
+      createPatient(tx, actor(a), input({ primaryPayerId: payerId, memberId: "SYN5551" })),
+    );
+    const record = await withTenant(a, (tx) => getPatientForEdit(tx, id));
+    await expect(
+      withTenant(a, (tx) =>
+        updatePatient(
+          tx,
+          actor(a),
+          id,
+          record!.updatedAt.toISOString(),
+          input({ mrn: record!.mrn, primaryPayerId: foreignPayer, memberId: "SYN5552" }),
+          "Attempted cross-tenant payer",
+        ),
+      ),
+    ).rejects.toThrow("Choose a payer from the list.");
+    const unchanged = await withTenant(a, (tx) => tx.select().from(patients).where(eq(patients.id, id)));
+    expect(unchanged[0]!.primaryPayerId).toBe(payerId);
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.update(patients).set({ primaryPayerId: foreignPayer }).where(eq(patients.id, id)),
+      ),
+      /patients_primary_payer_fk/,
+    );
+  });
+
   it("requires a new member ID when the payer changes, and clears it for self-pay", async () => {
     const payerIds = await withTenant(a, async (tx) =>
       (await tx.select({ id: payers.id }).from(payers)).map((p) => p.id),
