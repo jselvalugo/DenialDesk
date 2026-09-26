@@ -15,6 +15,8 @@ track outcomes. Product brief: `docs/PRODUCT_BRIEF.md`. Requirements baseline: `
 - Architecture decisions: `docs/decisions/` (one short ADR per decision). Threat models: `docs/threat-models/`.
 - Legal rules: `rules/` (versioned, effective-dated). **Never hard-code a statutory deadline, rate, or threshold anywhere else.**
 - How agents collaborate: `docs/AGENT_WORKFLOW.md`.
+- UI and visual design: `docs/DESIGN.md` (read before any UI work).
+- Current status, decisions, and open questions: `docs/PROJECT_STATE.md` — read at session start, update at session end.
 
 If a task is not backed by a spec, write or update the spec first.
 

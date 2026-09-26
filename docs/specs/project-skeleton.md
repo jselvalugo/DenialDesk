@@ -1,6 +1,6 @@
 # Spec: Project skeleton
 
-Status: draft
+Status: approved (by delegated technical authority, 2026-09-26)
 Roadmap item: `docs/ROADMAP.md` → Phase 0 → "Project skeleton: app, DB, test runner, lint, CI on every PR"
 Requirement IDs: R-7.4.2, R-7.4.4, R-7.3.5, R-7.1.3, R-15.7
 
@@ -45,6 +45,6 @@ None.
 Netlify deploy configuration (next roadmap item), auth, tenancy tables, rules engine, synthetic
 data generator, any UI beyond a placeholder home page.
 
-## Open questions
-- Secrets scanner: gitleaks (GitHub Action) is the default proposal — confirm or name another.
-- Background-job queue library: decide in the tenancy/jobs spec, not here.
+## Decisions
+- Secrets scanner: gitleaks (GitHub Action).
+- Background-job queue library: decided in a later spec, not here.
