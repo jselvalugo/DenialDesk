@@ -15,7 +15,7 @@ import { syntheticDataOnly } from "@/lib/env";
 
 export interface CreateState {
   error?: string;
-  created?: { name: string; adminEmail: string; temporaryPassword: string };
+  created?: { tenantId: string; name: string; adminEmail: string; temporaryPassword: string };
 }
 
 const createSchema = z.object({
@@ -33,10 +33,12 @@ export async function createPractice(_: CreateState, formData: FormData): Promis
   });
   if (!parsed.success) return { error: "Enter a practice name, the admin's name, and a valid email." };
   try {
-    const { temporaryPassword } = await create(parsed.data, operator);
+    const { tenantId, temporaryPassword } = await create(parsed.data, operator);
     if (passwordProblem(temporaryPassword)) throw new Error("Generated password failed policy");
     revalidatePath("/operator");
-    return { created: { name: parsed.data.name, adminEmail: parsed.data.adminEmail, temporaryPassword } };
+    return {
+      created: { tenantId, name: parsed.data.name, adminEmail: parsed.data.adminEmail, temporaryPassword },
+    };
   } catch (error) {
     if (error instanceof PracticeError) return { error: error.message };
     throw error;

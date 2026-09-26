@@ -128,13 +128,23 @@ test.describe("as the platform operator", () => {
     browser,
   }) => {
     test.setTimeout(60_000);
-    await page.goto("/operator");
+    await page.goto("/operator/practices/new");
     const name = `Synthetic Coral Clinic ${Date.now()}`;
     await page.getByLabel("Practice name").fill(name);
     await page.getByLabel("Admin's full name").fill("Synthetic Admin");
     await page.getByLabel("Admin's work email").fill(`baa-admin-${Date.now()}@e2e.denialdesk.test`);
     await page.getByRole("button", { name: "Create practice" }).click();
     await expect(page.getByRole("status")).toContainText(`${name} created`);
+    await expect(page.getByRole("link", { name: "Open practice" })).toHaveAttribute(
+      "href",
+      /^\/operator\/practices\/[0-9a-f-]{36}$/,
+    );
+    // "Create another" clears the one-time password and shows an empty form.
+    await page.getByRole("button", { name: "Create another" }).click();
+    await expect(page.getByText("Temporary password")).toHaveCount(0);
+    await expect(page.getByLabel("Practice name")).toHaveValue("");
+    await page.getByRole("link", { name: "Cancel" }).click();
+    await expect(page).toHaveURL(/\/operator$/);
 
     const table = page.getByRole("table", { name: "All practices on this environment" });
     const row = table.getByRole("row", { name: new RegExp(name) });
@@ -231,6 +241,9 @@ test.describe("as the platform operator", () => {
     await expect(page.getByText("Back to")).toHaveCount(0);
     const table = page.getByRole("table", { name: "All practices on this environment" });
 
+    // Creating a practice happens on its own page, reached from the list.
+    await page.getByRole("link", { name: "New practice" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "New practice" })).toBeVisible();
     const name = `Synthetic Harbor Clinic ${Date.now()}`;
     await page.getByLabel("Practice name").fill(name);
     await page.getByLabel("Admin's full name").fill("Synthetic Admin");
@@ -241,6 +254,7 @@ test.describe("as the platform operator", () => {
     await expect(page.getByRole("status")).toContainText("Temporary password");
 
     const temporaryPassword = (await page.getByRole("status").locator("dd").nth(1).textContent())!.trim();
+    await page.getByRole("link", { name: "All practices" }).click();
 
     // The new admin must replace the temporary password before setting up MFA.
     const adminContext = await browser.newContext({

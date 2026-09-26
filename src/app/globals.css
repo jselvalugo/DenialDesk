@@ -12,6 +12,8 @@
   --dd-blue-700: #245d93;
   --dd-teal: #1f6b75;
   --dd-teal-50: #e6f2f3;
+  /* The logo's cross, for the brand mark on dark chrome (BrandMark.tsx). */
+  --dd-brand-cross: #14c8b0;
   --dd-selected: #eaf0f7;
 
   --dd-canvas: #f3f6f9;

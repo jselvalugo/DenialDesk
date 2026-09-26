@@ -79,6 +79,7 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
   { format: "tenant_agreements rows are retained, never deleted", args: [] },
   { format: "a voided agreement cannot change", args: [] },
   { format: "tenant_agreements recorded fields are immutable", args: [] },
+  { format: "custom_fields identity is immutable", args: [] },
   { format: "voiding may only set the void fields", args: [] },
   { format: "void fields belong to voided agreements only", args: [] },
   { format: "tenant_agreements status may only move to superseded or voided", args: [] },

@@ -41,8 +41,8 @@ carry a name and source only; their EDI payer ID and regulatory regime stay **un
       "No deadline — payer not verified" instead of a date. Tests cover null regime.
 - [x] Claim submission/837P generation (when built) must refuse unverified payers — enforced by a
       guard function with a unit test.
-- [x] Payer names are public reference data, not PHI; no audit or logging change needed beyond
-      existing patient-write audit.
+- [x] Payer names are public reference data, not PHI. Loading catalog payers into a practice is a
+      configuration change and emits a `payer.catalog_loaded` audit event (count + catalog version).
 
 ## Data / API changes
 - Migration: `ALTER TABLE payers ALTER COLUMN edi_payer_id DROP NOT NULL, ALTER COLUMN regime DROP NOT NULL, ADD COLUMN source text`.

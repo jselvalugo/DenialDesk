@@ -68,7 +68,7 @@ the focus ring inside navy chrome.
 Module tiles (module switcher, page headers) are a colored glyph on the module's own light tint with
 a 1px border (`tile-<tone>-fg/-bg/-border`), like our badges, never a solid colored square with a
 white glyph (ADR 0005): Denials teal, Claims blue, Revenue cycle navy, Insight amber, Patients and
-Setup slate. Every glyph is ≥ 5:1 on its tint. Tiles identify the module; they never carry status.
+Settings slate. Every glyph is ≥ 5:1 on its tint. Tiles identify the module; they never carry status.
 
 ## 5. Color tokens
 Neutrals are cool slate.
@@ -134,20 +134,27 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
   - *Global header*, 56px white: logo, then the "Go to a module or page" field beside it (opens the
     module switcher; Ctrl/⌘ K); practice name, demo badge, and the user menu (name, role, practice,
     sign out) on the right.
-  - *Tab bar*, 44px navy: the current module's name with a chevron as the first control (accessible
-    name "<Module>, switch module"; opens the switcher), then the module's shipped pages as tabs (`nav`
+  - *Tab bar*, 44px navy: the white DenialDesk mark (logo icon, teal cross) with a chevron as the
+    first control (accessible name "<Module>, switch module"; opens the switcher; the module name is
+    carried by the tabs and the page-header eyebrow), then the module's shipped pages as tabs (`nav`
     "Primary"). Planned pages are not tabs. No grid or "waffle" icon.
   - *Module switcher* ("Go to"): modal dialog with a search field and one grouped list: each module
     row (tinted tile, name, one-line description) links to its home, and its pages follow as compact
     links; planned modules and pages are shown as "Planned" with a dashed border, never links.
   - Modules ("apps" in code): Denials, Patients, Claims, Revenue cycle (roles that can view it),
-    Insight, Setup (style guide; only when available). Defined once in
+    Insight, Settings (section tabs: General, Custom fields, and planned sections; the design
+    style guide in pre-production; `specs/settings-and-custom-fields.md`). Defined once in
     `src/components/shell/navigation.ts`.
 - **Page header:** white band (panel style) with the module tile, an uppercase "Module · Page"
   eyebrow, the serif title, a one-line description, and actions on the right.
 - **Preview banner:** 32px strip above everything in non-production (ADR 0003).
 - **Page:** page header, then filters toolbar, then content. Page padding 24px (16px under 1024px).
 - Tables use the full content width. Forms max 720px wide, labels above fields.
+- **Create flows get their own page** (owner rule, 2026-09-26). A list page never embeds a
+  "create" form: it has a primary "New <thing>" button in the page header's actions that opens
+  `/<list>/new`, which has a breadcrumb back to the list, a Cancel link, and after saving links to
+  the new record and back to the list. Examples: `/patients/new`, `/operator/practices/new`.
+  Small row-level actions (suspend, mark in error) may stay inline.
 - Minimum supported viewport 1280×800 for working screens; usable down to 1024px.
 
 ## 9. Components (build these, reuse them, don't fork them)

@@ -42,10 +42,16 @@ export interface NavApp {
 export interface NavVisibility {
   showRevenueCycle: boolean;
   showDesignSystem: boolean;
+  /** Signed-in practice users: the practice Settings pages. */
+  showSettings?: boolean;
 }
 
 /** What the menus show. Not access control: every page still enforces its own permission on the server. */
-export function navApps({ showRevenueCycle, showDesignSystem }: NavVisibility): NavApp[] {
+export function navApps({
+  showRevenueCycle,
+  showDesignSystem,
+  showSettings = false,
+}: NavVisibility): NavApp[] {
   const apps: NavApp[] = [
     {
       id: "denials",
@@ -106,19 +112,22 @@ export function navApps({ showRevenueCycle, showDesignSystem }: NavVisibility): 
     tone: "amber",
     items: [{ label: "Reports", href: "/reports", icon: BarChart3, available: false }],
   });
-  const setup: NavItem[] = [];
+  const settings: NavItem[] = [];
   // The platform console isn't linked from practices: it has its own sign-in (/operator/login).
-  if (showDesignSystem) {
-    setup.push({ label: "Design system", href: "/design", icon: Palette, available: true });
+  if (showSettings) {
+    settings.push({ label: "Settings", href: "/settings", icon: Settings2, available: true });
   }
-  if (setup.length > 0) {
+  if (showDesignSystem) {
+    settings.push({ label: "Design system", href: "/design", icon: Palette, available: true });
+  }
+  if (settings.length > 0) {
     apps.push({
-      id: "setup",
-      label: "Setup",
-      description: "The design style guide.",
+      id: "settings",
+      label: "Settings",
+      description: "Practice profile, custom fields, access, and the design style guide.",
       icon: Settings2,
       tone: "slate",
-      items: setup,
+      items: settings,
     });
   }
   return apps;

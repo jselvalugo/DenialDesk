@@ -38,6 +38,10 @@ test("the module switcher searches modules and pages and opens one", async ({ pa
   await page.goto("/design");
   // The shortcut listener attaches after hydration; wait for client-rendered chrome first.
   await expect(page.getByRole("button", { name: /, switch module$/ })).toBeEnabled();
+  // The launcher shows the brand mark, not the module name.
+  await expect(
+    page.getByRole("button", { name: /, switch module$/ }).locator("svg[data-brand-mark]"),
+  ).toBeVisible();
   await expect(async () => {
     await page.keyboard.press("Control+k");
     await expect(page.getByRole("dialog", { name: "Go to" })).toBeVisible({ timeout: 500 });
@@ -55,7 +59,8 @@ test("the module switcher searches modules and pages and opens one", async ({ pa
   await page.keyboard.press("Escape");
   await expect(switcher).toBeHidden();
   await page.getByRole("button", { name: /, switch module$/ }).click();
-  await switcher.getByRole("link", { name: "Setup module" }).click();
+  await switcher.getByRole("link", { name: "Settings module" }).click();
+  // Signed out, Settings holds only the style guide (practice settings need a signed-in user).
   await expect(
     page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Design system" }),
   ).toHaveAttribute("aria-current", "page");
@@ -103,7 +108,7 @@ test("the preview operator status endpoint rejects requests without the secret t
 test("navigation icons are decorative and link names stay text-only", async ({ page }) => {
   await page.goto("/design");
   const nav = page.getByRole("navigation", { name: "Primary" });
-  const moduleButton = page.getByRole("button", { name: "Setup, switch module", exact: true });
+  const moduleButton = page.getByRole("button", { name: "Settings, switch module", exact: true });
   await moduleButton.click();
   const switcher = page.getByRole("dialog", { name: "Go to" });
   // No nine-dot grid icon anywhere in the chrome (ADR 0005).

@@ -15,7 +15,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   return (
-    <ShellProvider visibility={{ showDesignSystem, showRevenueCycle }}>
+    <ShellProvider visibility={{ showDesignSystem, showRevenueCycle, showSettings: user !== null }}>
       <div className="flex min-h-0 flex-1 flex-col">
         <a
           href="#main"

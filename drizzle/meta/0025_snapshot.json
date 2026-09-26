@@ -1,6 +1,6 @@
 {
-  "id": "f5d5efa1-4158-4f68-bd2a-cd317971d760",
-  "prevId": "55b160ad-51c2-4317-a312-9ac8dc7e7c61",
+  "id": "9a8bd638-e00f-49e9-8cc6-944bde68750a",
+  "prevId": "49280f70-ad93-4e14-b228-b5ef8ae5e75d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -900,6 +900,12 @@
         },
         "help_text": {
           "name": "help_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sensitivity": {
+          "name": "sensitivity",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2071,14 +2077,14 @@
           "name": "edi_payer_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "regime": {
           "name": "regime",
           "type": "regulatory_regime",
           "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "appeal_window_days": {
           "name": "appeal_window_days",
@@ -2088,6 +2094,12 @@
         },
         "appeal_window_source": {
           "name": "appeal_window_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
           "type": "text",
           "primaryKey": false,
           "notNull": false

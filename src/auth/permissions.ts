@@ -34,3 +34,8 @@ export function canEditPatients(role: Role): boolean {
 export function canTagSensitivity(role: Role): boolean {
   return role === "admin";
 }
+
+/** Practice settings (custom fields and, later, users and security): administrators only. */
+export function canConfigureSettings(role: Role): boolean {
+  return role === "admin";
+}

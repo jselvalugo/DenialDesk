@@ -1,6 +1,6 @@
 {
-  "id": "f5d5efa1-4158-4f68-bd2a-cd317971d760",
-  "prevId": "55b160ad-51c2-4317-a312-9ac8dc7e7c61",
+  "id": "49280f70-ad93-4e14-b228-b5ef8ae5e75d",
+  "prevId": "f5d5efa1-4158-4f68-bd2a-cd317971d760",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -900,6 +900,12 @@
         },
         "help_text": {
           "name": "help_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sensitivity": {
+          "name": "sensitivity",
           "type": "text",
           "primaryKey": false,
           "notNull": false

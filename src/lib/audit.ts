@@ -67,7 +67,11 @@ export type AuditAction =
   | "rcm.deposits_imported"
   | "rcm.deposits_rejected"
   | "rcm.deposits_reversed"
-  | "rcm.report_viewed";
+  | "rcm.report_viewed"
+  | "settings.custom_field_created"
+  | "settings.custom_field_updated"
+  | "settings.custom_field_deactivated"
+  | "settings.custom_field_reactivated";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
@@ -94,7 +98,8 @@ export interface AuditEvent {
     | "tenant_agreement"
     | "rcm_file"
     | "rcm_voucher"
-    | "rcm_deposit_file";
+    | "rcm_deposit_file"
+    | "custom_field";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;
