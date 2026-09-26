@@ -168,7 +168,12 @@ test.describe("signed in", () => {
     await page.getByRole("link", { name: "DenialDesk home" }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe("/");
     await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
-    for (const name of ["How DenialDesk works", "Your modules", "Safeguards"]) {
+    for (const name of [
+      "How DenialDesk works",
+      "From patient record to claim and denial",
+      "Your modules",
+      "Safeguards",
+    ]) {
       await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
     }
     // Shipped steps link to their page; planned steps are labelled, never linked.
@@ -179,6 +184,24 @@ test.describe("signed in", () => {
       const item = page.locator(`[data-step="${step}"]`);
       await expect(item.getByRole("link")).toHaveCount(0);
       await expect(item.getByText("Planned")).toBeVisible();
+    }
+    for (const step of [1, 4]) {
+      await expect(page.locator(`[data-record-step="${step}"]`).getByRole("link")).toHaveAttribute(
+        "href",
+        "/patients",
+      );
+    }
+    for (const step of [2, 3]) {
+      const item = page.locator(`[data-record-step="${step}"]`);
+      await expect(item.getByRole("link")).toHaveCount(0);
+      await expect(item.getByText("Planned", { exact: true })).toBeVisible();
+    }
+    for (const title of [
+      "Sign-in needs a second factor",
+      "Identifiers are encrypted",
+      "Business Associate Agreements on file",
+    ]) {
+      await expect(page.getByText(title, { exact: true })).toBeVisible();
     }
   });
 });
