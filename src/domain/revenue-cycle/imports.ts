@@ -20,7 +20,7 @@ export const REVIEW_REASONS = {
   blank_code: "Blank procedure code",
   invalid_code: "Procedure code isn't five letters or digits",
   after_period: "Service date after the period",
-  credit_balance: "Credit balance (possible refund due)",
+  credit_balance: "Credit balance: a refund may be due (refund deadlines aren't tracked here)",
 } as const;
 export type ReviewReason = keyof typeof REVIEW_REASONS;
 
@@ -71,6 +71,11 @@ export const CURRENT_FORMAT_VERSION = 2;
  * caller's transaction: all or nothing. Audited with IDs and counts only.
  */
 export async function importMonthlyFile(tx: TenantTx, input: ImportInput): Promise<string> {
+  for (const line of input.lines) {
+    const amounts = [line.billedCents, line.paymentCents, line.adjustmentCents, line.balanceCents];
+    if (!amounts.every(Number.isSafeInteger))
+      throw new Error(`Row ${line.rowNumber}: amounts must be whole cents`);
+  }
   const classify = prepareEngine(await loadEngineConfig(tx));
   const sites = await tx.select({ id: rcmSites.id, name: rcmSites.name }).from(rcmSites);
   if (input.defaultSiteId && !sites.some((s) => s.id === input.defaultSiteId)) {

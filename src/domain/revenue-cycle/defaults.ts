@@ -131,7 +131,7 @@ export const DEFAULT_RULES: DefaultRule[] = [
     code: "PROMPT_PAY_INTEREST",
     name: "Prompt-pay interest",
     description:
-      "Late-payment interest a payer adds to a claim payment is interest income, not patient service revenue.",
+      'Late-payment interest a payer adds to a claim payment is interest income, not patient service revenue. ⚠️ VERIFY how your system marks interest lines; any description containing "interest" matches.',
     priority: 10,
     match: {
       any: [

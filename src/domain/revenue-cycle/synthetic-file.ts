@@ -45,6 +45,8 @@ interface SimCharge {
   postings: Posting[];
   /** Month the charge was voided, if it was voided after the month it was posted. */
   voidedIn?: number;
+  /** Month the open balance moved to patient responsibility (financial class SELF). */
+  toPatientIn?: number;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -118,7 +120,8 @@ export function generateMonthlyFiles(options: {
         continue;
       }
       if (special === 3) {
-        // A Category II quality code at the customary $0.01, written off the same month.
+        // A Category II quality code at a nominal $0.01 in this synthetic data, written off the
+        // same month.
         charges.push({
           month: m,
           line: { ...base, cpt: "3074F", description: "Most recent systolic BP < 130" },
@@ -152,10 +155,14 @@ export function generateMonthlyFiles(options: {
       if (payerClass !== "SELF") {
         postings.push({ month: m + lag, payment: allowed - patientShare, adjustment: charge - allowed });
       }
-      if (patientShare > 0 && random.int(1, 10) <= 7) {
+      const patientPays = patientShare > 0 && random.int(1, 10) <= 7;
+      if (patientPays) {
         postings.push({ month: m + lag + random.int(0, 2), payment: patientShare, adjustment: 0 });
       }
-      charges.push({ month: m, line: base, charge, postings });
+      // Many PM systems move the remaining patient share to self-pay once the payer has paid.
+      const toPatientIn =
+        payerClass !== "SELF" && patientShare > 0 && random.int(1, 2) === 1 ? m + lag : undefined;
+      charges.push({ month: m, line: base, charge, postings, toPatientIn });
     }
   }
 
@@ -169,8 +176,10 @@ export function generateMonthlyFiles(options: {
       const toDate = c.postings.filter((p) => p.month <= m);
       const balance = c.charge - toDate.reduce((t, p) => t + p.payment + p.adjustment, 0);
       if (c.month !== m && now.length === 0 && balance === 0) continue;
+      const toPatient = c.toPatientIn !== undefined && m >= c.toPatientIn;
       lines.push({
         ...c.line,
+        ...(toPatient ? { payerClass: "SELF", payerName: "Self-pay" } : {}),
         status:
           c.line.status ||
           (c.voidedIn !== undefined && m >= c.voidedIn ? "VOID" : balance === 0 ? "PAID" : "OPEN"),

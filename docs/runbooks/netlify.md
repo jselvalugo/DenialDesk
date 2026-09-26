@@ -55,6 +55,8 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
 ## Demo practice and operator console
 - "Explore the demo practice" signs visitors into a shared synthetic demo practice, created on
   first use. Reset it any time from `/operator` → *Reset demo with sample data* or *Reset demo empty* (setup only, no claims/denials/files); the old one is archived.
+- Migrations run with the deploy; never deploy app code ahead of its migrations or run a
+  column-dropping migration while an older build is still serving.
 - After a release that changes the revenue cycle starter configuration or file layout (e.g. C0,
   2026-09-26), reset the demo so it carries the new configuration and sample files. Other
   pre-production practices keep their stored rules; an admin can review them on the Rules page.

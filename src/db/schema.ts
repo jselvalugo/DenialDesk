@@ -450,7 +450,7 @@ export const rcmFiles = pgTable(
     paymentCents: cents("payment_cents").notNull(),
     adjustmentCents: cents("adjustment_cents").notNull().default(0),
     balanceCents: cents("balance_cents").notNull(),
-    /** Charges − adjustments posted in the period. */
+    /** Format 2: charges − adjustments posted in the period (format 1: charges − estimated contra). */
     netCents: cents("net_cents").notNull(),
     /** 1: pre-2026-09-26 layout (not usable for vouchers or aging); 2: month-end activity file. */
     formatVersion: integer("format_version").notNull().default(1),
@@ -487,7 +487,7 @@ export const rcmClaimLines = pgTable(
     balanceCents: cents("balance_cents").notNull(),
     siteId: uuid("site_id").references(() => rcmSites.id),
     ruleCode: text("rule_code").notNull(),
-    /** Charges − adjustments posted in the period. */
+    /** Format 2 files: charges − adjustments posted in the period (see rcmFiles.formatVersion). */
     netCents: cents("net_cents").notNull(),
     arGl: text("ar_gl").notNull(),
     revenueGl: text("revenue_gl").notNull(),

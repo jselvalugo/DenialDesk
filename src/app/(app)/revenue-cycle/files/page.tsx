@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { rcmSites } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
-import { listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
+import { CURRENT_FORMAT_VERSION, listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
 import { syntheticDataOnly } from "@/lib/env";
 import { Badge } from "@/components/ui/Badge";
 import { UploadForm } from "./UploadForm";
@@ -79,6 +79,14 @@ export default async function FilesPage() {
                     {(perPeriod.get(`${f.periodYear}-${f.periodMonth}`) ?? 0) > 1 && (
                       <span className="ml-2">
                         <Badge tone="warning">Period imported more than once</Badge>
+                      </span>
+                    )}
+                    {f.formatVersion !== CURRENT_FORMAT_VERSION && (
+                      <span
+                        className="ml-2"
+                        title="Imported before the month-end activity layout; not used for vouchers or aging. Import the month again."
+                      >
+                        <Badge tone="neutral">Earlier layout</Badge>
                       </span>
                     )}
                   </Td>

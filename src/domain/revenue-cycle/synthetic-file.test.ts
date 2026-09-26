@@ -63,8 +63,14 @@ describe("synthetic monthly activity files", () => {
     });
     const used = new Set(files.flatMap((f) => f.lines.map((l) => classify(l).ruleCode)));
     expect([...used].sort()).toEqual(DEFAULT_RULES.map((r) => r.code).sort());
-    // Lines that reach the ledger in later months: a void after posting, an invalid code paid later.
+    // Lines that reach the ledger in later months: a void after posting, an invalid code paid later,
+    // and a balance moved from the payer's class to self-pay.
     expect(files.some((f) => f.lines.some((l) => l.status === "VOID" && l.billedCents === 0))).toBe(true);
+    const classes = new Map<string, Set<string>>();
+    for (const l of files.flatMap((f) => f.lines)) {
+      classes.set(l.accountNumber, (classes.get(l.accountNumber) ?? new Set()).add(l.payerClass));
+    }
+    expect([...classes.values()].some((c) => c.has("SELF") && c.size > 1)).toBe(true);
     expect(
       files.some((f) => f.lines.some((l) => l.cpt === "9921" && l.billedCents === 0 && l.paymentCents > 0)),
     ).toBe(true);

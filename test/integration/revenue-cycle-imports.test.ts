@@ -48,6 +48,28 @@ const line = (rowNumber: number, overrides: Partial<MonthlyLine> = {}): MonthlyL
   ...overrides,
 });
 
+const routing = {
+  ruleCode: "STANDARD",
+  netCents: 0,
+  arGl: "1200",
+  revenueGl: "4000",
+  adjustmentGl: "4050",
+  flagged: true,
+};
+const emptyFile = (ctx: Ctx) => ({
+  tenantId: ctx.tenantId,
+  uploadedBy: ctx.userId,
+  filename: "x.csv",
+  periodYear: 2026,
+  periodMonth: 1,
+  rowCount: 0,
+  billedCents: 0,
+  paymentCents: 0,
+  balanceCents: 0,
+  netCents: 0,
+  flaggedCount: 0,
+});
+
 beforeAll(async () => {
   a = await practice("alpha", 31);
   b = await practice("beta", 32);
@@ -83,7 +105,7 @@ describe("synthetic practices", () => {
     expect(file!.netCents).toBe(file!.billedCents - file!.adjustmentCents);
     expect(file!.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     const detail = await withTenant(a, (tx) => getFile(tx, file!.id, { page: 1 }));
-    expect(detail!.byRule.length).toBeGreaterThanOrEqual(3);
+    expect(detail!.byRule.some((r) => r.key === "STANDARD")).toBe(true);
     expect(detail!.bySite.every((s) => s.siteId !== null)).toBe(true);
   });
 });
@@ -243,23 +265,29 @@ describe("imported files are tenant-isolated and immutable", () => {
     },
   );
 
-  it("rejects a file stamped with another practice", async () => {
+  it("rejects unknown review reasons and file formats", async () => {
+    const [file] = await withTenant(a, (tx) => listFiles(tx));
     await expectDbError(
       withTenant(a, (tx) =>
-        tx.insert(rcmFiles).values({
-          tenantId: b.tenantId,
-          uploadedBy: a.userId,
-          filename: "x.csv",
-          periodYear: 2026,
-          periodMonth: 1,
-          rowCount: 0,
-          billedCents: 0,
-          paymentCents: 0,
-          balanceCents: 0,
-          netCents: 0,
-          flaggedCount: 0,
+        tx.insert(rcmClaimLines).values({
+          ...line(9_999),
+          ...routing,
+          tenantId: a.tenantId,
+          fileId: file!.id,
+          reviewReasons: ["looks_odd"],
         }),
       ),
+      /review_reasons_known/,
+    );
+    await expectDbError(
+      withTenant(a, (tx) => tx.insert(rcmFiles).values({ ...emptyFile(a), formatVersion: 3 })),
+      /format_version_known/,
+    );
+  });
+
+  it("rejects a file stamped with another practice", async () => {
+    await expectDbError(
+      withTenant(a, (tx) => tx.insert(rcmFiles).values({ ...emptyFile(a), tenantId: b.tenantId })),
       /row-level security/,
     );
   });

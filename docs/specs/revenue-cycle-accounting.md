@@ -37,9 +37,12 @@ only current-format files (earlier imports must be re-imported).
 
 ## Accounting model
 **Every amount posts as recorded.** Each line's charges, payments, and adjustments for the month
-reach the ledger exactly as the PM system posted them, whatever the line's status or code, so the
-ledger's receivable always equals the file's open balance and the month-to-month roll-forward
-holds by construction. Rules never change amounts; they only choose accounts:
+reach the ledger exactly as the PM system posted them, whatever the line's status or code, so in
+total the ledger's receivable equals the file's open balance and the month-to-month roll-forward
+holds by construction. Per receivable account and site it holds only if lines keep their routing;
+PM systems move balances between financial classes (e.g. to patient responsibility after
+adjudication), so each voucher also reclassifies receivables between accounts and sites to match
+the file (B3). Rules never change amounts; they only choose accounts:
 - **Receivable (AR)** from the rule, else the financial class, else the practice default.
 - **Revenue and adjustment accounts** from the rule, else the AR account's routing.
 - **Net revenue** for the month = charges − adjustments posted in the month (accrual: charges when
@@ -76,11 +79,17 @@ else the most recent current-format import (`periodFiles()`); every report uses 
   - charges: debit AR, credit revenue;
   - adjustments: debit the adjustment account, credit AR;
   - payments: debit the practice's payments-clearing account, credit AR.
+  - receivable reclassification: for each (site, AR account), the prior month's file balance
+    routed that way, plus this month's movements, is compared with this month's file balance
+    routed that way; the difference posts to that receivable. Differences net to zero when the
+    months roll forward; otherwise the voucher can't balance and the file must be fixed. The
+    first imported month has no prior file, so its opening balances are the practice's GL.
 - **Five checks**, exact to the cent, recomputed whenever the voucher is shown, approved, or
   exported: (1) debits equal credits; (2) ties to the file: posted charges, adjustments, and
-  payments equal the file's totals; (3) net change in receivables = charges −
-  adjustments − payments; (4) every account exists in the chart with the right type and every line
-  has a site; (5) no other approved or exported voucher covers the month.
+  payments equal the file's totals; (3) receivables tie: for every site and AR account, opening
+  (prior file) + movements + reclassification = the file's open balance; (4) every account exists
+  in the chart with the right type and every line has a site; (5) no other approved or exported
+  voucher covers the month.
 - **Workflow:** draft → approved → exported, or void. Prepare (regenerating supersedes the draft)
   and export: admin or manager. Approve: admin or manager other than the preparer (also a DB
   check), all checks passing. Void: admin, with a reason. No deletes; amounts and lines are
@@ -137,7 +146,7 @@ else the most recent current-format import (`periodFiles()`); every report uses 
 
 ## Phase status
 - [x] **B1** (2026-09-26): `rcm_sites`, `payer_classes`, `gl_accounts`, `business_rules` with FORCE
-      RLS, no DELETE, check constraints (contra 0–10000 bps, one default AR, AR accounts carry
+      RLS, no DELETE, check constraints (contra 0–10000 bps, retired in C0; one default AR; AR accounts carry
       routing); pure engine `src/domain/revenue-cycle/engine.ts` with a fixed condition vocabulary;
       starter configuration seeded (audited) with every synthetic practice and loadable (audited,
       admin only) for practices without rules; read-only Rules and ledger page (admin, manager,
