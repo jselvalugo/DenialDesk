@@ -21,7 +21,7 @@ _Last updated: 2026-09-26_
 - Operator console can reset the demo with sample data or empty (setup only) to test features
   from a clean slate.
 - Practice sign-in page shows the owner's DenialDesk reception image in a matted frame beside the
-  card (`specs/sign-in-and-sessions.md`); the operator sign-in stays plain.
+  card (`specs/sign-in-and-sessions.md`); the operator sign-in has no image.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
   login and a platform operator console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
@@ -71,6 +71,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
 - A vector (SVG) version of the logo from a designer; the app currently uses the PNG.
+- Confirm and record the license and generating tool for the sign-in reception image
+  (`public/brand/README.md`); it is owner-supplied and described as a synthetic render.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.
 

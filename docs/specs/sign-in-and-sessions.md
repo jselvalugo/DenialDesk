@@ -21,12 +21,14 @@ Requirement IDs: R-7.2.2, R-7.2.7, R-7.2.9, R-7.5.1
 - [x] Roles: admin, manager, specialist, compliance (read-only for denials).
 - [x] E2E tests: redirect when signed out, wrong password, unknown account, password-only,
       lockout, first-time enrollment, role display.
-- [x] Sign-in page design (owner request, 2026-09-26): `/login` shows the DenialDesk reception
-      image (`public/brand/denialdesk-reception.jpg`, synthetic render, no PHI) in a matted frame
-      with a one-line product description beside the sign-in card at 1024px and wider, stacked
-      above it below that; borders and a hairline shadow only, per DESIGN.md §3 and §7. The image
-      is decorative (`alt=""`); the logo still names the product. The page fits 1280×800 without
-      scrolling. The platform console sign-in is unchanged.
+- [x] Sign-in page design (owner request, 2026-09-26; R-7.2.2 sign-in surface, §11): every step
+      under `/login` shows the DenialDesk reception image (`public/brand/denialdesk-reception.jpg`,
+      synthetic render, no PHI, provenance in `public/brand/README.md`) in a matted frame. At 1024px
+      and wider the image and a short product description sit beside the card; below that the image
+      alone stacks above the card. Borders and a hairline shadow only, per DESIGN.md §3 and §7; the
+      product text is Inter (§6). The image is decorative (`alt=""`); the logo still names the
+      product. `/login` fits 1280×800 without scrolling and the platform console sign-in has no
+      image (both covered by `test/e2e/auth.spec.ts`).
 
 ## Deferred
 - Customer SSO (SAML/OIDC, Entra ID) and SCIM — at Azure cutover (R-7.2.1).

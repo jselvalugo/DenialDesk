@@ -42,9 +42,11 @@ DenialDesk's visual identity is navy chrome, a teal accent, serif page titles, a
 around its own logo (`docs/assets/denialdesk-logo.png`),
 always shown unaltered on a white background (sign-in page, global header). Adopted 2026-09-26,
 ADR 0004 amendment; ERP shell (global header, app bar, app launcher) 2026-09-26, `specs/erp-shell.md`.
-The practice sign-in page also carries the reception image (`public/brand/denialdesk-reception.jpg`)
-in a matted frame beside the card (above it under 1024px): hairline, navy line, white mat, hairline.
-It is the one place a picture appears in the product; working screens never use imagery.
+The practice sign-in pages (`/login` and its MFA and password steps) also carry the reception image
+(`public/brand/denialdesk-reception.jpg`, provenance in `public/brand/README.md`) in a matted frame
+beside the card (above it under 1024px): hairline, canvas gap, navy line, white mat, hairline. It is
+the one place a picture appears in the product; working screens never use imagery. The product line
+next to it is Inter, not serif: Playfair stays reserved for page titles (§6).
 
 | Token | Hex | Use |
 |---|---|---|

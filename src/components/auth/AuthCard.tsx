@@ -1,34 +1,34 @@
 import Image from "next/image";
 
 /**
- * Brand image framed for the practice sign-in page: hairline, white gap, navy line, white mat,
+ * Brand image framed for the practice sign-in page: hairline, canvas gap, navy line, white mat,
  * hairline, picture. Borders and a hairline shadow only (DESIGN.md §3, §7); the image is
- * decorative, so assistive tech skips it and the logo still names the product.
+ * decorative (empty alt), so assistive tech skips it and the logo still names the product.
  */
 function AuthHero() {
   return (
-    <figure aria-hidden="true" className="rounded-panel border border-border bg-canvas p-1">
-      <div className="rounded-[6px] border border-primary bg-surface p-1.5 shadow-xs">
-        <div className="overflow-hidden rounded-[4px] border border-border bg-surface-muted">
+    <div className="rounded-panel border border-border bg-canvas p-1">
+      <div className="rounded-control border border-primary bg-surface p-1.5 shadow-xs">
+        <div className="overflow-hidden rounded-sm border border-border bg-surface-muted">
           <Image
             src="/brand/denialdesk-reception.jpg"
             alt=""
             width={2000}
             height={800}
-            sizes="(max-width: 1023px) 100vw, 600px"
+            sizes="(max-width: 1023px) 400px, 600px"
             className="block h-auto w-full"
             priority
           />
         </div>
       </div>
-    </figure>
+    </div>
   );
 }
 
 /**
  * The sign-in card used by practice sign-in and the platform console's own sign-in.
  * With `hero`, wide screens show the framed brand image and a product line beside the card;
- * narrow screens stack them. Without it, the card is centered alone.
+ * narrow screens stack the image above the card and drop the line. Without it, the card is alone.
  */
 export function AuthCard({
   label,
@@ -55,7 +55,7 @@ export function AuthCard({
               <>
                 <AuthHero />
                 <div className="mt-6 hidden lg:block">
-                  <p className="font-serif text-title font-semibold text-primary">
+                  <p className="text-title font-semibold text-primary">
                     Claims and denial management for Florida physician practices.
                   </p>
                   <p className="mt-2 max-w-[52ch] text-body text-muted">
