@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { and, eq, gte } from "drizzle-orm";
+import { SESSION_COOKIE } from "@/auth/policy";
 import { currentStep } from "@/auth/totp";
+import { systemDb } from "@/db/client";
+import { auditEvents, users } from "@/db/schema";
 import { e2eUser, freshCode, signInWithPassword } from "./support";
 
 test.describe("demo login", () => {
@@ -16,8 +20,12 @@ test.describe("demo login", () => {
     await expect(page.getByRole("table").getByRole("row")).not.toHaveCount(0);
   });
 
-  test("demo sessions are sent to sign-in, and the operator can sign in from there", async ({ page }) => {
+  test("demo sessions are sent to sign-in, and the operator can sign in from there", async ({
+    page,
+    browser,
+  }) => {
     test.setTimeout(60_000); // may wait up to 30 s for a TOTP step the setup sign-in didn't use
+    const startedAt = new Date(Date.now() - 1000);
     await page.goto("/login");
     await page.getByRole("button", { name: "Explore the demo practice" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
@@ -25,10 +33,13 @@ test.describe("demo login", () => {
     await page.goto("/operator");
     await expect(page).toHaveURL(/\/login\?reason=account$/);
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByRole("status")).toContainText("Signing in ends the demo session");
+    await expect(page.getByRole("button", { name: "Explore the demo practice" })).toHaveCount(0);
 
     // The sign-in page no longer bounces a demo session back to the demo.
     await page.goto("/login");
     await expect(page.getByRole("status")).toContainText("Signing in ends the demo session");
+    const demoCookie = (await page.context().cookies()).find((c) => c.name === SESSION_COOKIE)!;
     const operator = e2eUser("operator");
     await signInWithPassword(page, operator);
     await page
@@ -37,6 +48,27 @@ test.describe("demo login", () => {
     await page.getByRole("button", { name: "Verify" }).click();
     await page.getByRole("link", { name: "Platform console" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Practices" })).toBeVisible();
+
+    // Signing in ended the demo session: its old cookie no longer works anywhere, and that's audited.
+    const replay = await browser.newContext();
+    await replay.addCookies([demoCookie]);
+    const replayPage = await replay.newPage();
+    await replayPage.goto("/");
+    await expect(replayPage).toHaveURL(/\/login$/);
+    await replay.close();
+    const [operatorRow] = await systemDb().select().from(users).where(eq(users.email, operator.email));
+    const replaced = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(
+        and(
+          eq(auditEvents.action, "auth.session_replaced"),
+          eq(auditEvents.actorUserId, operatorRow!.id),
+          gte(auditEvents.occurredAt, startedAt),
+        ),
+      );
+    expect(replaced).toHaveLength(1);
+    expect(replaced[0]!.metadata).toMatchObject({ previousAuthMethod: "demo" });
   });
 });
 

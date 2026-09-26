@@ -64,7 +64,9 @@ describe("requireOperator", () => {
 
   it("sends signed-out visitors to sign-in", async () => {
     vi.mocked(session.getSession).mockResolvedValue(null);
+    vi.mocked(session.requireAuth).mockClear();
     await expect(requireOperator()).rejects.toThrow("redirect:/login");
+    expect(session.requireAuth).not.toHaveBeenCalled();
   });
 
   it("sends demo sessions to sign-in instead of a dead-end 404", async () => {

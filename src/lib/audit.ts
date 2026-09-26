@@ -15,6 +15,7 @@ export type AuditAction =
   | "auth.mfa_failed"
   | "auth.logout"
   | "auth.session_expired"
+  | "auth.session_replaced"
   | "denial.queue_viewed"
   | "denial.viewed"
   | "denial.status_changed"

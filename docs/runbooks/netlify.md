@@ -60,6 +60,7 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
 - Can't get in? Sign in at `/login` as `SEED_ADMIN_EMAIL` (it must equal `PLATFORM_OPERATOR_EMAIL`),
   then use *Platform console* in the sidebar. Forgotten password, lockout, or lost authenticator:
   call the seed endpoint again (with `{"resetMfa": true}` for a lost authenticator) to repair the account.
+  Pre-production only: production access recovery follows the approved access-management procedure.
 
 ## Checks after each deploy
 - `https://denialdesk.netlify.app/api/health` returns `{"status":"ok","appEnv":"preview","db":"up"}`.

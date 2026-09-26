@@ -17,6 +17,10 @@ const errors: Record<string, string> = {
   suspended: "This practice's access is suspended. Contact DenialDesk support.",
 };
 
+// Own keys only: `?reason=constructor` must not pick up an Object.prototype function.
+const lookup = (table: Record<string, string>, key: string | undefined) =>
+  key !== undefined && Object.hasOwn(table, key) ? table[key] : undefined;
+
 export default async function SignInPage({
   searchParams,
 }: {
@@ -36,12 +40,15 @@ export default async function SignInPage({
       </p>
       <SignInForm
         notice={
-          notices[params.reason ?? ""] ??
-          errors[params.error ?? ""] ??
-          (demo ? "You're exploring the demo practice. Signing in ends the demo session." : undefined)
+          [
+            lookup(notices, params.reason) ?? lookup(errors, params.error),
+            demo ? "You're exploring the demo practice. Signing in ends the demo session." : undefined,
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined
         }
       />
-      {demoLoginEnabled() && <DemoSignIn />}
+      {demoLoginEnabled() && !demo && <DemoSignIn />}
     </>
   );
 }
