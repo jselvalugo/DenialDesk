@@ -183,6 +183,13 @@
       "when": 1790457404981,
       "tag": "0025_lovely_mentor",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790462687490,
+      "tag": "0026_insight_report_indexes",
+      "breakpoints": true
     }
   ]
 }

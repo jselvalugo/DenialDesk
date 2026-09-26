@@ -39,3 +39,16 @@ export function canTagSensitivity(role: Role): boolean {
 export function canConfigureSettings(role: Role): boolean {
   return role === "admin";
 }
+
+/** Insight standard reports: every role can view (owner decision 2026-09-26). */
+export function canViewInsight(role: Role): boolean {
+  return Boolean(role);
+}
+
+/**
+ * Exporting an Insight report leaves the audited system as a file, so it is kept to the roles
+ * above front-line specialist (owner decision 2026-09-26), matching the revenue-cycle pattern.
+ */
+export function canExportInsight(role: Role): boolean {
+  return role === "admin" || role === "manager" || role === "compliance";
+}

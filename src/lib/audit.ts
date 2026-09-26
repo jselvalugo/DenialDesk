@@ -71,7 +71,9 @@ export type AuditAction =
   | "settings.custom_field_created"
   | "settings.custom_field_updated"
   | "settings.custom_field_deactivated"
-  | "settings.custom_field_reactivated";
+  | "settings.custom_field_reactivated"
+  | "insight.report_viewed"
+  | "insight.report_exported";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
