@@ -129,10 +129,23 @@ vendor names, screenshots, or copied wording are used.
     `follow_up_on` (date, nullable), `decision_outcome` (enum, nullable), `decision_on` (date,
     nullable), `recovered_cents` (cents, nullable), `created_at`, `updated_at`.
   - Indexes: `(tenant_id, status, deadline)` for the work list; `(tenant_id, denial_id)`.
+  - Composite tenant-scoped FKs (`denials` and `claims` gained a `(tenant_id, id)` unique index for
+    this): `denial_id` must belong to the same tenant, `claim_id` must belong to the same tenant,
+    and a trigger (`appeals_claim_matches_denial`) checks the denormalized `claim_id` is the same
+    claim the denial itself points at (a composite FK can't cross-check two of an appeal's own
+    columns against each other).
   - RLS: tenant-scoped, `denialdesk_app` gets `SELECT, INSERT, UPDATE`; isolation test in
     `test/integration` alongside the existing denial/claim isolation tests.
 - New table `appeal_notes` (mirrors `denialNotes`): `id`, `tenant_id`, `appeal_id`, `author_id`,
-  `body`, `created_at`.
+  `body`, `created_at`. RLS: tenant-scoped, `denialdesk_app` gets `SELECT, INSERT` only — notes are
+  append-only in the UI (no edit action exists), so there is no `UPDATE` grant; isolation test in
+  `test/integration/tenancy.test.ts`.
+- New table `practice_settings` (built as part of A1, below): `id`, `tenant_id`, `key`, `value`,
+  `updated_at`, unique on `(tenant_id, key)`. A small, generic key/value store for
+  practice-configured product settings that are **not** legal values (those stay in `rules/`); A1's
+  only key is `appeal_follow_up_days`. RLS: tenant-scoped, `denialdesk_app` gets
+  `SELECT, INSERT, UPDATE`; isolation test in `test/integration/tenancy.test.ts`. No admin UI to
+  edit it ships in A1 — a missing row means the built-in default (30 days) applies.
 - `denials.status` gains no new enum values in A1 (existing `appeal_drafted`, `appeal_submitted`,
   `overturned`, `upheld`, `closed` already cover the sync points); confirm no other feature reads
   those statuses assuming only a denial-side action set them (grep before merge).

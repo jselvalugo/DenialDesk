@@ -140,7 +140,10 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 ## Open questions for humans
 - Appeals A1 (`specs/appeals.md`): late-filing blocking (OA-021), withdrawn/dismissed → denial
   status mapping (OA-022), appeal version history before A2 (OA-023), Medicare amount-in-controversy
-  thresholds source (OA-024), tracking/recovered-amount field masking (OA-025).
+  thresholds source (OA-024), tracking/recovered-amount field masking (OA-025), abandoning a draft
+  appeal (OA-026), compliance member-ID reveal on appeals (OA-027), counsel sign-off on the level
+  2–5 Medicare rules added in this review round (OA-028), sensitivity-tag masking timing (OA-029),
+  appeal record retention (OA-030).
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
