@@ -20,6 +20,8 @@ _Last updated: 2026-09-26_
   app launcher as its own app. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
 - Operator console can reset the demo with sample data or empty (setup only) to test features
   from a clean slate.
+- Practice sign-in page shows the owner's DenialDesk reception image in a matted frame beside the
+  card (`specs/sign-in-and-sessions.md`); the operator sign-in stays plain.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
   login and a platform operator console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
