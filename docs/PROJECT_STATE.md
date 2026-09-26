@@ -6,6 +6,15 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
+- Remittances and prompt pay R1/PP1 (`specs/remittances-and-prompt-pay.md`): 835 upload (parser in
+  `src/edi/x12/`), `/remittances` table and record page with balance check, post (claim version +
+  prompt-pay response per claim) and void with reason; `/prompt-pay` table and clock record page
+  (milestones, interest worksheet, contests with "recorded in error"); claim page Payments panel.
+  Migration 0026: append-only history enforced by triggers, RLS + isolation tests. Seed now posts
+  synthetic remittances. External data sources to connect are tracked in `docs/data-sources.xlsx`.
+  R2 (reversals, denial capture from posted adjustments, event-row guard; migration 0028) done;
+  CARC mapping is ⚠️ VERIFY (OA-021). Next: R2b line-level + deposit reassociation, PP2 alerts, R3 feed.
+  Open (counsel): interest accrual start; paper provider-response window.
 - Welcome page (`specs/welcome-page.md`) now explains how the patient record feeds claims and
   denials (4 steps; charge import and 837P/835 marked Planned) and lists more safeguards (MFA,
   field encryption, BAA on file). Wording passed `compliance-checker`; owner sign-off on copy pending.
@@ -137,7 +146,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
-6. Custom field values on records, settings S2 (MVP): threat model first (value encryption, masking), then `custom_field_values` with RLS + isolation test.
+6. Custom field values on records, settings S2 (MVP): ADR 0007 and threat model accepted; PR 1
+   (encrypted storage, value history, role-gated reveal) in review on branch
+   `claude/custom-field-values-storage`. Next: PR 2 patient form, PR 3 claims/denials, PR 4 payers.
 7. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
@@ -222,7 +233,10 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   C0's column drops were a one-time pre-production change on synthetic data.
 - Never edit, rename, or renumber a migration once pushed: Netlify deploy previews apply each
   branch's migrations to a branch database, track them by number, and refuse any change ("modified
-  after being applied"). Add a new migration instead.
+  after being applied"). Add a new migration instead. The same error appears when two
+  branches pick the same number: branch databases start from the main preview database, so a
+  base migration 0025 blocks a PR's own 0025. Before pushing a migration, merge the base branch
+  and take the next free number (custom field values hit this on 2026-09-26: #49, then #52).
 - Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
 - Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):

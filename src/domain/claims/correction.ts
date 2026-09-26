@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ClaimSnapshot } from "@/db/schema";
+import { CLAIM_STATUSES, type ClaimStatus } from "./status";
 
 // Format checks only. Validity against licensed code sets (AMA CPT, CMS ICD-10-CM) is out of scope
 // until those files are licensed and loaded (docs/specs/claims.md).
@@ -67,7 +68,13 @@ export type Correction = z.infer<typeof correctionSchema>;
 
 /** The billed content of a claim as stored in claim_versions (no patient demographics). */
 export function snapshotOf(
-  claim: { serviceDate: string; diagnosisCodes: string[]; billedCents: number; status: string },
+  claim: {
+    serviceDate: string;
+    diagnosisCodes: string[];
+    billedCents: number;
+    status: string;
+    paidCents?: number;
+  },
   lines: ClaimSnapshot["lines"],
 ): ClaimSnapshot {
   return {
@@ -75,6 +82,7 @@ export function snapshotOf(
     diagnosisCodes: [...claim.diagnosisCodes],
     billedCents: claim.billedCents,
     status: claim.status,
+    ...(claim.paidCents === undefined ? {} : { paidCents: claim.paidCents }),
     lines: [...lines]
       .sort((a, b) => a.lineNumber - b.lineNumber)
       .map((l) => ({
@@ -92,6 +100,9 @@ export function changedFields(before: ClaimSnapshot, after: ClaimSnapshot): stri
   const changes: string[] = [];
   if (before.serviceDate !== after.serviceDate) changes.push("serviceDate");
   if (before.diagnosisCodes.join(",") !== after.diagnosisCodes.join(",")) changes.push("diagnosisCodes");
+  if (before.status !== after.status) changes.push("status");
+  // Paid amounts are recorded from remittance posting onward; older versions don't carry them.
+  if (after.paidCents !== undefined && (before.paidCents ?? 0) !== after.paidCents) changes.push("paidCents");
   for (const line of after.lines) {
     const old = before.lines.find((l) => l.lineNumber === line.lineNumber);
     if (!old) {
@@ -116,6 +127,8 @@ export function describeChange(field: string): string {
     modifiers: "modifiers",
     units: "units",
     chargeCents: "charge",
+    status: "status",
+    paidCents: "paid",
   };
   const line = /^line (\d+)(?: (\w+))?$/.exec(field);
   if (line) return `line ${line[1]}${line[2] ? ` ${labels[line[2]] ?? line[2]}` : ""}`;
@@ -139,6 +152,12 @@ export function diffSnapshots(before: ClaimSnapshot, after: ClaimSnapshot): Snap
     if (field === "serviceDate") return { label, from: before.serviceDate, to: after.serviceDate };
     if (field === "diagnosisCodes")
       return { label, from: list(before.diagnosisCodes), to: list(after.diagnosisCodes) };
+    if (field === "status") {
+      const name = (status: string) => CLAIM_STATUSES[status as ClaimStatus]?.label ?? status;
+      return { label, from: name(before.status), to: name(after.status) };
+    }
+    if (field === "paidCents")
+      return { label, from: money(before.paidCents ?? 0), to: money(after.paidCents ?? 0) };
     const [, n, key] = /^line (\d+)(?: (\w+))?$/.exec(field)!;
     const old = before.lines.find((l) => l.lineNumber === Number(n));
     const now = after.lines.find((l) => l.lineNumber === Number(n))!;

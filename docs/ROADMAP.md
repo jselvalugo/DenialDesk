@@ -42,12 +42,12 @@ Claims:
 - [ ] 999 / 277CA acknowledgment capture [R-3.1.1]
 
 Prompt pay (FL-regulated claims only):
-- [ ] Prompt-pay clock and configurable alerts [R-3.1.1, R-3.1.2]
-- [ ] Late-payment interest calculator and itemized worksheet [R-3.1.3]
+- [~] Prompt-pay clock and configurable alerts [R-3.1.1, R-3.1.2] — PP1 clock, milestones, interest worksheet, contests (`specs/remittances-and-prompt-pay.md`); alerts inbox PP2
+- [x] Late-payment interest calculator and itemized worksheet [R-3.1.3] (PP1; accrual start ⚠️ VERIFY)
 - [ ] Uncontestable-obligation flag and demand letter [R-3.1.4]
 
 Remittance and denials:
-- [ ] 835 ERA ingestion and posting with exception queue [§8.2]
+- [~] 835 ERA ingestion and posting with exception queue [§8.2] — R1 upload, balance check, post/void with history; clearinghouse feed R3
 - [ ] Denial capture with CARC/RARC/group code and categorization [§8.3]
 - [x] Denial work queue prioritized by $ and days to appeal deadline [§8.3]
 - [x] Denial detail: notes, assignment, status
