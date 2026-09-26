@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { BrandMark } from "./BrandMark";
 import { ModuleSwitcher } from "./ModuleSwitcher";
 import { useShellLocation } from "./ShellContext";
 import { UserMenu, type ShellUser } from "./UserMenu";
@@ -13,7 +14,7 @@ export type { ShellUser };
 
 /**
  * DenialDesk chrome (DESIGN.md §8): a white global header (logo, "Go to" field, practice, user) over
- * a navy tab bar whose first control is the current module's name (accessible name
+ * a navy tab bar whose first control is the white brand mark (accessible name
  * "<Module>, switch module"); it opens the module switcher.
  */
 export function GlobalHeader({ user }: { user: ShellUser | null }) {
@@ -81,10 +82,11 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
           onClick={() => setSwitcherOpen(true)}
           aria-haspopup="dialog"
           aria-label={`${app.label}, switch module`}
-          className="flex shrink-0 items-center gap-2 border-r border-sidebar-border px-4 text-body font-semibold text-white transition-colors duration-100 hover:bg-sidebar-active focus-visible:-outline-offset-2"
+          title={`${app.label} · switch module`}
+          className="flex shrink-0 items-center gap-1.5 border-r border-sidebar-border px-3.5 text-white transition-colors duration-100 hover:bg-sidebar-active focus-visible:-outline-offset-2"
         >
-          {app.label}
-          <ChevronDown aria-hidden="true" className="size-4 text-sidebar-muted" strokeWidth={2} />
+          <BrandMark className="size-6" />
+          <ChevronDown aria-hidden="true" className="size-3.5 text-sidebar-muted" strokeWidth={2} />
         </button>
         <nav aria-label="Primary" className="flex min-w-0 flex-1 overflow-x-auto">
           <ul className="flex items-stretch">
