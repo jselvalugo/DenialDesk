@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { openFromLauncher } from "./support";
+import { openFromSwitcher } from "./support";
 
 test.describe("patients", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
@@ -8,10 +8,11 @@ test.describe("patients", () => {
     page,
   }) => {
     await page.goto("/");
-    await openFromLauncher(page, "Patients");
+    await openFromSwitcher(page, "Patients");
     await expect(page.getByRole("heading", { level: 1, name: "Patients" })).toBeVisible();
     await page.getByRole("link", { name: "Register patient" }).click();
-    await expect(page.getByText("Synthetic data only.")).toBeVisible();
+    // Scoped to the page: the environment banner outside <main> says "Synthetic data only." too.
+    await expect(page.getByRole("main").getByText("Synthetic data only.")).toBeVisible();
 
     const form = page.getByRole("form", { name: "Register patient" });
     await form.getByLabel("Last name").fill("Quillfeather");
@@ -20,7 +21,13 @@ test.describe("patients", () => {
     await form.getByLabel("Sex").selectOption("F");
     await form.getByLabel("City").fill("Tampa");
     await form.getByLabel("ZIP").fill("33606");
-    await form.getByLabel("Payer").selectOption({ index: 1 });
+    // The payer is a searchable text field: text that matches no payer blocks the save instead of
+    // silently becoming self-pay; a listed name resolves to that payer.
+    await form.getByLabel("Payer").fill("No Such Insurer");
+    await expect(form.getByText(/No payer matches/)).toBeVisible();
+    await expect(form.getByRole("button", { name: "Register patient" })).toBeDisabled();
+    await form.getByLabel("Payer").fill("Gulf Coast Mutual");
+    await expect(form.getByText(/No payer matches/)).toBeHidden();
     // A real-looking member ID is refused in a synthetic-only environment; typed values survive.
     await form.getByLabel("Member ID").fill("W123456789");
     await form.getByLabel(/I confirm this record is synthetic/).check();

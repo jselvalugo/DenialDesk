@@ -9,7 +9,6 @@ export interface ShellUser {
   displayName: string;
   tenantName: string;
   role: string;
-  demo?: boolean;
 }
 
 const roleLabels: Record<string, string> = {
@@ -56,7 +55,7 @@ export function UserMenu({ user }: { user: ShellUser }) {
       ref={root}
       className="relative"
       onBlur={(event) => {
-        // Tabbing away, or the app launcher taking focus, closes the menu.
+        // Tabbing away, or the module switcher taking focus, closes the menu.
         if (!root.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
       }}
     >

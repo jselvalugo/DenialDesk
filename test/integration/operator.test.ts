@@ -1,31 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, isNull } from "drizzle-orm";
-import { createDemoPractice as ensureDemoPracticeFresh, ensureDemoPractice } from "@/auth/demo";
+import { and, eq } from "drizzle-orm";
 import { verifyPassword } from "@/auth/password";
 import type { OperatorContext } from "@/auth/operator";
 import { closeDatabase, systemDb } from "@/db/client";
-import {
-  auditEvents,
-  businessRules,
-  claims,
-  denials,
-  locations,
-  memberships,
-  patients,
-  payers,
-  rcmFiles,
-  tenants,
-  users,
-} from "@/db/schema";
-import { withTenant } from "@/db/tenant";
-import { DEFAULT_RULES } from "@/domain/revenue-cycle/defaults";
+import { auditEvents, memberships, tenants, users } from "@/db/schema";
 import {
   createPractice,
   listPractices,
   PracticeError,
-  resetDemoPractice,
   setPracticeSuspended,
 } from "@/domain/platform/practices";
+import { todayIn } from "@rules/calendar";
+import { seedPractice } from "@/db/seed";
 import { createTestTenant } from "./helpers";
 
 // The operator belongs to no practice (docs/specs/operator-login.md).
@@ -96,99 +82,30 @@ describe("suspension", () => {
     ).toBeNull();
   });
 
-  it("only suspends customer practices (demo practices are reset instead)", async () => {
-    const demo = await ensureDemoPractice();
-    await expect(setPracticeSuspended(demo.tenantId, true, operator)).rejects.toBeInstanceOf(PracticeError);
-  });
-});
-
-describe("demo practice", () => {
-  it("is created on first use and reused afterwards", async () => {
-    const first = await ensureDemoPractice();
-    const second = await ensureDemoPractice();
-    expect(second).toEqual(first);
-    const [tenant] = await systemDb().select().from(tenants).where(eq(tenants.id, first.tenantId));
-    expect(tenant?.kind).toBe("demo");
-  });
-
-  it("reset archives the old demo practice and creates a fresh one", async () => {
-    const before = await ensureDemoPractice();
-    await resetDemoPractice(operator);
-    const after = await ensureDemoPractice();
-    expect(after.tenantId).not.toBe(before.tenantId);
-    const active = await systemDb()
-      .select()
-      .from(tenants)
-      .where(and(eq(tenants.kind, "demo"), isNull(tenants.suspendedAt)));
-    expect(active.map((t) => t.id)).toEqual([after.tenantId]);
-  });
-
-  it("can reset to an empty practice (setup only) and back to sample data, audited with the mode", async () => {
-    const count = async (ctx: { tenantId: string; userId: string }) =>
-      withTenant(ctx, async (tx) => ({
-        payers: (await tx.select({ id: payers.id }).from(payers)).length,
-        locations: (await tx.select({ id: locations.id }).from(locations)).length,
-        rules: (await tx.select({ id: businessRules.id }).from(businessRules)).length,
-        patients: (await tx.select({ id: patients.id }).from(patients)).length,
-        claims: (await tx.select({ id: claims.id }).from(claims)).length,
-        denials: (await tx.select({ id: denials.id }).from(denials)).length,
-        files: (await tx.select({ id: rcmFiles.id }).from(rcmFiles)).length,
-      }));
-
-    await resetDemoPractice(operator, "empty");
-    const empty = await ensureDemoPractice();
-    const [emptyTenant] = await systemDb().select().from(tenants).where(eq(tenants.id, empty.tenantId));
-    expect(emptyTenant!.name).toMatch(/demo, empty/);
-    const emptyCounts = await count(empty);
-    expect(emptyCounts).toMatchObject({
-      patients: 0,
-      claims: 0,
-      denials: 0,
-      files: 0,
-      rules: DEFAULT_RULES.length,
-    });
-    expect(emptyCounts.payers).toBeGreaterThan(0);
-    expect(emptyCounts.locations).toBeGreaterThan(0);
-    const [event] = await systemDb()
-      .select()
-      .from(auditEvents)
-      .where(and(eq(auditEvents.action, "operator.demo_reset"), eq(auditEvents.tenantId, empty.tenantId)));
-    expect(event!.metadata).toEqual({ mode: "empty" });
-
-    await resetDemoPractice(operator, "sample");
-    const sample = await ensureDemoPractice();
-    const sampleCounts = await count(sample);
-    expect(sampleCounts.denials).toBeGreaterThan(0);
-    expect(sampleCounts.files).toBe(3);
-  });
-});
-
-describe("demo guards", () => {
-  it("refuse to create or reset a demo practice when the demo is disabled", async () => {
-    process.env.DEMO_LOGIN_ENABLED = "false";
-    try {
-      await expect(ensureDemoPracticeFresh()).rejects.toThrow(/disabled/);
-      await expect(resetDemoPractice(operator)).rejects.toBeInstanceOf(PracticeError);
-    } finally {
-      process.env.DEMO_LOGIN_ENABLED = "true";
-    }
-  });
-
-  it("allow only one active demo practice, even under concurrent first use", async () => {
-    await resetDemoPractice(operator); // archive, leaving exactly one active
-    await systemDb().update(tenants).set({ suspendedAt: new Date() }).where(eq(tenants.kind, "demo"));
-    const results = await Promise.all([ensureDemoPractice(), ensureDemoPractice(), ensureDemoPractice()]);
-    expect(new Set(results.map((r) => r.tenantId)).size).toBe(1);
+  it("only suspends customer practices (legacy demo practices stay archived)", async () => {
+    const legacy = await createTestTenant("Legacy demo practice (synthetic)");
+    await systemDb()
+      .update(tenants)
+      .set({ kind: "demo", suspendedAt: new Date() }) // every demo practice is archived now
+      .where(eq(tenants.id, legacy.tenantId));
+    await expect(setPracticeSuspended(legacy.tenantId, true, operator)).rejects.toBeInstanceOf(PracticeError);
   });
 });
 
 describe("listPractices", () => {
   it("lists every practice with team size and open-denial counts", async () => {
-    const demo = await ensureDemoPractice();
+    const { tenantId } = await seedPractice({
+      practiceName: `Operator-listed seeded practice ${Date.now()} (synthetic)`,
+      asOf: todayIn(),
+      users: [
+        { email: `listed-a-${Date.now()}@synthetic.test`, displayName: "Synthetic A", role: "admin" },
+        { email: `listed-b-${Date.now()}@synthetic.test`, displayName: "Synthetic B", role: "specialist" },
+      ],
+    });
     const practices = await listPractices(operator);
-    const demoRow = practices.find((p) => p.id === demo.tenantId);
-    expect(demoRow?.teamSize).toBe(4);
-    expect(demoRow?.openDenials).toBeGreaterThan(0);
+    const row = practices.find((p) => p.id === tenantId);
+    expect(row?.teamSize).toBe(2);
+    expect(row?.openDenials).toBeGreaterThan(0);
     expect(practices.some((p) => p.id === listedPractice.tenantId)).toBe(true);
   });
 });

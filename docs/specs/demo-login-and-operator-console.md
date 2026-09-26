@@ -1,6 +1,8 @@
 # Spec: Demo login and platform operator console
 
-Status: done (2026-09-26) — requested by the product owner
+Status: demo login **removed** (2026-09-26, owner request: "remove the demo practice entirely").
+The operator console parts continue in `operator-login.md`; this spec is kept for history.
+Originally: done (2026-09-26) — requested by the product owner
 Roadmap item: Phase 0 → pre-production demo; platform operations (new)
 Requirement IDs: R-7.1.3, R-15.1, R-7.2.3, R-7.2.5, R-7.5.1, R-5.1.2
 
@@ -37,6 +39,11 @@ session, and practice-free account; 2026-09-26)
       denials. Shows practice-level metadata and counts only — never patient or claim data.
 - [x] Create practice: name + first admin (name, email). Shows a one-time temporary password
       for the admin, who sets up MFA on first sign-in.
+- [x] Creating a practice has its own page, `/operator/practices/new`, reached from a "New
+      practice" button on the practices list (owner request 2026-09-26: create/edit flows get their
+      own pages, not inline forms on list pages). After creation it links to the new practice's
+      page (to record the BAA), back to all practices, or to create another; "Create another"
+      clears the one-time password from the page.
 - [x] Suspend / reactivate a practice. Suspended practices' users can't sign in or use existing
       sessions.
 - [x] Reset demo: archives the current demo practice (kept for the audit trail, never deleted)

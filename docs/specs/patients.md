@@ -54,11 +54,14 @@ denials, and balances.
 - [x] MRN is unique per practice; a duplicate is reported as a form error, not a crash.
 - [x] Primary payer must belong to the practice: checked in code and by a tenant-scoped composite
       foreign key `(tenant_id, primary_payer_id) → payers (tenant_id, id)`.
-- [x] Sensitivity tags can be set by administrators only; tags are shown on the chart.
+- [ ] Sensitivity tags can be set by administrators only; tags are shown on the chart.
+      Hidden 2026-09-26 by owner decision: the form no longer shows the tag checkboxes, stored tags
+      are kept on save and still shown on the chart. New records cannot be tagged until a
+      tagging path returns (R-3.5.1 gap, accepted by the owner).
 - [x] Patient chart: demographics, coverage, totals (claims, billed, paid, open denied amount),
       claims table (links to `/claims/[id]`), denials table (links to `/denials/[id]`).
 - [x] Claim and denial detail pages link the patient name to the chart; the claims list links it too.
-- [x] "Patients" is its own app in the app launcher (`specs/erp-shell.md`), available to every role.
+- [x] "Patients" is its own module in the module switcher (`specs/erp-shell.md`), available to every role.
 - [x] Page titles never include patient data (DESIGN.md §12).
 - [x] Audit events: `patient.list_viewed`, `patient.searched`, `patient.viewed`,
       `patient.created`, `patient.updated` (IDs, counts, field names; never values).

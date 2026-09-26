@@ -22,14 +22,21 @@ import {
   memberships,
   patients,
   payers,
+  promptPayResponses,
   providers,
   rcmSites,
+  remittanceClaims,
+  remittanceEvents,
+  remittances,
   tenants,
   users,
 } from "./schema";
 import { withTenant } from "./tenant";
 
 const minDate = (a: string, b: string) => (a < b ? a : b);
+
+/** Days from payer receipt to payment for synthetic paid claims: some on time, some late (interest). */
+const PAYMENT_LAGS = [12, 17, 19, 24, 33, 46];
 
 /** Keeps each INSERT well under PostgreSQL's 65,535-parameter limit. */
 async function insertInChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>, size = 500) {
@@ -49,7 +56,6 @@ export interface SeedUser {
  */
 export async function seedPractice(options: {
   practiceName: string;
-  kind?: "customer" | "demo";
   asOf: string;
   users: SeedUser[];
   dataset?: SyntheticDataset;
@@ -78,7 +84,7 @@ export async function seedPractice(options: {
 
   const [tenant] = await db
     .insert(tenants)
-    .values({ name: options.practiceName, kind: options.kind ?? "customer" })
+    .values({ name: options.practiceName, kind: "customer" })
     .returning();
   const tenantId = tenant!.id;
   const userIds: string[] = [];
@@ -111,6 +117,20 @@ export async function seedPractice(options: {
   for (const c of [...dataset.claims].sort((a, b) => a.serviceDate.localeCompare(b.serviceDate)))
     primaryPayerKey.set(c.patientKey, c.payerKey);
 
+  const remitGroups = new Map<
+    string,
+    {
+      payerKey: string;
+      paymentDate: string;
+      claims: {
+        claimId: string;
+        billed: number;
+        paid: number;
+        adjustments: { group: "CO" | "PR" | "OA"; carc: string; cents: number }[];
+        rarcs: string[];
+      }[];
+    }
+  >();
   const claimRows: (typeof claims.$inferInsert)[] = [];
   const lineRows: (typeof claimLines.$inferInsert)[] = [];
   const denialRows: (typeof denials.$inferInsert)[] = [];
@@ -118,6 +138,26 @@ export async function seedPractice(options: {
     const billed = c.lines.reduce((sum, line) => sum + line.chargeCents, 0);
     const denied = c.denial?.deniedCents ?? 0;
     const claimId = idFor(c.key);
+    // Adjudicated claims are paid or denied by a synthetic remittance; a claim whose payment date is
+    // still ahead stays accepted by the payer and unpaid, so open prompt-pay clocks exist.
+    const paymentDate = c.unsubmitted
+      ? null
+      : (c.denial?.noticeDate ??
+        addCalendarDays(c.payerReceivedDate!, PAYMENT_LAGS[index % PAYMENT_LAGS.length]!));
+    const awaitingPayment = paymentDate !== null && paymentDate > dataset.asOf;
+    if (paymentDate && !awaitingPayment) {
+      const payerKey = c.payerKey;
+      const key = `${payerKey}|${paymentDate}`;
+      const group = remitGroups.get(key) ?? { payerKey, paymentDate, claims: [] };
+      group.claims.push({
+        claimId,
+        billed,
+        paid: billed - denied,
+        adjustments: c.denial ? [{ group: c.denial.groupCode, carc: c.denial.carc, cents: denied }] : [],
+        rarcs: c.denial?.rarcs ?? [],
+      });
+      remitGroups.set(key, group);
+    }
     claimRows.push({
       id: claimId,
       tenantId,
@@ -129,8 +169,16 @@ export async function seedPractice(options: {
       serviceDate: c.serviceDate,
       diagnosisCodes: c.diagnosisCodes,
       billedCents: billed,
-      paidCents: c.unsubmitted ? 0 : billed - denied,
-      status: c.unsubmitted ?? (!c.denial ? "paid" : denied < billed ? "partially_paid" : "denied"),
+      paidCents: c.unsubmitted || awaitingPayment ? 0 : billed - denied,
+      status:
+        c.unsubmitted ??
+        (awaitingPayment
+          ? "acknowledged"
+          : !c.denial
+            ? "paid"
+            : denied < billed
+              ? "partially_paid"
+              : "denied"),
       electronic: c.electronic,
       submittedAt: c.unsubmitted === "draft" ? null : new Date(`${c.serviceDate}T14:00:00Z`),
       payerReceivedDate: c.payerReceivedDate,
@@ -241,6 +289,55 @@ export async function seedPractice(options: {
       (chunk) => tx.insert(claimVersions).values(chunk),
     );
     await insertInChunks(denialRows, (chunk) => tx.insert(denials).values(chunk));
+    // Posted synthetic remittances (one per payer and payment date) and the payer responses they
+    // put on each claim's prompt-pay clock. Recorded by the system (no user).
+    const remitRows: (typeof remittances.$inferInsert)[] = [];
+    const remitClaimRows: (typeof remittanceClaims.$inferInsert)[] = [];
+    const remitEventRows: (typeof remittanceEvents.$inferInsert)[] = [];
+    const responseRows: (typeof promptPayResponses.$inferInsert)[] = [];
+    for (const [n, group] of [...remitGroups.values()].entries()) {
+      const remittanceId = randomUUID();
+      const total = group.claims.reduce((sum, c) => sum + c.paid, 0);
+      remitRows.push({
+        id: remittanceId,
+        tenantId,
+        payerId: idFor(group.payerKey),
+        method: total > 0 ? "eft" : "non_payment",
+        traceNumber: `SYN-TRN-${String(100_000 + n)}`,
+        paymentDate: group.paymentDate,
+        totalPaidCents: total,
+        status: "posted",
+        source: "seed",
+      });
+      remitEventRows.push(
+        { tenantId, remittanceId, event: "received", reason: "Synthetic remittance loaded" },
+        { tenantId, remittanceId, event: "posted", reason: `Posted ${group.claims.length} claim payments` },
+      );
+      for (const c of group.claims) {
+        remitClaimRows.push({
+          tenantId,
+          remittanceId,
+          claimId: c.claimId,
+          statusCode: c.paid > 0 ? "1" : "4",
+          chargeCents: c.billed,
+          paidCents: c.paid,
+          adjustments: c.adjustments,
+          rarcs: c.rarcs,
+        });
+        responseRows.push({
+          tenantId,
+          claimId: c.claimId,
+          kind: c.paid > 0 ? "payment" : "denial",
+          responseDate: group.paymentDate,
+          cents: c.paid,
+          remittanceId,
+        });
+      }
+    }
+    await insertInChunks(remitRows, (chunk) => tx.insert(remittances).values(chunk));
+    await insertInChunks(remitEventRows, (chunk) => tx.insert(remittanceEvents).values(chunk));
+    await insertInChunks(remitClaimRows, (chunk) => tx.insert(remittanceClaims).values(chunk));
+    await insertInChunks(responseRows, (chunk) => tx.insert(promptPayResponses).values(chunk));
     await seedRevenueCycleDefaults(tx, tenantId, userIds[0]!);
     if (withActivity) {
       // The last three months of synthetic activity files, routed by the starter rules.

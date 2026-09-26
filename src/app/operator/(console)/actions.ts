@@ -10,17 +10,12 @@ import {
   voidAgreement as markVoid,
   type RecordOutcome,
 } from "@/domain/platform/agreements";
-import {
-  createPractice as create,
-  PracticeError,
-  resetDemoPractice as reset,
-  setPracticeSuspended,
-} from "@/domain/platform/practices";
+import { createPractice as create, PracticeError, setPracticeSuspended } from "@/domain/platform/practices";
 import { syntheticDataOnly } from "@/lib/env";
 
 export interface CreateState {
   error?: string;
-  created?: { name: string; adminEmail: string; temporaryPassword: string };
+  created?: { tenantId: string; name: string; adminEmail: string; temporaryPassword: string };
 }
 
 const createSchema = z.object({
@@ -38,10 +33,12 @@ export async function createPractice(_: CreateState, formData: FormData): Promis
   });
   if (!parsed.success) return { error: "Enter a practice name, the admin's name, and a valid email." };
   try {
-    const { temporaryPassword } = await create(parsed.data, operator);
+    const { tenantId, temporaryPassword } = await create(parsed.data, operator);
     if (passwordProblem(temporaryPassword)) throw new Error("Generated password failed policy");
     revalidatePath("/operator");
-    return { created: { name: parsed.data.name, adminEmail: parsed.data.adminEmail, temporaryPassword } };
+    return {
+      created: { tenantId, name: parsed.data.name, adminEmail: parsed.data.adminEmail, temporaryPassword },
+    };
   } catch (error) {
     if (error instanceof PracticeError) return { error: error.message };
     throw error;
@@ -60,20 +57,6 @@ export async function toggleSuspended(_: ActionState, formData: FormData): Promi
   if (!parsed.success) return { error: "Invalid request." };
   try {
     await setPracticeSuspended(parsed.data.tenantId, parsed.data.suspend === "true", operator);
-  } catch (error) {
-    if (error instanceof PracticeError) return { error: error.message };
-    throw error;
-  }
-  revalidatePath("/operator");
-  return {};
-}
-
-export async function resetDemo(_: ActionState, formData: FormData): Promise<ActionState> {
-  const operator = await requireOperator();
-  const mode = z.enum(["sample", "empty"]).safeParse(formData.get("mode"));
-  if (!mode.success) return { error: "Choose how to reset the demo." };
-  try {
-    await reset(operator, mode.data);
   } catch (error) {
     if (error instanceof PracticeError) return { error: error.message };
     throw error;

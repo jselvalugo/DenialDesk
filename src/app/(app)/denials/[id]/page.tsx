@@ -14,7 +14,7 @@ import { Money } from "@/components/ui/Money";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { CARC, CATEGORY_LABELS } from "@/domain/carc";
-import { DENIAL_STATUSES, REGIME_LABELS } from "@/domain/denial-status";
+import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { DUE_SOON_DAYS, getDenial, teamMembers } from "@/domain/denials/queries";
 import { audit } from "@/lib/audit";
 import { formatDate } from "@/lib/format";
@@ -77,13 +77,16 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
   const carc = CARC[denial.carc];
   const canWork = canWorkDenials(auth.role);
   const deniedLine = detail.lines.find((line) => line.id === denial.claimLineId);
-  const milestones = claim.payerReceivedDate
-    ? promptPayMilestones({
-        regime: payer.regime,
-        electronic: claim.electronic,
-        receivedDate: claim.payerReceivedDate,
-      })
-    : null;
+  // Prompt-pay milestones need a verified regime; an unverified payer gets no computed deadline
+  // (spec: payer-catalog P1) rather than a guessed one.
+  const milestones =
+    claim.payerReceivedDate && payer.regime !== null
+      ? promptPayMilestones({
+          regime: payer.regime,
+          electronic: claim.electronic,
+          receivedDate: claim.payerReceivedDate,
+        })
+      : null;
   // Deadline explanation comes from the rules that produced it, never from text in this page.
   const basisRules =
     denial.appealDeadlineBasis && denial.appealDeadlineBasis !== "payer_contract"
@@ -110,6 +113,18 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
           <p className="mt-1 text-body text-muted">
             {CATEGORY_LABELS[denial.category]} denial · {payer.name} · notice dated{" "}
             {formatDate(denial.noticeDate)}
+            {denial.remittanceId && (
+              <>
+                {" · "}
+                <Link
+                  href={`/remittances/${denial.remittanceId}`}
+                  className="font-medium text-link hover:underline"
+                >
+                  captured from remittance
+                </Link>{" "}
+                <Badge tone="warning">Category unverified</Badge>
+              </>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-4">
@@ -184,7 +199,7 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
               <Field label="Location">{detail.locationName}</Field>
               <Field label="Payer">
                 {payer.name}
-                <span className="block text-label text-muted">{REGIME_LABELS[payer.regime]}</span>
+                <span className="block text-label text-muted">{regimeLabel(payer.regime)}</span>
               </Field>
               <Field label="Billed">
                 <Money cents={claim.billedCents} />

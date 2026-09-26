@@ -15,7 +15,7 @@ pnpm install
 cp .env.example .env.local          # then set FIELD_ENCRYPTION_KEY=$(openssl rand -base64 32)
 docker compose up -d db
 pnpm db:migrate
-SEED_ADMIN_PASSWORD='a-long-passphrase' pnpm db:seed   # synthetic demo practice
+SEED_ADMIN_PASSWORD='a-long-passphrase' pnpm db:seed   # synthetic sample practice
 pnpm dev                            # http://localhost:3000
 ```
 

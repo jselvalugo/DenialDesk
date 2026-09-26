@@ -15,8 +15,10 @@ import { withTenant } from "@/db/tenant";
 import { CATEGORY_LABELS } from "@/domain/carc";
 import { diffSnapshots } from "@/domain/claims/correction";
 import { getClaim } from "@/domain/claims/queries";
+import { claimPayments } from "@/domain/remittances/queries";
+import { REMITTANCE_STATUSES } from "@/domain/remittances/status";
 import { CLAIM_STATUSES, FILING_WARNING_DAYS, filingStatus, isUnsubmitted } from "@/domain/claims/status";
-import { DENIAL_STATUSES, REGIME_LABELS } from "@/domain/denial-status";
+import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { audit } from "@/lib/audit";
 import { formatDate } from "@/lib/format";
 import { CorrectionForm } from "./CorrectionForm";
@@ -52,6 +54,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   const detail = await withTenant(auth, async (tx) => {
     const detail = await getClaim(tx, id);
     if (!detail) return null;
+    const payments = await claimPayments(tx, id);
     await audit(tx, {
       action: "claim.viewed",
       actorUserId: auth.userId,
@@ -61,7 +64,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
       // Whose record was shown, for accounting of disclosures (IDs only).
       metadata: { patientId: detail.patient.id },
     });
-    return detail;
+    return { ...detail, payments };
   });
   if (!detail) notFound();
 
@@ -110,7 +113,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
               <Field label="Location">{detail.locationName}</Field>
               <Field label="Payer">
                 {payer.name}
-                <span className="block text-label text-muted">{REGIME_LABELS[payer.regime]}</span>
+                <span className="block text-label text-muted">{regimeLabel(payer.regime)}</span>
               </Field>
               <Field label="Billed">
                 <Money cents={claim.billedCents} />
@@ -251,9 +254,15 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                 </p>
                 {filing.deadline.verify && <Badge tone="warning">Pending counsel verification</Badge>}
               </div>
+            ) : filing.state === "payer_unverified" ? (
+              <p className="text-body text-warning-fg">
+                No deadline — payer not verified. Once this payer&apos;s regulatory regime is verified,
+                confirm the filing window manually with the payer contract or applicable law; DenialDesk
+                cannot compute one until then.
+              </p>
             ) : (
               <p className="text-body text-warning-fg">
-                DenialDesk has no filing rule configured for {REGIME_LABELS[payer.regime]} claims. Confirm the
+                DenialDesk has no filing rule configured for {regimeLabel(payer.regime)} claims. Confirm the
                 filing window with the payer contract or applicable law before it lapses.
               </p>
             )}
@@ -276,6 +285,45 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                 <span className="font-mono">•••• {patient.memberIdLast4}</span>
               </Field>
             </dl>
+          </Panel>
+
+          <Panel title="Payments">
+            {detail.payments.length === 0 ? (
+              <p className="text-body text-muted">No remittance has paid or denied this claim yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {detail.payments.map((payment) => (
+                  <li key={payment.remittanceId} className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <Link
+                        href={`/remittances/${payment.remittanceId}`}
+                        className="font-mono font-medium text-link hover:underline"
+                      >
+                        {payment.traceNumber}
+                      </Link>
+                      <span className="block text-label text-muted">
+                        paid {formatDate(payment.paymentDate)}
+                        {payment.adjustments.length > 0 &&
+                          ` · ${payment.adjustments.map((a) => `${a.group}-${a.carc}`).join(", ")}`}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <Money cents={payment.paidCents} className="block" />
+                      <Badge tone={REMITTANCE_STATUSES[payment.status].tone}>
+                        {REMITTANCE_STATUSES[payment.status].label}
+                      </Badge>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {claim.payerReceivedDate && (
+              <p className="mt-3 border-t border-border pt-3 text-label">
+                <Link href={`/prompt-pay/${claim.id}`} className="font-medium text-link hover:underline">
+                  Prompt-pay clock
+                </Link>
+              </p>
+            )}
           </Panel>
 
           <Panel title="Denials">

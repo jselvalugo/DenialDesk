@@ -3,7 +3,9 @@ import { expect, type Page } from "@playwright/test";
 import { currentStep, totpAt } from "@/auth/totp";
 import type { E2EUser } from "./global-setup";
 
-export function e2eUser(key: "worker" | "viewer" | "newbie" | "locked" | "guesser" | "operator"): E2EUser {
+export function e2eUser(
+  key: "worker" | "viewer" | "manager" | "newbie" | "locked" | "guesser" | "operator",
+): E2EUser {
   return JSON.parse(readFileSync("test/e2e/.auth/users.json", "utf8"))[key];
 }
 
@@ -30,7 +32,7 @@ export async function signIn(page: Page, user: E2EUser) {
   await expect(page.getByRole("heading", { name: "Two-step verification" })).toBeVisible();
   await page.getByLabel("6-digit code").fill(await freshCode(user.totpSecret!, new Set()));
   await page.getByRole("button", { name: "Verify" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
 }
 
 /** Platform console sign-in (its own page and session), ending on the console. */
@@ -46,10 +48,10 @@ export async function signInOperator(page: Page, user: E2EUser, usedSteps = new 
 }
 
 /**
- * Opens a page, or an app ("Revenue cycle app"), through the app launcher: the tab bar only shows
- * the current app's pages.
+ * Opens a page, or a module ("Revenue cycle module"), through the module switcher ("Go to"): the
+ * tab bar only shows the current module's pages. The switcher button is named "<Module>, switch module".
  */
-export async function openFromLauncher(page: Page, name: string) {
-  await page.getByRole("button", { name: "App launcher" }).click();
-  await page.getByRole("dialog", { name: "App launcher" }).getByRole("link", { name, exact: true }).click();
+export async function openFromSwitcher(page: Page, name: string) {
+  await page.getByRole("button", { name: /, switch module$/ }).click();
+  await page.getByRole("dialog", { name: "Go to" }).getByRole("link", { name, exact: true }).click();
 }

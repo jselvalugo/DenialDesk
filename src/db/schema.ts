@@ -48,13 +48,13 @@ export const tenants = pgTable(
   {
     id: id(),
     name: text("name").notNull(),
-    /** "demo" = synthetic demo practice for the preview's one-click demo login. */
+    /** "demo" = legacy one-click demo practice (removed 2026-09-26; archived rows only). */
     kind: tenantKindEnum("kind").notNull().default("customer"),
     /** Set by the platform operator; blocks sign-in and existing sessions for the practice. */
     suspendedAt: timestamp("suspended_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
-  // At most one active demo practice, so concurrent first demo clicks can't each create one.
+  // Legacy: at most one active demo practice (none can be created since the demo was removed).
   (t) => [
     uniqueIndex("tenants_one_active_demo")
       .on(t.kind)
@@ -107,8 +107,8 @@ export const sessions = pgTable(
     tenantId: uuid("tenant_id").references(() => tenants.id),
     mfaVerified: boolean("mfa_verified").notNull().default(false),
     /**
-     * How the session was established. "demo" sessions skip MFA and are limited to the demo practice;
-     * "operator" sessions are the platform console's own (no practice, separate cookie).
+     * How the session was established. "demo" is legacy (the demo was removed; such sessions are
+     * ended on sight); "operator" sessions are the platform console's own (no practice, separate cookie).
      */
     authMethod: text("auth_method", { enum: ["password_mfa", "demo", "operator"] })
       .notNull()
@@ -166,11 +166,15 @@ export const payers = pgTable(
     id: id(),
     tenantId: tenantId(),
     name: text("name").notNull(),
-    ediPayerId: text("edi_payer_id").notNull(),
-    regime: regimeEnum("regime").notNull(),
+    /** Null until the clearinghouse payer list confirms it (P2). Payer is "unverified" until then. */
+    ediPayerId: text("edi_payer_id"),
+    /** Null until an admin verifies it (P2). Never guessed — no legal clock without a verified regime. */
+    regime: regimeEnum("regime"),
     /** Appeal window from the payer contract (not statute). Null = not configured. */
     appealWindowDays: integer("appeal_window_days"),
     appealWindowSource: text("appeal_window_source"),
+    /** Where a catalog name came from (e.g. "FL OIR licensee list — ⚠️ VERIFY"). Null for practice-entered payers. */
+    source: text("source"),
     createdAt: createdAt(),
   },
   // Target of tenant-scoped foreign keys (FKs bypass RLS, so the tenant is part of the key).
@@ -303,6 +307,8 @@ export interface ClaimSnapshot {
   diagnosisCodes: string[];
   billedCents: number;
   status: string;
+  /** Paid to date; recorded from remittance posting onward (absent on older versions). */
+  paidCents?: number;
   lines: {
     lineNumber: number;
     procedureCode: string;
@@ -399,10 +405,18 @@ export const denials = pgTable(
     /** Date the appeal was filed; compared with appealDeadline to flag late appeals. */
     appealSubmittedOn: date("appeal_submitted_on", { mode: "string" }),
     assigneeId: uuid("assignee_id").references(() => users.id),
+    /** The posted remittance this denial was captured from; null for denials entered otherwise. */
+    remittanceId: uuid("remittance_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
+    foreignKey({
+      name: "denials_remittance_fk",
+      columns: [t.tenantId, t.remittanceId],
+      foreignColumns: [remittances.tenantId, remittances.id],
+    }),
+    index("denials_remittance_idx").on(t.tenantId, t.remittanceId),
     index("denials_queue_deadline_idx").on(t.tenantId, t.status, t.appealDeadline),
     index("denials_queue_amount_idx").on(t.tenantId, t.status, t.deniedCents),
     index("denials_claim_idx").on(t.claimId),
@@ -424,6 +438,159 @@ export const denialNotes = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("denial_notes_denial_idx").on(t.denialId, t.createdAt)],
+);
+
+// ---------------------------------------------------------------------------------------------
+// Remittances (835) and Florida prompt pay (docs/specs/remittances-and-prompt-pay.md). Restricted
+// PHI by linkage to claims. No patient names and no bank account or routing numbers are stored.
+// ---------------------------------------------------------------------------------------------
+
+export const remittanceMethodEnum = pgEnum("remittance_method", ["check", "eft", "non_payment"]);
+export const remittanceStatusEnum = pgEnum("remittance_status", ["received", "posted", "void"]);
+
+/** One 835 transaction: a check or EFT from one payer. Core fields never change (DB trigger). */
+export const remittances = pgTable(
+  "remittances",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    payerId: uuid("payer_id").notNull(),
+    method: remittanceMethodEnum("method").notNull(),
+    /** TRN02: check or EFT trace number. */
+    traceNumber: text("trace_number").notNull(),
+    paymentDate: date("payment_date", { mode: "string" }).notNull(),
+    totalPaidCents: cents("total_paid_cents").notNull(),
+    /** Provider-level adjustments (PLB), so claims + PLB balance to the payment. */
+    providerAdjustmentCents: cents("provider_adjustment_cents").notNull().default(0),
+    status: remittanceStatusEnum("status").notNull().default("received"),
+    source: text("source", { enum: ["upload", "seed"] }).notNull(),
+    /** Null when loaded by the system (seed). */
+    loadedBy: uuid("loaded_by").references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("remittances_tenant_id_key").on(t.tenantId, t.id),
+    uniqueIndex("remittances_payer_trace_key").on(t.tenantId, t.payerId, t.traceNumber),
+    index("remittances_tenant_date_idx").on(t.tenantId, t.paymentDate),
+    foreignKey({
+      name: "remittances_payer_fk",
+      columns: [t.tenantId, t.payerId],
+      foreignColumns: [payers.tenantId, payers.id],
+    }),
+  ],
+);
+
+export interface RemittanceAdjustment {
+  group: "CO" | "PR" | "OA" | "PI";
+  carc: string;
+  cents: number;
+}
+
+/** One claim payment (CLP loop) on a remittance. Insert-only evidence. */
+export const remittanceClaims = pgTable(
+  "remittance_claims",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    remittanceId: uuid("remittance_id").notNull(),
+    claimId: uuid("claim_id").notNull(),
+    /** CLP02 claim status code as received (1 primary, 2 secondary, 3 tertiary, 4 denied, …). */
+    statusCode: text("status_code").notNull(),
+    chargeCents: cents("charge_cents").notNull(),
+    paidCents: cents("paid_cents").notNull(),
+    patientResponsibilityCents: cents("patient_responsibility_cents").notNull().default(0),
+    payerControlNumber: text("payer_control_number"),
+    adjustments: jsonb("adjustments").$type<RemittanceAdjustment[]>().notNull(),
+    rarcs: text("rarcs")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("remittance_claims_remittance_idx").on(t.tenantId, t.remittanceId),
+    index("remittance_claims_claim_idx").on(t.tenantId, t.claimId),
+    foreignKey({
+      name: "remittance_claims_remittance_fk",
+      columns: [t.tenantId, t.remittanceId],
+      foreignColumns: [remittances.tenantId, remittances.id],
+    }),
+    foreignKey({
+      name: "remittance_claims_claim_fk",
+      columns: [t.tenantId, t.claimId],
+      foreignColumns: [claims.tenantId, claims.id],
+    }),
+  ],
+);
+
+/** Remittance history: every status change with who, when, and why. Append-only. */
+export const remittanceEvents = pgTable(
+  "remittance_events",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    remittanceId: uuid("remittance_id").notNull(),
+    event: remittanceStatusEnum("event").notNull(),
+    reason: text("reason").notNull(),
+    /** Null for system events (seed). */
+    actorId: uuid("actor_id").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("remittance_events_remittance_idx").on(t.tenantId, t.remittanceId, t.createdAt),
+    foreignKey({
+      name: "remittance_events_remittance_fk",
+      columns: [t.tenantId, t.remittanceId],
+      foreignColumns: [remittances.tenantId, remittances.id],
+    }),
+  ],
+);
+
+export const promptPayResponseKindEnum = pgEnum("prompt_pay_response_kind", ["payment", "denial", "contest"]);
+
+/**
+ * Payer responses on a claim's Florida prompt-pay clock (R-3.1.1): payments and denials from posted
+ * remittances, contests recorded by a person. Append-only; a mistake is corrected by a new row that
+ * voids the earlier one ("recorded in error"), so the clock's history is never lost.
+ */
+export const promptPayResponses = pgTable(
+  "prompt_pay_responses",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    claimId: uuid("claim_id").notNull(),
+    kind: promptPayResponseKindEnum("kind").notNull(),
+    responseDate: date("response_date", { mode: "string" }).notNull(),
+    cents: cents("cents").notNull().default(0),
+    remittanceId: uuid("remittance_id"),
+    note: text("note"),
+    /** Set on a correction row: the response it marks as recorded in error. */
+    voidsResponseId: uuid("voids_response_id"),
+    /** Null for responses recorded by the system (remittance posting by seed). */
+    recordedBy: uuid("recorded_by").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("prompt_pay_responses_tenant_id_key").on(t.tenantId, t.id),
+    uniqueIndex("prompt_pay_responses_voids_key").on(t.tenantId, t.voidsResponseId),
+    index("prompt_pay_responses_claim_idx").on(t.tenantId, t.claimId, t.responseDate),
+    foreignKey({
+      name: "prompt_pay_responses_claim_fk",
+      columns: [t.tenantId, t.claimId],
+      foreignColumns: [claims.tenantId, claims.id],
+    }),
+    foreignKey({
+      name: "prompt_pay_responses_remittance_fk",
+      columns: [t.tenantId, t.remittanceId],
+      foreignColumns: [remittances.tenantId, remittances.id],
+    }),
+    foreignKey({
+      name: "prompt_pay_responses_voids_fk",
+      columns: [t.tenantId, t.voidsResponseId],
+      foreignColumns: [t.tenantId, t.id],
+    }),
+  ],
 );
 
 // ---------------------------------------------------------------------------------------------
@@ -844,3 +1011,144 @@ export const operatorCredentials = pgTable("operator_credentials", {
   appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
   retiredAt: timestamp("retired_at", { withTimezone: true }),
 });
+
+// ---------------------------------------------------------------------------------------------
+// Practice settings (docs/specs/settings-and-custom-fields.md)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * A field a practice administrator added to one of its records (patients, claims, denials,
+ * payers). Definitions only: labels and choices are configuration, never PHI. Fields are
+ * deactivated, never deleted (R-9.2.1), so values recorded later keep their meaning.
+ */
+export const customFields = pgTable(
+  "custom_fields",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    /** Which record the field is added to. */
+    entity: text("entity", { enum: ["patient", "claim", "denial", "payer"] }).notNull(),
+    /** Stable machine name, unique per record type; never changes after creation. */
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    fieldType: text("field_type", {
+      enum: ["text", "long_text", "number", "date", "checkbox", "select"],
+    }).notNull(),
+    /** Choices for `select` fields, in display order; empty otherwise. */
+    options: text("options")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    required: boolean("required").notNull().default(false),
+    helpText: text("help_text"),
+    /**
+     * Sensitive category (R-3.5.1), e.g. "hiv": values are masked on screen and opening one is an
+     * audited action with a reason. Null means ordinary. Same keys as SENSITIVITY_TAGS.
+     */
+    sensitivity: text("sensitivity"),
+    /** Display order within the record type (lower first). */
+    position: integer("position").notNull().default(0),
+    active: boolean("active").notNull().default(true),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    /** Stale-edit check for the field form: every update must set it. */
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("custom_fields_tenant_entity_key").on(t.tenantId, t.entity, t.key),
+    index("custom_fields_tenant_entity_idx").on(t.tenantId, t.entity, t.position),
+  ],
+);
+
+/**
+ * One value of one custom field on one record (patient, claim, denial, or payer): exactly one of
+ * the four record columns is set (database CHECK). Every value is stored only as ciphertext
+ * (`valueEnc`, AES-256-GCM with AAD binding it to its tenant/field/record, ADR 0007); masking at
+ * read time follows the field's sensitivity category, decided in `src/domain/custom-fields/values.ts`.
+ * Never deleted (R-9.2.1): clearing a value sets `valueEnc` to NULL.
+ */
+export const customFieldValues = pgTable(
+  "custom_field_values",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    fieldId: uuid("field_id")
+      .notNull()
+      .references(() => customFields.id),
+    patientId: uuid("patient_id").references(() => patients.id),
+    claimId: uuid("claim_id").references(() => claims.id),
+    denialId: uuid("denial_id").references(() => denials.id),
+    payerId: uuid("payer_id").references(() => payers.id),
+    /** Ciphertext only (`v1.<iv>.<tag>.<ct>`); NULL means the value was cleared. Never PHI in plain. */
+    valueEnc: text("value_enc"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    updatedBy: uuid("updated_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    /** Stale-edit check: values are saved in the same transaction as the record, under its check. */
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("custom_field_values_tenant_field_patient_key")
+      .on(t.tenantId, t.fieldId, t.patientId)
+      .where(sql`${t.patientId} is not null`),
+    uniqueIndex("custom_field_values_tenant_field_claim_key")
+      .on(t.tenantId, t.fieldId, t.claimId)
+      .where(sql`${t.claimId} is not null`),
+    uniqueIndex("custom_field_values_tenant_field_denial_key")
+      .on(t.tenantId, t.fieldId, t.denialId)
+      .where(sql`${t.denialId} is not null`),
+    uniqueIndex("custom_field_values_tenant_field_payer_key")
+      .on(t.tenantId, t.fieldId, t.payerId)
+      .where(sql`${t.payerId} is not null`),
+    index("custom_field_values_tenant_patient_idx").on(t.tenantId, t.patientId),
+    index("custom_field_values_tenant_claim_idx").on(t.tenantId, t.claimId),
+    index("custom_field_values_tenant_denial_idx").on(t.tenantId, t.denialId),
+    index("custom_field_values_tenant_payer_idx").on(t.tenantId, t.payerId),
+    // Target of the version table's tenant-scoped foreign key (FKs bypass RLS).
+    uniqueIndex("custom_field_values_tenant_id_key").on(t.tenantId, t.id),
+  ],
+);
+
+/**
+ * Every prior state of a `custom_field_values` row (owner decision 2026-09-26; ADR 0007 addendum):
+ * written in the same transaction as an update or clear, before the new ciphertext overwrites the
+ * row. Append-only (INSERT + SELECT only, no UPDATE/DELETE grant, and a trigger refuses both) —
+ * the audit trail of what a value used to be, kept under the same encryption as the value itself.
+ */
+export const customFieldValueVersions = pgTable(
+  "custom_field_value_versions",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    valueId: uuid("value_id")
+      .notNull()
+      .references(() => customFieldValues.id),
+    fieldId: uuid("field_id")
+      .notNull()
+      .references(() => customFields.id),
+    patientId: uuid("patient_id").references(() => patients.id),
+    claimId: uuid("claim_id").references(() => claims.id),
+    denialId: uuid("denial_id").references(() => denials.id),
+    payerId: uuid("payer_id").references(() => payers.id),
+    /** The ciphertext the row held just before this change (NULL if it was already cleared). */
+    valueEnc: text("value_enc"),
+    changedBy: uuid("changed_by")
+      .notNull()
+      .references(() => users.id),
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "custom_field_value_versions_value_fk",
+      columns: [t.tenantId, t.valueId],
+      foreignColumns: [customFieldValues.tenantId, customFieldValues.id],
+    }),
+    index("custom_field_value_versions_value_idx").on(t.valueId, t.changedAt),
+  ],
+);

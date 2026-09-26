@@ -3,8 +3,10 @@ import { base32Decode } from "@/auth/totp";
 import { e2eUser, freshCode, signInWithPassword } from "./support";
 
 test("signed-out visitors are sent to sign-in", async ({ page }) => {
-  await page.goto("/denials");
-  await expect(page).toHaveURL(/\/login$/);
+  for (const path of ["/", "/overview", "/denials"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/login$/);
+  }
 });
 
 test("a wrong password shows a generic error", async ({ page }) => {
@@ -45,7 +47,14 @@ test("a correct password does not reset the count of wrong MFA codes", async ({ 
   await signInWithPassword(page, user); // attempt 1
   for (let i = 0; i < 3; i++) {
     await page.getByLabel("6-digit code").fill("000000"); // attempts 2–4
-    await page.getByRole("button", { name: "Verify" }).click();
+    // Wait for this attempt's own response: the alert text is the same every time, so checking it
+    // alone can pass before the request lands, and navigating away could then drop the attempt.
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/login/mfa",
+      ),
+      page.getByRole("button", { name: "Verify" }).click(),
+    ]);
     await expect(page.getByRole("main").getByRole("alert")).toContainText("didn't match");
   }
   await signInWithPassword(page, user); // attempt 5: allowed, and now locked
@@ -69,14 +78,14 @@ test("first sign-in requires setting up an authenticator", async ({ page }) => {
 
   await page.getByLabel("6-digit code").fill(await freshCode(key, new Set()));
   await page.getByRole("button", { name: "Turn on two-step verification" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
 });
 
 test.describe("signed in", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
   test("shows the user and practice, and signs out", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/overview");
     await expect(page.getByText("Riley Worker")).toBeVisible();
     await expect(page.getByText(/E2E practice .* \(synthetic\)/)).toBeVisible();
     await page.getByRole("button", { name: /Riley Worker/ }).click();

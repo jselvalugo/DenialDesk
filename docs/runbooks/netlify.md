@@ -18,12 +18,12 @@ Site: https://denialdesk.netlify.app
   |---|---|
   | `APP_ENV` | `preview` — shows the synthetic-data banner, enables the seed endpoint |
   | `FIELD_ENCRYPTION_KEY` | AES-256 key for member IDs and MFA secrets (secret; pre-prod only) |
-  | `SEED_TOKEN` | Bearer token for the demo seed endpoint (secret); no operator power |
+  | `SEED_TOKEN` | Bearer token for the sample-practice seed endpoint and the operator status endpoint (secret); it can trigger the same configuration sync a sign-in does, nothing more |
   | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Admin of the seeded synthetic practice (password secret); not the operator |
-  | `DEMO_LOGIN_ENABLED` | `true` shows "Explore the demo practice" on sign-in (ignored in production) |
   | `PLATFORM_OPERATOR_EMAIL` | The operator account for the platform console; an address used only for the console, never a practice user |
   | `PLATFORM_OPERATOR_PASSWORD_HASH` | The operator's password hash from `pnpm operator:credential` (secret); the only way the operator account is created or reset |
-  | `RATE_LIMIT_DEMO` / `RATE_LIMIT_SIGNIN` / `RATE_LIMIT_MFA` | Optional overrides for per-network limits (defaults 10/10 min, 30/15 min, 30/15 min) |
+  | `PLATFORM_OPERATOR_MFA` | `off`: the operator signs in with the password alone (ignored in production). Unset or `on`: two-step required |
+  | `RATE_LIMIT_SIGNIN` / `RATE_LIMIT_MFA` | Optional overrides for per-network limits (defaults 30/15 min each) |
 
   If `APP_ENV` is missing the app still treats itself as non-production — safe by default.
 - **Access:** Netlify password protection is on for the whole site, in front of the app's own
@@ -36,7 +36,7 @@ Site: https://denialdesk.netlify.app
 - **Manual:** from the repo root, run the command the Netlify connector's `deploy-site` returns
   (`npx @netlify/mcp … --site-id …`), which uploads the working tree and builds on Netlify.
 
-## Seeding the demo practice, and recovering the admin account
+## Seeding the synthetic sample practice, and recovering its admin account
 ```bash
 curl -X POST -H "Authorization: Bearer $SEED_TOKEN" https://denialdesk.netlify.app/api/preview/seed
 # first call: {"status":"seeded"}
@@ -53,25 +53,76 @@ token, or with a wrong token.
 
 Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step verification.
 
-## Demo practice and operator console
-- "Explore the demo practice" signs visitors into a shared synthetic demo practice, created on
-  first use. Reset it any time from `/operator` → *Reset demo with sample data* or *Reset demo empty* (setup only, no claims/denials/files); the old one is archived.
+## Practices and the operator console
+- There is no demo practice (removed 2026-09-26, owner request). Create practices from `/operator`;
+  the seed endpoint above adds one synthetic sample practice ("Coral Bay Physicians (synthetic)").
+  Remove `DEMO_LOGIN_ENABLED` and `RATE_LIMIT_DEMO` from Netlify; they do nothing now.
 - Migrations run with the deploy; never deploy app code ahead of its migrations or run a
   column-dropping migration while an older build is still serving.
 - Each customer practice's signed BAA is recorded from its practice page (`/operator` → practice
   name → *Record the signed agreement*; spec: `docs/specs/practice-agreements.md`). Pre-production
   holds synthetic practices only, so upload test PDFs there, never a real customer's agreement.
 - After a release that changes the revenue cycle starter configuration or file layout (e.g. C0,
-  2026-09-26), reset the demo so it carries the new configuration and sample files. Other
-  pre-production practices keep their stored rules; an admin can review them on the Rules page.
+  2026-09-26), practices keep their stored rules; an admin can review them on the Rules page.
 - The platform console has its own sign-in at `/operator/login` (spec: `docs/specs/operator-login.md`).
   Only the `PLATFORM_OPERATOR_EMAIL` account can use it, with password + two-step verification. That
   account belongs to no practice and can't sign in at `/login`; practice users can't sign in to the console.
-  Operator and practice/demo sessions are separate, so one browser can hold both.
+  Operator and practice sessions are separate, so one browser can hold both.
 - **Operator account (sole administrator):** it exists only from configuration. On your own machine run
   `pnpm operator:credential`, then set `PLATFORM_OPERATOR_EMAIL` (an address used only for the console,
   never a practice user and not `SEED_ADMIN_EMAIL`) and `PLATFORM_OPERATOR_PASSWORD_HASH` (secret) in
-  Netlify, and redeploy. Sign in at `/operator/login`; two-step is set up on first sign-in.
+  Netlify, and redeploy. Sign in at `/operator/login`; two-step is set up on first sign-in unless
+  `PLATFORM_OPERATOR_MFA=off` is set (remove that variable to turn two-step back on).
+- **`PLATFORM_OPERATOR_PASSWORD_HASH` is the hash the script prints, never the password itself.** The
+  value starts with `scrypt$131072$8$1$`, is one line of about 127 characters, and ends with letters
+  or digits. Netlify shows the last four characters of a secret: a preview ending in `8$1$` means
+  only the prefix was pasted, and a value that short also trips Netlify's secret scanning (it
+  matches this runbook and the tests), which fails the build. If the value holds anything else (the
+  password, a hash with other parameters, a truncated paste), the console is simply off: sign-in
+  shows the generic "sign-in failed" error and nothing is created. The reason is in the function log
+  (*Logs → Functions*) as an `operator.credential_unusable` line with `status: malformed` (or
+  `test_hash` when the public e2e hash is used), once per function instance and nothing else: the
+  value itself never reaches the log. Fix the value in Netlify, redeploy (a value change
+  alone doesn't reach running functions), and sign in again. Use the same value in every deploy
+  context ("All" in the Netlify UI), or at least in Production. The script also refuses passwords
+  under 16 characters for the operator account. If the password itself was pasted, treat it as
+  exposed (it sits in Netlify's configuration and history): choose a new password when you re-run
+  `pnpm operator:credential`.
+- **Operator sign-in shows the generic error ("Email or password is incorrect, or the account is
+  temporarily locked"):** the page never says why (no account enumeration), but two places do.
+  1. One request, from your own machine (`SEED_TOKEN` is the seed endpoint's token in Netlify):
+     ```bash
+     curl -H "Authorization: Bearer $SEED_TOKEN" https://denialdesk.netlify.app/api/preview/operator-status
+     # {"email":"set","passwordHash":"usable","account":"current","locked":false}
+     ```
+     | Field | Value | Meaning / fix |
+     |---|---|---|
+     | `email` | `missing` | `PLATFORM_OPERATOR_EMAIL` isn't reaching the running function: set it for the deploy context that is live (Production), scope *Functions*, and redeploy. |
+     | `passwordHash` | `missing` | Same for `PLATFORM_OPERATOR_PASSWORD_HASH`. With "different value per deploy context", check the **Production** value: the live site uses that one. |
+     | `passwordHash` | `malformed` | The value isn't the hash `pnpm operator:credential` prints (it must start with `scrypt$131072$8$1$`, about 127 characters, no spaces). Usually the password itself or a truncated paste; see above, choose a new password. |
+     | `passwordHash` | `test_hash` | The public e2e test hash; make a real one. |
+     | `account` | `unconfigured` | See the `email` and `passwordHash` rows: one of them isn't usable. |
+     | `account` | `refused` | The configured email already belongs to a practice user or a disabled account (e.g. a retired demo admin, or `SEED_ADMIN_EMAIL`). Use an address that has never been a practice user. |
+     | `account` | `retired` | This deployment carries a hash that was already replaced (old deploy link or rollback). Open the current deploy, or set the current hash here. |
+     | `account` | `current` / `provisioned` / `rotated` | Configuration is fine. Then it is the password typed, the email typed (must equal `PLATFORM_OPERATOR_EMAIL`, case doesn't matter), or the lockout below. |
+     | `locked` | `true` | Too many wrong attempts: wait 15 minutes, or replace the hash (a rotation clears the lockout). |
+
+     The endpoint is 404 in production, without the token or with a wrong one. It shares the seed
+     endpoint's budget of 5 calls per hour per network, so a few status checks can delay a seed
+     call by up to an hour. It syncs the account from configuration exactly like a sign-in does.
+  2. The function log (_Logs → Functions → Next.js Server Handler_) shows one
+     `operator.sign_in_refused` line per refused attempt with a `status` and nothing else:
+     `email_missing`, `hash_missing`, `hash_malformed`, `hash_test`, `retired` and `refused` mean
+     the same as the table above; `unknown_email` (no account has the email typed) and
+     `other_email` (an account has it, but it isn't the operator's email) mean the email typed
+     isn't `PLATFORM_OPERATOR_EMAIL`; `disabled` (the account with the email typed is disabled) and
+     `practice_account` (the operator's account gained a practice membership) mean the account no
+     longer qualifies: use an address that has never been a practice user; `locked` and
+     `wrong_password` are what they say (the lockout clears after 15 minutes or with a rotation).
+  Netlify notes: a value marked *secret* must include the **Functions** scope (the UI's default
+  "All scopes" does); a value or scope change reaches running functions only after a redeploy
+  (*Deploys → Trigger deploy*); the Netlify UI never alters `$` characters, but a shell would, so
+  paste the hash in the UI rather than through `netlify env:set` inside double quotes.
 - **Forgotten password or lost authenticator:** run `pnpm operator:credential` again and replace
   `PLATFORM_OPERATOR_PASSWORD_HASH`. The next request applies it: new password, two-step reset, every
   operator session ended (audited as `operator.credential_rotated`). There is no in-app recovery.
@@ -84,6 +135,18 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
 - `PLATFORM_OPERATOR_EMAIL` must never equal `SEED_ADMIN_EMAIL` (the seed refuses it). Mark
   `PLATFORM_OPERATOR_PASSWORD_HASH` secret, and keep two-step (ideally a security key) on the Netlify
   account: whoever can edit these values controls the console.
+
+## Deploy preview fails with "migration … has been modified after being applied"
+
+Two causes, and code is not at risk in either:
+
+1. **Number collision (most likely).** The base branch already has a migration with the same
+   number, applied to the main preview database the branch database starts from. Merge the base
+   branch, move the PR's migration to the next free number (`pnpm db:generate`, then
+   `pnpm netlify:migrations`), and push.
+2. **Edited after being applied.** A migration changed after an earlier push applied it to this
+   PR's branch database. Delete that database branch in Netlify (Project → Database) and retry,
+   or push under a new branch name. Then never edit that migration again; add a new one.
 
 ## Checks after each deploy
 - `https://denialdesk.netlify.app/api/health` returns `{"status":"ok","appEnv":"preview","db":"up"}`.

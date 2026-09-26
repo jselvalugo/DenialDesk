@@ -21,4 +21,20 @@ describe("buildLogRecord", () => {
   it("rejects free-form event names", () => {
     expect(() => buildLogRecord("error", "Failed for claim 123")).toThrow(/area\.action/);
   });
+
+  it("doesn't treat inherited object keys as allowed fields", () => {
+    expect(() => buildLogRecord("info", "claim.submitted", { constructor: "x" })).toThrow(/constructor/);
+  });
+
+  it("rejects code-defined fields whose values don't match their pattern", () => {
+    expect(() =>
+      buildLogRecord("error", "request.unhandled_error", { route: "/patients?mrn=SYN-1" }),
+    ).toThrow(/route/);
+    expect(() => buildLogRecord("warn", "db.query_failed", { constraint: "idx (Synthetic Person)" })).toThrow(
+      /constraint/,
+    );
+    expect(
+      buildLogRecord("error", "request.unhandled_error", { route: "/patients/[id]", digest: "42" }),
+    ).toMatchObject({ route: "/patients/[id]", digest: "42" });
+  });
 });

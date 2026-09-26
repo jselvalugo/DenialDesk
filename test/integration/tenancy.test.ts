@@ -204,4 +204,86 @@ describe("database errors from tenant queries", () => {
       expect((error as Error).cause).toBeUndefined();
     }
   });
+
+  // Postgres puts row values in `detail` ("Key (tenant_id, mrn)=(…)", "Failing row contains (…)").
+  const leaks = (error: unknown, values: string[]) => {
+    const e = error as Error;
+    const text = [e.message, e.stack, JSON.stringify(e), String(e.cause)].join("\n");
+    return [...values, "Key (", "Failing row"].filter((value) => text.includes(value));
+  };
+
+  it("keep only SQLSTATE and constraint for a unique violation (23505)", async () => {
+    const [existing] = await withTenant(a, (tx) => tx.select().from(patients).limit(1));
+    const name = "Synthia Duplicatepatient";
+    const error = await withTenant(a, (tx) =>
+      tx.insert(patients).values({ ...existing!, id: undefined, firstName: name, createdAt: undefined }),
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("23505");
+    expect((error as DatabaseError).constraint).toBe("patients_tenant_mrn_key");
+    expect(leaks(error, [name, existing!.mrn, a.tenantId])).toEqual([]);
+  });
+
+  it("keep only SQLSTATE and constraint for a check violation (23514)", async () => {
+    const name = "SYN-GL-Synthia Checkpatient";
+    const error = await withTenant(a, (tx) =>
+      tx.insert(glAccounts).values({ tenantId: a.tenantId, number: "SYN-9999", name, kind: "ar" }),
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("23514");
+    expect((error as DatabaseError).constraint).toBe("gl_accounts_ar_routing");
+    expect(leaks(error, [name, "SYN-9999", a.tenantId])).toEqual([]);
+  });
+
+  it("sanitize system (non-tenant) query errors too: no email, name, or password hash", async () => {
+    const email = `synthia.duplicate-${Date.now()}@example.test`;
+    const values = { email, displayName: "Synthia Systemuser", passwordHash: "$argon2id$SYN-HASH-0000" };
+    await systemDb().insert(users).values(values);
+    const error = await systemDb()
+      .insert(users)
+      .values({ ...values, email: email.toUpperCase() })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("23505");
+    expect((error as DatabaseError).constraint).toBe("users_email_key");
+    expect(leaks(error, [email, email.toUpperCase(), values.displayName, values.passwordHash])).toEqual([]);
+    await systemDb().delete(users).where(eq(users.email, email));
+  });
+
+  // Every Drizzle query path reaches the sanitizer (ADR 0006). 22P02 quotes the bad value.
+  const bad = "SYN-not-a-uuid-Synthia";
+  it.each([
+    ["select", () => systemDb().select().from(users).where(eq(users.id, bad))],
+    ["relational query", () => systemDb().query.users.findFirst({ where: eq(users.id, bad) })],
+    ["execute", () => systemDb().execute(sql`select ${bad}::uuid`)],
+    [
+      "statement in a system transaction",
+      () => systemDb().transaction((tx) => tx.execute(sql`select ${bad}::uuid`)),
+    ],
+    [
+      "nested savepoint",
+      () =>
+        systemDb().transaction((tx) => tx.transaction((inner) => inner.execute(sql`select ${bad}::uuid`))),
+    ],
+  ] as const)("sanitize a %s error", async (_, run) => {
+    const error = await (run() as Promise<unknown>).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("22P02");
+    expect(leaks(error, [bad])).toEqual([]);
+  });
+
+  it("sanitize a deferred constraint violation raised at commit", async () => {
+    const value = "SYN-DEFERRED-Synthia";
+    const error = await systemDb()
+      .transaction(async (tx) => {
+        await tx.execute(
+          sql`create temp table deferred_probe (v text unique deferrable initially deferred) on commit drop`,
+        );
+        await tx.execute(sql`insert into deferred_probe values (${value}), (${value})`);
+      })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("23505");
+    expect(leaks(error, [value])).toEqual([]);
+  });
 });

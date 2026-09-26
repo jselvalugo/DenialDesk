@@ -24,17 +24,17 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** False until the feature ships; listed in the app launcher as "Planned", never a link. */
+  /** False until the feature ships; listed in the module switcher as "Planned", never a link. */
   available: boolean;
 }
 
-/** An app groups related pages, like an ERP module: switched in the app launcher, its pages are tabs. */
+/** A module ("app" in code) groups related pages: switched from the module switcher, its pages are tabs. */
 export interface NavApp {
   id: string;
   label: string;
   description: string;
   icon: LucideIcon;
-  /** Tile color in the launcher and page headers (a chart-series token, DESIGN.md §5). */
+  /** Tile tint in the switcher and page headers (DESIGN.md §4). */
   tone: "teal" | "navy" | "blue" | "amber" | "slate";
   items: NavItem[];
 }
@@ -42,10 +42,16 @@ export interface NavApp {
 export interface NavVisibility {
   showRevenueCycle: boolean;
   showDesignSystem: boolean;
+  /** Signed-in practice users: the practice Settings pages. */
+  showSettings?: boolean;
 }
 
 /** What the menus show. Not access control: every page still enforces its own permission on the server. */
-export function navApps({ showRevenueCycle, showDesignSystem }: NavVisibility): NavApp[] {
+export function navApps({
+  showRevenueCycle,
+  showDesignSystem,
+  showSettings = false,
+}: NavVisibility): NavApp[] {
   const apps: NavApp[] = [
     {
       id: "denials",
@@ -54,7 +60,7 @@ export function navApps({ showRevenueCycle, showDesignSystem }: NavVisibility): 
       icon: ShieldAlert,
       tone: "teal",
       items: [
-        { label: "Overview", href: "/", icon: LayoutDashboard, available: true },
+        { label: "Overview", href: "/overview", icon: LayoutDashboard, available: true },
         { label: "Denial queue", href: "/denials", icon: Inbox, available: true },
         { label: "Appeals", href: "/appeals", icon: Gavel, available: false },
       ],
@@ -75,8 +81,8 @@ export function navApps({ showRevenueCycle, showDesignSystem }: NavVisibility): 
       tone: "blue",
       items: [
         { label: "Claims", href: "/claims", icon: FileText, available: true },
-        { label: "Remittances", href: "/remittances", icon: Receipt, available: false },
-        { label: "Prompt pay", href: "/prompt-pay", icon: Scale, available: false },
+        { label: "Remittances", href: "/remittances", icon: Receipt, available: true },
+        { label: "Prompt pay", href: "/prompt-pay", icon: Scale, available: true },
       ],
     },
   ];
@@ -106,19 +112,22 @@ export function navApps({ showRevenueCycle, showDesignSystem }: NavVisibility): 
     tone: "amber",
     items: [{ label: "Reports", href: "/reports", icon: BarChart3, available: false }],
   });
-  const setup: NavItem[] = [];
+  const settings: NavItem[] = [];
   // The platform console isn't linked from practices: it has its own sign-in (/operator/login).
-  if (showDesignSystem) {
-    setup.push({ label: "Design system", href: "/design", icon: Palette, available: true });
+  if (showSettings) {
+    settings.push({ label: "Settings", href: "/settings", icon: Settings2, available: true });
   }
-  if (setup.length > 0) {
+  if (showDesignSystem) {
+    settings.push({ label: "Design system", href: "/design", icon: Palette, available: true });
+  }
+  if (settings.length > 0) {
     apps.push({
-      id: "setup",
-      label: "Setup",
-      description: "Platform administration and the design style guide.",
+      id: "settings",
+      label: "Settings",
+      description: "Practice profile, custom fields, access, and the design style guide.",
       icon: Settings2,
       tone: "slate",
-      items: setup,
+      items: settings,
     });
   }
   return apps;
@@ -145,7 +154,27 @@ export function locate(apps: NavApp[], pathname: string): { app: NavApp; item: N
   return best ?? { app: apps[0]!, item: null };
 }
 
-/** First page of an app: where its launcher tile goes. */
+function includes(text: string, query: string) {
+  return text.toLowerCase().includes(query);
+}
+
+/**
+ * Module switcher search: modules whose name, description, or pages match the query. A matching
+ * module keeps all of its pages; otherwise only the matching pages are listed under it.
+ */
+export function filterModules(apps: NavApp[], query: string): { app: NavApp; items: NavItem[] }[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return apps.map((app) => ({ app, items: app.items }));
+  return apps
+    .map((app) => {
+      const moduleMatches = includes(app.label, q) || includes(app.description, q);
+      const items = moduleMatches ? app.items : app.items.filter((item) => includes(item.label, q));
+      return { app, items };
+    })
+    .filter((group) => group.items.length > 0);
+}
+
+/** First page of a module: where its switcher link goes. */
 export function appHome(app: NavApp): string | null {
   return app.items.find((item) => item.available)?.href ?? null;
 }

@@ -16,7 +16,7 @@ Engineering:
 - [x] ADR 0001 tech stack accepted (ADR 0003 Netlify pre-prod accepted; ADR 0002 Azure confirmed at cutover)
 - [x] Project skeleton: app, DB, test runner, lint, CI on every PR [R-7.4.2, R-7.4.4]
 - [x] Design system foundation + app shell (`docs/DESIGN.md`, ADR 0004)
-- [ ] Netlify deploy previews + demo site with pre-prod guards: synthetic banner, synthetic-only uploads, restricted access (ADR 0003) [R-7.1.3] — config, banner, and sign-in done; synthetic-only upload guard done for revenue cycle files (`SYN-` account numbers + attestation); site not yet created (runbook: docs/runbooks/netlify.md)
+- [ ] Netlify deploy previews + pre-production site (no demo login since 2026-09-26) with pre-prod guards: synthetic banner, synthetic-only uploads, restricted access (ADR 0003) [R-7.1.3] — config, banner, and sign-in done; synthetic-only upload guard done for revenue cycle files (`SYN-` account numbers + attestation); site not yet created (runbook: docs/runbooks/netlify.md)
 - [x] Synthetic data generator: practices, providers, payers, patients, claims, denials [R-15.1]
 - [x] Tenancy + RBAC skeleton with row-level security and isolation tests [R-7.2.3, R-7.2.4]
 - [x] Auth: OIDC SSO behind an interface (Entra ID at cutover), MFA, session timeouts [R-7.2.1, R-7.2.2, R-7.2.7]
@@ -32,6 +32,7 @@ Engineering:
 Setup:
 - [ ] Practice, location, and provider setup (NPI, taxonomy, FL license) [§8.1]
 - [ ] Payer master with regulatory-regime tags [§8.1, §1.3]
+- [ ] Custom field values on patient, claim, denial, and payer records (sensitive fields masked, opened with a reason, audited) [R-3.5.1, R-7.5.1] — `specs/settings-and-custom-fields.md` S2; added to MVP by owner 2026-09-26
 
 Claims:
 - [x] Claim data model with immutable version history [R-3.10.3] — claims list/detail, corrections with reason, append-only `claim_versions` (`specs/claims.md` C1)
@@ -41,12 +42,12 @@ Claims:
 - [ ] 999 / 277CA acknowledgment capture [R-3.1.1]
 
 Prompt pay (FL-regulated claims only):
-- [ ] Prompt-pay clock and configurable alerts [R-3.1.1, R-3.1.2]
-- [ ] Late-payment interest calculator and itemized worksheet [R-3.1.3]
+- [~] Prompt-pay clock and configurable alerts [R-3.1.1, R-3.1.2] — PP1 clock, milestones, interest worksheet, contests (`specs/remittances-and-prompt-pay.md`); alerts inbox PP2
+- [x] Late-payment interest calculator and itemized worksheet [R-3.1.3] (PP1; accrual start ⚠️ VERIFY)
 - [ ] Uncontestable-obligation flag and demand letter [R-3.1.4]
 
 Remittance and denials:
-- [ ] 835 ERA ingestion and posting with exception queue [§8.2]
+- [~] 835 ERA ingestion and posting with exception queue [§8.2] — R1 upload, balance check, post/void with history; clearinghouse feed R3
 - [ ] Denial capture with CARC/RARC/group code and categorization [§8.3]
 - [x] Denial work queue prioritized by $ and days to appeal deadline [§8.3]
 - [x] Denial detail: notes, assignment, status

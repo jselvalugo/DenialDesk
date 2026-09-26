@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/auth/session";
-import { demoLoginEnabled } from "@/lib/env";
-import { DemoSignIn } from "./DemoSignIn";
 import { SignInForm } from "./SignInForm";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -27,9 +25,8 @@ export default async function SignInPage({
 }) {
   const params = await searchParams;
   const session = await getSession();
-  // A demo session still sees the form, so the owner can sign in from a browser that explored the demo.
-  const demo = session?.authMethod === "demo";
-  if (session?.mfaVerified && session.tenantId && !demo) redirect("/");
+  // A leftover demo session (the demo was removed) isn't a sign-in: show the form.
+  if (session?.mfaVerified && session.tenantId && session.authMethod !== "demo") redirect("/");
 
   return (
     <>
@@ -37,17 +34,7 @@ export default async function SignInPage({
       <p className="mt-1 mb-6 text-body text-muted">
         Use your practice account. You&apos;ll confirm with your authenticator app next.
       </p>
-      <SignInForm
-        notice={
-          [
-            lookup(notices, params.reason) ?? lookup(errors, params.error),
-            demo ? "You're exploring the demo practice. Signing in ends the demo session." : undefined,
-          ]
-            .filter(Boolean)
-            .join(" ") || undefined
-        }
-      />
-      {demoLoginEnabled() && !demo && <DemoSignIn />}
+      <SignInForm notice={lookup(notices, params.reason) ?? lookup(errors, params.error)} />
     </>
   );
 }

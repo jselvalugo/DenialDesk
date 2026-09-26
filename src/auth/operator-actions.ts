@@ -8,6 +8,7 @@ import { auditSystem } from "@/lib/audit";
 import { limitCurrentRequest } from "@/lib/rate-limit";
 import {
   claimTotp,
+  clearFailures,
   CODE_MISMATCH,
   CODE_REUSED,
   codeSchema,
@@ -18,7 +19,16 @@ import {
   SIGN_IN_FAILED,
   type FormState,
 } from "./credentials";
-import { isOperatorAccount, syncOperatorAccount, usableSync } from "./operator-account";
+import { log } from "@/lib/log";
+import {
+  isOperatorAccount,
+  isOperatorEmail,
+  operatorConfigurationStatus,
+  operatorMfaSkipped,
+  syncOperatorAccount,
+  usableSync,
+  type SyncResult,
+} from "./operator-account";
 import { decoyHash, verifyPassword } from "./password";
 import {
   clientIp,
@@ -51,6 +61,43 @@ async function replacePreviousOperatorSession(actorUserId: string): Promise<void
   });
 }
 
+/** The fixed words a refused operator sign-in is logged with (docs/specs/operator-login.md). */
+export type RefusalStatus =
+  | "email_missing"
+  | "hash_missing"
+  | "hash_malformed"
+  | "hash_test"
+  | "retired"
+  | "refused"
+  | "unknown_email"
+  | "other_email"
+  | "disabled"
+  | "practice_account"
+  | "locked"
+  | "wrong_password";
+
+/**
+ * Why a sign-in was refused, for the operator alone (the server log; visitors see only the generic
+ * error). `status` is a fixed word, never the email tried or anything from the configuration, so
+ * the line can't help anyone guess the password or find out who the operator is.
+ */
+function refusalStatus(
+  sync: SyncResult,
+  user: { email: string; disabledAt: Date | null } | undefined,
+): RefusalStatus {
+  if (sync === "unconfigured") {
+    const { email, passwordHash } = operatorConfigurationStatus();
+    if (email === "missing") return "email_missing";
+    if (passwordHash === "malformed") return "hash_malformed";
+    if (passwordHash === "test_hash") return "hash_test";
+    return "hash_missing";
+  }
+  if (sync === "retired" || sync === "refused") return sync;
+  if (!user) return "unknown_email";
+  if (user.disabledAt) return "disabled";
+  return isOperatorEmail(user.email) ? "practice_account" : "other_email";
+}
+
 export async function signInOperator(_: FormState, formData: FormData): Promise<FormState> {
   const parsed = loginSchema.safeParse({ email: formData.get("email"), password: formData.get("password") });
   if (!parsed.success) return { error: "Enter your email and password." };
@@ -66,9 +113,12 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
     .where(sql`lower(${users.email}) = lower(${parsed.data.email})`)
     .limit(1);
   // Every account but the operator (and a disabled or practice-linked one) looks unknown here.
-  if (!user || user.disabledAt || !usableSync(sync) || !(await isOperatorAccount(user))) {
+  const isOperator =
+    user !== undefined && !user.disabledAt && usableSync(sync) && (await isOperatorAccount(user));
+  if (!user || !isOperator) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing
     await auditSystem({ action: "operator.login_failed", ipAddress: await clientIp() });
+    log.warn("operator.sign_in_refused", { status: refusalStatus(sync, user) });
     return { error: SIGN_IN_FAILED };
   }
   if (!(await reserveAttempt(user.id))) {
@@ -79,15 +129,32 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
       ipAddress: await clientIp(),
       metadata: { locked: true },
     });
+    log.warn("operator.sign_in_refused", { status: "locked" });
     return { error: SIGN_IN_FAILED };
   }
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
     await recordFailure(user.id, "operator.login_failed");
+    log.warn("operator.sign_in_refused", { status: "wrong_password" });
     return { error: SIGN_IN_FAILED };
   }
 
-  // The attempt counter resets only after MFA succeeds.
   await replacePreviousOperatorSession(user.id);
+  if (operatorMfaSkipped()) {
+    // Owner decision (2026-09-26): password alone outside production while the console is set up.
+    await createSession(user.id, { authMethod: "operator", mfaVerified: true });
+    const session = await getOperatorSession();
+    await clearFailures(user.id);
+    await auditSystem({
+      action: "operator.login_succeeded",
+      actorUserId: user.id,
+      entityType: "session",
+      entityId: session?.sessionId ?? null,
+      ipAddress: await clientIp(),
+      metadata: { mfa: "skipped_by_config" },
+    });
+    redirect("/operator");
+  }
+  // The attempt counter resets only after MFA succeeds.
   await createSession(user.id, { authMethod: "operator" });
   redirect(user.mfaEnrolledAt ? "/operator/login/mfa" : "/operator/login/mfa/setup");
 }

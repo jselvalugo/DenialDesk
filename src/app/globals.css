@@ -12,6 +12,8 @@
   --dd-blue-700: #245d93;
   --dd-teal: #1f6b75;
   --dd-teal-50: #e6f2f3;
+  /* The logo's cross, for the brand mark on dark chrome (BrandMark.tsx). */
+  --dd-brand-cross: #14c8b0;
   --dd-selected: #eaf0f7;
 
   --dd-canvas: #f3f6f9;
@@ -23,7 +25,7 @@
   --dd-text-muted: #475569;
   --dd-text-subtle: #5b6b82;
 
-  /* Navy chrome: the app bar (token names predate it; they were the sidebar) */
+  /* Navy chrome: the tab bar (token names predate it; they were the sidebar) */
   --dd-sidebar: #1a2c4e;
   --dd-sidebar-fg: #e2e8f0;
   --dd-sidebar-muted: #8a9bb5;
@@ -54,6 +56,23 @@
   --dd-chart-4: #b7791f;
   --dd-chart-5: #c05621;
   --dd-chart-danger: #a32d2d;
+
+  /* Module tiles (DESIGN.md §4): a colored glyph on its own light tint, every pair ≥ 5:1 */
+  --dd-tile-teal-fg: #1f6b75;
+  --dd-tile-teal-bg: #e6f2f3;
+  --dd-tile-teal-border: #b9dadd;
+  --dd-tile-navy-fg: #1a2c4e;
+  --dd-tile-navy-bg: #eaf0f7;
+  --dd-tile-navy-border: #c6d2e3;
+  --dd-tile-blue-fg: #245d93;
+  --dd-tile-blue-bg: #eaf2fa;
+  --dd-tile-blue-border: #c3d9ee;
+  --dd-tile-amber-fg: #854f0b;
+  --dd-tile-amber-bg: #fbf3e6;
+  --dd-tile-amber-border: #eed3a6;
+  --dd-tile-slate-fg: #475569;
+  --dd-tile-slate-bg: #f1f5f9;
+  --dd-tile-slate-border: #cbd5e1;
 }
 
 @theme inline {
@@ -108,6 +127,22 @@
   --color-chart-4: var(--dd-chart-4);
   --color-chart-5: var(--dd-chart-5);
   --color-chart-danger: var(--dd-chart-danger);
+
+  --color-tile-teal-fg: var(--dd-tile-teal-fg);
+  --color-tile-teal-bg: var(--dd-tile-teal-bg);
+  --color-tile-teal-border: var(--dd-tile-teal-border);
+  --color-tile-navy-fg: var(--dd-tile-navy-fg);
+  --color-tile-navy-bg: var(--dd-tile-navy-bg);
+  --color-tile-navy-border: var(--dd-tile-navy-border);
+  --color-tile-blue-fg: var(--dd-tile-blue-fg);
+  --color-tile-blue-bg: var(--dd-tile-blue-bg);
+  --color-tile-blue-border: var(--dd-tile-blue-border);
+  --color-tile-amber-fg: var(--dd-tile-amber-fg);
+  --color-tile-amber-bg: var(--dd-tile-amber-bg);
+  --color-tile-amber-border: var(--dd-tile-amber-border);
+  --color-tile-slate-fg: var(--dd-tile-slate-fg);
+  --color-tile-slate-bg: var(--dd-tile-slate-bg);
+  --color-tile-slate-border: var(--dd-tile-slate-border);
 
   /* Type scale (DESIGN.md §6): size / line-height */
   --text-display: 1.75rem;

@@ -18,7 +18,7 @@ Requirement IDs: §8.3, §8.4, R-3.1.1, R-3.1.2, R-4.2.1, R-5.1.2, R-7.3.3, R-7.
       compliance role is read-only.
 - [x] Member ID reveal requires a reason and is audited.
 - [x] Every queue and detail view is audited.
-- [x] Overview page with real totals, next deadlines, and open denials by reason.
+- [x] Overview page (`/overview`; `/` is the welcome page, `specs/welcome-page.md`) with real totals, next deadlines, and open denials by reason.
 
 ## Deferred
 - Denial capture from 835 files (Phase 1 "835 ERA ingestion") — today denials come from the seed.

@@ -15,7 +15,7 @@ export function AppShell({
   children: ReactNode;
 }) {
   return (
-    <ShellProvider visibility={{ showDesignSystem, showRevenueCycle }}>
+    <ShellProvider visibility={{ showDesignSystem, showRevenueCycle, showSettings: user !== null }}>
       <div className="flex min-h-0 flex-1 flex-col">
         <a
           href="#main"
@@ -24,16 +24,6 @@ export function AppShell({
           Skip to content
         </a>
         <GlobalHeader user={user} />
-        {user?.demo && (
-          <p
-            role="note"
-            aria-label="Demo practice notice"
-            className="border-b border-info-border bg-info-bg px-6 py-2 text-label font-medium text-info-fg"
-          >
-            Shared demo practice: other visitors can see anything you type here. Never enter real patient
-            information.
-          </p>
-        )}
         <main
           id="main"
           tabIndex={-1}

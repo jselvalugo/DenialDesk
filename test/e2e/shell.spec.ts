@@ -24,30 +24,43 @@ test("design system page renders the sample queue", async ({ page }) => {
 
 test("unbuilt sections are not links", async ({ page }) => {
   await page.goto("/design");
-  await page.getByRole("button", { name: "App launcher" }).click();
-  const launcher = page.getByRole("dialog", { name: "App launcher" });
-  await expect(launcher.getByText("Appeals")).toBeVisible();
+  await page.getByRole("button", { name: /, switch module$/ }).click();
+  const switcher = page.getByRole("dialog", { name: "Go to" });
+  await expect(switcher.getByText("Appeals")).toBeVisible();
   await expect(page.getByRole("link", { name: /^Appeals/ })).toHaveCount(0);
-  await expect(launcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
+  await expect(switcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
+  // A planned module (Insight) is listed as a heading, never a link.
+  await expect(switcher.getByRole("heading", { level: 3, name: /^Insight/ })).toBeVisible();
+  await expect(switcher.getByRole("link", { name: /Insight/ })).toHaveCount(0);
 });
 
-test("the app launcher searches apps and pages and opens one", async ({ page }) => {
+test("the module switcher searches modules and pages and opens one", async ({ page }) => {
   await page.goto("/design");
   // The shortcut listener attaches after hydration; wait for client-rendered chrome first.
-  await expect(page.getByRole("button", { name: "App launcher" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /, switch module$/ })).toBeEnabled();
+  // The launcher shows the brand mark, not the module name.
+  await expect(
+    page.getByRole("button", { name: /, switch module$/ }).locator("svg[data-brand-mark]"),
+  ).toBeVisible();
   await expect(async () => {
     await page.keyboard.press("Control+k");
-    await expect(page.getByRole("dialog", { name: "App launcher" })).toBeVisible({ timeout: 500 });
+    await expect(page.getByRole("dialog", { name: "Go to" })).toBeVisible({ timeout: 500 });
   }).toPass();
-  const launcher = page.getByRole("dialog", { name: "App launcher" });
-  await expect(launcher.getByLabel("Search apps and pages")).toBeFocused();
-  await launcher.getByLabel("Search apps and pages").fill("queue");
-  await expect(launcher.getByRole("link", { name: "Design system" })).toHaveCount(0);
-  await expect(launcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
+  const switcher = page.getByRole("dialog", { name: "Go to" });
+  await expect(switcher.getByLabel("Search modules and pages")).toBeFocused();
+  await switcher.getByLabel("Search modules and pages").fill("queue");
+  await expect(switcher.getByRole("link", { name: "Design system" })).toHaveCount(0);
+  await expect(switcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
+  // A module match keeps all of its pages; a page match shows only its module and that page.
+  await switcher.getByLabel("Search modules and pages").fill("claims");
+  await expect(switcher.getByRole("link", { name: "Claims module" })).toBeVisible();
+  await expect(switcher.getByText("Remittances", { exact: true })).toBeVisible();
+  await expect(switcher.getByRole("link", { name: "Denials module" })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await expect(launcher).toBeHidden();
-  await page.getByRole("button", { name: "App launcher" }).click();
-  await launcher.getByRole("link", { name: "Setup app" }).click();
+  await expect(switcher).toBeHidden();
+  await page.getByRole("button", { name: /, switch module$/ }).click();
+  await switcher.getByRole("link", { name: "Settings module" }).click();
+  // Signed out, Settings holds only the style guide (practice settings need a signed-in user).
   await expect(
     page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Design system" }),
   ).toHaveAttribute("aria-current", "page");
@@ -82,33 +95,58 @@ test("the preview seed endpoint rejects requests without the secret token", asyn
   expect([404, 429]).toContain(wrong.status());
 });
 
+test("the preview operator status endpoint rejects requests without the secret token", async ({
+  request,
+}) => {
+  expect([404, 429]).toContain((await request.get("/api/preview/operator-status")).status());
+  const wrong = await request.get("/api/preview/operator-status", {
+    headers: { authorization: `Bearer ${"w".repeat(40)}` },
+  });
+  expect([404, 429]).toContain(wrong.status());
+});
+
 test("navigation icons are decorative and link names stay text-only", async ({ page }) => {
   await page.goto("/design");
   const nav = page.getByRole("navigation", { name: "Primary" });
-  await page.getByRole("button", { name: "App launcher" }).click();
-  const launcher = page.getByRole("dialog", { name: "App launcher" });
-  for (const scope of [nav, launcher]) {
+  const moduleButton = page.getByRole("button", { name: "Settings, switch module", exact: true });
+  await moduleButton.click();
+  const switcher = page.getByRole("dialog", { name: "Go to" });
+  // No nine-dot grid icon anywhere in the chrome (ADR 0005).
+  await expect(page.locator("header svg.lucide-grip, header svg.lucide-grid-3x3")).toHaveCount(0);
+  for (const scope of [nav, switcher, moduleButton]) {
     const icons = scope.locator("svg");
     expect(await icons.count()).toBeGreaterThan(0);
     for (const icon of await icons.all()) await expect(icon).toHaveAttribute("aria-hidden", "true");
   }
   await expect(nav.getByRole("link", { name: "Design system", exact: true })).toBeVisible();
-  await expect(launcher.getByRole("link", { name: "Denial queue", exact: true })).toBeVisible();
+  await expect(switcher.getByRole("link", { name: "Denial queue", exact: true })).toBeVisible();
 });
 
-test("the launcher opens from the header search and closes with its button or the backdrop", async ({
+test("the switcher marks the current module and counts results", async ({ page }) => {
+  await page.goto("/design");
+  await page.getByRole("button", { name: "Settings, switch module", exact: true }).click();
+  const switcher = page.getByRole("dialog", { name: "Go to" });
+  await expect(
+    switcher.getByRole("heading", { level: 3, name: /^Settings/ }).getByText("Current", { exact: true }),
+  ).toBeVisible();
+  await expect(switcher.getByRole("list", { name: "Settings", exact: true })).toBeVisible();
+  await switcher.getByLabel("Search modules and pages").fill("claims");
+  await expect(switcher.getByText("1 module · 3 pages")).toBeVisible();
+});
+
+test("the module switcher opens from the header field and closes with its button or the backdrop", async ({
   page,
 }) => {
   await page.goto("/design");
-  const launcher = page.getByRole("dialog", { name: "App launcher" });
-  await page.getByRole("button", { name: "Search apps and pages" }).click();
-  await expect(launcher).toBeVisible();
-  await launcher.getByRole("button", { name: "Close app launcher" }).click();
-  await expect(launcher).toBeHidden();
-  await page.getByRole("button", { name: "App launcher" }).click();
-  await expect(launcher).toBeVisible();
+  const switcher = page.getByRole("dialog", { name: "Go to" });
+  await page.getByRole("button", { name: "Go to a module or page" }).click();
+  await expect(switcher).toBeVisible();
+  await switcher.getByRole("button", { name: "Close" }).click();
+  await expect(switcher).toBeHidden();
+  await page.getByRole("button", { name: /, switch module$/ }).click();
+  await expect(switcher).toBeVisible();
   await page.mouse.click(8, 890); // the backdrop, outside the dialog box
-  await expect(launcher).toBeHidden();
+  await expect(switcher).toBeHidden();
 });
 
 test("the header fits a 1024px window without horizontal scroll", async ({ page }) => {
@@ -116,4 +154,66 @@ test("the header fits a 1024px window without horizontal scroll", async ({ page 
   await page.goto("/design");
   await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1024);
+});
+
+test.describe("signed in", () => {
+  test.use({ storageState: "test/e2e/.auth/worker.json" });
+
+  test("the tab bar names the current module and opens the switcher from it", async ({ page }) => {
+    await page.goto("/overview");
+    const button = page.getByRole("button", { name: "Denials, switch module", exact: true });
+    await expect(button).toHaveAttribute("aria-haspopup", "dialog");
+    await button.click();
+    const switcher = page.getByRole("dialog", { name: "Go to" });
+    await expect(switcher).toBeVisible();
+    await switcher.getByRole("link", { name: "Claims module" }).click();
+    await expect(page.getByRole("button", { name: "Claims, switch module", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Claims" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
+
+  test("the logo opens the home page, and /welcome redirects there", async ({ page }) => {
+    await page.goto("/welcome");
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+    await page.goto("/claims");
+    await page.getByRole("link", { name: "DenialDesk home" }).click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+    await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
+    for (const name of [
+      "How DenialDesk works",
+      "From patient record to claim and denial",
+      "Your modules",
+      "Safeguards",
+    ]) {
+      await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+    }
+    // Shipped steps link to their page; planned steps are labelled, never linked.
+    for (const step of [1, 2, 3]) {
+      await expect(page.locator(`[data-step="${step}"]`).getByRole("link")).toHaveCount(1);
+    }
+    for (const step of [4, 5]) {
+      const item = page.locator(`[data-step="${step}"]`);
+      await expect(item.getByRole("link")).toHaveCount(0);
+      await expect(item.getByText("Planned")).toBeVisible();
+    }
+    for (const step of [1, 4]) {
+      await expect(page.locator(`[data-record-step="${step}"]`).getByRole("link")).toHaveAttribute(
+        "href",
+        "/patients",
+      );
+    }
+    for (const step of [2, 3]) {
+      const item = page.locator(`[data-record-step="${step}"]`);
+      await expect(item.getByRole("link")).toHaveCount(0);
+      await expect(item.getByText("Planned", { exact: true })).toBeVisible();
+    }
+    for (const title of [
+      "Sign-in needs a second factor",
+      "Identifiers are encrypted",
+      "Business Associate Agreements on file",
+    ]) {
+      await expect(page.getByText(title, { exact: true })).toBeVisible();
+    }
+  });
 });
