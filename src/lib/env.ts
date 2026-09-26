@@ -19,7 +19,9 @@ const schema = z.object({
    * scrypt hash of the operator's password, from `pnpm operator:credential` (secret). The operator
    * account exists only as provisioned from this; changing it resets the password and two-step.
    */
-  PLATFORM_OPERATOR_PASSWORD_HASH: z.string().startsWith("scrypt$").optional(),
+  // Validated strictly where it's used (src/auth/operator-account.ts): a bad value switches the
+  // console off rather than stopping the whole app.
+  PLATFORM_OPERATOR_PASSWORD_HASH: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

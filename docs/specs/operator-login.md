@@ -4,7 +4,8 @@ Status: done (2026-09-26) — requested by the product owner; revised 2026-09-26
 provisioned only from infrastructure configuration (no setup page), owner rebaseline
 Roadmap item: platform operations (follows `demo-login-and-operator-console.md`)
 Requirement IDs: R-7.2.3, R-7.2.7, R-7.2.9, R-7.5.1, R-15.1; partial: R-7.2.2 (TOTP, not yet
-phishing-resistant), R-7.2.5 (no JIT approval) — both production gates in `docs/ROADMAP.md`
+phishing-resistant), R-7.2.5 (no JIT approval), R-7.2.6 (recovery is audited but has no alert or
+independent review yet) — all production gates in `docs/ROADMAP.md`
 
 ## Goal
 The platform console (`/operator`) has its own sign-in, separate from practice sign-in, used only
@@ -46,7 +47,15 @@ Provisioning from infrastructure configuration (owner rebaseline, 2026-09-26)
 - [x] On each operator sign-in and console request the app syncs the account from configuration:
       creates it (practice-free) if missing; if the configured hash changed, that is a **credential
       rotation** (recovery): new password, two-step enrollment and lockout cleared, every operator
-      session ended. Never touches an account with a practice membership or a disabled account.
+      session ended. Never touches an account with a practice membership or a disabled account
+      (recorded once per configuration as `operator.credential_refused`).
+- [x] **Rotations only move forward.** Every applied credential's fingerprint (SHA-256 of email +
+      hash; the hash itself isn't stored) is kept in `operator_credentials`. A deployment still
+      carrying a retired credential (an old deploy link, a rollback, a stale slot) can never re-apply
+      it: sign-in there is refused and it does not end the owner's sessions.
+- [x] The hash must use exactly the parameters `pnpm operator:credential` produces (scrypt N=2^17,
+      r=8, p=1, 16-byte salt, 64-byte key). The public e2e test hash is refused on Netlify and in
+      production. A seeded practice user can't take the operator email.
 - [x] The console is off (sign-in refused, live sessions ended) unless both values are set and the
       hash is well-formed. `pnpm operator:credential` requires an interactive terminal (no echo) and a
       16-character minimum.
@@ -56,7 +65,8 @@ Provisioning from infrastructure configuration (owner rebaseline, 2026-09-26)
 Audit (R-7.5.1)
 - [x] `operator.login_succeeded`, `operator.login_failed`, `operator.mfa_failed`,
       `operator.mfa_enrolled`, `operator.logout`, `operator.session_revoked`,
-      `operator.credential_provisioned`, `operator.credential_rotated`;
+      `operator.credential_provisioned`, `operator.credential_rotated`, `operator.credential_refused`
+      (no user actor: the source is hosting configuration; the request IP only triggered the sync);
       lockouts and expiry use the shared `auth.locked_out` / `auth.session_expired`. IDs only.
 
 ## Data / API changes
@@ -84,6 +94,11 @@ None.
   the hosting platform logs configuration changes. `SEED_TOKEN` no longer has any operator power.
 - The hash is not the password, but it must still be secret (it allows offline guessing); scrypt
   N=2^17 and a 16-character minimum make that expensive.
+- The hosting account is now the root of trust: the Netlify team and Azure accounts that can edit
+  configuration must use phishing-resistant MFA and be limited to the owner.
+- Single administrator: the owner is credential issuer, operator, recovery path and reviewer. This
+  needs a written risk acceptance with compensating controls before production (human decision;
+  `docs/PROJECT_STATE.md` open items).
 - The operator never has a practice membership, so it can't read PHI through practice pages; console
   queries stay practice-level metadata and counts (tenant-scoped via `withTenant`).
 
@@ -102,7 +117,10 @@ None.
   it refuses to run without a terminal.
 
 ## Upgrade note (existing environments)
-1. Run `pnpm operator:credential` on your own machine.
+1. Run `pnpm operator:credential` on your own machine (clear the terminal afterwards).
 2. In the hosting configuration set `PLATFORM_OPERATOR_EMAIL` to an address used only for the
-   console and `PLATFORM_OPERATOR_PASSWORD_HASH` to the printed hash (secret), then redeploy.
-3. Sign in at `/operator/login` and set up two-step verification.
+   console (not `SEED_ADMIN_EMAIL`) and `PLATFORM_OPERATOR_PASSWORD_HASH` to the printed hash
+   (secret), then redeploy.
+3. Sign in at `/operator/login` and set up two-step verification. If an operator account already
+   existed (from the old setup page), the first request applies the new credential as a rotation:
+   its two-step is reset and its sessions end.

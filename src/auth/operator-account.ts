@@ -1,10 +1,13 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { systemDb } from "@/db/client";
-import { memberships, sessions, users } from "@/db/schema";
+import { auditEvents, memberships, operatorCredentials, sessions, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
+import { isProduction, onNetlify } from "@/lib/env";
 import type { TenantTx } from "@/db/tenant";
 import { isOperatorEmail, operatorEmail } from "./operator-email";
+import { SCRYPT_PARAMS } from "./password";
 
 // The platform operator account (docs/specs/operator-login.md): the one account whose email is
 // PLATFORM_OPERATOR_EMAIL and that belongs to no practice. It signs in only at /operator/login, and
@@ -30,60 +33,152 @@ export async function isOperatorAccount(user: { id: string; email: string }): Pr
   return isOperatorEmail(user.email) && !(await hasPracticeMembership(user.id));
 }
 
-/** The scrypt hash format produced by `pnpm operator:credential` (see src/auth/password.ts). */
-const HASH_FORMAT = /^scrypt\$\d+\$\d+\$\d+\$[A-Za-z0-9_-]{16,}\$[A-Za-z0-9_-]{64,}$/;
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+/** Identifies one applied credential: this email with this hash (the hash itself is never stored). */
+const credentialFingerprint = (email: string, hash: string) => sha256(`${email}\n${hash}`);
 
-/** The operator's password hash from infrastructure configuration, or null if unset or malformed. */
-export function configuredOperatorHash(): string | null {
-  const hash = process.env.PLATFORM_OPERATOR_PASSWORD_HASH?.trim();
-  return hash && HASH_FORMAT.test(hash) ? hash : null;
+/**
+ * The e2e suite's operator hash is public (test/e2e/operator-credentials.ts). It works only on a
+ * local test server: never on Netlify and never in production.
+ */
+const PUBLIC_TEST_HASH_FINGERPRINT = "a983bfd3bd3f77d53e78e1f74713e3671a53b04b72a312648b21fc9cc8e56e67";
+
+/** Exactly the scrypt parameters and lengths `pnpm operator:credential` produces. */
+function wellFormed(hash: string): boolean {
+  const [scheme, n, r, p, salt, key] = hash.split("$");
+  if (scheme !== "scrypt" || !salt || !key || hash.split("$").length !== 6) return false;
+  if (Number(n) !== SCRYPT_PARAMS.N || Number(r) !== SCRYPT_PARAMS.R || Number(p) !== SCRYPT_PARAMS.P) {
+    return false;
+  }
+  const b64url = /^[A-Za-z0-9_-]+$/;
+  return (
+    b64url.test(salt) &&
+    b64url.test(key) &&
+    Buffer.from(salt, "base64url").length === SCRYPT_PARAMS.SALT_LENGTH &&
+    Buffer.from(key, "base64url").length === SCRYPT_PARAMS.KEY_LENGTH
+  );
 }
 
-/** The console is on only when both the operator email and a well-formed password hash are configured. */
+/** The operator's password hash from infrastructure configuration, or null if unset or unusable. */
+export function configuredOperatorHash(): string | null {
+  const hash = process.env.PLATFORM_OPERATOR_PASSWORD_HASH?.trim();
+  if (!hash || !wellFormed(hash)) return null;
+  if ((isProduction() || onNetlify()) && sha256(hash) === PUBLIC_TEST_HASH_FINGERPRINT) return null;
+  return hash;
+}
+
+/** Both the operator email and a usable password hash are configured. */
 export function operatorConfigured(): boolean {
   return operatorEmail() !== null && configuredOperatorHash() !== null;
 }
+
+/**
+ * - `current`: the account matches configuration. `provisioned` / `rotated`: it now does.
+ * - `unconfigured`: the console is off. `retired`: this deployment still carries a hash that was
+ *   already replaced (e.g. an old deploy link); it can never re-apply it, and sign-in is refused here.
+ * - `refused`: the configured email belongs to a practice or disabled account; never touched.
+ */
+export type SyncResult = "current" | "provisioned" | "rotated" | "unconfigured" | "retired" | "refused";
+
+/** Only these results let the operator sign in or use the console. */
+export const usableSync = (result: SyncResult) =>
+  result === "current" || result === "provisioned" || result === "rotated";
 
 /**
  * Makes the operator account match infrastructure configuration (PLATFORM_OPERATOR_EMAIL and
  * PLATFORM_OPERATOR_PASSWORD_HASH). No page or endpoint can create or reset the operator: only
  * whoever controls the hosting configuration can (docs/specs/operator-login.md).
  *
- * - No account yet: creates it, practice-free, with the configured hash (two-step set up at first sign-in).
- * - Hash changed: that is a credential rotation, used for recovery. The new hash applies, two-step
- *   enrollment and lockout are cleared, and every session of the account ends.
- * - An account with a practice membership, or a disabled one, is never touched (fail closed).
+ * A new hash is a credential rotation (recovery): it applies once, clears two-step enrollment and
+ * lockout, and ends every operator session. Rotations only move forward: every applied hash's
+ * fingerprint is recorded, and a retired one is never applied again. Audit events name hosting
+ * configuration as the source (no user actor; the request IP is only what triggered the sync).
  * Cheap when nothing changed (one indexed lookup), so it runs on every console request and sign-in.
  */
-export async function syncOperatorAccount(): Promise<void> {
+export async function syncOperatorAccount(trigger: "sign_in" | "console_request"): Promise<SyncResult> {
   const email = operatorEmail();
   const hash = configuredOperatorHash();
-  if (!email || !hash) return;
-  const [user] = await systemDb()
-    .select({ id: users.id, passwordHash: users.passwordHash, disabledAt: users.disabledAt })
+  if (!email || !hash) return "unconfigured";
+  const [current] = await systemDb()
+    .select({ passwordHash: users.passwordHash })
     .from(users)
     .where(sql`lower(${users.email}) = ${email}`)
     .limit(1);
-  if (user?.passwordHash === hash) return;
-  if (user && (user.disabledAt || (await hasPracticeMembership(user.id)))) return;
+  if (current?.passwordHash === hash) return "current";
 
-  await systemDb()
-    .transaction(async (tx) => {
+  const fingerprint = credentialFingerprint(email, hash);
+  const source = {
+    source: "hosting_config",
+    trigger,
+    fingerprint: fingerprint.slice(0, 8),
+    ipIsTrigger: true,
+  };
+  return systemDb()
+    .transaction(async (tx): Promise<SyncResult> => {
+      const [known] = await tx
+        .select({ fingerprint: operatorCredentials.fingerprint })
+        .from(operatorCredentials)
+        .where(eq(operatorCredentials.fingerprint, fingerprint))
+        .limit(1);
+      if (known) return "retired";
+
+      const [user] = await tx
+        .select({ id: users.id, passwordHash: users.passwordHash, disabledAt: users.disabledAt })
+        .from(users)
+        .where(sql`lower(${users.email}) = ${email}`)
+        .limit(1)
+        // Locks the row so a concurrent membership insert waits until this commits.
+        .for("update");
+
       if (!user) {
         const [created] = await tx
           .insert(users)
           .values({ email, displayName: "Platform operator", passwordHash: hash })
           .returning({ id: users.id });
+        await tx.insert(operatorCredentials).values({ fingerprint });
         await audit(tx as unknown as TenantTx, {
           action: "operator.credential_provisioned",
-          actorUserId: created!.id,
+          actorUserId: null,
           entityType: "user",
           entityId: created!.id,
+          metadata: source,
         });
-        return;
+        return "provisioned";
       }
-      // Only the request that actually swaps the hash rotates (concurrent requests see 0 rows).
-      const rotated = await tx
+      if (user.passwordHash === hash) return "current";
+
+      const [membership] = await tx
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(eq(memberships.userId, user.id))
+        .limit(1);
+      if (membership || user.disabledAt) {
+        const reason = membership ? "practice_account" : "disabled";
+        // Recorded once per configured hash, so a misconfiguration is visible without flooding.
+        const [already] = await tx
+          .select({ id: auditEvents.id })
+          .from(auditEvents)
+          .where(
+            and(
+              eq(auditEvents.action, "operator.credential_refused"),
+              eq(auditEvents.entityId, user.id),
+              sql`${auditEvents.metadata}->>'fingerprint' = ${source.fingerprint}`,
+            ),
+          )
+          .limit(1);
+        if (!already) {
+          await audit(tx as unknown as TenantTx, {
+            action: "operator.credential_refused",
+            actorUserId: null,
+            entityType: "user",
+            entityId: user.id,
+            metadata: { ...source, reason },
+          });
+        }
+        return "refused";
+      }
+
+      await tx
         .update(users)
         .set({
           passwordHash: hash,
@@ -94,9 +189,15 @@ export async function syncOperatorAccount(): Promise<void> {
           mfaEnrolledAt: null,
           totpLastStep: null,
         })
-        .where(and(eq(users.id, user.id), eq(users.passwordHash, user.passwordHash)))
-        .returning({ id: users.id });
-      if (rotated.length === 0) return;
+        .where(eq(users.id, user.id));
+      // The new hash is recorded as applied and the old one as retired, so neither can come back
+      // through a deployment that still carries the old configuration.
+      const previous = credentialFingerprint(email, user.passwordHash);
+      await tx.insert(operatorCredentials).values({ fingerprint });
+      await tx
+        .insert(operatorCredentials)
+        .values({ fingerprint: previous, retiredAt: new Date() })
+        .onConflictDoUpdate({ target: operatorCredentials.fingerprint, set: { retiredAt: new Date() } });
       const ended = await tx
         .update(sessions)
         .set({ revokedAt: new Date() })
@@ -104,17 +205,24 @@ export async function syncOperatorAccount(): Promise<void> {
         .returning({ id: sessions.id });
       await audit(tx as unknown as TenantTx, {
         action: "operator.credential_rotated",
-        actorUserId: user.id,
+        actorUserId: null,
         entityType: "user",
         entityId: user.id,
-        metadata: { mfaReset: true, sessionsEnded: ended.length },
+        metadata: {
+          ...source,
+          previousFingerprint: previous.slice(0, 8),
+          mfaReset: true,
+          sessionsEnded: ended.length,
+        },
       });
+      return "rotated";
     })
     .catch((error: unknown) => {
-      // Two first requests racing to create the account: the loser hits the unique email index.
+      // A concurrent request applied the same configuration first (unique email or fingerprint).
       const code =
         (error as { cause?: { code?: string }; code?: string })?.cause?.code ??
         (error as { code?: string })?.code;
-      if (code !== "23505") throw error;
+      if (code === "23505") return "current";
+      throw error;
     });
 }

@@ -30,6 +30,8 @@ _Last updated: 2026-09-26_
   BAA-on-file gate in production. Demo stays on pre-production only.
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
+- Open item (human decision): single-administrator risk acceptance with compensating controls
+  (independent log review, sealed break-glass holder) and R-7.2.6 alerting, before production.
 - Production branch on Netlify: `claude/quirky-feynman-ufql5a` (default). Each session works on its
   own branch and merges through a PR.
 

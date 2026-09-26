@@ -18,7 +18,7 @@ import {
   SIGN_IN_FAILED,
   type FormState,
 } from "./credentials";
-import { isOperatorAccount, operatorConfigured, syncOperatorAccount } from "./operator-account";
+import { isOperatorAccount, syncOperatorAccount, usableSync } from "./operator-account";
 import { decoyHash, verifyPassword } from "./password";
 import {
   clientIp,
@@ -58,7 +58,7 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
   if (!limited.allowed) return rateLimited("sign_in", "sign-in attempts", limited);
 
   // The operator account exists only as provisioned from infrastructure configuration.
-  await syncOperatorAccount();
+  const sync = await syncOperatorAccount("sign_in");
   // Always look the account up, so response timing doesn't reveal which email is the operator's.
   const [user] = await systemDb()
     .select()
@@ -66,7 +66,7 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
     .where(sql`lower(${users.email}) = lower(${parsed.data.email})`)
     .limit(1);
   // Every account but the operator (and a disabled or practice-linked one) looks unknown here.
-  if (!user || user.disabledAt || !operatorConfigured() || !(await isOperatorAccount(user))) {
+  if (!user || user.disabledAt || !usableSync(sync) || !(await isOperatorAccount(user))) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing
     await auditSystem({ action: "operator.login_failed", ipAddress: await clientIp() });
     return { error: SIGN_IN_FAILED };

@@ -45,6 +45,7 @@ export type AuditAction =
   | "operator.session_revoked"
   | "operator.credential_provisioned"
   | "operator.credential_rotated"
+  | "operator.credential_refused"
   | "operator.practice_created"
   | "operator.practice_suspended"
   | "operator.practice_reactivated"

@@ -26,9 +26,12 @@ export interface OperatorContext {
  */
 export const requireOperator = cache(async (): Promise<OperatorContext> => {
   // Applies a credential rotation from configuration first, which ends existing sessions.
-  await syncOperatorAccount();
+  const sync = await syncOperatorAccount("console_request");
   const session = await getOperatorSession();
   if (!session) redirect("/operator/login");
+  // A deployment still carrying a retired hash (e.g. an old deploy link) is refused outright, but it
+  // never ends sessions: an old link must not be a way to sign the owner out.
+  if (sync === "retired") redirect("/operator/login");
   if (!session.mfaVerified) {
     redirect(session.mfaEnrolled ? "/operator/login/mfa" : "/operator/login/mfa/setup");
   }

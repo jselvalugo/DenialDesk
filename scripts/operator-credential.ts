@@ -21,6 +21,11 @@ async function ask(prompt: string): Promise<string> {
     },
   });
   const rl = createInterface({ input: process.stdin, output, terminal: true });
+  // Ctrl-C: restore the line and exit without printing anything.
+  rl.on("SIGINT", () => {
+    process.stdout.write("\n");
+    process.exit(130);
+  });
   process.stdout.write(prompt);
   muted = true;
   const answer = await new Promise<string>((resolve) => rl.question("", resolve));

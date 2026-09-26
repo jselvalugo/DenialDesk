@@ -18,7 +18,7 @@ vi.mock("./operator-account", async () => {
     isOperatorEmail: (e: string) => email() !== null && e.trim().toLowerCase() === email(),
     operatorConfigured: () => email() !== null && Boolean(process.env.PLATFORM_OPERATOR_PASSWORD_HASH),
     hasPracticeMembership: vi.fn(),
-    syncOperatorAccount: vi.fn(),
+    syncOperatorAccount: vi.fn(async () => "current"),
   };
 });
 
@@ -99,7 +99,16 @@ describe("requireOperator", () => {
   it("applies configuration (a credential rotation) before reading the session", async () => {
     vi.mocked(session.getOperatorSession).mockResolvedValue(null);
     await expect(requireOperator()).rejects.toThrow();
-    expect(account.syncOperatorAccount).toHaveBeenCalled();
+    const synced = vi.mocked(account.syncOperatorAccount).mock.invocationCallOrder.at(-1)!;
+    const read = vi.mocked(session.getOperatorSession).mock.invocationCallOrder.at(-1)!;
+    expect(synced).toBeLessThan(read);
+  });
+
+  it("refuses a deployment carrying a retired hash without ending the owner's sessions", async () => {
+    vi.mocked(account.syncOperatorAccount).mockResolvedValueOnce("retired");
+    operatorSession();
+    await expect(requireOperator()).rejects.toThrow("redirect:/operator/login");
+    expect(session.revokeSession).not.toHaveBeenCalled();
   });
 
   it("never treats an account with a practice membership as the operator (fail closed)", async () => {
