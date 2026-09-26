@@ -307,6 +307,8 @@ export interface ClaimSnapshot {
   diagnosisCodes: string[];
   billedCents: number;
   status: string;
+  /** Paid to date; recorded from remittance posting onward (absent on older versions). */
+  paidCents?: number;
   lines: {
     lineNumber: number;
     procedureCode: string;
@@ -428,6 +430,159 @@ export const denialNotes = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("denial_notes_denial_idx").on(t.denialId, t.createdAt)],
+);
+
+// ---------------------------------------------------------------------------------------------
+// Remittances (835) and Florida prompt pay (docs/specs/remittances-and-prompt-pay.md). Restricted
+// PHI by linkage to claims. No patient names and no bank account or routing numbers are stored.
+// ---------------------------------------------------------------------------------------------
+
+export const remittanceMethodEnum = pgEnum("remittance_method", ["check", "eft", "non_payment"]);
+export const remittanceStatusEnum = pgEnum("remittance_status", ["received", "posted", "void"]);
+
+/** One 835 transaction: a check or EFT from one payer. Core fields never change (DB trigger). */
+export const remittances = pgTable(
+  "remittances",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    payerId: uuid("payer_id").notNull(),
+    method: remittanceMethodEnum("method").notNull(),
+    /** TRN02: check or EFT trace number. */
+    traceNumber: text("trace_number").notNull(),
+    paymentDate: date("payment_date", { mode: "string" }).notNull(),
+    totalPaidCents: cents("total_paid_cents").notNull(),
+    /** Provider-level adjustments (PLB), so claims + PLB balance to the payment. */
+    providerAdjustmentCents: cents("provider_adjustment_cents").notNull().default(0),
+    status: remittanceStatusEnum("status").notNull().default("received"),
+    source: text("source", { enum: ["upload", "seed"] }).notNull(),
+    /** Null when loaded by the system (seed). */
+    loadedBy: uuid("loaded_by").references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("remittances_tenant_id_key").on(t.tenantId, t.id),
+    uniqueIndex("remittances_payer_trace_key").on(t.tenantId, t.payerId, t.traceNumber),
+    index("remittances_tenant_date_idx").on(t.tenantId, t.paymentDate),
+    foreignKey({
+      name: "remittances_payer_fk",
+      columns: [t.tenantId, t.payerId],
+      foreignColumns: [payers.tenantId, payers.id],
+    }),
+  ],
+);
+
+export interface RemittanceAdjustment {
+  group: "CO" | "PR" | "OA" | "PI";
+  carc: string;
+  cents: number;
+}
+
+/** One claim payment (CLP loop) on a remittance. Insert-only evidence. */
+export const remittanceClaims = pgTable(
+  "remittance_claims",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    remittanceId: uuid("remittance_id").notNull(),
+    claimId: uuid("claim_id").notNull(),
+    /** CLP02 claim status code as received (1 primary, 2 secondary, 3 tertiary, 4 denied, …). */
+    statusCode: text("status_code").notNull(),
+    chargeCents: cents("charge_cents").notNull(),
+    paidCents: cents("paid_cents").notNull(),
+    patientResponsibilityCents: cents("patient_responsibility_cents").notNull().default(0),
+    payerControlNumber: text("payer_control_number"),
+    adjustments: jsonb("adjustments").$type<RemittanceAdjustment[]>().notNull(),
+    rarcs: text("rarcs")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("remittance_claims_remittance_idx").on(t.tenantId, t.remittanceId),
+    index("remittance_claims_claim_idx").on(t.tenantId, t.claimId),
+    foreignKey({
+      name: "remittance_claims_remittance_fk",
+      columns: [t.tenantId, t.remittanceId],
+      foreignColumns: [remittances.tenantId, remittances.id],
+    }),
+    foreignKey({
+      name: "remittance_claims_claim_fk",
+      columns: [t.tenantId, t.claimId],
+      foreignColumns: [claims.tenantId, claims.id],
+    }),
+  ],
+);
+
+/** Remittance history: every status change with who, when, and why. Append-only. */
+export const remittanceEvents = pgTable(
+  "remittance_events",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    remittanceId: uuid("remittance_id").notNull(),
+    event: remittanceStatusEnum("event").notNull(),
+    reason: text("reason").notNull(),
+    /** Null for system events (seed). */
+    actorId: uuid("actor_id").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("remittance_events_remittance_idx").on(t.tenantId, t.remittanceId, t.createdAt),
+    foreignKey({
+      name: "remittance_events_remittance_fk",
+      columns: [t.tenantId, t.remittanceId],
+      foreignColumns: [remittances.tenantId, remittances.id],
+    }),
+  ],
+);
+
+export const promptPayResponseKindEnum = pgEnum("prompt_pay_response_kind", ["payment", "denial", "contest"]);
+
+/**
+ * Payer responses on a claim's Florida prompt-pay clock (R-3.1.1): payments and denials from posted
+ * remittances, contests recorded by a person. Append-only; a mistake is corrected by a new row that
+ * voids the earlier one ("recorded in error"), so the clock's history is never lost.
+ */
+export const promptPayResponses = pgTable(
+  "prompt_pay_responses",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    claimId: uuid("claim_id").notNull(),
+    kind: promptPayResponseKindEnum("kind").notNull(),
+    responseDate: date("response_date", { mode: "string" }).notNull(),
+    cents: cents("cents").notNull().default(0),
+    remittanceId: uuid("remittance_id"),
+    note: text("note"),
+    /** Set on a correction row: the response it marks as recorded in error. */
+    voidsResponseId: uuid("voids_response_id"),
+    /** Null for responses recorded by the system (remittance posting by seed). */
+    recordedBy: uuid("recorded_by").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("prompt_pay_responses_tenant_id_key").on(t.tenantId, t.id),
+    uniqueIndex("prompt_pay_responses_voids_key").on(t.tenantId, t.voidsResponseId),
+    index("prompt_pay_responses_claim_idx").on(t.tenantId, t.claimId, t.responseDate),
+    foreignKey({
+      name: "prompt_pay_responses_claim_fk",
+      columns: [t.tenantId, t.claimId],
+      foreignColumns: [claims.tenantId, claims.id],
+    }),
+    foreignKey({
+      name: "prompt_pay_responses_remittance_fk",
+      columns: [t.tenantId, t.remittanceId],
+      foreignColumns: [remittances.tenantId, remittances.id],
+    }),
+    foreignKey({
+      name: "prompt_pay_responses_voids_fk",
+      columns: [t.tenantId, t.voidsResponseId],
+      foreignColumns: [t.tenantId, t.id],
+    }),
+  ],
 );
 
 // ---------------------------------------------------------------------------------------------

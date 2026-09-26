@@ -71,7 +71,17 @@ export type AuditAction =
   | "settings.custom_field_created"
   | "settings.custom_field_updated"
   | "settings.custom_field_deactivated"
-  | "settings.custom_field_reactivated";
+  | "settings.custom_field_reactivated"
+  | "remittance.list_viewed"
+  | "remittance.uploaded"
+  | "remittance.upload_rejected"
+  | "remittance.viewed"
+  | "remittance.posted"
+  | "remittance.voided"
+  | "prompt_pay.list_viewed"
+  | "prompt_pay.viewed"
+  | "prompt_pay.response_recorded"
+  | "prompt_pay.response_voided";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
@@ -99,7 +109,9 @@ export interface AuditEvent {
     | "rcm_file"
     | "rcm_voucher"
     | "rcm_deposit_file"
-    | "custom_field";
+    | "custom_field"
+    | "remittance"
+    | "prompt_pay_response";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;

@@ -94,3 +94,27 @@ describe("correction input bounds", () => {
     expect(splitCodes("A,".repeat(1_000_000)).length).toBeLessThanOrEqual(100);
   });
 });
+
+describe("posting history (status and paid amount)", () => {
+  it("names status and paid changes and labels them for the history", () => {
+    const before = snapshotOf(
+      { serviceDate: "2026-01-02", diagnosisCodes: ["E11.9"], billedCents: 10_000, status: "acknowledged" },
+      [],
+    );
+    const after = snapshotOf(
+      {
+        serviceDate: "2026-01-02",
+        diagnosisCodes: ["E11.9"],
+        billedCents: 10_000,
+        status: "paid",
+        paidCents: 8_000,
+      },
+      [],
+    );
+    expect(changedFields(before, after)).toEqual(["status", "paidCents"]);
+    expect(diffSnapshots(before, after)).toEqual([
+      { label: "status", from: "Accepted by payer", to: "Paid" },
+      { label: "paid", from: "$0.00", to: "$80.00" },
+    ]);
+  });
+});
