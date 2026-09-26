@@ -2,11 +2,11 @@
 
 Status: done
 Roadmap item: ERP shell follow-up (`specs/erp-shell.md`)
-Requirement IDs: §11 (usability), R-7.11.5 (trust shown)
+Requirement IDs: §11 (non-functional: usability)
 
 ## Goal
-Clicking the DenialDesk logo opens a welcome page that explains, at a high level, how the platform
-works and where to start.
+The app always opens on a welcome page (the home page, `/`) that explains, at a high level, how the
+platform works and where to start. Sign-in and the logo both land there.
 
 ## User stories
 - As a new practice user, I can see how a claim moves through DenialDesk so I know where to work.
@@ -36,6 +36,9 @@ None. Reads only the session (name, practice). No PHI; no audit event (no PHI re
 
 ## Legal rules used
 None.
+
+## Notes
+On `/` the tab bar falls back to the Denials module with no tab selected (`locate()` finds no item).
 
 ## Out of scope
 Per-user onboarding progress, product tours, marketing content.

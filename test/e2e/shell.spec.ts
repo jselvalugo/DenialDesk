@@ -163,10 +163,10 @@ test.describe("signed in", () => {
 
   test("the logo opens the home page, and /welcome redirects there", async ({ page }) => {
     await page.goto("/welcome");
-    await expect(page).toHaveURL(/\/$/);
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/");
     await page.goto("/claims");
     await page.getByRole("link", { name: "DenialDesk home" }).click();
-    await expect(page).toHaveURL(/\/$/);
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/");
     await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
     for (const name of ["How DenialDesk works", "Your modules", "Safeguards"]) {
       await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();

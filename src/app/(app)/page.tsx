@@ -77,7 +77,7 @@ const SAFEGUARDS: { icon: LucideIcon; title: string; body: string }[] = [
   },
 ];
 
-/** Home: where sign-in and the logo land. a plain-language map of the platform and a way into each module. */
+/** Home: where sign-in and the logo land: a plain-language map of the platform and a way into each module. */
 export default async function HomePage() {
   const auth = await requireAuth();
   const firstName = auth.displayName.trim().split(/\s+/)[0] || auth.displayName;

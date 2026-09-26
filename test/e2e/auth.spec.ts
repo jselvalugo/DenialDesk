@@ -3,8 +3,10 @@ import { base32Decode } from "@/auth/totp";
 import { e2eUser, freshCode, signInWithPassword } from "./support";
 
 test("signed-out visitors are sent to sign-in", async ({ page }) => {
-  await page.goto("/denials");
-  await expect(page).toHaveURL(/\/login$/);
+  for (const path of ["/", "/overview", "/denials"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/login$/);
+  }
 });
 
 test("a wrong password shows a generic error", async ({ page }) => {
