@@ -43,7 +43,7 @@ export const navigation: NavSection[] = [
   {
     label: "Claims",
     items: [
-      { label: "Claims", href: "/claims", icon: FileText, available: false },
+      { label: "Claims", href: "/claims", icon: FileText, available: true },
       { label: "Remittances", href: "/remittances", icon: Receipt, available: false },
       { label: "Prompt pay", href: "/prompt-pay", icon: Scale, available: false },
     ],

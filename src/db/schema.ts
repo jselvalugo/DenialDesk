@@ -4,6 +4,7 @@ import {
   bigserial,
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -228,11 +229,15 @@ export const claims = pgTable(
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     /** Payer receipt date from the 277CA; starts the Florida prompt-pay clock (R-3.1.1). */
     payerReceivedDate: date("payer_received_date", { mode: "string" }),
+    /** Current version; a trigger requires a matching claim_versions row for billed changes (R-3.10.3). */
+    version: integer("version").notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     uniqueIndex("claims_tenant_number_key").on(t.tenantId, t.claimNumber),
+    // Target of tenant-scoped foreign keys (FKs bypass RLS, so the tenant is part of the key).
+    uniqueIndex("claims_tenant_id_key").on(t.tenantId, t.id),
     index("claims_tenant_payer_idx").on(t.tenantId, t.payerId),
   ],
 );
@@ -255,6 +260,50 @@ export const claimLines = pgTable(
     chargeCents: cents("charge_cents").notNull(),
   },
   (t) => [uniqueIndex("claim_lines_claim_line_key").on(t.claimId, t.lineNumber)],
+);
+
+/** What a claim version records: billed content only, no patient demographics. */
+export interface ClaimSnapshot {
+  serviceDate: string;
+  diagnosisCodes: string[];
+  billedCents: number;
+  status: string;
+  lines: {
+    lineNumber: number;
+    procedureCode: string;
+    modifiers: string[];
+    units: number;
+    chargeCents: number;
+  }[];
+}
+
+/** Immutable claim history (R-3.10.3): insert and read only for the app role. */
+export const claimVersions = pgTable(
+  "claim_versions",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    claimId: uuid("claim_id").notNull(),
+    version: integer("version").notNull(),
+    snapshot: jsonb("snapshot").$type<ClaimSnapshot>().notNull(),
+    changedFields: text("changed_fields")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    reason: text("reason").notNull(),
+    /** Null for versions created by the system (seed, import). */
+    changedBy: uuid("changed_by").references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("claim_versions_claim_version_key").on(t.tenantId, t.claimId, t.version),
+    // A version can only point at a claim of the same practice.
+    foreignKey({
+      name: "claim_versions_claim_fk",
+      columns: [t.tenantId, t.claimId],
+      foreignColumns: [claims.tenantId, claims.id],
+    }),
+  ],
 );
 
 // ---------------------------------------------------------------------------------------------
