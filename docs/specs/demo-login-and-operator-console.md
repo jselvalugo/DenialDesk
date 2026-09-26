@@ -69,7 +69,7 @@ practices (retention/legal hold, R-9.2), Netlify deploy management (stays in Net
 ## Open decisions (human)
 - Demo visitors share one guest account with the manager role, so they can add notes others see.
   Options: keep (interactive demo, warning shown), make demo read-only, or one demo per visitor.
-- Rate limiting on the public demo button (today: unauthenticated, not rate-limited).
+- ~~Rate limiting on the public demo button~~ — done: 10 per network per 10 minutes (`docs/specs/rate-limiting.md`).
 
 ## Test evidence
 - Unit: operator check (configured email, case-insensitive; rejects demo sessions, demo guests, unset config).
