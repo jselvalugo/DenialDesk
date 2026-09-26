@@ -115,7 +115,12 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
         </nav>
       </div>
 
-      <ModuleSwitcher apps={apps} open={switcherOpen} onClose={() => setSwitcherOpen(false)} />
+      <ModuleSwitcher
+        apps={apps}
+        currentId={app.id}
+        open={switcherOpen}
+        onClose={() => setSwitcherOpen(false)}
+      />
     </header>
   );
 }
