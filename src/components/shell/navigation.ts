@@ -90,8 +90,8 @@ export function navApps({
         { label: "A/R aging", href: "/revenue-cycle/ar-aging", icon: Hourglass, available: true },
         { label: "Deposits", href: "/revenue-cycle/deposits", icon: Landmark, available: true },
         { label: "Rules and ledger", href: "/revenue-cycle/rules", icon: BookOpenCheck, available: true },
-        { label: "RCM dashboard", href: "/revenue-cycle/dashboard", icon: LineChart, available: false },
-        { label: "Statements", href: "/revenue-cycle/statements", icon: PieChart, available: false },
+        { label: "RCM dashboard", href: "/revenue-cycle/dashboard", icon: LineChart, available: true },
+        { label: "Statements", href: "/revenue-cycle/statements", icon: PieChart, available: true },
       ],
     });
   }

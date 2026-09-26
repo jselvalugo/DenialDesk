@@ -44,7 +44,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 ## Next up
 0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger, B2 monthly file
    import, C0 (own design: month-end activity file, routing-only rules), B3 journal vouchers, and
-   B4 aging/deposits/reconciliation done; next B5 statements and dashboard (denial tie-ins).
+   B4 aging/deposits/reconciliation, and B5 statements and RCM dashboard (denial tie-ins by
+   payer-class regime) done; the module's planned phases are complete. Follow-ups: coded reasons
+   for deposit reversals, credit-balance refund tracking (roadmap), multi-account deposits.
 1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
@@ -66,6 +68,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Revenue cycle: the starter chart of accounts and payer-class codes are illustrative; each practice
   maps them to its own GL and PM financial classes (rule/GL editing UI needs version history first).
   Accountant to confirm the net-revenue presentation (posted write-offs vs. GAAP price concessions).
+  The Statements page and dashboard are labelled a management view until that review.
+- Revenue cycle deposits: the database owner role can still modify deposit rows (insert-only
+  applies to the app role). Accept the risk or add a guard trigger? Owner decision.
 - Git history still contains the reference prototype's names from before C0. Rewrite history
   (force-push of the default branch), or leave it? Owner decision.
 - Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must

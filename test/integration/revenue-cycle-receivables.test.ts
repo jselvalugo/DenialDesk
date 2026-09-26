@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase } from "@/db/client";
 import { auditEvents, rcmClaimLines, rcmDepositFiles, rcmDeposits } from "@/db/schema";
@@ -12,6 +12,7 @@ import {
   monthsWithoutDeposits,
   receivablesReport,
   reverseDepositFile,
+  reverseDepositsFor,
 } from "@/domain/revenue-cycle/receivables";
 import type { Actor } from "@/domain/revenue-cycle/vouchers";
 import { generateDataset } from "@/domain/synthetic/generator";
@@ -137,7 +138,7 @@ describe("importDeposits", () => {
       withTenant(a.manager, (tx) =>
         reverseDepositFile(tx, a.manager, earlier!.id, "Imported the wrong export"),
       ),
-    ).rejects.toThrow(/Only administrators/);
+    ).rejects.toMatchObject({ message: /Only administrators/, code: "forbidden" });
     const reversalId = await withTenant(a.admin, (tx) =>
       reverseDepositFile(tx, a.admin, earlier!.id, "Imported the wrong export"),
     );
@@ -147,7 +148,7 @@ describe("importDeposits", () => {
     expect(rows.map((r) => r.amountCents).sort((x, y) => x - y)).toEqual([-12_500, 500]);
     await expect(
       withTenant(a.admin, (tx) => reverseDepositFile(tx, a.admin, earlier!.id, "Imported the wrong export")),
-    ).rejects.toThrow(/already reversed/);
+    ).rejects.toMatchObject({ message: /already reversed/, code: "already_reversed" });
     const [event] = await withTenant(a.admin, (tx) =>
       tx
         .select()
@@ -155,7 +156,14 @@ describe("importDeposits", () => {
         .where(and(eq(auditEvents.entityId, earlier!.id), eq(auditEvents.action, "rcm.deposits_reversed"))),
     );
     expect(event!.metadata).toMatchObject({ reversalFileId: reversalId, rows: 2 });
-    // Now the corrected export imports.
+    // The reversed file itself stays refused; only a corrected export imports.
+    const original = [
+      { rowNumber: 2, depositDate: "2026-03-02", amountCents: 12_500 },
+      { rowNumber: 3, depositDate: "2026-03-03", amountCents: -500 },
+    ];
+    await expect(withTenant(a.manager, (tx) => importDeposits(tx, a.manager, original))).rejects.toThrow(
+      /reversed file can't be imported again/,
+    );
     await withTenant(a.manager, (tx) => importDeposits(tx, a.manager, march));
   });
 
@@ -170,6 +178,36 @@ describe("importDeposits", () => {
     await expect(
       withTenant(a.manager, (tx) => importDeposits(tx, a.manager, [{ ...one[0]!, amountCents: 1.5 }])),
     ).rejects.toThrow(/whole/);
+  });
+});
+
+describe("reverseDepositsFor", () => {
+  it("audits every refusal with a coded reason and the file ID", async () => {
+    const refusals = () =>
+      withTenant(a.admin, (tx) =>
+        tx
+          .select({ entityId: auditEvents.entityId, metadata: auditEvents.metadata })
+          .from(auditEvents)
+          .where(eq(auditEvents.action, "rcm.deposits_rejected"))
+          .orderBy(auditEvents.id),
+      );
+    const before = (await refusals()).length;
+    const [file] = await withTenant(a.admin, (tx) =>
+      tx.select().from(rcmDepositFiles).where(isNull(rcmDepositFiles.reversesFileId)).limit(1),
+    );
+    const reason = "Imported the wrong export";
+    const unknown = "00000000-0000-4000-8000-000000000000";
+    expect(await reverseDepositsFor(a.manager, file!.id, reason)).toMatchObject({ ok: false });
+    expect(await reverseDepositsFor(a.admin, file!.id, "short")).toMatchObject({ ok: false });
+    expect(await reverseDepositsFor(a.admin, unknown, reason)).toMatchObject({ ok: false });
+    expect(await reverseDepositsFor(a.admin, "not-a-uuid", reason)).toMatchObject({ ok: false });
+    const rows = (await refusals()).slice(before);
+    expect(rows.map((r) => [r.entityId, r.metadata])).toEqual([
+      [file!.id, { reason: "forbidden", operation: "reverse" }],
+      [file!.id, { reason: "reason_length", operation: "reverse" }],
+      [unknown, { reason: "not_found", operation: "reverse" }],
+      [null, { reason: "bad_id", operation: "reverse" }],
+    ]);
   });
 });
 

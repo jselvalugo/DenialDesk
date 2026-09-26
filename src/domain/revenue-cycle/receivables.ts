@@ -1,9 +1,10 @@
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { canConfigureRevenueCycle, canRunRevenueCycle } from "@/auth/permissions";
-import type { TenantTx } from "@/db/tenant";
+import { withTenant, type TenantTx } from "@/db/tenant";
 import { rcmClaimLines, rcmDepositFiles, rcmDeposits, rcmFiles, users } from "@/db/schema";
-import { audit } from "@/lib/audit";
+import { audit, auditSystem } from "@/lib/audit";
+import { z } from "zod";
 import { createHash } from "node:crypto";
 import { ageReceivables, reconcileDeposits, rollForward, type BucketKey, type DepositLine } from "./aging";
 import { periodEnd } from "./monthly-file";
@@ -13,7 +14,15 @@ import type { Actor } from "./vouchers";
 // A/R aging, roll-forward, and deposits (docs/specs/revenue-cycle-accounting.md, B4). Reports
 // hold totals only; deposit imports are audited with counts.
 
-export class DepositError extends Error {}
+/** A refused deposit operation; `code` is safe to audit (the message is shown to the user). */
+export class DepositError extends Error {
+  constructor(
+    message: string,
+    readonly code = "refused",
+  ) {
+    super(message);
+  }
+}
 
 /** Stores a parsed deposit file in the caller's transaction and audits it (counts only). */
 export async function importDeposits(tx: TenantTx, actor: Actor, deposits: DepositLine[]): Promise<string> {
@@ -36,7 +45,10 @@ export async function importDeposits(tx: TenantTx, actor: Actor, deposits: Depos
     .from(rcmDepositFiles)
     .where(and(eq(rcmDepositFiles.contentHash, contentHash), isNull(rcmDepositFiles.reversesFileId)))
     .limit(1);
-  if (existing) throw new DepositError("This deposit file was already imported.");
+  if (existing)
+    throw new DepositError(
+      "This exact deposit file was already imported. A reversed file can't be imported again; import the corrected export instead.",
+    );
   // Bank exports often cover overlapping ranges; importing one twice would double deposits.
   const reversed = tx
     .select({ id: rcmDepositFiles.reversesFileId })
@@ -100,20 +112,20 @@ export async function importDeposits(tx: TenantTx, actor: Actor, deposits: Depos
  */
 export async function reverseDepositFile(tx: TenantTx, actor: Actor, fileId: string, reason: string) {
   if (!canConfigureRevenueCycle(actor.role))
-    throw new DepositError("Only administrators can reverse deposit files.");
+    throw new DepositError("Only administrators can reverse deposit files.", "forbidden");
   const trimmed = reason.trim();
   if (trimmed.length < 10 || trimmed.length > 500)
-    throw new DepositError("Give a reason of 10 to 500 characters.");
+    throw new DepositError("Give a reason of 10 to 500 characters.", "reason_length");
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`rcm_deposits:${actor.tenantId}`}))`);
   const [file] = await tx.select().from(rcmDepositFiles).where(eq(rcmDepositFiles.id, fileId)).limit(1);
-  if (!file) throw new DepositError("That deposit file doesn't exist.");
-  if (file.reversesFileId) throw new DepositError("A reversing file can't be reversed.");
+  if (!file) throw new DepositError("That deposit file doesn't exist.", "not_found");
+  if (file.reversesFileId) throw new DepositError("A reversing file can't be reversed.", "is_reversal");
   const [already] = await tx
     .select({ id: rcmDepositFiles.id })
     .from(rcmDepositFiles)
     .where(eq(rcmDepositFiles.reversesFileId, fileId))
     .limit(1);
-  if (already) throw new DepositError("This file was already reversed.");
+  if (already) throw new DepositError("This file was already reversed.", "already_reversed");
   const rows = await tx.select().from(rcmDeposits).where(eq(rcmDeposits.fileId, fileId));
   const [reversal] = await tx
     .insert(rcmDepositFiles)
@@ -268,4 +280,34 @@ export async function monthsWithoutDeposits(tx: TenantTx) {
       periodMonth: p.periodMonth,
       paymentsCents: payments.get(p.fileId)!,
     }));
+}
+
+/**
+ * Reverses a deposit file in its own transaction for a signed-in user. A refusal rolls that
+ * transaction back, so it is audited separately with a coded reason and the file ID (R-7.5.1).
+ */
+export async function reverseDepositsFor(
+  actor: Actor,
+  fileId: unknown,
+  reason: string,
+): Promise<{ ok: true; reversalId: string } | { ok: false; error: string }> {
+  const id = z.uuid().safeParse(fileId);
+  const refused = async (code: string, error: string) => {
+    await auditSystem({
+      action: "rcm.deposits_rejected",
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      ...(id.success ? { entityType: "rcm_deposit_file" as const, entityId: id.data } : {}),
+      metadata: { reason: code, operation: "reverse" },
+    });
+    return { ok: false as const, error };
+  };
+  if (!id.success) return refused("bad_id", "That deposit file doesn't exist.");
+  try {
+    const reversalId = await withTenant(actor, (tx) => reverseDepositFile(tx, actor, id.data, reason));
+    return { ok: true, reversalId };
+  } catch (error) {
+    if (!(error instanceof DepositError)) throw error;
+    return refused(error.code, error.message);
+  }
 }

@@ -197,6 +197,42 @@ test.describe("receivables and deposits", () => {
   });
 });
 
+test.describe("statements and dashboard", () => {
+  test("the demo dashboard shows key figures and the statements net revenue by account", async ({ page }) => {
+    await openDemo(page);
+    await openFromLauncher(page, "RCM dashboard");
+    // Inside the Revenue cycle app its pages are tabs.
+    const nav = page.getByRole("navigation", { name: "Primary" });
+    await expect(page.getByRole("heading", { level: 1, name: "RCM dashboard" })).toBeVisible();
+    const figures = page.getByRole("region", { name: "Key figures" });
+    for (const label of ["Net revenue", "Payments", "Open A/R", "Days in A/R", "Net collection rate"]) {
+      await expect(figures).toContainText(label);
+    }
+    await expect(page.getByRole("list", { name: "Net revenue by month" }).getByRole("listitem")).toHaveCount(
+      3,
+    );
+
+    await nav.getByRole("link", { name: "Statements" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Statements" })).toBeVisible();
+    const income = page.getByRole("table", { name: "Income statement by month" });
+    await expect(income.getByRole("cell", { name: "Net revenue", exact: true })).toBeVisible();
+    await expect(income).toContainText("4000");
+    await expect(page.getByRole("table", { name: "Receivables by account" })).toContainText("1200");
+    await expect(page.getByRole("table", { name: "Cash by month" })).toBeVisible();
+  });
+
+  test.describe("as compliance (read-only)", () => {
+    test.use({ storageState: "test/e2e/.auth/viewer.json" });
+
+    test("can review the dashboard and statements", async ({ page }) => {
+      await page.goto("/revenue-cycle/dashboard");
+      await expect(page.getByRole("heading", { level: 1, name: "RCM dashboard" })).toBeVisible();
+      await page.goto("/revenue-cycle/statements");
+      await expect(page.getByRole("heading", { level: 1, name: "Statements" })).toBeVisible();
+    });
+  });
+});
+
 test.describe("revenue cycle as a denial specialist", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
@@ -214,6 +250,8 @@ test.describe("revenue cycle as a denial specialist", () => {
     expect((await page.goto("/revenue-cycle/journal"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/ar-aging"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/deposits"))?.status()).toBe(404);
+    expect((await page.goto("/revenue-cycle/dashboard"))?.status()).toBe(404);
+    expect((await page.goto("/revenue-cycle/statements"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/rules"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/files"))?.status()).toBe(404);
     expect((await page.request.get("/api/revenue-cycle/sample-file")).status()).toBe(404);
