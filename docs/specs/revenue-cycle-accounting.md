@@ -162,8 +162,8 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       site detected from the facility name, else a chosen default site (validated in-tenant);
       control totals stored on the file and proven equal to the lines. Import (admin, manager) and
       view (admin, manager, compliance) audited with IDs and counts only. Synthetic sample file
-      download (pre-production only) and last month's synthetic file seeded with every demo
-      practice. Strict money, unambiguous headers, physical line numbers; generic stored file name
+      download (pre-production only) and last month's synthetic file seeded with every sample
+      practice (seed endpoint, e2e). Strict money, unambiguous headers, physical line numbers; generic stored file name
       (uploaded names can hold PHI); service dates after the period flagged; compliance sees masked
       names and accounts. Threat model: `docs/threat-models/revenue-cycle-imports.md`.
       **Account number must be the practice account number, never an insurance member ID** (member IDs
@@ -175,8 +175,8 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       `review_reasons` on lines (DB-checked vocabulary); starter chart, classes, and three rules;
       a month-by-month synthetic simulation (lagged adjudication, patient balances, later voids,
       invalid codes paid later) whose files roll forward exactly; three consecutive months seeded
-      per demo practice. Practices seeded earlier keep their stored rules and version-1 files;
-      reset pre-production demo practices from the operator console (`docs/runbooks/netlify.md`).
+      per seeded sample practice. Practices seeded earlier keep their stored rules and version-1
+      files (the one-click demo and its console reset were removed 2026-09-26).
 - [x] **B3** (2026-09-26): `rcm_journal_vouchers` + `rcm_journal_lines` (FORCE RLS, no DELETE,
       tenant-scoped foreign keys). Lines insert-only and only into a draft (trigger). Vouchers
       update only workflow columns (column grant), forward only (draft → approved → exported;
@@ -191,8 +191,8 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       backfilled for existing practices) receives payments. Export is a server action returning
       the CSV (origin-checked, no GET side effects). The first imported month takes opening
       balances from the practice's GL; a later month whose prior month is missing fails check 3.
-      Demo practices get last month's draft prepared by a synthetic manager so the guest can
-      approve it. B4's roll-forward only reports; the voucher is what blocks a file that doesn't
+      Seeded sample practices get last month's draft prepared by a synthetic manager so another
+      manager can approve it. B4's roll-forward only reports; the voucher is what blocks a file that doesn't
       roll forward. Preparer may export an approved voucher (approval is the second person).
 - [x] **B4** (2026-09-26): pure `aging.ts` (buckets 0–30/31–60/61–90/91–120/over 120 from
       service date to month-end, credit balances apart; roll-forward that reports differences;
@@ -207,7 +207,7 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       marked synthetic deposit files only, with an attestation (ADR 0003). A/R aging page (month
       links, class × age table, age bars with text values, credit balances, roll-forward, payments
       and deposits; each view audited as `rcm.report_viewed`) and Deposits page (import, reverse,
-      synthetic sample only for months without deposits). Demo practices get synthetic deposits
+      synthetic sample only for months without deposits). Seeded sample practices get synthetic deposits
       with a realistic lag. Reports show totals only; they're built from PHI lines, so views
       are audited.
       Known limitations: the overlap rule assumes one bank account (a second account's deposits

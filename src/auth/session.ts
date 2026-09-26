@@ -213,12 +213,20 @@ export const requireAuth = cache(async (): Promise<AuthContext> => {
     .where(and(eq(memberships.userId, session.userId), eq(memberships.tenantId, session.tenantId)))
     .limit(1);
   if (!membership) redirect("/login?error=no-practice");
-  // The one-click demo was removed (2026-09-26): any leftover demo session ends here.
+  // The one-click demo was removed (2026-09-26): any leftover demo session ends here, audited.
   if (session.authMethod === "demo") {
     await systemDb()
       .update(sessions)
       .set({ revokedAt: new Date() })
       .where(eq(sessions.id, session.sessionId));
+    await auditSystem({
+      action: "auth.session_revoked",
+      actorUserId: session.userId,
+      tenantId: session.tenantId,
+      entityType: "session",
+      entityId: session.sessionId,
+      metadata: { reason: "demo_retired" },
+    });
     redirect("/login");
   }
   if (membership.suspendedAt) {

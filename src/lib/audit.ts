@@ -15,6 +15,7 @@ export type AuditAction =
   | "auth.mfa_failed"
   | "auth.logout"
   | "auth.session_expired"
+  | "auth.session_revoked"
   | "auth.session_replaced"
   | "denial.queue_viewed"
   | "denial.viewed"
@@ -45,6 +46,7 @@ export type AuditAction =
   | "operator.credential_provisioned"
   | "operator.credential_rotated"
   | "operator.credential_refused"
+  | "system.demo_retired"
   | "operator.practice_created"
   | "operator.practice_suspended"
   | "operator.practice_reactivated"
@@ -61,6 +63,17 @@ export type AuditAction =
   | "rcm.deposits_rejected"
   | "rcm.deposits_reversed"
   | "rcm.report_viewed";
+
+/**
+ * Actions no longer written, which still appear in older audit rows (the log is append-only).
+ * Kept so future audit viewers and exports can label them (e.g. accounting of disclosures).
+ */
+export const RETIRED_AUDIT_ACTIONS = {
+  "auth.demo_login": "One-click demo sign-in (demo removed 2026-09-26)",
+  "operator.demo_reset": "Demo practice reset by the operator (demo removed 2026-09-26)",
+  "operator.setup_completed": "Operator account set up on the setup page (removed 2026-09-26)",
+  "operator.setup_failed": "Operator setup page refusal (removed 2026-09-26)",
+} as const;
 
 export interface AuditEvent {
   action: AuditAction;

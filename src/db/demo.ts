@@ -8,6 +8,8 @@ import { systemDb } from "./client";
 import { memberships, sessions, tenants, users } from "./schema";
 import { seedPractice } from "./seed";
 
+// Historical name: this seeds the synthetic *sample* practice (Coral Bay), not the removed one-click
+// demo. Sign-in is a normal practice account with password + MFA.
 export const DEMO_PRACTICE = "Coral Bay Physicians (synthetic)";
 
 /**

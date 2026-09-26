@@ -5,7 +5,7 @@ Roadmap item: Security hardening (REQUIREMENTS §7.4)
 Requirement IDs: R-7.4.7, R-7.2.2, R-15.1
 
 ## Goal
-No single network can hammer the public demo button or try passwords and codes at scale.
+No single network can try passwords and codes at scale (the public demo button it also covered was removed 2026-09-26).
 
 ## Acceptance criteria
 - [x] Fixed-window limits per client network (IP), stored in PostgreSQL so they hold across

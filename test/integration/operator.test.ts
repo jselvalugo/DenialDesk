@@ -84,7 +84,10 @@ describe("suspension", () => {
 
   it("only suspends customer practices (legacy demo practices stay archived)", async () => {
     const legacy = await createTestTenant("Legacy demo practice (synthetic)");
-    await systemDb().update(tenants).set({ kind: "demo" }).where(eq(tenants.id, legacy.tenantId));
+    await systemDb()
+      .update(tenants)
+      .set({ kind: "demo", suspendedAt: new Date() }) // every demo practice is archived now
+      .where(eq(tenants.id, legacy.tenantId));
     await expect(setPracticeSuspended(legacy.tenantId, true, operator)).rejects.toBeInstanceOf(PracticeError);
   });
 });

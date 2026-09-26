@@ -45,13 +45,13 @@ export const tenants = pgTable(
   {
     id: id(),
     name: text("name").notNull(),
-    /** "demo" = synthetic demo practice for the preview's one-click demo login. */
+    /** "demo" = legacy one-click demo practice (removed 2026-09-26; archived rows only). */
     kind: tenantKindEnum("kind").notNull().default("customer"),
     /** Set by the platform operator; blocks sign-in and existing sessions for the practice. */
     suspendedAt: timestamp("suspended_at", { withTimezone: true }),
     createdAt: createdAt(),
   },
-  // At most one active demo practice, so concurrent first demo clicks can't each create one.
+  // Legacy: at most one active demo practice (none can be created since the demo was removed).
   (t) => [
     uniqueIndex("tenants_one_active_demo")
       .on(t.kind)
@@ -104,8 +104,8 @@ export const sessions = pgTable(
     tenantId: uuid("tenant_id").references(() => tenants.id),
     mfaVerified: boolean("mfa_verified").notNull().default(false),
     /**
-     * How the session was established. "demo" sessions skip MFA and are limited to the demo practice;
-     * "operator" sessions are the platform console's own (no practice, separate cookie).
+     * How the session was established. "demo" is legacy (the demo was removed; such sessions are
+     * ended on sight); "operator" sessions are the platform console's own (no practice, separate cookie).
      */
     authMethod: text("auth_method", { enum: ["password_mfa", "demo", "operator"] })
       .notNull()

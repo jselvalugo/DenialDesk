@@ -148,6 +148,13 @@
       "when": 1790442941005,
       "tag": "0020_remove_demo",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790443487976,
+      "tag": "0021_retire_demo_accounts",
+      "breakpoints": true
     }
   ]
 }

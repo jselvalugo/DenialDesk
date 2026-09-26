@@ -9,7 +9,7 @@ import { withTenant } from "@/db/tenant";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { auditSystem } from "@/lib/audit";
 
-// Platform operator actions (spec: docs/specs/demo-login-and-operator-console.md).
+// Platform operator actions (specs: docs/specs/operator-login.md, demo-login-and-operator-console.md).
 // Practice-level metadata and counts only; never patient or claim data.
 
 export interface PracticeSummary {

@@ -34,8 +34,8 @@ import {
 export type { FormState };
 
 /**
- * Ends the browser's current session, if any, before a new one replaces it (e.g. the owner signing
- * in from a browser that explored the demo). Runs only after a correct password, so a wrong one
+ * Ends the browser's current session, if any, before a new one replaces it (e.g. someone else's
+ * half-finished sign-in on a shared computer). Runs only after a correct password, so a wrong one
  * never ends the existing session. Audited so every session has a recorded end.
  */
 async function replacePreviousSession(actorUserId: string): Promise<void> {
@@ -185,7 +185,8 @@ export async function signOut(): Promise<void> {
 /** "Stay signed in" from the session-timeout warning. */
 export async function keepSessionAlive(): Promise<boolean> {
   const session = await getSession();
-  if (!session?.mfaVerified) return false;
+  // A leftover demo session (the demo was removed) is never extended.
+  if (!session?.mfaVerified || session.authMethod === "demo") return false;
   await touchSession(session.sessionId);
   return true;
 }
