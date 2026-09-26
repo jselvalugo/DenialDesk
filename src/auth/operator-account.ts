@@ -78,24 +78,49 @@ function warnUnusable(hash: string, status: "malformed" | "test_hash"): void {
   log.warn("operator.credential_unusable", { status });
 }
 
+/**
+ * Why the configured PLATFORM_OPERATOR_PASSWORD_HASH can or can't be used. `test_hash` is the public
+ * e2e hash, refused on Netlify and in production.
+ */
+export type HashStatus = "usable" | "missing" | "malformed" | "test_hash";
+
+function classifyConfiguredHash(): { status: HashStatus; hash: string } {
+  const hash = process.env.PLATFORM_OPERATOR_PASSWORD_HASH?.trim() ?? "";
+  if (!hash) return { status: "missing", hash };
+  if (!wellFormed(hash)) return { status: "malformed", hash };
+  if ((isProduction() || onNetlify()) && sha256(hash) === PUBLIC_TEST_HASH_FINGERPRINT) {
+    return { status: "test_hash", hash };
+  }
+  return { status: "usable", hash };
+}
+
 /** The operator's password hash from infrastructure configuration, or null if unset or unusable. */
 export function configuredOperatorHash(): string | null {
-  const hash = process.env.PLATFORM_OPERATOR_PASSWORD_HASH?.trim();
-  if (!hash) return null;
-  if (!wellFormed(hash)) {
-    warnUnusable(hash, "malformed");
-    return null;
-  }
-  if ((isProduction() || onNetlify()) && sha256(hash) === PUBLIC_TEST_HASH_FINGERPRINT) {
-    warnUnusable(hash, "test_hash");
-    return null;
-  }
-  return hash;
+  const { status, hash } = classifyConfiguredHash();
+  if (status === "usable") return hash;
+  if (status !== "missing") warnUnusable(hash, status);
+  return null;
 }
 
 /** Both the operator email and a usable password hash are configured. */
 export function operatorConfigured(): boolean {
   return operatorEmail() !== null && configuredOperatorHash() !== null;
+}
+
+export interface OperatorConfigurationStatus {
+  email: "set" | "missing";
+  passwordHash: HashStatus;
+}
+
+/**
+ * What is wrong with the operator configuration, for the operator alone (the server log and the
+ * pre-production status endpoint): never the values, nothing derived from them.
+ */
+export function operatorConfigurationStatus(): OperatorConfigurationStatus {
+  return {
+    email: operatorEmail() === null ? "missing" : "set",
+    passwordHash: classifyConfiguredHash().status,
+  };
 }
 
 /**
@@ -121,7 +146,9 @@ export const usableSync = (result: SyncResult) =>
  * configuration as the source (no user actor; the request IP is only what triggered the sync).
  * Cheap when nothing changed (one indexed lookup), so it runs on every console request and sign-in.
  */
-export async function syncOperatorAccount(trigger: "sign_in" | "console_request"): Promise<SyncResult> {
+export type SyncTrigger = "sign_in" | "console_request" | "status_check";
+
+export async function syncOperatorAccount(trigger: SyncTrigger): Promise<SyncResult> {
   const email = operatorEmail();
   const hash = configuredOperatorHash();
   if (!email || !hash) return "unconfigured";

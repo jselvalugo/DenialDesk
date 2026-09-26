@@ -83,6 +83,33 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   under 16 characters for the operator account. If the password itself was pasted, treat it as
   exposed (it sits in Netlify's configuration and history): choose a new password when you re-run
   `pnpm operator:credential`.
+- **Operator sign-in shows the generic error ("Email or password is incorrect, or the account is
+  temporarily locked"):** the page never says why (no account enumeration), but two places do.
+  1. One request, from your own machine (`SEED_TOKEN` is the seed endpoint's token in Netlify):
+     ```bash
+     curl -H "Authorization: Bearer $SEED_TOKEN" https://denialdesk.netlify.app/api/preview/operator-status
+     # {"email":"set","passwordHash":"usable","account":"current","locked":false}
+     ```
+     | Field | Value | Meaning / fix |
+     |---|---|---|
+     | `email` | `missing` | `PLATFORM_OPERATOR_EMAIL` isn't reaching the running function: set it for the deploy context that is live (Production), scope *Functions*, and redeploy. |
+     | `passwordHash` | `missing` | Same for `PLATFORM_OPERATOR_PASSWORD_HASH`. With "different value per deploy context", check the **Production** value: the live site uses that one. |
+     | `passwordHash` | `malformed` | The value isn't the hash `pnpm operator:credential` prints (it must start with `scrypt$131072$8$1$`, about 127 characters, no spaces). Usually the password itself or a truncated paste; see above, choose a new password. |
+     | `passwordHash` | `test_hash` | The public e2e test hash; make a real one. |
+     | `account` | `refused` | The configured email already belongs to a practice user or a disabled account (e.g. a retired demo admin, or `SEED_ADMIN_EMAIL`). Use an address that has never been a practice user. |
+     | `account` | `retired` | This deployment carries a hash that was already replaced (old deploy link or rollback). Open the current deploy, or set the current hash here. |
+     | `account` | `current` / `provisioned` / `rotated` | Configuration is fine. Then it is the password typed, the email typed (must equal `PLATFORM_OPERATOR_EMAIL`, case doesn't matter), or the lockout below. |
+     | `locked` | `true` | Too many wrong attempts: wait 15 minutes, or replace the hash (a rotation clears the lockout). |
+     The endpoint is 404 in production, without the token or with a wrong one, and allows 5 calls
+     per hour per network. It syncs the account from configuration exactly like a sign-in does.
+  2. The function log (*Logs → Functions → Next.js Server Handler*) shows one
+     `operator.sign_in_refused` line per refused attempt with `status` = `email_missing`,
+     `hash_missing`, `hash_malformed`, `hash_test`, `retired`, `refused`, `unknown_email`,
+     `other_email`, `disabled`, `practice_account`, `locked` or `wrong_password`, and nothing else.
+  Netlify notes: a value marked *secret* must include the **Functions** scope (the UI's default
+  "All scopes" does); a value or scope change reaches running functions only after a redeploy
+  (*Deploys → Trigger deploy*); the Netlify UI never alters `$` characters, but a shell would, so
+  paste the hash in the UI rather than through `netlify env:set` inside double quotes.
 - **Forgotten password or lost authenticator:** run `pnpm operator:credential` again and replace
   `PLATFORM_OPERATOR_PASSWORD_HASH`. The next request applies it: new password, two-step reset, every
   operator session ended (audited as `operator.credential_rotated`). There is no in-app recovery.

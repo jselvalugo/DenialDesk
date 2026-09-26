@@ -17,7 +17,8 @@ vi.mock("@/lib/log", async () => {
   };
 });
 
-const { configuredOperatorHash, operatorConfigured } = await import("./operator-account");
+const { configuredOperatorHash, operatorConfigurationStatus, operatorConfigured } =
+  await import("./operator-account");
 const { hashPassword } = await import("./password");
 const { log } = await import("@/lib/log");
 
@@ -87,6 +88,28 @@ describe("configuredOperatorHash", () => {
   it("is silent when nothing is configured", () => {
     vi.stubEnv("PLATFORM_OPERATOR_PASSWORD_HASH", "");
     expect(configuredOperatorHash()).toBeNull();
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+});
+
+// The status the owner can read (server log, pre-production status endpoint): fixed words only.
+describe("operatorConfigurationStatus", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("names what is missing or unusable, without logging or exposing the values", async () => {
+    const hash = await hashPassword("a synthetic operator passphrase");
+    vi.stubEnv("PLATFORM_OPERATOR_EMAIL", "");
+    vi.stubEnv("PLATFORM_OPERATOR_PASSWORD_HASH", "");
+    expect(operatorConfigurationStatus()).toEqual({ email: "missing", passwordHash: "missing" });
+    vi.stubEnv("PLATFORM_OPERATOR_EMAIL", "operator@synthetic.test");
+    vi.stubEnv("PLATFORM_OPERATOR_PASSWORD_HASH", "Synthetic-Not-A-Hash-2026!");
+    expect(operatorConfigurationStatus()).toEqual({ email: "set", passwordHash: "malformed" });
+    vi.stubEnv("PLATFORM_OPERATOR_PASSWORD_HASH", E2E_OPERATOR_PASSWORD_HASH);
+    vi.stubEnv("NETLIFY", "true");
+    expect(operatorConfigurationStatus()).toEqual({ email: "set", passwordHash: "test_hash" });
+    vi.stubEnv("PLATFORM_OPERATOR_PASSWORD_HASH", ` ${hash}\n`);
+    expect(operatorConfigurationStatus()).toEqual({ email: "set", passwordHash: "usable" });
+    // Reading the status is not a request: only configuredOperatorHash warns.
     expect(log.warn).not.toHaveBeenCalled();
   });
 });

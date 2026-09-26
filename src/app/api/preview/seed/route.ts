@@ -1,8 +1,8 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { SeedRefusedError, seedDemoPractice } from "@/db/demo";
 import { auditSystem } from "@/lib/audit";
 import { isProduction } from "@/lib/env";
 import { limitCurrentRequest } from "@/lib/rate-limit";
+import { authorizedBySeedToken } from "@/lib/seed-token";
 
 // Pre-production only (ADR 0003): seeds the synthetic demo practice where the database is only
 // reachable from inside the platform (Netlify Database). Locked three ways: 404 in production,
@@ -11,22 +11,13 @@ import { limitCurrentRequest } from "@/lib/rate-limit";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const digest = (value: string) => createHash("sha256").update(value).digest();
-
-function authorized(request: Request): boolean {
-  const expected = process.env.SEED_TOKEN;
-  const supplied = request.headers.get("authorization")?.replace(/^Bearer /, "");
-  if (!expected || expected.length < 32 || !supplied) return false;
-  return timingSafeEqual(digest(supplied), digest(expected));
-}
-
 export async function POST(request: Request) {
   if (isProduction()) return new Response(null, { status: 404 });
   const limited = await limitCurrentRequest("seed");
   if (!limited.allowed) {
     return new Response(null, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
   }
-  if (!authorized(request)) return new Response(null, { status: 404 });
+  if (!authorizedBySeedToken(request)) return new Response(null, { status: 404 });
 
   const email = process.env.SEED_ADMIN_EMAIL;
   const password = process.env.SEED_ADMIN_PASSWORD;

@@ -18,7 +18,15 @@ import {
   SIGN_IN_FAILED,
   type FormState,
 } from "./credentials";
-import { isOperatorAccount, syncOperatorAccount, usableSync } from "./operator-account";
+import { log } from "@/lib/log";
+import {
+  isOperatorAccount,
+  isOperatorEmail,
+  operatorConfigurationStatus,
+  syncOperatorAccount,
+  usableSync,
+  type SyncResult,
+} from "./operator-account";
 import { decoyHash, verifyPassword } from "./password";
 import {
   clientIp,
@@ -51,6 +59,28 @@ async function replacePreviousOperatorSession(actorUserId: string): Promise<void
   });
 }
 
+/**
+ * Why a sign-in was refused, for the operator alone (the server log; visitors see only the generic
+ * error). `status` is a fixed word, never the email tried or anything from the configuration, so
+ * the line can't help anyone guess the password or find out who the operator is.
+ */
+function refusalStatus(
+  sync: SyncResult,
+  user: { email: string; disabledAt: Date | null } | undefined,
+  isOperator: boolean,
+): string {
+  if (sync === "unconfigured") {
+    const { email, passwordHash } = operatorConfigurationStatus();
+    if (email === "missing") return "email_missing";
+    return passwordHash === "test_hash" ? "hash_test" : `hash_${passwordHash}`;
+  }
+  if (sync !== "current" && sync !== "provisioned" && sync !== "rotated") return sync;
+  if (!user) return "unknown_email";
+  if (user.disabledAt) return "disabled";
+  if (!isOperatorEmail(user.email)) return "other_email";
+  return isOperator ? "unknown" : "practice_account";
+}
+
 export async function signInOperator(_: FormState, formData: FormData): Promise<FormState> {
   const parsed = loginSchema.safeParse({ email: formData.get("email"), password: formData.get("password") });
   if (!parsed.success) return { error: "Enter your email and password." };
@@ -66,9 +96,12 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
     .where(sql`lower(${users.email}) = lower(${parsed.data.email})`)
     .limit(1);
   // Every account but the operator (and a disabled or practice-linked one) looks unknown here.
-  if (!user || user.disabledAt || !usableSync(sync) || !(await isOperatorAccount(user))) {
+  const isOperator =
+    user !== undefined && !user.disabledAt && usableSync(sync) && (await isOperatorAccount(user));
+  if (!user || !isOperator) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing
     await auditSystem({ action: "operator.login_failed", ipAddress: await clientIp() });
+    log.warn("operator.sign_in_refused", { status: refusalStatus(sync, user, isOperator) });
     return { error: SIGN_IN_FAILED };
   }
   if (!(await reserveAttempt(user.id))) {
@@ -79,10 +112,12 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
       ipAddress: await clientIp(),
       metadata: { locked: true },
     });
+    log.warn("operator.sign_in_refused", { status: "locked" });
     return { error: SIGN_IN_FAILED };
   }
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
     await recordFailure(user.id, "operator.login_failed");
+    log.warn("operator.sign_in_refused", { status: "wrong_password" });
     return { error: SIGN_IN_FAILED };
   }
 
