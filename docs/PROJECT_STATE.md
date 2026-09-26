@@ -23,6 +23,11 @@ _Last updated: 2026-09-26_
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
   login and a platform operator console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
+  The operator account exists only from hosting configuration (`PLATFORM_OPERATOR_PASSWORD_HASH`,
+  made with `pnpm operator:credential`); no page can create or reset it (owner rebaseline 2026-09-26).
+- Next (owner rebaseline): tenancy lifecycle in the console: Pause for non-payment (read-only +
+  export), Suspend for security, Terminate → offboarding (export, legal hold, certified destruction),
+  BAA-on-file gate in production. Demo stays on pre-production only.
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
 - Production branch on Netlify: `claude/quirky-feynman-ufql5a` (default). Each session works on its

@@ -15,6 +15,11 @@ const schema = z.object({
    * console: an account with a practice membership never qualifies (docs/specs/operator-login.md).
    */
   PLATFORM_OPERATOR_EMAIL: z.email().optional(),
+  /**
+   * scrypt hash of the operator's password, from `pnpm operator:credential` (secret). The operator
+   * account exists only as provisioned from this; changing it resets the password and two-step.
+   */
+  PLATFORM_OPERATOR_PASSWORD_HASH: z.string().startsWith("scrypt$").optional(),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

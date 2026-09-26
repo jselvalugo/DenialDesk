@@ -18,10 +18,11 @@ Site: https://denialdesk.netlify.app
   |---|---|
   | `APP_ENV` | `preview` — shows the synthetic-data banner, enables the seed endpoint |
   | `FIELD_ENCRYPTION_KEY` | AES-256 key for member IDs and MFA secrets (secret; pre-prod only) |
-  | `SEED_TOKEN` | Bearer token for the seed endpoint, and the setup code at `/operator/setup` (secret) |
+  | `SEED_TOKEN` | Bearer token for the demo seed endpoint (secret); no operator power |
   | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Admin of the seeded synthetic practice (password secret); not the operator |
   | `DEMO_LOGIN_ENABLED` | `true` shows "Explore the demo practice" on sign-in (ignored in production) |
   | `PLATFORM_OPERATOR_EMAIL` | The operator account for the platform console; an address used only for the console, never a practice user |
+  | `PLATFORM_OPERATOR_PASSWORD_HASH` | The operator's password hash from `pnpm operator:credential` (secret); the only way the operator account is created or reset |
   | `RATE_LIMIT_DEMO` / `RATE_LIMIT_SIGNIN` / `RATE_LIMIT_MFA` | Optional overrides for per-network limits (defaults 10/10 min, 30/15 min, 30/15 min) |
 
   If `APP_ENV` is missing the app still treats itself as non-production — safe by default.
@@ -64,13 +65,13 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   Only the `PLATFORM_OPERATOR_EMAIL` account can use it, with password + two-step verification. That
   account belongs to no practice and can't sign in at `/login`; practice users can't sign in to the console.
   Operator and practice/demo sessions are separate, so one browser can hold both.
-- **Upgrading from before 2026-09-26:** `PLATFORM_OPERATOR_EMAIL` used to equal `SEED_ADMIN_EMAIL`
-  (the demo admin). Change it to a new, console-only address before deploying (the seed endpoint now
-  refuses when the two match), then run `/operator/setup`. The demo admin keeps signing in at `/login`.
-- First time, forgotten password, lockout, or lost authenticator: open `/operator/setup`, enter the
-  operator email and the setup code (`SEED_TOKEN`), and choose a password. This signs the account out
-  everywhere and restarts two-step setup. Pre-production only (404 in production); production
-  access recovery follows the approved access-management procedure.
+- **Operator account (sole administrator):** it exists only from configuration. On your own machine run
+  `pnpm operator:credential`, then set `PLATFORM_OPERATOR_EMAIL` (an address used only for the console,
+  never a practice user and not `SEED_ADMIN_EMAIL`) and `PLATFORM_OPERATOR_PASSWORD_HASH` (secret) in
+  Netlify, and redeploy. Sign in at `/operator/login`; two-step is set up on first sign-in.
+- **Forgotten password or lost authenticator:** run `pnpm operator:credential` again and replace
+  `PLATFORM_OPERATOR_PASSWORD_HASH`. The next request applies it: new password, two-step reset, every
+  operator session ended (audited as `operator.credential_rotated`). There is no in-app recovery.
 
 ## Checks after each deploy
 - `https://denialdesk.netlify.app/api/health` returns `{"status":"ok","appEnv":"preview","db":"up"}`.

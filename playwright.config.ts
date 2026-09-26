@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { E2E_OPERATOR_EMAIL, E2E_OPERATOR_PASSWORD_HASH } from "./test/e2e/operator-credentials";
 
 // Runs against production builds (`pnpm build` first): one server as a preview environment and one
 // as production, so the pre-production guards are tested in both modes (ADR 0003).
@@ -48,9 +49,9 @@ export default defineConfig({
       env: {
         APP_ENV: "preview",
         DEMO_LOGIN_ENABLED: "true",
-        PLATFORM_OPERATOR_EMAIL: "platform-operator@e2e.denialdesk.test",
-        // Operator setup code for this test server only (test/e2e/operator.spec.ts).
-        SEED_TOKEN: "e2e-operator-setup-code-synthetic-0000000000",
+        // Operator provisioned from configuration, as in production (test/e2e/operator-credentials.ts).
+        PLATFORM_OPERATOR_EMAIL: E2E_OPERATOR_EMAIL,
+        PLATFORM_OPERATOR_PASSWORD_HASH: E2E_OPERATOR_PASSWORD_HASH,
       },
     },
     {

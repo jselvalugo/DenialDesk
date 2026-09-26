@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { operatorSetupAllowed } from "@/auth/operator-account";
 import { signInOperator } from "@/auth/operator-actions";
 import { getOperatorSession } from "@/auth/session";
 import { SignInForm } from "@/app/login/SignInForm";
@@ -36,14 +35,6 @@ export default async function OperatorSignInPage({
         submit={signInOperator}
         notice={reason !== undefined && Object.hasOwn(notices, reason) ? notices[reason] : undefined}
       />
-      {operatorSetupAllowed() && (
-        <p className="mt-6 text-label text-muted">
-          First time here, or locked out?{" "}
-          <Link href="/operator/setup" className="font-medium text-link hover:underline">
-            Set up the operator account
-          </Link>
-        </p>
-      )}
     </>
   );
 }

@@ -4,11 +4,11 @@ import { systemDb } from "@/db/client";
 import { memberships, sessions, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import type { TenantTx } from "@/db/tenant";
-import { isOperatorEmail } from "./operator-email";
-import { hashPassword } from "./password";
+import { isOperatorEmail, operatorEmail } from "./operator-email";
 
 // The platform operator account (docs/specs/operator-login.md): the one account whose email is
-// PLATFORM_OPERATOR_EMAIL and that belongs to no practice. It signs in only at /operator/login.
+// PLATFORM_OPERATOR_EMAIL and that belongs to no practice. It signs in only at /operator/login, and
+// it exists only as provisioned from infrastructure configuration (syncOperatorAccount).
 
 export { isOperatorEmail, operatorEmail } from "./operator-email";
 
@@ -30,73 +30,63 @@ export async function isOperatorAccount(user: { id: string; email: string }): Pr
   return isOperatorEmail(user.email) && !(await hasPracticeMembership(user.id));
 }
 
-/**
- * Setup and recovery are allowed only where APP_ENV explicitly says development or preview, so a
- * missing or mistyped APP_ENV never exposes an MFA-resetting path.
- */
-export function operatorSetupAllowed(): boolean {
-  return process.env.APP_ENV === "development" || process.env.APP_ENV === "preview";
+/** The scrypt hash format produced by `pnpm operator:credential` (see src/auth/password.ts). */
+const HASH_FORMAT = /^scrypt\$\d+\$\d+\$\d+\$[A-Za-z0-9_-]{16,}\$[A-Za-z0-9_-]{64,}$/;
+
+/** The operator's password hash from infrastructure configuration, or null if unset or malformed. */
+export function configuredOperatorHash(): string | null {
+  const hash = process.env.PLATFORM_OPERATOR_PASSWORD_HASH?.trim();
+  return hash && HASH_FORMAT.test(hash) ? hash : null;
 }
 
-export type SetupFailure = "not_allowed" | "practice_account" | "disabled" | "conflict";
-
-export class OperatorSetupError extends Error {
-  constructor(
-    message: string,
-    readonly reason: SetupFailure,
-  ) {
-    super(message);
-  }
+/** The console is on only when both the operator email and a well-formed password hash are configured. */
+export function operatorConfigured(): boolean {
+  return operatorEmail() !== null && configuredOperatorHash() !== null;
 }
 
 /**
- * Creates the operator account, or recovers an existing one: new password, two-step enrollment
- * and lockout cleared, every session ended. Pre-production only; the caller checks the setup code.
- * Refuses an email that belongs to a practice account or a disabled account.
+ * Makes the operator account match infrastructure configuration (PLATFORM_OPERATOR_EMAIL and
+ * PLATFORM_OPERATOR_PASSWORD_HASH). No page or endpoint can create or reset the operator: only
+ * whoever controls the hosting configuration can (docs/specs/operator-login.md).
+ *
+ * - No account yet: creates it, practice-free, with the configured hash (two-step set up at first sign-in).
+ * - Hash changed: that is a credential rotation, used for recovery. The new hash applies, two-step
+ *   enrollment and lockout are cleared, and every session of the account ends.
+ * - An account with a practice membership, or a disabled one, is never touched (fail closed).
+ * Cheap when nothing changed (one indexed lookup), so it runs on every console request and sign-in.
  */
-export async function setUpOperatorAccount(input: {
-  email: string;
-  password: string;
-}): Promise<{ userId: string; created: boolean }> {
-  if (!operatorSetupAllowed()) {
-    throw new OperatorSetupError("Operator setup isn't available in this environment.", "not_allowed");
-  }
-  const passwordHash = await hashPassword(input.password);
-  return systemDb()
+export async function syncOperatorAccount(): Promise<void> {
+  const email = operatorEmail();
+  const hash = configuredOperatorHash();
+  if (!email || !hash) return;
+  const [user] = await systemDb()
+    .select({ id: users.id, passwordHash: users.passwordHash, disabledAt: users.disabledAt })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${email}`)
+    .limit(1);
+  if (user?.passwordHash === hash) return;
+  if (user && (user.disabledAt || (await hasPracticeMembership(user.id)))) return;
+
+  await systemDb()
     .transaction(async (tx) => {
-      const [existing] = await tx
-        .select({ id: users.id, disabledAt: users.disabledAt })
-        .from(users)
-        .where(sql`lower(${users.email}) = lower(${input.email})`)
-        .limit(1)
-        // Locks the row so a concurrent membership insert waits until this commits.
-        .for("update");
-      if (existing) {
-        const [membership] = await tx
-          .select({ id: memberships.id })
-          .from(memberships)
-          .where(eq(memberships.userId, existing.id))
-          .limit(1);
-        if (membership) {
-          throw new OperatorSetupError(
-            "That email belongs to a practice account. Set PLATFORM_OPERATOR_EMAIL to an address used only for the platform console.",
-            "practice_account",
-          );
-        }
-        if (existing.disabledAt) throw new OperatorSetupError("That account is disabled.", "disabled");
+      if (!user) {
+        const [created] = await tx
+          .insert(users)
+          .values({ email, displayName: "Platform operator", passwordHash: hash })
+          .returning({ id: users.id });
+        await audit(tx as unknown as TenantTx, {
+          action: "operator.credential_provisioned",
+          actorUserId: created!.id,
+          entityType: "user",
+          entityId: created!.id,
+        });
+        return;
       }
-      const userId =
-        existing?.id ??
-        (
-          await tx
-            .insert(users)
-            .values({ email: input.email.trim(), displayName: "Platform operator", passwordHash })
-            .returning({ id: users.id })
-        )[0]!.id;
-      await tx
+      // Only the request that actually swaps the hash rotates (concurrent requests see 0 rows).
+      const rotated = await tx
         .update(users)
         .set({
-          passwordHash,
+          passwordHash: hash,
           mustChangePassword: false,
           failedLoginCount: 0,
           lockedUntil: null,
@@ -104,29 +94,27 @@ export async function setUpOperatorAccount(input: {
           mfaEnrolledAt: null,
           totpLastStep: null,
         })
-        .where(eq(users.id, userId));
+        .where(and(eq(users.id, user.id), eq(users.passwordHash, user.passwordHash)))
+        .returning({ id: users.id });
+      if (rotated.length === 0) return;
       const ended = await tx
         .update(sessions)
         .set({ revokedAt: new Date() })
-        .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)))
+        .where(and(eq(sessions.userId, user.id), isNull(sessions.revokedAt)))
         .returning({ id: sessions.id });
-      // Audited in the same transaction: a setup never commits without its audit event.
       await audit(tx as unknown as TenantTx, {
-        action: "operator.setup_completed",
-        actorUserId: userId,
+        action: "operator.credential_rotated",
+        actorUserId: user.id,
         entityType: "user",
-        entityId: userId,
-        metadata: { created: !existing, mfaReset: true, sessionsEnded: ended.length },
+        entityId: user.id,
+        metadata: { mfaReset: true, sessionsEnded: ended.length },
       });
-      return { userId, created: !existing };
     })
     .catch((error: unknown) => {
-      // Two first-time setups racing both miss the row lock; the loser hits the unique email index.
+      // Two first requests racing to create the account: the loser hits the unique email index.
       const code =
         (error as { cause?: { code?: string }; code?: string })?.cause?.code ??
         (error as { code?: string })?.code;
-      if (code === "23505")
-        throw new OperatorSetupError("Setup was just completed elsewhere. Try again.", "conflict");
-      throw error;
+      if (code !== "23505") throw error;
     });
 }

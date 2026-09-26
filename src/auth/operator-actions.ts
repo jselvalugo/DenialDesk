@@ -1,9 +1,7 @@
 "use server";
 
-import { createHash, timingSafeEqual } from "node:crypto";
 import { redirect } from "next/navigation";
 import { eq, sql } from "drizzle-orm";
-import { z } from "zod";
 import { systemDb } from "@/db/client";
 import { users } from "@/db/schema";
 import { auditSystem } from "@/lib/audit";
@@ -20,15 +18,8 @@ import {
   SIGN_IN_FAILED,
   type FormState,
 } from "./credentials";
-import {
-  isOperatorAccount,
-  isOperatorEmail,
-  OperatorSetupError,
-  operatorEmail,
-  operatorSetupAllowed,
-  setUpOperatorAccount,
-} from "./operator-account";
-import { decoyHash, passwordProblem, verifyPassword } from "./password";
+import { isOperatorAccount, operatorConfigured, syncOperatorAccount } from "./operator-account";
+import { decoyHash, verifyPassword } from "./password";
 import {
   clientIp,
   completeMfa,
@@ -66,6 +57,8 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
   const limited = await limitCurrentRequest("sign_in");
   if (!limited.allowed) return rateLimited("sign_in", "sign-in attempts", limited);
 
+  // The operator account exists only as provisioned from infrastructure configuration.
+  await syncOperatorAccount();
   // Always look the account up, so response timing doesn't reveal which email is the operator's.
   const [user] = await systemDb()
     .select()
@@ -73,7 +66,7 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
     .where(sql`lower(${users.email}) = lower(${parsed.data.email})`)
     .limit(1);
   // Every account but the operator (and a disabled or practice-linked one) looks unknown here.
-  if (!user || user.disabledAt || !(await isOperatorAccount(user))) {
+  if (!user || user.disabledAt || !operatorConfigured() || !(await isOperatorAccount(user))) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing
     await auditSystem({ action: "operator.login_failed", ipAddress: await clientIp() });
     return { error: SIGN_IN_FAILED };
@@ -174,72 +167,4 @@ export async function keepOperatorSessionAlive(): Promise<boolean> {
   if (!session?.mfaVerified) return false;
   await touchSession(session.sessionId);
   return true;
-}
-
-const digest = (value: string) => createHash("sha256").update(value).digest();
-
-/** Constant-time comparison with SEED_TOKEN (at least 32 characters, or setup is off). */
-function setupCodeMatches(supplied: string): boolean {
-  const expected = process.env.SEED_TOKEN;
-  if (!expected || expected.length < 32) return false;
-  return timingSafeEqual(digest(supplied), digest(expected));
-}
-
-const setupSchema = z.object({
-  email: z.email().max(254),
-  code: z.string().trim().min(1).max(256),
-  password: z.string().max(128),
-  confirm: z.string().max(128),
-});
-
-const SETUP_FAILED = "The email or setup code is incorrect.";
-
-/**
- * First-time setup and recovery of the operator account, pre-production only. Needs the configured
- * operator email and the environment's setup code; then continues to two-step enrollment.
- */
-export async function setUpOperator(_: FormState, formData: FormData): Promise<FormState> {
-  if (!operatorSetupAllowed()) return { error: "Operator setup isn't available here." };
-  const limited = await limitCurrentRequest("seed");
-  if (!limited.allowed) return rateLimited("seed", "setup attempts", limited);
-  const parsed = setupSchema.safeParse({
-    email: formData.get("email"),
-    code: formData.get("code"),
-    password: formData.get("password"),
-    confirm: formData.get("confirm"),
-  });
-  if (!parsed.success) return { error: "Enter your email, the setup code, and a new password twice." };
-  if (!operatorEmail()) return { error: "The platform console isn't configured in this environment." };
-
-  // Check the code even when the email is wrong, so both failures take the same path.
-  const codeOk = setupCodeMatches(parsed.data.code);
-  if (!codeOk || !isOperatorEmail(parsed.data.email)) {
-    await auditSystem({
-      action: "operator.setup_failed",
-      ipAddress: await clientIp(),
-      metadata: { reason: "bad_code_or_email" },
-    });
-    return { error: SETUP_FAILED };
-  }
-  const problem = passwordProblem(parsed.data.password);
-  if (problem) return { error: problem };
-  if (parsed.data.password !== parsed.data.confirm) return { error: "The passwords don't match." };
-
-  let userId: string;
-  try {
-    ({ userId } = await setUpOperatorAccount({ email: parsed.data.email, password: parsed.data.password }));
-  } catch (error) {
-    if (error instanceof OperatorSetupError) {
-      await auditSystem({
-        action: "operator.setup_failed",
-        ipAddress: await clientIp(),
-        metadata: { reason: error.reason },
-      });
-      return { error: error.message };
-    }
-    throw error;
-  }
-  // Setup already ended every session of this account, so there's no previous one to replace.
-  await createSession(userId, { authMethod: "operator" });
-  redirect("/operator/login/mfa/setup");
 }
