@@ -41,6 +41,19 @@ describe.each(cases)("Medicare %s deadline", (nextLevel, windowDays, due, citati
       expect(medicareNextLevelDeadline({ regime, nextLevel, priorDecisionDate: "2026-06-01" })).toBeNull();
     },
   );
+
+  it.each([
+    [-1, addCalendarDays(due, -1)], // prior decision one day earlier (D-1)
+    [0, due], // prior decision on the base date (D)
+    [1, addCalendarDays(due, 1)], // prior decision one day later (D+1)
+  ])("prior decision date D%+i shifts the deadline by the same day", (offset, expectedDue) => {
+    const shifted = medicareNextLevelDeadline({
+      regime: "medicare",
+      nextLevel,
+      priorDecisionDate: addCalendarDays("2026-06-01", offset),
+    });
+    expect(shifted?.date).toBe(expectedDue);
+  });
 });
 
 describe("Medicare appeal chain", () => {
@@ -60,6 +73,16 @@ describe("Medicare appeal chain", () => {
       priorDecisionDate: "2026-11-10",
     });
     expect(d?.date).toBe("2027-01-14");
+  });
+
+  it("handles a window that crosses a February leap day (2028-02-29)", () => {
+    const d = medicareNextLevelDeadline({
+      regime: "medicare",
+      nextLevel: "alj_hearing",
+      priorDecisionDate: "2028-02-01",
+    });
+    // 5-day receipt presumption + 60-day filing window = 65 days from 2028-02-01.
+    expect(d?.date).toBe("2028-04-06");
   });
 
   it("is not shifted by the DST change (2026-03-08)", () => {
