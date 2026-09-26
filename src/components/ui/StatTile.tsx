@@ -14,7 +14,7 @@ export function StatTile({
   emphasis?: "danger" | "warning";
 }) {
   return (
-    <div className="rounded-panel border border-border bg-surface px-4 py-3.5">
+    <div className="rounded-panel border border-border bg-surface px-4 py-3.5 shadow-xs">
       <p className="text-label font-semibold tracking-wider text-muted uppercase">{label}</p>
       <p
         className={cn(

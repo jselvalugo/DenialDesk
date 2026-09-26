@@ -16,7 +16,7 @@ export function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-panel border border-border bg-surface">
+    <section className="rounded-panel border border-border bg-surface shadow-xs">
       {title && (
         <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3">
           <div>
@@ -26,7 +26,7 @@ export function Panel({
           {actions}
         </div>
       )}
-      <div className={cn(!flush && "p-4")}>{children}</div>
+      <div className={cn(flush ? "overflow-hidden rounded-b-panel" : "p-4")}>{children}</div>
     </section>
   );
 }

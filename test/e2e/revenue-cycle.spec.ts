@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { DEFAULT_RULES } from "@/domain/revenue-cycle/defaults";
+import { openFromLauncher } from "./support";
 
 async function openDemo(page: Page) {
   await page.goto("/login");
@@ -12,7 +13,7 @@ test.describe("revenue cycle as compliance (read-only)", () => {
 
   test("rules and ledger show the seeded default configuration", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: "Rules and ledger" }).click();
+    await openFromLauncher(page, "Rules and ledger");
     await expect(page.getByRole("heading", { level: 1, name: "Rules and ledger" })).toBeVisible();
     const rules = page.getByRole("table", { name: "Business rules in evaluation order" });
     await expect(rules.getByRole("row")).toHaveCount(DEFAULT_RULES.length + 1); // header + rules
@@ -99,6 +100,9 @@ test.describe("journal vouchers", () => {
     page,
   }) => {
     await openDemo(page);
+    await openFromLauncher(page, "Revenue cycle app");
+    await expect(page.getByRole("heading", { level: 1, name: "Monthly files" })).toBeVisible();
+    // Inside the Revenue cycle app its pages are tabs.
     await page
       .getByRole("navigation", { name: "Primary" })
       .getByRole("link", { name: "Journal vouchers" })
@@ -139,6 +143,12 @@ test.describe("revenue cycle as a denial specialist", () => {
   test("is hidden from navigation and returns 404", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("navigation", { name: "Primary" })).not.toContainText("Revenue cycle");
+    await page.getByRole("button", { name: "App launcher" }).click();
+    const launcher = page.getByRole("dialog", { name: "App launcher" });
+    await expect(launcher.getByRole("link", { name: "Claims app" })).toBeVisible();
+    await expect(launcher).not.toContainText("Revenue cycle");
+    await expect(launcher).not.toContainText("Journal vouchers");
+    await page.keyboard.press("Escape");
     expect((await page.goto("/revenue-cycle/journal"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/rules"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/files"))?.status()).toBe(404);

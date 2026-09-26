@@ -24,8 +24,27 @@ test("design system page renders the sample queue", async ({ page }) => {
 
 test("unbuilt sections are not links", async ({ page }) => {
   await page.goto("/design");
+  await page.getByRole("button", { name: "App launcher" }).click();
+  const launcher = page.getByRole("dialog", { name: "App launcher" });
+  await expect(launcher.getByText("Appeals")).toBeVisible();
   await expect(page.getByRole("link", { name: /^Appeals/ })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Denial queue" })).toBeVisible();
+  await expect(launcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
+});
+
+test("the app launcher searches apps and pages and opens one", async ({ page }) => {
+  await page.goto("/design");
+  await page.keyboard.press("Control+k");
+  const launcher = page.getByRole("dialog", { name: "App launcher" });
+  await expect(launcher.getByLabel("Search apps and pages")).toBeFocused();
+  await launcher.getByLabel("Search apps and pages").fill("queue");
+  await expect(launcher.getByRole("link", { name: "Design system" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(launcher).toBeHidden();
+  await page.getByRole("button", { name: "App launcher" }).click();
+  await launcher.getByRole("link", { name: "Setup app" }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Design system" }),
+  ).toHaveAttribute("aria-current", "page");
 });
 
 test("health endpoint reports status without leaking config", async ({ request }) => {
@@ -60,8 +79,13 @@ test("the preview seed endpoint rejects requests without the secret token", asyn
 test("navigation icons are decorative and link names stay text-only", async ({ page }) => {
   await page.goto("/design");
   const nav = page.getByRole("navigation", { name: "Primary" });
-  const icons = nav.locator("svg");
-  expect(await icons.count()).toBeGreaterThan(0);
-  for (const icon of await icons.all()) await expect(icon).toHaveAttribute("aria-hidden", "true");
-  await expect(nav.getByRole("link", { name: "Denial queue", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "App launcher" }).click();
+  const launcher = page.getByRole("dialog", { name: "App launcher" });
+  for (const scope of [nav, launcher]) {
+    const icons = scope.locator("svg");
+    expect(await icons.count()).toBeGreaterThan(0);
+    for (const icon of await icons.all()) await expect(icon).toHaveAttribute("aria-hidden", "true");
+  }
+  await expect(nav.getByRole("link", { name: "Design system", exact: true })).toBeVisible();
+  await expect(launcher.getByRole("link", { name: "Denial queue", exact: true })).toBeVisible();
 });
