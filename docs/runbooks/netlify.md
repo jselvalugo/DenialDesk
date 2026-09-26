@@ -72,6 +72,18 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   `pnpm operator:credential`, then set `PLATFORM_OPERATOR_EMAIL` (an address used only for the console,
   never a practice user and not `SEED_ADMIN_EMAIL`) and `PLATFORM_OPERATOR_PASSWORD_HASH` (secret) in
   Netlify, and redeploy. Sign in at `/operator/login`; two-step is set up on first sign-in.
+- **`PLATFORM_OPERATOR_PASSWORD_HASH` is the hash the script prints, never the password itself.** The
+  value starts with `scrypt$131072$8$1$` and is about 130 characters. If it holds anything else (the
+  password, a hash with other parameters, a truncated paste), the console is simply off: sign-in
+  shows the generic "sign-in failed" error and nothing is created. The reason is in the function log
+  (*Logs → Functions*) as an `operator.credential_unusable` line with `status: malformed` (or
+  `test_hash` when the public e2e hash is used), once per function instance and nothing else: the
+  value itself never reaches the log. Fix the value in Netlify, redeploy (a value change
+  alone doesn't reach running functions), and sign in again. Use the same value in every deploy
+  context ("All" in the Netlify UI), or at least in Production. The script also refuses passwords
+  under 16 characters for the operator account. If the password itself was pasted, treat it as
+  exposed (it sits in Netlify's configuration and history): choose a new password when you re-run
+  `pnpm operator:credential`.
 - **Forgotten password or lost authenticator:** run `pnpm operator:credential` again and replace
   `PLATFORM_OPERATOR_PASSWORD_HASH`. The next request applies it: new password, two-step reset, every
   operator session ended (audited as `operator.credential_rotated`). There is no in-app recovery.
