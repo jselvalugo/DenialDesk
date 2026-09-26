@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { generateTotpSecret } from "@/auth/totp";
 import { closeDatabase, systemDb } from "@/db/client";
-import { users } from "@/db/schema";
+import { operatorCredentials, users } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { encryptField } from "@/lib/crypto/field";
 
@@ -52,7 +52,10 @@ export default async function globalSetup() {
     }
     enrolled[key] = { email: make(key), password, totpSecret: secret };
   }
-  // The platform operator: one fixed account, reused across runs with fresh credentials.
+  // The platform operator: one fixed account, reused across runs with fresh credentials. Its row is
+  // written directly, so the server adopts it as the one active credential: clear earlier records
+  // (test database only).
+  await systemDb().delete(operatorCredentials);
   const operatorSecret = generateTotpSecret();
   const [operator] = await systemDb().select().from(users).where(eq(users.email, E2E_OPERATOR_EMAIL));
   const operatorId = operator

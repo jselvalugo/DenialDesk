@@ -72,8 +72,12 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
 - **Forgotten password or lost authenticator:** run `pnpm operator:credential` again and replace
   `PLATFORM_OPERATOR_PASSWORD_HASH`. The next request applies it: new password, two-step reset, every
   operator session ended (audited as `operator.credential_rotated`). There is no in-app recovery.
-  Changes only move forward: an old deploy link or a rollback still carrying the previous hash can't
-  apply it again (sign-in there is refused). Clear the terminal after copying the hash.
+  Changes only move forward: an old deploy link or a rollback still carrying the previous hash (or a
+  previous operator email) can't apply it again (sign-in there is refused). Only one operator
+  credential is ever active. Clear the terminal after copying the hash.
+- **Once, after deploying this change:** deploys built before it still serve the old `/operator/setup`
+  page with their own copy of `SEED_TOKEN`. In Netlify, delete (or lock) older production and preview
+  deploys, or rotate `SEED_TOKEN` and redeploy each branch you keep.
 - `PLATFORM_OPERATOR_EMAIL` must never equal `SEED_ADMIN_EMAIL` (the seed refuses it). Mark
   `PLATFORM_OPERATOR_PASSWORD_HASH` secret, and keep two-step (ideally a security key) on the Netlify
   account: whoever can edit these values controls the console.

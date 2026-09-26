@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { systemDb } from "@/db/client";
 import { auditEvents, memberships, operatorCredentials, sessions, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
@@ -99,14 +99,23 @@ export async function syncOperatorAccount(trigger: "sign_in" | "console_request"
   const email = operatorEmail();
   const hash = configuredOperatorHash();
   if (!email || !hash) return "unconfigured";
-  const [current] = await systemDb()
-    .select({ passwordHash: users.passwordHash })
-    .from(users)
-    .where(sql`lower(${users.email}) = ${email}`)
-    .limit(1);
-  if (current?.passwordHash === hash) return "current";
-
   const fingerprint = credentialFingerprint(email, hash);
+  // Fast path (every request): this exact credential is the one active credential.
+  const [[state], [current]] = await Promise.all([
+    systemDb()
+      .select({ retiredAt: operatorCredentials.retiredAt })
+      .from(operatorCredentials)
+      .where(eq(operatorCredentials.fingerprint, fingerprint))
+      .limit(1),
+    systemDb()
+      .select({ passwordHash: users.passwordHash })
+      .from(users)
+      .where(sql`lower(${users.email}) = ${email}`)
+      .limit(1),
+  ]);
+  if (state?.retiredAt) return "retired";
+  if (state && current?.passwordHash === hash) return "current";
+
   const source = {
     source: "hosting_config",
     trigger,
@@ -115,12 +124,28 @@ export async function syncOperatorAccount(trigger: "sign_in" | "console_request"
   };
   return systemDb()
     .transaction(async (tx): Promise<SyncResult> => {
+      // One credential change at a time; every check below is repeated under this lock.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('denialdesk.operator_credentials'))`);
       const [known] = await tx
-        .select({ fingerprint: operatorCredentials.fingerprint })
+        .select({ retiredAt: operatorCredentials.retiredAt })
         .from(operatorCredentials)
         .where(eq(operatorCredentials.fingerprint, fingerprint))
         .limit(1);
-      if (known) return "retired";
+      if (known?.retiredAt) return "retired";
+      // At most one credential is active. Another active one means this configuration is stale
+      // (an old deploy link, or a previous operator email) unless it is new and being applied now.
+      const [otherActive] = await tx
+        .select({ fingerprint: operatorCredentials.fingerprint })
+        .from(operatorCredentials)
+        .where(and(isNull(operatorCredentials.retiredAt), ne(operatorCredentials.fingerprint, fingerprint)))
+        .limit(1);
+      const retireOthers = () =>
+        tx
+          .update(operatorCredentials)
+          .set({ retiredAt: new Date() })
+          .where(
+            and(isNull(operatorCredentials.retiredAt), ne(operatorCredentials.fingerprint, fingerprint)),
+          );
 
       const [user] = await tx
         .select({ id: users.id, passwordHash: users.passwordHash, disabledAt: users.disabledAt })
@@ -130,12 +155,27 @@ export async function syncOperatorAccount(trigger: "sign_in" | "console_request"
         // Locks the row so a concurrent membership insert waits until this commits.
         .for("update");
 
+      if (user?.passwordHash === hash) {
+        if (known) return "current";
+        // The account already matches but this credential was never recorded (it predates this
+        // table). Adopt it only if nothing else is active; otherwise it is stale.
+        if (otherActive) {
+          await tx.insert(operatorCredentials).values({ fingerprint, retiredAt: new Date() });
+          return "retired";
+        }
+        await tx.insert(operatorCredentials).values({ fingerprint });
+        return "current";
+      }
+
       if (!user) {
         const [created] = await tx
           .insert(users)
           .values({ email, displayName: "Platform operator", passwordHash: hash })
           .returning({ id: users.id });
-        await tx.insert(operatorCredentials).values({ fingerprint });
+        // A new operator email: every earlier credential (and so any earlier operator account on an
+        // old deploy link) is retired.
+        await retireOthers();
+        await tx.insert(operatorCredentials).values({ fingerprint }).onConflictDoNothing();
         await audit(tx as unknown as TenantTx, {
           action: "operator.credential_provisioned",
           actorUserId: null,
@@ -145,8 +185,6 @@ export async function syncOperatorAccount(trigger: "sign_in" | "console_request"
         });
         return "provisioned";
       }
-      if (user.passwordHash === hash) return "current";
-
       const [membership] = await tx
         .select({ id: memberships.id })
         .from(memberships)
@@ -193,7 +231,8 @@ export async function syncOperatorAccount(trigger: "sign_in" | "console_request"
       // The new hash is recorded as applied and the old one as retired, so neither can come back
       // through a deployment that still carries the old configuration.
       const previous = credentialFingerprint(email, user.passwordHash);
-      await tx.insert(operatorCredentials).values({ fingerprint });
+      await retireOthers();
+      await tx.insert(operatorCredentials).values({ fingerprint }).onConflictDoNothing();
       await tx
         .insert(operatorCredentials)
         .values({ fingerprint: previous, retiredAt: new Date() })

@@ -8,7 +8,7 @@ import {
 } from "@/auth/operator-account";
 import { hashPassword, verifyPassword } from "@/auth/password";
 import { closeDatabase, systemDb } from "@/db/client";
-import { auditEvents, memberships, sessions, users } from "@/db/schema";
+import { auditEvents, memberships, operatorCredentials, sessions, users } from "@/db/schema";
 import { E2E_OPERATOR_PASSWORD_HASH } from "../e2e/operator-credentials";
 import { createTestTenant } from "./helpers";
 
@@ -155,6 +155,42 @@ describe("syncOperatorAccount", () => {
     // And the current configuration keeps working.
     configure(address, second);
     expect(await syncOperatorAccount("sign_in")).toBe("current");
+  });
+
+  it("retires the previous operator account when the operator email changes", async () => {
+    const oldAddress = email();
+    const oldHash = await hashPassword("old synthetic operator phrase");
+    configure(oldAddress, oldHash);
+    await syncOperatorAccount("console_request");
+    configure(email(), await hashPassword("new synthetic operator phrase"));
+    expect(await syncOperatorAccount("console_request")).toBe("provisioned");
+    // An old deploy link still configured with the previous email and hash.
+    configure(oldAddress, oldHash);
+    expect(await syncOperatorAccount("sign_in")).toBe("retired");
+  });
+
+  it("adopts a matching account that predates credential records only if nothing else is active", async () => {
+    await systemDb()
+      .update(operatorCredentials)
+      .set({ retiredAt: new Date() })
+      .where(isNull(operatorCredentials.retiredAt));
+    const legacy = email();
+    const hash = await hashPassword("legacy synthetic operator phrase");
+    await systemDb()
+      .insert(users)
+      .values({ email: legacy, displayName: "Platform operator", passwordHash: hash });
+    configure(legacy, hash);
+    expect(await syncOperatorAccount("sign_in")).toBe("current");
+    expect(await syncOperatorAccount("sign_in")).toBe("current");
+
+    // Another legacy account while a credential is active: stale, never adopted.
+    const other = email();
+    const otherHash = await hashPassword("other synthetic operator phrase");
+    await systemDb()
+      .insert(users)
+      .values({ email: other, displayName: "Platform operator", passwordHash: otherHash });
+    configure(other, otherHash);
+    expect(await syncOperatorAccount("sign_in")).toBe("retired");
   });
 
   it("applies a new configuration exactly once under concurrent requests", async () => {

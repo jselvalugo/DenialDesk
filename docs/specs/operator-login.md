@@ -52,7 +52,9 @@ Provisioning from infrastructure configuration (owner rebaseline, 2026-09-26)
 - [x] **Rotations only move forward.** Every applied credential's fingerprint (SHA-256 of email +
       hash; the hash itself isn't stored) is kept in `operator_credentials`. A deployment still
       carrying a retired credential (an old deploy link, a rollback, a stale slot) can never re-apply
-      it: sign-in there is refused and it does not end the owner's sessions.
+      it: sign-in there is refused and it does not end the owner's sessions. At most one credential
+      is active: applying a new one (new hash or new operator email) retires every other, and
+      credential changes are serialized under one database lock.
 - [x] The hash must use exactly the parameters `pnpm operator:credential` produces (scrypt N=2^17,
       r=8, p=1, 16-byte salt, 64-byte key). The public e2e test hash is refused on Netlify and in
       production. A seeded practice user can't take the operator email.
