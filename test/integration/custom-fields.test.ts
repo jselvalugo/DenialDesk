@@ -3,7 +3,11 @@ import { and, eq, sql } from "drizzle-orm";
 import { closeDatabase, systemDb } from "@/db/client";
 import { auditEvents, customFields } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
-import { newCustomFieldSchema, type NewCustomField } from "@/domain/settings/custom-fields";
+import {
+  MAX_FIELDS_PER_ENTITY,
+  newCustomFieldSchema,
+  type NewCustomField,
+} from "@/domain/settings/custom-fields";
 import {
   activeCustomFields,
   createCustomField,
@@ -121,6 +125,43 @@ describe("custom fields", () => {
     expect(actions.map((e) => e.action)).toEqual(
       expect.arrayContaining(["settings.custom_field_updated", "settings.custom_field_deactivated"]),
     );
+  });
+
+  it("limits active fields per record type; deactivating frees a slot, reactivating needs one", async () => {
+    const c = await createTestTenant("Fields C");
+    const ids: string[] = [];
+    for (let i = 0; i < MAX_FIELDS_PER_ENTITY; i++) {
+      ids.push(
+        await withTenant(c, (tx) => createCustomField(tx, c, field({ entity: "payer", key: `f${i}` }))),
+      );
+    }
+    await expect(
+      withTenant(c, (tx) => createCustomField(tx, c, field({ entity: "payer", key: "extra" }))),
+    ).rejects.toThrow(/50 active fields/);
+    const stamp = async (id: string) =>
+      (
+        await withTenant(c, (tx) => tx.select().from(customFields).where(eq(customFields.id, id)))
+      )[0]!.updatedAt.toISOString();
+    await withTenant(c, async (tx) => setCustomFieldActive(tx, c, ids[0]!, await stamp(ids[0]!), false));
+    await withTenant(c, (tx) => createCustomField(tx, c, field({ entity: "payer", key: "extra" })));
+    await expect(
+      withTenant(c, async (tx) => setCustomFieldActive(tx, c, ids[0]!, await stamp(ids[0]!), true)),
+    ).rejects.toThrow(/50 active fields/);
+  });
+
+  it("reactivates a field and audits it", async () => {
+    const [row] = (await withTenant(a, (tx) => listCustomFields(tx))).filter((r) => !r.active);
+    await withTenant(a, (tx) => setCustomFieldActive(tx, a, row!.id, row!.updatedAt.toISOString(), true));
+    expect((await withTenant(a, (tx) => activeCustomFields(tx, "patient"))).map((r) => r.id)).toContain(
+      row!.id,
+    );
+    const [event] = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(
+        and(eq(auditEvents.entityId, row!.id), eq(auditEvents.action, "settings.custom_field_reactivated")),
+      );
+    expect(event).toBeDefined();
   });
 
   it("the database keeps a field's identity fixed and forbids deletes", async () => {

@@ -59,3 +59,21 @@ describe("customFieldChangesSchema", () => {
     });
   });
 });
+
+describe("canConfigureSettings", () => {
+  it("allows administrators only", async () => {
+    const { canConfigureSettings } = await import("@/auth/permissions");
+    expect(canConfigureSettings("admin")).toBe(true);
+    for (const role of ["manager", "specialist", "compliance"] as const)
+      expect(canConfigureSettings(role)).toBe(false);
+  });
+});
+
+describe("choice limits", () => {
+  it("refuses more than 50 choices or a choice over 60 characters", () => {
+    const select = { ...base, fieldType: "select" };
+    const many = Array.from({ length: 51 }, (_, i) => `C${i}`);
+    expect(newCustomFieldSchema.safeParse({ ...select, options: many }).success).toBe(false);
+    expect(newCustomFieldSchema.safeParse({ ...select, options: ["x".repeat(61)] }).success).toBe(false);
+  });
+});

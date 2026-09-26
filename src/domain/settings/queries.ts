@@ -1,4 +1,4 @@
-import { and, asc, count, eq, max } from "drizzle-orm";
+import { and, asc, count, eq, max, sql } from "drizzle-orm";
 import { customFields } from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
 import { audit } from "@/lib/audit";
@@ -46,16 +46,33 @@ export async function activeCustomFields(tx: TenantTx, entity: CustomFieldEntity
     .orderBy(asc(customFields.position), asc(customFields.createdAt));
 }
 
-export async function createCustomField(tx: TenantTx, actor: Actor, input: NewCustomField): Promise<string> {
-  const [existing] = await tx
-    .select({ total: count(), last: max(customFields.position) })
+/** Serializes changes per practice and record type, so the limit and positions hold under concurrency. */
+async function lockEntity(tx: TenantTx, actor: Actor, entity: CustomFieldEntity) {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`custom_fields:${actor.tenantId}:${entity}`}))`,
+  );
+}
+
+/** The limit counts active fields only: deactivating a field frees its slot. */
+async function assertRoomFor(tx: TenantTx, entity: CustomFieldEntity) {
+  const [{ active } = { active: 0 }] = await tx
+    .select({ active: count() })
     .from(customFields)
-    .where(eq(customFields.entity, input.entity));
-  if ((existing?.total ?? 0) >= MAX_FIELDS_PER_ENTITY) {
+    .where(and(eq(customFields.entity, entity), eq(customFields.active, true)));
+  if (active >= MAX_FIELDS_PER_ENTITY) {
     throw new CustomFieldError(
-      `This record type already has ${MAX_FIELDS_PER_ENTITY} fields. Deactivate one you no longer use.`,
+      `This record type already has ${MAX_FIELDS_PER_ENTITY} active fields. Deactivate one you no longer use.`,
     );
   }
+}
+
+export async function createCustomField(tx: TenantTx, actor: Actor, input: NewCustomField): Promise<string> {
+  await lockEntity(tx, actor, input.entity);
+  await assertRoomFor(tx, input.entity);
+  const [existing] = await tx
+    .select({ last: max(customFields.position) })
+    .from(customFields)
+    .where(eq(customFields.entity, input.entity));
   const [taken] = await tx
     .select({ id: customFields.id })
     .from(customFields)
@@ -143,6 +160,10 @@ export async function setCustomFieldActive(
 ): Promise<void> {
   const current = await lockField(tx, fieldId, expectedUpdatedAt);
   if (current.active === active) return;
+  if (active) {
+    await lockEntity(tx, actor, current.entity);
+    await assertRoomFor(tx, current.entity);
+  }
   await tx.update(customFields).set({ active, updatedAt: new Date() }).where(eq(customFields.id, fieldId));
   await audit(tx, {
     action: active ? "settings.custom_field_reactivated" : "settings.custom_field_deactivated",

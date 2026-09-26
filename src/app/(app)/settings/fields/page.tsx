@@ -63,7 +63,7 @@ export default async function CustomFieldsPage({
         title={`${entityName} fields`}
         description={`Fields your practice adds to ${entityName.toLowerCase()}, in form order. Deactivated fields are hidden from forms and keep their history.`}
         actions={
-          canEdit && fields.length < MAX_FIELDS_PER_ENTITY ? (
+          canEdit && fields.filter((f) => f.active).length < MAX_FIELDS_PER_ENTITY ? (
             <Link
               href={`/settings/fields/new?records=${entity}`}
               className="inline-flex h-8 items-center rounded-control border border-primary bg-primary px-3 text-body font-medium text-white hover:bg-primary-hover"

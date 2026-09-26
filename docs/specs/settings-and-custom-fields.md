@@ -32,7 +32,7 @@ tab per section; administrators add their own fields to patients, claims, denial
 - [x] Keys are lowercase `^[a-z][a-z0-9_]{0,39}$`, unique per practice and record type; suggested
       from the label when left blank.
 - [x] Choice lists need 1–50 choices; other types store none (database check).
-- [x] At most 50 fields per record type.
+- [x] At most 50 active fields per record type (deactivating frees a slot; reactivating needs one).
 - [x] Stale edits (the field changed since the form opened) are refused with a reload message.
 - [x] Fields are never deleted (no DELETE grant); deactivated fields are hidden from forms.
 - [x] Tenant isolation: RLS (forced) with an isolation test.
@@ -48,6 +48,11 @@ tab per section; administrators add their own fields to patients, claims, denial
 - S2 will add `custom_field_values` (tenant-scoped, RLS, audited). Values on patient records are PHI
   and follow the patient record's audit and encryption rules; values for free-text types will be
   encrypted at rest at field level if they can hold identifiers (decide in S2's threat model).
+
+- Labels, help, and choices are configuration and must never contain patient information (the
+  form says so). Stored values (S2) need their own classification; S2 must decide field-level
+  encryption for free-text types and add a sensitivity category to definitions (R-3.5.1) before
+  any value is stored.
 
 ## Legal rules used
 None.
