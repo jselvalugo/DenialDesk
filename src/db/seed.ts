@@ -39,6 +39,7 @@ export interface SeedUser {
  */
 export async function seedPractice(options: {
   practiceName: string;
+  kind?: "customer" | "demo";
   asOf: string;
   users: SeedUser[];
   dataset?: SyntheticDataset;
@@ -49,7 +50,10 @@ export async function seedPractice(options: {
   const dataset = options.dataset ?? generateDataset({ asOf: options.asOf });
   const db = systemDb();
 
-  const [tenant] = await db.insert(tenants).values({ name: options.practiceName }).returning();
+  const [tenant] = await db
+    .insert(tenants)
+    .values({ name: options.practiceName, kind: options.kind ?? "customer" })
+    .returning();
   const tenantId = tenant!.id;
   const userIds: string[] = [];
   for (const user of options.users) {

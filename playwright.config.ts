@@ -45,13 +45,18 @@ export default defineConfig({
       command: `pnpm start --port ${previewPort}`,
       port: previewPort,
       reuseExistingServer: false,
-      env: { APP_ENV: "preview" },
+      env: {
+        APP_ENV: "preview",
+        DEMO_LOGIN_ENABLED: "true",
+        PLATFORM_OPERATOR_EMAIL: "operator@e2e.denialdesk.test",
+      },
     },
     {
       command: `pnpm start --port ${productionPort}`,
       port: productionPort,
       reuseExistingServer: false,
-      env: { APP_ENV: "production" },
+      // DEMO_LOGIN_ENABLED is set here too, to prove production ignores it.
+      env: { APP_ENV: "production", DEMO_LOGIN_ENABLED: "true" },
     },
   ],
 });

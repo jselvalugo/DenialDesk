@@ -21,13 +21,20 @@ export type AuditAction =
   | "denial.assigned"
   | "denial.note_added"
   | "patient.member_id_revealed"
-  | "system.demo_seeded";
+  | "system.demo_seeded"
+  | "auth.demo_login"
+  | "auth.password_changed"
+  | "operator.console_viewed"
+  | "operator.practice_created"
+  | "operator.practice_suspended"
+  | "operator.practice_reactivated"
+  | "operator.demo_reset";
 
 export interface AuditEvent {
   action: AuditAction;
   actorUserId?: string | null;
   tenantId?: string | null;
-  entityType?: "denial" | "claim" | "patient" | "user" | "session";
+  entityType?: "denial" | "claim" | "patient" | "user" | "session" | "tenant";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;

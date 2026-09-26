@@ -6,10 +6,12 @@ import { TopBar, type ShellUser } from "./TopBar";
 export function AppShell({
   user,
   showDesignSystem,
+  showOperatorConsole = false,
   children,
 }: {
   user: ShellUser | null;
   showDesignSystem: boolean;
+  showOperatorConsole?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -20,9 +22,19 @@ export function AppShell({
       >
         Skip to content
       </a>
-      <Sidebar showDesignSystem={showDesignSystem} />
+      <Sidebar showDesignSystem={showDesignSystem} showOperatorConsole={showOperatorConsole} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar user={user} />
+        {user?.demo && (
+          <p
+            role="note"
+            aria-label="Demo practice notice"
+            className="border-b border-info-border bg-info-bg px-6 py-2 text-label font-medium text-info-fg"
+          >
+            Shared demo practice: other visitors can see anything you type here. Never enter real patient
+            information.
+          </p>
+        )}
         <main
           id="main"
           tabIndex={-1}

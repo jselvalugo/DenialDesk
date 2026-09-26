@@ -1,0 +1,1 @@
+ALTER TABLE "sessions" ADD COLUMN "auth_method" text DEFAULT 'password_mfa' NOT NULL;

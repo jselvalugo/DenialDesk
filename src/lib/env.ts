@@ -8,6 +8,10 @@ const schema = z.object({
   FIELD_ENCRYPTION_KEY: z
     .string()
     .refine((value) => Buffer.from(value, "base64").length === 32, "must be base64 of 32 bytes"),
+  /** "true" shows the one-click demo login (never in production, whatever this says). */
+  DEMO_LOGIN_ENABLED: z.enum(["true", "false"]).optional(),
+  /** The one account allowed into the platform operator console (/operator). */
+  PLATFORM_OPERATOR_EMAIL: z.email().optional(),
 });
 
 export type ServerEnv = z.infer<typeof schema>;
@@ -39,4 +43,9 @@ export function appEnv(): string {
 
 export function isProduction(): boolean {
   return appEnv() === "production";
+}
+
+/** Demo login is available only outside production and only when explicitly enabled. */
+export function demoLoginEnabled(): boolean {
+  return !isProduction() && process.env.DEMO_LOGIN_ENABLED === "true";
 }

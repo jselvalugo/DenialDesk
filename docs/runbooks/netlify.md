@@ -20,6 +20,8 @@ Site: https://denialdesk.netlify.app
   | `FIELD_ENCRYPTION_KEY` | AES-256 key for member IDs and MFA secrets (secret; pre-prod only) |
   | `SEED_TOKEN` | Bearer token for the one-time seed endpoint (secret) |
   | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Demo admin account created by the seed (password secret) |
+  | `DEMO_LOGIN_ENABLED` | `true` shows "Explore the demo practice" on sign-in (ignored in production) |
+  | `PLATFORM_OPERATOR_EMAIL` | The one account allowed into the platform console at `/operator` |
 
   If `APP_ENV` is missing the app still treats itself as non-production — safe by default.
 - **Access:** Netlify password protection is on for the whole site, in front of the app's own
@@ -42,6 +44,12 @@ auth), or seed before turning protection on. The endpoint returns 404 in product
 token, or with a wrong token.
 
 Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step verification.
+
+## Demo practice and operator console
+- "Explore the demo practice" signs visitors into a shared synthetic demo practice, created on
+  first use. Reset it any time from `/operator` → *Reset demo practice* (the old one is archived).
+- `/operator` is visible only to `PLATFORM_OPERATOR_EMAIL` after password + two-step sign-in.
+  Everyone else gets a 404.
 
 ## Checks after each deploy
 - `https://denialdesk.netlify.app/api/health` returns `{"status":"ok","appEnv":"preview","db":"up"}`.

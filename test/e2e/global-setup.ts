@@ -5,10 +5,15 @@ import { todayIn } from "@rules/calendar";
 import { generateTotpSecret } from "@/auth/totp";
 import { closeDatabase, systemDb } from "@/db/client";
 import { users } from "@/db/schema";
+import { hashPassword } from "@/auth/password";
+import { generateDataset } from "@/domain/synthetic/generator";
 import { seedPractice } from "@/db/seed";
 import { encryptField } from "@/lib/crypto/field";
 
 // Seeds a fresh synthetic practice per run with known test credentials. Test-only.
+/** Fixed so the test servers can name it in PLATFORM_OPERATOR_EMAIL (playwright.config.ts). */
+export const E2E_OPERATOR_EMAIL = "operator@e2e.denialdesk.test";
+
 export interface E2EUser {
   email: string;
   password: string;
@@ -44,6 +49,31 @@ export default async function globalSetup() {
     }
     enrolled[key] = { email: make(key), password, totpSecret: secret };
   }
+  // The platform operator: one fixed account, reused across runs with fresh credentials.
+  const operatorSecret = generateTotpSecret();
+  const [operator] = await systemDb().select().from(users).where(eq(users.email, E2E_OPERATOR_EMAIL));
+  const operatorId = operator
+    ? operator.id
+    : (
+        await seedPractice({
+          practiceName: "E2E operator practice (synthetic)",
+          asOf: todayIn(),
+          users: [{ email: E2E_OPERATOR_EMAIL, displayName: "Olive Operator", role: "admin", password }],
+          dataset: generateDataset({ asOf: todayIn(), patients: 3, claims: 6 }),
+        })
+      ).userIds[0]!;
+  await systemDb()
+    .update(users)
+    .set({
+      passwordHash: await hashPassword(password),
+      totpSecretEnc: encryptField(operatorSecret),
+      mfaEnrolledAt: new Date(),
+      totpLastStep: null,
+      failedLoginCount: 0,
+      lockedUntil: null,
+    })
+    .where(eq(users.id, operatorId));
+  enrolled.operator = { email: E2E_OPERATOR_EMAIL, password, totpSecret: operatorSecret };
   await closeDatabase();
 
   mkdirSync("test/e2e/.auth", { recursive: true });
