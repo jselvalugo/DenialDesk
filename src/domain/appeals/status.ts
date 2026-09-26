@@ -50,6 +50,19 @@ export const APPEAL_DECISION_OUTCOME_LABELS: Record<AppealDecisionOutcome, strin
   dismissed: "Dismissed",
 };
 
+/**
+ * Whether a submission met its deadline: the deadline day itself counts as on time (same boundary
+ * rule as `denial-queue.md` / `rules/deadlines.ts#payerResponseStatus`). Null when there's no
+ * deadline to compare against ("not configured"), since there's nothing to be late against.
+ */
+export function submissionTimeliness(
+  submittedOn: string,
+  deadline: string | null,
+): "on_time" | "late" | null {
+  if (deadline === null) return null;
+  return submittedOn <= deadline ? "on_time" : "late";
+}
+
 /** A decision outcome that is not a payer ruling on the merits (spec: appeals.md A1). */
 export function isCloseOutcome(outcome: AppealDecisionOutcome): boolean {
   return outcome === "withdrawn" || outcome === "dismissed";

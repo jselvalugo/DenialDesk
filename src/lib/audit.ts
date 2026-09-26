@@ -74,6 +74,7 @@ export type AuditAction =
   | "settings.custom_field_reactivated"
   | "appeal.list_viewed"
   | "appeal.viewed"
+  | "appeal.create_form_viewed"
   | "appeal.created"
   | "appeal.submission_recorded"
   | "appeal.decision_recorded"

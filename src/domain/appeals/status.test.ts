@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { denialStatusForDecision, isCloseOutcome } from "./status";
+import { addCalendarDays } from "@rules/calendar";
+import { denialStatusForDecision, isCloseOutcome, submissionTimeliness } from "./status";
 
 describe("isCloseOutcome", () => {
   it("treats withdrawn and dismissed as not a payer ruling on the merits", () => {
@@ -8,6 +9,22 @@ describe("isCloseOutcome", () => {
     expect(isCloseOutcome("upheld")).toBe(false);
     expect(isCloseOutcome("overturned_full")).toBe(false);
     expect(isCloseOutcome("overturned_partial")).toBe(false);
+  });
+});
+
+describe("submissionTimeliness", () => {
+  const deadline = "2026-06-15";
+
+  it.each([
+    [addCalendarDays(deadline, -1), "on_time"], // day before
+    [deadline, "on_time"], // day of (the deadline day itself counts as on time)
+    [addCalendarDays(deadline, 1), "late"], // day after
+  ])("submitted on %s against deadline " + deadline + " reads %s", (submittedOn, expected) => {
+    expect(submissionTimeliness(submittedOn, deadline)).toBe(expected);
+  });
+
+  it("is null when there's no deadline to compare against", () => {
+    expect(submissionTimeliness("2026-06-15", null)).toBeNull();
   });
 });
 

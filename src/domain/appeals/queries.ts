@@ -126,7 +126,17 @@ export async function getAppeal(tx: TenantTx, appealId: string) {
   if (!row) return null;
 
   const deniedLine = row.denial.claimLineId
-    ? (await tx.select().from(claimLines).where(eq(claimLines.id, row.denial.claimLineId)).limit(1))[0]
+    ? (
+        await tx
+          .select({
+            id: claimLines.id,
+            lineNumber: claimLines.lineNumber,
+            procedureCode: claimLines.procedureCode,
+          })
+          .from(claimLines)
+          .where(eq(claimLines.id, row.denial.claimLineId))
+          .limit(1)
+      )[0]
     : undefined;
 
   const notes = await tx
