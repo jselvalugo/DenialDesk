@@ -136,6 +136,13 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   `PLATFORM_OPERATOR_PASSWORD_HASH` secret, and keep two-step (ideally a security key) on the Netlify
   account: whoever can edit these values controls the console.
 
+## Deploy preview fails with "migration … has been modified after being applied"
+
+A migration file changed after an earlier push applied it to the PR's branch database. Code is
+not at risk. Either delete that database branch in Netlify (Project → Database) and retry the
+deploy, or push the same commits under a new branch name and open a new PR, which gets a fresh
+branch database. Then never edit that migration again; add a new one.
+
 ## Checks after each deploy
 - `https://denialdesk.netlify.app/api/health` returns `{"status":"ok","appEnv":"preview","db":"up"}`.
 - The amber "Synthetic data only" banner is visible on every page.

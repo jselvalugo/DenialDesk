@@ -107,7 +107,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
-6. Custom field values on records, settings S2 (MVP): threat model first (value encryption, masking), then `custom_field_values` with RLS + isolation test.
+6. Custom field values on records, settings S2 (MVP): ADR 0007 and threat model accepted; PR 1
+   (encrypted storage, value history, role-gated reveal) in review on branch
+   `claude/custom-field-values-storage`. Next: PR 2 patient form, PR 3 claims/denials, PR 4 payers.
 7. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
@@ -192,7 +194,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   C0's column drops were a one-time pre-production change on synthetic data.
 - Never edit, rename, or renumber a migration once pushed: Netlify deploy previews apply each
   branch's migrations to a branch database, track them by number, and refuse any change ("modified
-  after being applied"). Add a new migration instead.
+  after being applied"). Add a new migration instead. Even a trailing-newline change counts. If a
+  PR's branch database is already broken this way, push the same commits under a new branch name
+  and open a new PR (fresh branch database); nothing in git is lost (PR #49 → storage PR, 2026-09-26).
 - Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
 - Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):
