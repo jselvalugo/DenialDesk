@@ -8,7 +8,7 @@ export interface LoadDefaultsState {
   error?: string;
 }
 
-/** Loads the RevCycle IQ default rules and ledger for a practice that has none yet. */
+/** Loads DenialDesk's starter rules and ledger for a practice that has none yet. */
 export async function loadDefaultRules(): Promise<LoadDefaultsState> {
   const auth = await requireAuth();
   const result = await loadDefaultRuleSet(auth);

@@ -8,7 +8,7 @@ import { DEFAULT_GL_ACCOUNTS, DEFAULT_PAYER_CLASSES, DEFAULTS_SOURCE, DEFAULT_RU
 import { EngineConfigError, ruleMatchSchema, type EngineConfig } from "./engine";
 
 /**
- * Seeds the RevCycle IQ default ledger configuration for the current tenant and audits it. Does
+ * Seeds DenialDesk's starter ledger configuration for the current tenant and audits it. Does
  * nothing when the practice already has business rules, so it never overwrites a practice's own
  * configuration. Serialized per tenant, so concurrent calls load the defaults once. Returns whether
  * anything was created.
@@ -84,8 +84,6 @@ export async function seedRevenueCycleDefaults(
       description: r.description,
       priority: r.priority,
       match: r.match,
-      contraBps: r.contraBps,
-      excluded: r.excluded,
       arGl: r.arGl,
       revenueGl: r.revenueGl,
       adjustmentGl: r.adjustmentGl,

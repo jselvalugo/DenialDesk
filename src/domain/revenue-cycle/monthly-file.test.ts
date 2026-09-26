@@ -13,18 +13,19 @@ import {
 const header = MONTHLY_FILE_HEADER.join(",");
 const row = (overrides: Partial<Record<string, string>> = {}) => {
   const values: Record<string, string> = {
-    Patient: "Synthetic, Ana",
-    "Account #": "SYN-000123",
-    "Svc Date": "03/14/2026",
-    CPT: "99213",
+    "Patient name": "Synthetic, Ana",
+    "Account number": "SYN-000123",
+    "Service date": "03/14/2026",
+    "Procedure code": "99213",
     Description: "Office visit",
     Facility: "Main clinic",
     Payer: "Gulf Coast Mutual",
-    "Payer Class": "COM",
-    Status: "PAID",
-    "Billed Charge": "$1,234.50",
-    "Total Payment": "(10.00)",
-    Balance: "1224.5",
+    "Financial class": "COMM",
+    Status: "OPEN",
+    Charges: "$1,234.50",
+    Payments: "(10.00)",
+    Adjustments: "300",
+    Balance: "924.5",
     ...overrides,
   };
   return MONTHLY_FILE_HEADER.map((h) => `"${values[h] ?? ""}"`).join(",");
@@ -68,25 +69,28 @@ describe("parseMonthlyFile", () => {
       serviceDate: "2026-03-14",
       billedCents: 123_450,
       paymentCents: -1_000,
-      balanceCents: 122_450,
+      adjustmentCents: 30_000,
+      balanceCents: 92_450,
     });
     const reordered =
-      "balance,TOTAL PAYMENT,billed charge,payer class,cpt,svc date,account #,patient\n1,2,3,COM,99213,01/02/2026,SYN-1,Syn";
+      "balance,ADJUSTMENTS,payments,charges,financial class,cpt,dos,account,patient\n1,2,3,4,COMM,99213,01/02/2026,SYN-1,Syn";
     expect(parseMonthlyFile(reordered, { syntheticOnly: true }).ok).toBe(true);
   });
 
   it("names missing required columns", () => {
     const result = parseMonthlyFile("Patient,CPT\nx,99213", { syntheticOnly: false });
     expect(result.ok).toBe(false);
-    expect(!result.ok && result.problems[0]!.message).toMatch(/Account #.*Svc Date.*Payer Class/);
+    expect(!result.ok && result.problems[0]!.message).toMatch(
+      /Account number.*Service date.*Financial class.*Charges.*Payments.*Adjustments.*Balance/,
+    );
   });
 
   it("rejects the whole file when any row is invalid, without echoing values", () => {
     const text = [
       header,
       row(),
-      row({ "Billed Charge": "12,34x", Patient: "" }),
-      row({ "Svc Date": "13/01/2026" }),
+      row({ Charges: "12,34x", "Patient name": "" }),
+      row({ "Service date": "13/01/2026" }),
     ].join("\n");
     const result = parseMonthlyFile(text, { syntheticOnly: true });
     expect(result.ok).toBe(false);
@@ -96,22 +100,22 @@ describe("parseMonthlyFile", () => {
   });
 
   it("accepts only synthetic account numbers outside production", () => {
-    const text = `${header}\n${row({ "Account #": "4471902" })}`;
+    const text = `${header}\n${row({ "Account number": "4471902" })}`;
     const synthetic = parseMonthlyFile(text, { syntheticOnly: true });
     expect(!synthetic.ok && synthetic.problems[0]!.message).toMatch(/synthetic files only/);
     expect(parseMonthlyFile(text, { syntheticOnly: false }).ok).toBe(true);
   });
 
   it("reports physical line numbers and skips blank and all-comma rows", () => {
-    const text = [header, "", row(), ",,,,,,,,,,,", row({ Patient: "" })].join("\n");
+    const text = [header, "", row(), ",,,,,,,,,,,,", row({ "Patient name": "" })].join("\n");
     const result = parseMonthlyFile(text, { syntheticOnly: true });
-    expect(!result.ok && result.problems).toEqual([{ row: 5, message: "Patient is blank." }]);
+    expect(!result.ok && result.problems).toEqual([{ row: 5, message: "Patient name is blank." }]);
   });
 
   it("rejects ambiguous headers", () => {
-    const text = `${header},Payment\n${row()},1`;
+    const text = `${header},Payment amount\n${row()},1`;
     const result = parseMonthlyFile(text, { syntheticOnly: true });
-    expect(!result.ok && result.problems[0]!.message).toMatch(/More than one column could be Total Payment/);
+    expect(!result.ok && result.problems[0]!.message).toMatch(/More than one column could be Payments/);
   });
 
   it("accepts exactly the row limit and rejects one more", () => {

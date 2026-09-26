@@ -464,9 +464,6 @@ export const businessRules = pgTable(
     active: boolean("active").notNull().default(true),
     /** Validated with `ruleMatchSchema` (src/domain/revenue-cycle/engine.ts) on read and write. */
     match: jsonb("match").notNull(),
-    /** Contractual adjustment in basis points (0–10000). */
-    contraBps: integer("contra_bps").notNull(),
-    excluded: boolean("excluded").notNull().default(false),
     arGl: text("ar_gl"),
     revenueGl: text("revenue_gl"),
     adjustmentGl: text("adjustment_gl"),
@@ -497,12 +494,15 @@ export const rcmFiles = pgTable(
     periodYear: integer("period_year").notNull(),
     periodMonth: integer("period_month").notNull(),
     rowCount: integer("row_count").notNull(),
+    /** Charges, payments, and adjustments posted in the period; balances open at period end. */
     billedCents: cents("billed_cents").notNull(),
     paymentCents: cents("payment_cents").notNull(),
+    adjustmentCents: cents("adjustment_cents").notNull().default(0),
     balanceCents: cents("balance_cents").notNull(),
-    contraCents: cents("contra_cents").notNull(),
+    /** Format 2: charges − adjustments posted in the period (format 1: charges − estimated contra). */
     netCents: cents("net_cents").notNull(),
-    excludedCount: integer("excluded_count").notNull(),
+    /** 1: pre-2026-09-26 layout (not usable for vouchers or aging); 2: month-end activity file. */
+    formatVersion: integer("format_version").notNull().default(1),
     flaggedCount: integer("flagged_count").notNull(),
     createdAt: createdAt(),
   },
@@ -528,20 +528,25 @@ export const rcmClaimLines = pgTable(
     payerName: text("payer_name").notNull(),
     payerClass: text("payer_class").notNull(),
     status: text("status").notNull(),
+    /** Posted in the period (see rcmFiles). */
     billedCents: cents("billed_cents").notNull(),
     paymentCents: cents("payment_cents").notNull(),
+    adjustmentCents: cents("adjustment_cents").notNull().default(0),
+    /** Open at period end; negative is a credit balance. */
     balanceCents: cents("balance_cents").notNull(),
     siteId: uuid("site_id").references(() => rcmSites.id),
     ruleCode: text("rule_code").notNull(),
-    contraBps: integer("contra_bps").notNull(),
-    contraCents: cents("contra_cents").notNull(),
+    /** Format 2 files: charges − adjustments posted in the period (see rcmFiles.formatVersion). */
     netCents: cents("net_cents").notNull(),
     arGl: text("ar_gl").notNull(),
     revenueGl: text("revenue_gl").notNull(),
     adjustmentGl: text("adjustment_gl").notNull(),
-    excluded: boolean("excluded").notNull(),
-    /** Needs review: zero charge or blank CPT/HCPCS (RevCycle IQ "flagged"). */
+    /** Needs review; the reasons are in `reviewReasons` (REVIEW_REASONS in imports.ts). */
     flagged: boolean("flagged").notNull(),
+    reviewReasons: text("review_reasons")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
   },
   (t) => [
     uniqueIndex("rcm_claim_lines_file_row_key").on(t.fileId, t.rowNumber),

@@ -28,8 +28,9 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Production on Azure, U.S. only; primary likely East US 2 (confirm at cutover) | ADR 0002 |
 | 2026-09-26 | Pre-production on Netlify, synthetic data only | ADR 0003 |
 | 2026-09-26 | Enterprise design system; Tailwind v4 + own components + Radix | ADR 0004, `DESIGN.md` |
-| 2026-09-26 | RevCycle IQ look and feel (navy/teal, Playfair/Inter/Space Mono, lucide icons); logo unchanged | ADR 0004 amendment, `specs/revcycle-look-and-feel.md` |
-| 2026-09-26 | Port RevCycle IQ accounting (rules engine, JVs, FIFO A/R, deposits, statements) as a tenant-scoped module, phases B1–B5 | `specs/revenue-cycle-accounting.md` |
+| 2026-09-26 | DenialDesk visual identity (navy/teal, Playfair/Inter/Space Mono, lucide icons); logo unchanged | ADR 0004 amendment, `specs/visual-identity.md` |
+| 2026-09-26 | Revenue cycle accounting module (rules engine, journal vouchers, A/R aging, deposits, statements), tenant-scoped, phases B1–B5 | `specs/revenue-cycle-accounting.md` |
+| 2026-09-26 | DenialDesk is standalone (owner instruction): the owner's earlier prototype was reference only; the revenue cycle module uses DenialDesk's own file layout, rules, accounts, vouchers, aging, and reconciliation (C0) | `specs/revenue-cycle-accounting.md` |
 | 2026-09-26 | Secrets scanning: gitleaks in CI | `specs/project-skeleton.md` |
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
@@ -38,8 +39,9 @@ The product owner delegated technical decisions to the implementing agent ("make
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
-0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger and B2 monthly file
-   import done; next B3 journal vouchers (MIP export), B4 deposits and A/R aging, B5 statements
+0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger, B2 monthly file
+   import, and C0 (own design: month-end activity file, starter configuration, posted adjustments)
+   done; next B3 journal vouchers (GL import CSV), B4 aging/deposits/reconciliation, B5 statements
    and dashboard.
 1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
@@ -59,13 +61,16 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Revenue cycle imports (before real data, `docs/threat-models/revenue-cycle-imports.md`):
   sensitivity tags for lines (Part 2/HIV/behavioral CPTs); encrypt account numbers or confirm
   PM exports never put member IDs there; accept the synthetic-only guard as attestation-level.
+- Revenue cycle: the starter chart of accounts and payer-class codes are illustrative; each practice
+  maps them to its own GL and PM financial classes (rule/GL editing UI needs version history first).
+  Accountant to confirm the net-revenue presentation (posted write-offs vs. GAAP price concessions).
+- Git history still contains the reference prototype's names from before C0. Rewrite history
+  (force-push of the default branch), or leave it? Owner decision.
 - Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must
   honor; Medicare Advantage filing windows assumed to come from payer contracts (`specs/claims.md`).
 - Claims before real data: sensitivity masking of diagnosis codes in `claim_versions` snapshots and
   history; retention/legal-hold path for append-only history; PIP/workers' comp/Medicaid filing
   rules and the HMO citation for timely filing (`specs/claims.md`).
-- Revenue cycle: confirm the Capitation rule is meant to be shadowed by the Medicare/Medicaid wrap
-  rule, and the GL account / payer-class names (seeded names are descriptive placeholders).
 
 ### Decisions from the 2026-09-26 agent reviews (need a human)
 1. **MFA enrollment on first sign-in** needs only the password, so a stolen password for a
@@ -93,6 +98,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   checked against the tenant in code (FKs bypass RLS).
 - Drizzle wraps DB errors: the Postgres message is on `error.cause` (see test helper `expectDbError`).
 - Next.js renders a hidden `role="alert"` route announcer; scope e2e alert queries to `main`.
+- Once production exists, record tables (imports, vouchers, audit) change by adding columns only;
+  C0's column drops were a one-time pre-production change on synthetic data.
+- Never edit, rename, or renumber a migration once pushed: Netlify deploy previews apply each
+  branch's migrations to a branch database, track them by number, and refuse any change ("modified
+  after being applied"). Add a new migration instead.
 - Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
 - Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):

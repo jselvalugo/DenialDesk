@@ -46,7 +46,7 @@ describe("revenue cycle defaults", () => {
   it("are seeded with every new synthetic practice", async () => {
     const setup = await withTenant(seeded, (tx) => ledgerSetup(tx));
     expect(setup.rules.map((r) => r.code)).toEqual(DEFAULT_RULES.map((r) => r.code));
-    expect(setup.accounts.filter((a) => a.isDefaultAr).map((a) => a.number)).toEqual(["1310"]);
+    expect(setup.accounts.filter((a) => a.isDefaultAr).map((a) => a.number)).toEqual(["1200"]);
     const locationCount = await withTenant(seeded, (tx) => tx.select().from(locations));
     expect(setup.sites).toHaveLength(locationCount.length);
     expect(setup.sites.every((s) => s.locationName !== null)).toBe(true);
@@ -68,13 +68,12 @@ describe("revenue cycle defaults", () => {
     const classify = prepareEngine(await withTenant(seeded, (tx) => loadEngineConfig(tx)));
     const result = classify({
       status: "PAID",
-      payerClass: "SPY",
+      payerClass: "SELF",
       cpt: "99213",
       description: "Visit",
       facility: "Clinic",
-      billedCents: 12_000,
     });
-    expect(result).toMatchObject({ ruleCode: "SELF_PAY", arGl: "1320", revenueGl: "5410" });
+    expect(result).toEqual({ ruleCode: "STANDARD", arGl: "1240", revenueGl: "4400", adjustmentGl: "4450" });
   });
 
   it("never overwrite an existing configuration", async () => {
@@ -91,13 +90,13 @@ describe("revenue cycle defaults", () => {
       tx.select().from(auditEvents).where(eq(auditEvents.action, "rcm.defaults_loaded")),
     );
     expect(events).toHaveLength(1);
-    expect(events[0]!.metadata).toMatchObject({ rules: 12 });
+    expect(events[0]!.metadata).toMatchObject({ rules: DEFAULT_RULES.length });
   });
 
   it("can be loaded into a practice that has none, without locations or payers", async () => {
     expect(await loadDefaultRuleSet({ ...empty, role: "admin" })).toEqual({ ok: true });
     const setup = await withTenant(empty, (tx) => ledgerSetup(tx));
-    expect(setup.rules).toHaveLength(12);
+    expect(setup.rules).toHaveLength(DEFAULT_RULES.length);
     expect(setup.sites).toHaveLength(0);
     expect(setup.classes.every((c) => c.payerName === null)).toBe(true);
   });
@@ -136,24 +135,17 @@ describe("loading the default rule set", () => {
       loadDefaultRuleSet({ ...practice, role: "admin" }),
     ]);
     expect(results.filter((r) => r.ok)).toHaveLength(1);
-    expect(await withTenant(practice, (tx) => tx.select().from(businessRules))).toHaveLength(12);
+    expect(await withTenant(practice, (tx) => tx.select().from(businessRules))).toHaveLength(
+      DEFAULT_RULES.length,
+    );
   });
 });
 
 describe("revenue cycle constraints", () => {
-  it("reject contra percentages outside 0–100%", async () => {
-    await expectDbError(
-      withTenant(seeded, (tx) =>
-        tx.update(businessRules).set({ contraBps: 10_001 }).where(eq(businessRules.code, "STANDARD")),
-      ),
-      /contra_bps_range/,
-    );
-  });
-
   it("allow only one default AR account per practice", async () => {
     await expectDbError(
       withTenant(seeded, (tx) =>
-        tx.update(glAccounts).set({ isDefaultAr: true }).where(eq(glAccounts.number, "1320")),
+        tx.update(glAccounts).set({ isDefaultAr: true }).where(eq(glAccounts.number, "1240")),
       ),
       /one_default_ar/,
     );

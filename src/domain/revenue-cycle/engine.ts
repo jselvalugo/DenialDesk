@@ -3,11 +3,12 @@ import { z } from "zod";
 /**
  * Revenue cycle accounting rules engine (docs/specs/revenue-cycle-accounting.md).
  *
- * Classifies one line of the monthly practice-management export: the first active rule (lowest
- * priority number) whose conditions match wins, sets the contractual-adjustment ("contra")
- * percentage, and routes the line to AR, revenue, and adjustment GL accounts. Rules and routing
- * are per-practice accounting configuration stored in the database, not legal rules. Pure and
- * deterministic: no I/O, integer cents only.
+ * Routes one line of the monthly activity file to general-ledger accounts: the first active rule
+ * (lowest priority number) whose conditions match wins and picks the line's receivable (AR),
+ * revenue, and adjustment accounts. Rules never change amounts: every line's charges, payments,
+ * and adjustments post as the practice-management system recorded them, so the ledger always
+ * agrees with the file. Rules and routing are per-practice accounting configuration stored in the
+ * database, not legal rules. Pure and deterministic: no I/O.
  */
 
 export const RULE_FIELDS = ["status", "payer_class", "cpt", "description", "facility"] as const;
@@ -15,7 +16,7 @@ export type RuleField = (typeof RULE_FIELDS)[number];
 
 /**
  * The fixed condition vocabulary. Users pick from these; no free-form code or regular expressions.
- * - equals / in: exact, case-sensitive match (as in the source engine; the importer trims cells)
+ * - equals / in: exact, case-sensitive match (the importer trims cells)
  * - contains: case-insensitive substring
  * - starts_with / ends_with: exact prefix/suffix
  * - invalid_cpt: the CPT/HCPCS value isn't exactly 5 letters or digits
@@ -46,10 +47,6 @@ export interface EngineRule {
   priority: number;
   active: boolean;
   match: RuleMatch;
-  /** Contractual adjustment in basis points: 0 = none, 10000 = 100% of the charge. */
-  contraBps: number;
-  /** Excluded from standard AR (e.g. fully adjusted lines). */
-  excluded: boolean;
   /** GL overrides; null falls back to the payer class, then the AR account's defaults. */
   arGl: string | null;
   revenueGl: string | null;
@@ -80,16 +77,10 @@ export interface LineInput {
   cpt: string;
   description: string;
   facility: string;
-  billedCents: number;
 }
 
 export interface Classification {
   ruleCode: string;
-  contraBps: number;
-  excluded: boolean;
-  grossCents: number;
-  contraCents: number;
-  netCents: number;
   arGl: string;
   revenueGl: string;
   adjustmentGl: string;
@@ -97,7 +88,8 @@ export interface Classification {
 
 export class EngineConfigError extends Error {}
 
-const CPT_FORMAT = /^[A-Za-z0-9]{5}$/;
+/** A CPT/HCPCS code is exactly five letters or digits. */
+export const CPT_FORMAT = /^[A-Za-z0-9]{5}$/;
 
 function fieldValue(line: LineInput, field: RuleField): string {
   switch (field) {
@@ -135,27 +127,13 @@ export function ruleMatches(match: RuleMatch, line: LineInput): boolean {
   return "always" in match || match.any.some((condition) => conditionMatches(condition, line));
 }
 
-/**
- * Contra amount for a charge: basis points, rounded half away from zero to the cent (so credits
- * mirror charges exactly). The source engine only used 0% and 100%, where rounding never applies.
- */
-export function contraCents(grossCents: number, bps: number): number {
-  const exact = (Math.abs(grossCents) * bps) / 10_000;
-  return Math.sign(grossCents) * Math.round(exact);
-}
-
-/** Sorted, validated view of a config; call once per import, then classify every line. */
+/** Sorted, validated view of a config; call once per import, then route every line. */
 export function prepareEngine(config: EngineConfig) {
   const rules = config.rules
     .filter((rule) => rule.active)
     .sort((a, b) => a.priority - b.priority || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
   if (!rules.some((rule) => "always" in rule.match)) {
     throw new EngineConfigError("The active rule set needs a fallback rule that matches every line.");
-  }
-  for (const rule of rules) {
-    if (!Number.isInteger(rule.contraBps) || rule.contraBps < 0 || rule.contraBps > 10_000) {
-      throw new EngineConfigError(`Rule ${rule.code} has an invalid contra percentage.`);
-    }
   }
   const payerClassAr = new Map(config.payerClasses.map((pc) => [pc.code, pc.arGl]));
   const arAccounts = new Map(config.arAccounts.map((account) => [account.number, account]));
@@ -175,19 +153,12 @@ export function prepareEngine(config: EngineConfig) {
   }
 
   return function classify(line: LineInput): Classification {
-    if (!Number.isInteger(line.billedCents)) throw new EngineConfigError("Charges must be integer cents.");
     const rule = rules.find((candidate) => ruleMatches(candidate.match, line))!;
     const arGl = rule.arGl ?? payerClassAr.get(line.payerClass) ?? config.defaultArGl;
     const account = arAccounts.get(arGl);
     if (!account) throw new EngineConfigError(`AR account ${arGl} isn't set up.`);
-    const contra = contraCents(line.billedCents, rule.contraBps);
     return {
       ruleCode: rule.code,
-      contraBps: rule.contraBps,
-      excluded: rule.excluded,
-      grossCents: line.billedCents,
-      contraCents: contra,
-      netCents: line.billedCents - contra,
       arGl,
       revenueGl: rule.revenueGl ?? account.revenueGl,
       adjustmentGl: rule.adjustmentGl ?? account.adjustmentGl,

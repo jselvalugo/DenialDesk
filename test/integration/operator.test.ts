@@ -163,7 +163,7 @@ describe("demo practice", () => {
     const sample = await ensureDemoPractice();
     const sampleCounts = await count(sample);
     expect(sampleCounts.denials).toBeGreaterThan(0);
-    expect(sampleCounts.files).toBe(1);
+    expect(sampleCounts.files).toBe(3);
   });
 });
 

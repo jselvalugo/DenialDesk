@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { rcmSites } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
-import { listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
+import { CURRENT_FORMAT_VERSION, listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
 import { syntheticDataOnly } from "@/lib/env";
 import { Badge } from "@/components/ui/Badge";
 import { UploadForm } from "./UploadForm";
@@ -41,7 +41,7 @@ export default async function FilesPage() {
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <PageHeader
         title="Monthly files"
-        description="Charges and payments exported from the practice-management system each month, classified line by line with the practice's accounting rules."
+        description="Each month's charges, payments, adjustments, and open balances from the practice-management system, classified line by line with the practice's accounting rules."
       />
 
       <Panel title="Imported files" description={`${files.length} files, newest period first`} flush>
@@ -57,10 +57,11 @@ export default async function FilesPage() {
                 <Th>Period</Th>
                 <Th>File</Th>
                 <Th numeric>Lines</Th>
-                <Th numeric>Gross charges</Th>
-                <Th numeric>Contra</Th>
+                <Th numeric>Charges</Th>
+                <Th numeric>Adjustments</Th>
                 <Th numeric>Net revenue</Th>
                 <Th numeric>Payments</Th>
+                <Th numeric>Open balance</Th>
                 <Th numeric>Needs review</Th>
                 <Th>Imported by</Th>
               </tr>
@@ -80,6 +81,14 @@ export default async function FilesPage() {
                         <Badge tone="warning">Period imported more than once</Badge>
                       </span>
                     )}
+                    {f.formatVersion !== CURRENT_FORMAT_VERSION && (
+                      <span
+                        className="ml-2"
+                        title="Imported before the month-end activity layout; not used for vouchers or aging. Import the month again."
+                      >
+                        <Badge tone="neutral">Earlier layout</Badge>
+                      </span>
+                    )}
                   </Td>
                   <Td className="max-w-64 truncate text-muted">{f.filename}</Td>
                   <Td numeric>{f.rowCount.toLocaleString("en-US")}</Td>
@@ -87,13 +96,16 @@ export default async function FilesPage() {
                     <Money cents={f.billedCents} />
                   </Td>
                   <Td numeric>
-                    <Money cents={f.contraCents} />
+                    <Money cents={f.adjustmentCents} />
                   </Td>
                   <Td numeric className="font-medium">
                     <Money cents={f.netCents} />
                   </Td>
                   <Td numeric>
                     <Money cents={f.paymentCents} />
+                  </Td>
+                  <Td numeric>
+                    <Money cents={f.balanceCents} />
                   </Td>
                   <Td numeric>{f.flaggedCount}</Td>
                   <Td className="text-muted">
@@ -110,7 +122,7 @@ export default async function FilesPage() {
       {canRunRevenueCycle(auth.role) && (
         <Panel
           title="Import a monthly file"
-          description="CSV with columns Patient, Account #, Svc Date, CPT, Description, Facility, Payer, Payer Class, Status, Billed Charge, Total Payment, Balance."
+          description="Month-end activity CSV: every charge line with activity in the month or still open at month-end. Columns: Patient name, Account number, Service date, Procedure code, Description, Facility, Payer, Financial class, Status, Charges, Payments, Adjustments (posted in the month), and Balance (open at month-end)."
         >
           <UploadForm
             sites={sites}

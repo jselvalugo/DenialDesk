@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { DEFAULT_RULES } from "@/domain/revenue-cycle/defaults";
 
 async function openDemo(page: Page) {
   await page.goto("/login");
@@ -14,8 +15,8 @@ test.describe("revenue cycle as compliance (read-only)", () => {
     await page.getByRole("link", { name: "Rules and ledger" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Rules and ledger" })).toBeVisible();
     const rules = page.getByRole("table", { name: "Business rules in evaluation order" });
-    await expect(rules.getByRole("row")).toHaveCount(13); // header + 12 rules
-    await expect(rules.getByRole("row").nth(1)).toContainText("INTEREST");
+    await expect(rules.getByRole("row")).toHaveCount(DEFAULT_RULES.length + 1); // header + rules
+    await expect(rules.getByRole("row").nth(1)).toContainText("PROMPT_PAY_INTEREST");
     await expect(rules.getByRole("row").last()).toContainText("Every line not matched by an earlier rule");
     await expect(page.getByRole("table", { name: "GL accounts" })).toContainText("Default AR");
     await expect(page.getByRole("table", { name: "Payer classes" })).toContainText("MCR");
@@ -31,12 +32,12 @@ test.describe("monthly files", () => {
       await page.goto("/revenue-cycle/files");
       await expect(page.getByRole("heading", { name: "Import a monthly file" })).toHaveCount(0);
       await page.getByRole("table", { name: "Imported monthly files" }).getByRole("link").first().click();
-      await expect(page.getByRole("region", { name: "File control totals" })).toContainText("150");
+      await expect(page.getByRole("region", { name: "File control totals" })).toContainText("Open balance");
       const lines = page.getByRole("table", { name: "Classified lines" });
       await expect(lines.getByRole("row")).toHaveCount(51); // header + first page of 50
       // Compliance sees masked identifiers (minimum necessary).
       await expect(lines.getByRole("row").nth(1)).toContainText("•••• ");
-      await expect(page.getByText(/^1–50 of 150/)).toBeVisible();
+      await expect(page.getByText(/^1–50 of \d{3}/)).toBeVisible();
       await page
         .getByRole("table", { name: "Totals by rule" })
         .getByRole("link", { name: "STANDARD" })
@@ -68,7 +69,7 @@ test.describe("monthly files", () => {
     await page.getByLabel(/synthetic data only/).check();
     await page.getByRole("button", { name: "Import file" }).click();
     const problems = page.getByRole("list", { name: "Problems in the file" });
-    await expect(problems).toContainText("Row 2: Account # must start with SYN-");
+    await expect(problems).toContainText("Row 2: Account number must start with SYN-");
 
     await page.getByLabel("Monthly file (CSV, up to 5 MB)").setInputFiles({
       name: "synthetic-sample.csv",
@@ -78,7 +79,10 @@ test.describe("monthly files", () => {
     await page.getByLabel(/synthetic data only/).check();
     await page.getByRole("button", { name: "Import file" }).click();
     await expect(page).toHaveURL(/\/revenue-cycle\/files\/[0-9a-f-]{36}$/);
-    await expect(page.getByRole("region", { name: "File control totals" })).toContainText("150");
+    const lineCount = csv.trim().split("\r\n").length - 1;
+    await expect(page.getByRole("region", { name: "File control totals" })).toContainText(
+      lineCount.toLocaleString("en-US"),
+    );
     await expect(page.getByText(/^monthly-file-\d{4}-\d{2}\.csv/)).toBeVisible();
     // Managers work accounts, so they see identifiers unmasked.
     await expect(page.getByRole("table", { name: "Classified lines" }).getByRole("row").nth(1)).toContainText(
@@ -86,7 +90,7 @@ test.describe("monthly files", () => {
     );
     // Paging past the end lands on the last page.
     await page.goto(`${page.url()}?page=99`);
-    await expect(page).toHaveURL(/page=3$/);
+    await expect(page).toHaveURL(new RegExp(`page=${Math.ceil(lineCount / 50)}$`));
   });
 });
 
