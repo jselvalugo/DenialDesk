@@ -3,6 +3,10 @@ import { z } from "zod";
 const schema = z.object({
   APP_ENV: z.enum(["development", "preview", "production"]),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  /** Base64 of 32 random bytes (AES-256). Pre-prod only; Azure Key Vault in production (ADR 0002). */
+  FIELD_ENCRYPTION_KEY: z
+    .string()
+    .refine((value) => Buffer.from(value, "base64").length === 32, "must be base64 of 32 bytes"),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

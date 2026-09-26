@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { parseEnv } from "./env";
 
-const valid = { APP_ENV: "development", DATABASE_URL: "postgres://u:p@localhost:5432/db" };
+const valid = {
+  APP_ENV: "development",
+  DATABASE_URL: "postgres://u:p@localhost:5432/db",
+  FIELD_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
+};
 
 describe("parseEnv", () => {
   it("accepts a valid environment", () => {
@@ -14,6 +18,12 @@ describe("parseEnv", () => {
 
   it("rejects a non-Postgres DATABASE_URL", () => {
     expect(() => parseEnv({ ...valid, DATABASE_URL: "mysql://u:p@localhost/db" })).toThrow(/DATABASE_URL/);
+  });
+
+  it("rejects an encryption key of the wrong length", () => {
+    expect(() => parseEnv({ ...valid, FIELD_ENCRYPTION_KEY: Buffer.alloc(16).toString("base64") })).toThrow(
+      /FIELD_ENCRYPTION_KEY/,
+    );
   });
 
   it("names missing variables without echoing any values", () => {

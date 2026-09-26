@@ -1,30 +1,50 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const port = Number(process.env.PORT ?? 3000);
+// Runs against production builds (`pnpm build` first): one server as a preview environment and one
+// as production, so the pre-production guards are tested in both modes (ADR 0003).
+const previewPort = 3000;
+const productionPort = 3001;
+
+const browser = {
+  ...devices["Desktop Chrome"],
+  viewport: { width: 1440, height: 900 },
+  // Lets environments with a preinstalled browser skip `playwright install`.
+  launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+    ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }
+    : {},
+};
 
 export default defineConfig({
   testDir: "test/e2e",
   forbidOnly: !!process.env.CI,
   retries: 0,
+  workers: 1,
   reporter: process.env.CI ? [["github"], ["list"]] : "list",
-  use: { baseURL: `http://localhost:${port}`, trace: "retain-on-failure" },
+  use: { trace: "retain-on-failure" },
   projects: [
     {
-      name: "chromium",
-      use: {
-        ...devices["Desktop Chrome"],
-        viewport: { width: 1440, height: 900 },
-        // Lets environments with a preinstalled browser skip `playwright install`.
-        launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
-          ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }
-          : {},
-      },
+      name: "preview",
+      testIgnore: /production\.spec\.ts/,
+      use: { ...browser, baseURL: `http://localhost:${previewPort}` },
+    },
+    {
+      name: "production",
+      testMatch: /production\.spec\.ts/,
+      use: { ...browser, baseURL: `http://localhost:${productionPort}` },
     },
   ],
-  webServer: {
-    command: process.env.CI ? `pnpm start --port ${port}` : `pnpm dev --port ${port}`,
-    port,
-    reuseExistingServer: !process.env.CI,
-    env: { APP_ENV: process.env.APP_ENV ?? "development" },
-  },
+  webServer: [
+    {
+      command: `pnpm start --port ${previewPort}`,
+      port: previewPort,
+      reuseExistingServer: false,
+      env: { APP_ENV: "preview" },
+    },
+    {
+      command: `pnpm start --port ${productionPort}`,
+      port: productionPort,
+      reuseExistingServer: false,
+      env: { APP_ENV: "production" },
+    },
+  ],
 });

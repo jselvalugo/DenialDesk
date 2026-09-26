@@ -1,0 +1,7 @@
+# Pre-production only, synthetic data only (ADR 0003). Runbook: docs/runbooks/netlify.md
+[build]
+  command = "pnpm db:migrate && pnpm build"
+
+[build.environment]
+  NODE_VERSION = "24"
+  NEXT_TELEMETRY_DISABLED = "1"

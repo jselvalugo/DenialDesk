@@ -8,6 +8,20 @@
       "when": 1790412869895,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790413681232,
+      "tag": "0001_core_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790413682185,
+      "tag": "0002_security",
+      "breakpoints": true
     }
   ]
 }

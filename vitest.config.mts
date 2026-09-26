@@ -12,7 +12,13 @@ export default defineConfig({
       },
       {
         resolve: { alias },
-        test: { name: "integration", include: ["test/integration/**/*.test.ts"], environment: "node" },
+        test: {
+          name: "integration",
+          include: ["test/integration/**/*.test.ts"],
+          environment: "node",
+          setupFiles: ["test/integration/setup.ts"],
+          fileParallelism: false,
+        },
       },
     ],
   },
