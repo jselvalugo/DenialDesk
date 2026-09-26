@@ -249,4 +249,41 @@ describe("database errors from tenant queries", () => {
     expect(leaks(error, [email, email.toUpperCase(), values.displayName, values.passwordHash])).toEqual([]);
     await systemDb().delete(users).where(eq(users.email, email));
   });
+
+  // Every Drizzle query path reaches the sanitizer (ADR 0005). 22P02 quotes the bad value.
+  const bad = "SYN-not-a-uuid-Synthia";
+  it.each([
+    ["select", () => systemDb().select().from(users).where(eq(users.id, bad))],
+    ["relational query", () => systemDb().query.users.findFirst({ where: eq(users.id, bad) })],
+    ["execute", () => systemDb().execute(sql`select ${bad}::uuid`)],
+    [
+      "statement in a system transaction",
+      () => systemDb().transaction((tx) => tx.execute(sql`select ${bad}::uuid`)),
+    ],
+    [
+      "nested savepoint",
+      () =>
+        systemDb().transaction((tx) => tx.transaction((inner) => inner.execute(sql`select ${bad}::uuid`))),
+    ],
+  ] as const)("sanitize a %s error", async (_, run) => {
+    const error = await (run() as Promise<unknown>).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("22P02");
+    expect(leaks(error, [bad])).toEqual([]);
+  });
+
+  it("sanitize a deferred constraint violation raised at commit", async () => {
+    const value = "SYN-DEFERRED-Synthia";
+    const error = await systemDb()
+      .transaction(async (tx) => {
+        await tx.execute(
+          sql`create temp table deferred_probe (v text unique deferrable initially deferred) on commit drop`,
+        );
+        await tx.execute(sql`insert into deferred_probe values (${value}), (${value})`);
+      })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("23505");
+    expect(leaks(error, [value])).toEqual([]);
+  });
 });

@@ -1,4 +1,5 @@
 import type { Instrumentation } from "next";
+import { installQueryErrorSanitizer } from "@/db/errors";
 import { serverEnv } from "@/lib/env";
 import { log } from "@/lib/log";
 import { requestErrorFields } from "@/lib/request-error";
@@ -7,6 +8,8 @@ import { requestErrorFields } from "@/lib/request-error";
 export function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     serverEnv();
+    // Fails the boot if a Drizzle upgrade removed the method errors are sanitized in (ADR 0005).
+    installQueryErrorSanitizer();
   }
 }
 

@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { systemDb, type Database } from "./client";
 import { sanitizeDatabaseError } from "./errors";
 
-export { DatabaseError, isUniqueViolation, sanitizeDatabaseError } from "./errors";
+export { DatabaseError, isDatabaseError, isUniqueViolation, sanitizeDatabaseError } from "./errors";
 
 export type TenantTx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 

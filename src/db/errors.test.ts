@@ -6,9 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DatabaseError,
   installQueryErrorSanitizer,
+  sanitizeConnectionError,
   isUniqueViolation,
   sanitizeDatabaseError,
-  TRIGGER_MESSAGE_FORMATS,
+  TRIGGER_MESSAGES,
+  type TriggerSlot,
 } from "./errors";
 
 // Synthetic values only (CLAUDE.md #1). Each one must never survive sanitizing.
@@ -189,7 +191,7 @@ describe("sanitizeDatabaseError: messages are kept only when known to be value-f
   it("keeps a trigger message that matches a listed format with ID, number, or status arguments", () => {
     for (const message of [
       "claim 3f2a0c1e-8d4b-4c6a-9e7f-0a1b2c3d4e5f must move to version 4",
-      "rcm_voucher_workflow: posted -> draft is not allowed",
+      "rcm_voucher_workflow: approved -> draft is not allowed",
       "audit_events is append-only",
     ]) {
       expect(sanitize({ message, code: "P0001" }).message).toBe(message);
@@ -201,6 +203,10 @@ describe("sanitizeDatabaseError: messages are kept only when known to be value-f
       `claim ${NAME} must move to version 4`,
       `rcm_voucher_workflow: ${MRN} -> draft is not allowed`,
       `patient ${NAME} already has a claim`,
+      // PHI-shaped values in typed slots: a 9-digit SSN/member ID, a lowercase name, a non-status word.
+      "claim 3f2a0c1e-8d4b-4c6a-9e7f-0a1b2c3d4e5f must move to version 123456789",
+      "claim testpatient version 2 has no history row",
+      "rcm_voucher_workflow: synthia -> draft is not allowed",
     ]) {
       const sanitized = sanitize({ message, code: "P0001" });
       expect(sanitized.message).toBe("Database query failed (SQLSTATE P0001)");
@@ -212,48 +218,56 @@ describe("sanitizeDatabaseError: messages are kept only when known to be value-f
 
 describe("migrations raise only listed, value-free trigger messages", () => {
   const dir = new URL("../../drizzle/", import.meta.url);
-  const raises = readdirSync(dir)
+  const sources = readdirSync(dir)
     .filter((file) => file.endsWith(".sql"))
-    .flatMap((file) =>
-      [
-        ...readFileSync(new URL(file, dir), "utf8").matchAll(
-          /RAISE\s+EXCEPTION\s+'([^']*)'\s*(?:,([^;]*))?;/gi,
-        ),
-      ].map((match) => ({
-        file,
-        format: match[1]!,
-        args: (match[2] ?? "")
-          .split(",")
-          .map((a) => a.trim())
-          .filter(Boolean),
-      })),
-    );
+    .map((file) => ({ file, sql: readFileSync(new URL(file, dir), "utf8") }));
+  // Any RAISE that can abort (level omitted defaults to EXCEPTION), vs. the strict form we parse.
+  const ANY_RAISE = /\bRAISE\b(?!\s+(?:NOTICE|WARNING|INFO|LOG|DEBUG)\b)/gi;
+  const STRICT_RAISE = /\bRAISE\s+(?:EXCEPTION\s+)?'([^']*)'\s*(?:,([^;]*))?;/gi;
+  const raises = sources.flatMap(({ file, sql }) =>
+    [...sql.matchAll(STRICT_RAISE)].map((match) => ({
+      file,
+      format: match[1]!,
+      args: (match[2] ?? "")
+        .split(",")
+        .map((arg) => arg.trim())
+        .filter(Boolean),
+    })),
+  );
+  // Each interpolated expression's type; anything not listed fails the test.
+  const EXPRESSION_SLOTS: Record<string, TriggerSlot> = {
+    "OLD.id": "uuid",
+    "NEW.id": "uuid",
+    "NEW.claim_id": "uuid",
+    "NEW.version": "int",
+    "OLD.version + 1": "int",
+    missing: "int",
+    "OLD.status": "voucherStatus",
+    "NEW.status": "voucherStatus",
+  };
 
-  it("finds the RAISE statements", () => {
-    expect(raises.length).toBeGreaterThanOrEqual(TRIGGER_MESSAGE_FORMATS.length);
+  it("parses every RAISE strictly (no E'', quoted '' or USING forms slip past the checks)", () => {
+    for (const { file, sql } of sources) {
+      const all = [...sql.matchAll(ANY_RAISE)].length;
+      const parsed = [...sql.matchAll(STRICT_RAISE)].length;
+      expect({ file, parsed }).toEqual({ file, parsed: all });
+    }
+    expect(raises.length).toBeGreaterThanOrEqual(TRIGGER_MESSAGES.length);
   });
 
   it.each(raises.map((raise) => [raise.file, raise.format, raise] as const))(
-    "%s: '%s' is listed in TRIGGER_MESSAGE_FORMATS",
-    (_, format) => {
-      expect(TRIGGER_MESSAGE_FORMATS as readonly string[]).toContain(format);
+    "%s: '%s' is listed, and each argument has its slot's type",
+    (_, format, raise) => {
+      const listed = TRIGGER_MESSAGES.find((entry) => entry.format === format);
+      expect(listed, `add "${format}" to TRIGGER_MESSAGES`).toBeDefined();
+      expect(raise.args.map((arg) => EXPRESSION_SLOTS[arg] ?? `unlisted expression: ${arg}`)).toEqual(
+        listed!.args,
+      );
     },
   );
 
-  it.each(
-    raises
-      .filter((raise) => raise.args.length > 0)
-      .map((raise) => [raise.file, raise.format, raise] as const),
-  )("%s: '%s' interpolates only IDs, versions, counts, or statuses", (_, __, raise) => {
-    for (const arg of raise.args) {
-      expect(arg).toMatch(/^(?:(?:OLD|NEW)\.(?:id|claim_id|version|status)(?: \+ 1)?|missing)$/);
-    }
-  });
-
   it("has no RAISE with a USING clause (DETAIL/HINT would bypass the format check)", () => {
-    for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql"))) {
-      expect(readFileSync(new URL(file, dir), "utf8")).not.toMatch(/RAISE[^;]*\bUSING\b/i);
-    }
+    for (const { sql } of sources) expect(sql).not.toMatch(/RAISE[^;]*\bUSING\b/i);
   });
 });
 
@@ -274,5 +288,46 @@ describe("installQueryErrorSanitizer", () => {
     expect(surface(error)).not.toContain(NAME);
     expect(surface(error)).not.toContain(MRN);
     expect(stderr).toHaveLength(1); // logged once, not once per wrapper
+  });
+});
+
+describe("robustness", () => {
+  it("doesn't trust a Node socket code (no severity) as a SQLSTATE", () => {
+    const epipe = Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+    const sanitized = sanitizeDatabaseError(drizzleError(epipe)) as DatabaseError;
+    expect(sanitized.code).toBeUndefined();
+    expect(sanitized.message).toBe("Database query failed");
+  });
+
+  it("recognizes a DatabaseError from another copy of this module (by name, not instanceof)", async () => {
+    vi.resetModules();
+    const other = await import("./errors");
+    const foreign = new other.DatabaseError("Integrity constraint violation (SQLSTATE 23505)", "23505");
+    expect(foreign).not.toBeInstanceOf(DatabaseError);
+    expect(isUniqueViolation(foreign)).toBe(true);
+    expect(sanitizeDatabaseError(foreign)).toBe(foreign);
+  });
+
+  it("wraps Drizzle's prototype once, even from a second copy of this module", async () => {
+    installQueryErrorSanitizer();
+    const wrapped = (PgPreparedQuery.prototype as unknown as { queryWithCache: unknown }).queryWithCache;
+    vi.resetModules();
+    (await import("./errors")).installQueryErrorSanitizer();
+    expect((PgPreparedQuery.prototype as unknown as { queryWithCache: unknown }).queryWithCache).toBe(
+      wrapped,
+    );
+  });
+
+  it("replaces connection errors, which name hosts and roles", () => {
+    const refused = Object.assign(new Error("connect ECONNREFUSED 10.1.2.3:5432"), { code: "ECONNREFUSED" });
+    const auth = pgError({
+      message: 'password authentication failed for user "synthetic_role"',
+      code: "28P01",
+    });
+    expect(sanitizeConnectionError(refused).message).toBe("Database connection failed");
+    const sanitizedAuth = sanitizeConnectionError(auth);
+    expect(sanitizedAuth.code).toBe("28P01");
+    expect(surface(sanitizedAuth)).not.toContain("synthetic_role");
+    expect(surface(sanitizeConnectionError(refused))).not.toContain("10.1.2.3");
   });
 });

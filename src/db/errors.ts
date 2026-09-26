@@ -1,6 +1,7 @@
 import { DrizzleQueryError } from "drizzle-orm";
 import { PgPreparedQuery } from "drizzle-orm/pg-core";
 import { LOG_VALUE_PATTERNS, log } from "@/lib/log";
+import { voucherStatusEnum } from "./schema";
 
 /** A database failure with the query parameters (which can hold PHI) stripped out. */
 export class DatabaseError extends Error {
@@ -14,9 +15,17 @@ export class DatabaseError extends Error {
   }
 }
 
+/**
+ * True for a sanitized database error. Checked by name, not `instanceof`, so it holds even if this
+ * module is loaded twice (dev HMR, separate server bundles) while Drizzle's prototype is shared.
+ */
+export function isDatabaseError(error: unknown): error is DatabaseError {
+  return error instanceof Error && error.name === "DatabaseError";
+}
+
 /** True for a sanitized unique violation (a race callers usually turn into a friendly message). */
 export function isUniqueViolation(error: unknown): boolean {
-  return error instanceof DatabaseError && error.code === "23505";
+  return isDatabaseError(error) && error.code === "23505";
 }
 
 const SQLSTATE = /^[0-9A-Z]{5}$/;
@@ -39,39 +48,44 @@ const OBJECT_ONLY_MESSAGE_CODES = new Set([
   "53300", // too_many_connections
 ]);
 
-/**
- * Every `RAISE EXCEPTION` format string in drizzle/*.sql (SQLSTATE P0001). A trigger message is
- * kept only when it matches one of these, with each `%` filled by a UUID, an integer, or a status
- * word. src/db/errors.test.ts fails if a migration raises a message not listed here or interpolates
- * anything other than IDs, versions, counts, or statuses.
- */
-export const TRIGGER_MESSAGE_FORMATS = [
-  "audit_events is append-only",
-  "claim_versions is append-only",
-  "claim_versions.changed_by must be the current user",
-  "claims.created_at cannot change",
-  "claim % must move to version %",
-  "claim % version % has no history row",
-  "lines of claim % changed without a new claim version",
-  "claim version backfill missed % claims",
-  "rcm_voucher_workflow: % -> % is not allowed",
-  "rcm_voucher_workflow: approval, export, and void records are write-once",
-  "rcm_voucher_workflow: actor is not a member of this practice",
-  "rcm_journal_lines_draft_only: lines can only be added to a draft voucher",
-  "rcm_deposit_files_uploader: uploader is not a member of this practice",
-] as const;
+/** What a trigger may interpolate into a `%`: an ID, a small integer, or a voucher status. */
+export type TriggerSlot = "uuid" | "int" | "voucherStatus";
+const SLOT_PATTERNS: Record<TriggerSlot, string> = {
+  uuid: "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+  // Versions and counts; at most 6 digits so an SSN, member ID, or numeric MRN never matches.
+  int: "\\d{1,6}",
+  voucherStatus: `(?:${voucherStatusEnum.enumValues.join("|")})`,
+};
 
-const TRIGGER_ARGUMENT =
-  "(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\\d{1,12}|[a-z_]{1,32})";
-const TRIGGER_MESSAGES = TRIGGER_MESSAGE_FORMATS.map(
-  (format) =>
-    new RegExp(
-      `^${format
-        .split("%")
-        .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-        .join(TRIGGER_ARGUMENT)}$`,
-    ),
-);
+/**
+ * Every `RAISE` format string in drizzle/*.sql (SQLSTATE P0001), with the type of each `%`. A
+ * trigger message is kept only when it matches one of these exactly. src/db/errors.test.ts fails if
+ * a migration raises a format not listed here, or interpolates an expression whose type differs.
+ */
+export const TRIGGER_MESSAGES: readonly { format: string; args: readonly TriggerSlot[] }[] = [
+  { format: "audit_events is append-only", args: [] },
+  { format: "claim_versions is append-only", args: [] },
+  { format: "claim_versions.changed_by must be the current user", args: [] },
+  { format: "claims.created_at cannot change", args: [] },
+  { format: "claim % must move to version %", args: ["uuid", "int"] },
+  { format: "claim % version % has no history row", args: ["uuid", "int"] },
+  { format: "lines of claim % changed without a new claim version", args: ["uuid"] },
+  { format: "claim version backfill missed % claims", args: ["int"] },
+  { format: "rcm_voucher_workflow: % -> % is not allowed", args: ["voucherStatus", "voucherStatus"] },
+  { format: "rcm_voucher_workflow: approval, export, and void records are write-once", args: [] },
+  { format: "rcm_voucher_workflow: actor is not a member of this practice", args: [] },
+  { format: "rcm_journal_lines_draft_only: lines can only be added to a draft voucher", args: [] },
+  { format: "rcm_deposit_files_uploader: uploader is not a member of this practice", args: [] },
+];
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const TRIGGER_PATTERNS = TRIGGER_MESSAGES.map(({ format, args }) => {
+  const parts = format.split("%");
+  if (parts.length - 1 !== args.length) throw new Error(`Trigger format slots don't match: ${format}`);
+  return new RegExp(
+    `^${parts.map((part, k) => escapeRegExp(part) + (k < args.length ? SLOT_PATTERNS[args[k]!] : "")).join("")}$`,
+  );
+});
 
 interface PgErrorFields {
   code?: unknown;
@@ -81,10 +95,24 @@ interface PgErrorFields {
 
 const isSqlState = (code: unknown): code is string => typeof code === "string" && SQLSTATE.test(code);
 
+/**
+ * PostgreSQL server errors carry `severity`; Node socket errors (EPIPE, EPERM) have no severity
+ * and a code that merely looks like a SQLSTATE, so they are not trusted as one.
+ */
+function serverFields(cause: unknown): PgErrorFields | undefined {
+  const fields = cause as (PgErrorFields & { severity?: unknown }) | null | undefined;
+  return typeof fields?.severity === "string" && isSqlState(fields.code) ? fields : undefined;
+}
+
+/** The SQLSTATE of a PostgreSQL server error (bare or wrapped), for logging. */
+export function sqlStateOf(error: unknown): string | undefined {
+  const fields = serverFields(error) ?? serverFields((error as { cause?: unknown } | null)?.cause);
+  return fields?.code as string | undefined;
+}
+
 /** A node-postgres server error thrown without Drizzle's wrapper (it carries `severity` and a SQLSTATE). */
 function isBarePgError(error: unknown): error is Error & PgErrorFields {
-  const fields = error as { code?: unknown; severity?: unknown } | null;
-  return error instanceof Error && typeof fields?.severity === "string" && isSqlState(fields.code);
+  return error instanceof Error && serverFields(error) !== undefined;
 }
 
 function safeMessage(code: string | undefined, constraint: string | undefined, message: unknown): string {
@@ -93,7 +121,7 @@ function safeMessage(code: string | undefined, constraint: string | undefined, m
     return `Integrity constraint violation (SQLSTATE ${code})${constraint ? ` on "${constraint}"` : ""}`;
   if (typeof message === "string") {
     if (OBJECT_ONLY_MESSAGE_CODES.has(code)) return message;
-    if (code === "P0001" && TRIGGER_MESSAGES.some((pattern) => pattern.test(message))) return message;
+    if (code === "P0001" && TRIGGER_PATTERNS.some((pattern) => pattern.test(message))) return message;
   }
   return `Database query failed (SQLSTATE ${code})`;
 }
@@ -111,35 +139,50 @@ function safeMessage(code: string | undefined, constraint: string | undefined, m
  * Non-database errors (redirects, notFound, domain errors) pass through untouched.
  */
 export function sanitizeDatabaseError(error: unknown): unknown {
-  if (error instanceof DatabaseError) return error;
+  if (isDatabaseError(error)) return error;
   let pg: PgErrorFields | undefined;
-  if (error instanceof DrizzleQueryError) pg = (error.cause ?? {}) as PgErrorFields;
+  if (error instanceof DrizzleQueryError) pg = serverFields(error.cause) ?? {};
   else if (isBarePgError(error)) pg = error;
-  else if (error instanceof Error && isSqlState((error.cause as PgErrorFields | undefined)?.code))
-    pg = error.cause as PgErrorFields;
+  else if (error instanceof Error && serverFields(error.cause)) pg = serverFields(error.cause);
   else return error;
 
-  const code = isSqlState(pg.code) ? pg.code : undefined;
+  const code = isSqlState(pg!.code) ? pg!.code : undefined;
   const constraint =
-    typeof pg.constraint === "string" && IDENTIFIER.test(pg.constraint) ? pg.constraint : undefined;
+    typeof pg!.constraint === "string" && IDENTIFIER.test(pg!.constraint) ? pg!.constraint : undefined;
   // Integrity violations are often expected races that callers handle (e.g. a 23505 retry): warn.
   const level = code?.startsWith("23") ? "warn" : "error";
   log[level]("db.query_failed", { status: code ?? "unknown", ...(constraint ? { constraint } : {}) });
-  return new DatabaseError(safeMessage(code, constraint, pg.message), code, constraint);
+  return new DatabaseError(safeMessage(code, constraint, pg!.message), code, constraint);
+}
+
+/**
+ * Checking out a pool connection happens outside Drizzle's query path (e.g. at the start of
+ * `systemDb().transaction`). Its errors name hosts, roles, or databases, so they are replaced too.
+ */
+export function sanitizeConnectionError(error: unknown): DatabaseError {
+  const sanitized = sanitizeDatabaseError(error);
+  if (isDatabaseError(sanitized)) return sanitized;
+  log.error("db.connection_failed", { status: "unknown" });
+  return new DatabaseError("Database connection failed", undefined);
 }
 
 type QueryWithCache = (this: unknown, ...args: unknown[]) => Promise<unknown>;
-let installed = false;
+// On the shared Drizzle prototype, not in this module, so a second copy of this module never wraps twice.
+const SANITIZED = Symbol.for("denialdesk.queryErrorSanitizer");
 
 /**
  * Sanitizes every Drizzle query error where Drizzle creates it: `PgPreparedQuery.queryWithCache`,
- * which every select/insert/update/delete/execute and transaction statement goes through. This
- * covers `systemDb()` (auth, operator, audit, rate-limit) as well as `withTenant`. The method is
- * Drizzle-internal (ADR 0005), so a version that drops it fails at startup, not silently.
+ * which every select/insert/update/delete/execute, relational query, and transaction or savepoint
+ * statement goes through. This covers `systemDb()` (auth, operator, audit, rate-limit) as well as
+ * `withTenant`. The method is Drizzle-internal (ADR 0005): `register()` installs this at server
+ * start, so a Drizzle version without it fails to boot rather than silently leaking.
  */
 export function installQueryErrorSanitizer(): void {
-  if (installed) return;
-  const prototype = PgPreparedQuery.prototype as unknown as { queryWithCache?: QueryWithCache };
+  const prototype = PgPreparedQuery.prototype as unknown as {
+    queryWithCache?: QueryWithCache;
+    [SANITIZED]?: true;
+  };
+  if (prototype[SANITIZED]) return;
   const original = prototype.queryWithCache;
   if (typeof original !== "function") {
     throw new Error("drizzle-orm no longer has PgPreparedQuery.queryWithCache; update src/db/errors.ts");
@@ -151,5 +194,5 @@ export function installQueryErrorSanitizer(): void {
       throw sanitizeDatabaseError(error);
     }
   };
-  installed = true;
+  prototype[SANITIZED] = true;
 }

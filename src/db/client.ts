@@ -3,7 +3,8 @@ import { sql } from "drizzle-orm";
 import { Pool } from "pg";
 import { serverEnv } from "@/lib/env";
 import { netlifyDatabaseUrl } from "@/platform/netlify/database";
-import { installQueryErrorSanitizer } from "./errors";
+import { log } from "@/lib/log";
+import { installQueryErrorSanitizer, sanitizeConnectionError, sqlStateOf } from "./errors";
 import * as schema from "./schema";
 
 export type Database = NodePgDatabase<typeof schema>;
@@ -20,12 +21,26 @@ export function databaseUrl(): string {
 }
 
 function getPool(): Pool {
-  pool ??= new Pool({
+  if (pool) return pool;
+  const created = new Pool({
     connectionString: databaseUrl(),
     max: 10,
     connectionTimeoutMillis: 3_000,
     idleTimeoutMillis: 30_000,
   });
+  // An idle client dropped by the server (restart, suspend) is emitted here; unhandled, it would
+  // crash the process and print the raw error. Log the SQLSTATE only.
+  created.on("error", (error) => log.warn("db.pool_error", { status: sqlStateOf(error) ?? "unknown" }));
+  // Drizzle checks out a client for each transaction outside its query path; sanitize that too.
+  // (pool.query uses the callback form internally, whose errors reach Drizzle's query path.)
+  const connect = created.connect.bind(created) as (...args: unknown[]) => unknown;
+  created.connect = ((...args: unknown[]) =>
+    args.length > 0
+      ? connect(...args)
+      : (connect() as Promise<unknown>).catch((error: unknown) => {
+          throw sanitizeConnectionError(error);
+        })) as Pool["connect"];
+  pool = created;
   return pool;
 }
 

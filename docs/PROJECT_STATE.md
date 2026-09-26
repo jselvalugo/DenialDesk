@@ -40,6 +40,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
 | 2026-09-26 | ERP shell: global header, navy app bar with tabs, app launcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
+| 2026-09-26 | Every DB error sanitized where Drizzle creates it (system and tenant); kept messages opt-in (owner: fix both in PR #28) | ADR 0005 |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -98,8 +99,13 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
-- Log-sink residency and BAA (R-7.5.5): confirm the Azure log destination is U.S.-only and under
-  a BAA at the Azure deploy gate (owner decision 2026-09-26: hold until the Azure deployment).
+- Azure deploy gate, logging (owner decision 2026-09-26: hold until the Azure deployment; PR #28 reviews):
+  - Log-sink residency and BAA (R-7.5.5): the Azure log destination is U.S.-only and under a BAA.
+  - Tracing: Drizzle puts every query's params in the `drizzle.query.params` span attribute when
+    OpenTelemetry is present. Before adding Azure Monitor / Application Insights, disable Drizzle
+    spans or scrub that attribute.
+  - Migrations: `drizzle-kit migrate` runs outside the sanitizer and prints full Postgres errors
+    (including `detail` row values). Decide how production migrations run and where their output goes.
 
 ## Lessons / conventions learned
 - Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
