@@ -3,25 +3,55 @@
 Every Claude session (and every subagent) reads this file first. Keep it short and true.
 
 ## What we are building
-DenialDesk helps healthcare revenue-cycle teams work denied insurance claims:
-ingest denials, classify the reason (CARC/RARC codes), prioritize by value and
-deadline, draft appeals, and track outcomes. Full brief: `docs/PRODUCT_BRIEF.md`.
+DenialDesk is a secure SaaS platform for Florida physician practices to submit, track,
+and manage insurance claims and denials: classify denials (CARC/RARC), prioritize by
+value and deadline, draft appeals, enforce Florida prompt-pay and appeal deadlines, and
+track outcomes. Product brief: `docs/PRODUCT_BRIEF.md`. Requirements baseline: `docs/REQUIREMENTS.md`.
 
 ## Source of truth
+- Requirements: `docs/REQUIREMENTS.md`. Every change maps to one or more requirement IDs (e.g., `R-3.1.3`).
 - What to build: `docs/PRODUCT_BRIEF.md`, then one spec per feature in `docs/specs/`.
 - Order of work: `docs/ROADMAP.md`.
-- Why things are the way they are: `docs/decisions/` (one short ADR per decision).
+- Architecture decisions: `docs/decisions/` (one short ADR per decision). Threat models: `docs/threat-models/`.
+- Legal rules: `rules/` (versioned, effective-dated). **Never hard-code a statutory deadline, rate, or threshold anywhere else.**
 - How agents collaborate: `docs/AGENT_WORKFLOW.md`.
 
 If a task is not backed by a spec, write or update the spec first.
 
-## Hard rules
-- **No real PHI, ever.** Only synthetic patients/claims in code, fixtures, tests, logs, and issues.
-- Never log claim or patient fields; log IDs only.
+## Non-negotiables
+1. **No real PHI, ever.** Synthetic data only (Synthea, fixtures in `test/fixtures/synthetic/`) in code, fixtures, tests, logs, and issues. If you see anything that looks like real patient data, stop and tell the human.
+2. **No production access.** Do not request, read, or use production credentials, consoles, or customer tenants.
+3. **U.S.-only data residency** (Fla. Stat. § 408.051(3)). No infrastructure, service, SDK, or vendor may store or process PHI outside U.S. regions.
+4. **No PHI in logs, URLs, analytics, error trackers, or test snapshots.** Log IDs only; use the redaction helpers.
+5. **Tenant isolation.** Every query is tenant-scoped at the data layer. New tables need row-level security plus an isolation test.
+6. **Encryption.** TLS 1.2+ in transit. AES-256 at rest. Field-level encryption for SSN, MBI, member IDs, and bank data.
+7. **Audit everything.** Every PHI read or write emits an audit event (who, what, when, where, why).
+8. **No code inflation.** Nothing may auto-change CPT/ICD/HCPCS codes without a recorded human approval (R-3.10.1, R-3.10.2).
+9. **Don't invent payer rules or code meanings.** Cite the source in the spec or rule, or leave a TODO / ⚠️ VERIFY.
+10. **Dependencies.** Don't add packages without checking they exist, are maintained, and are license-compatible. Note every new dependency in the PR.
+11. **Never skip, disable, or delete a failing test** to get green.
+12. **Humans merge.** Agents open PRs; only humans approve, merge, and deploy.
+
+## Commit & PR conventions
 - One feature per branch and per PR. Small PRs (< ~400 changed lines) where possible.
-- Every PR: tests for new behavior, lint/typecheck clean, spec checkbox updated.
-- Never skip, disable, or delete a failing test to get green.
-- Don't invent payer rules or code meanings — cite the source in the spec or leave a TODO.
+- Commit subject: `<type>(<scope>): <summary> [R-x.x]`
+- Add the trailer `AI-Assisted: true` to agent-authored commits.
+- The PR description lists the requirement IDs, SOC 2 controls touched, data-classification impact, test evidence, and reviewer-agent results.
+
+## Definition of Done
+- [ ] Requirement IDs referenced; spec checkbox updated
+- [ ] Unit + integration tests; boundary tests (day before / of / after) for any legal deadline
+- [ ] Lint/typecheck clean
+- [ ] `reviewer`: no blocking findings open
+- [ ] `compliance-checker`: no blocking findings open
+- [ ] Docs updated
+- [ ] Human approval
+
+## Agents
+Defined today in `.claude/agents/`: `spec-writer`, `architect`, `builder`, `reviewer`,
+`compliance-checker` (see `docs/AGENT_WORKFLOW.md`). The fuller roster in
+`docs/REQUIREMENTS.md` §15.1 (security-reviewer, hipaa-compliance-reviewer,
+florida-rules-engine, edi-x12-specialist, soc2-evidence-auditor, …) is planned, not yet defined.
 
 ## Stack
 TBD — see `docs/decisions/0001-tech-stack.md`. Once decided, list here:
