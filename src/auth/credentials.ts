@@ -1,0 +1,110 @@
+import "server-only";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { z } from "zod";
+import { systemDb } from "@/db/client";
+import { users } from "@/db/schema";
+import { auditSystem, type AuditAction } from "@/lib/audit";
+import { decryptField } from "@/lib/crypto/field";
+import { retryMessage, type Bucket, type RateLimitResult } from "@/lib/rate-limit";
+import { LOCKOUT_MS, MAX_FAILED_ATTEMPTS } from "./policy";
+import { clientIp } from "./session";
+import { verifyTotp } from "./totp";
+
+// Credential checks shared by practice sign-in (actions.ts) and operator sign-in
+// (operator-actions.ts), so both enforce the same lockout, single-use codes, and messages.
+
+export interface FormState {
+  error?: string;
+}
+
+// One message for wrong password, unknown account, and locked account, so responses never reveal
+// which accounts exist (security review finding 3). Locked users are told how to recover.
+export const SIGN_IN_FAILED =
+  "Email or password is incorrect, or the account is temporarily locked. Try again in 15 minutes or contact your administrator.";
+
+export const loginSchema = z.object({
+  email: z.email().max(254),
+  password: z.string().min(1).max(128),
+});
+
+export const codeSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/),
+});
+
+export async function rateLimited(bucket: Bucket, what: string, result: RateLimitResult): Promise<FormState> {
+  await auditSystem({ action: "security.rate_limited", ipAddress: await clientIp(), metadata: { bucket } });
+  return { error: retryMessage(what, result) };
+}
+
+/**
+ * Reserves one sign-in attempt atomically before any credential is checked. Every password and
+ * MFA attempt counts; only a completed sign-in (password + MFA) resets the counter. Because the
+ * reservation and the lock happen in one UPDATE, parallel attempts can't exceed the limit and a
+ * correct password can't reset the count between MFA guesses (security review findings 1–2).
+ * Returns false when the account is locked.
+ */
+export async function reserveAttempt(userId: string): Promise<boolean> {
+  const result = await systemDb().execute<{ id: string; locked_now: boolean }>(sql`
+    with counted as (
+      select id, (case when locked_until <= now() then 0 else failed_login_count end) + 1 as attempts
+      from users where id = ${userId} and (locked_until is null or locked_until <= now())
+      for update
+    )
+    update users set
+      failed_login_count = counted.attempts,
+      locked_until = case when counted.attempts >= ${MAX_FAILED_ATTEMPTS}
+        then now() + make_interval(secs => ${LOCKOUT_MS / 1000}) else null end
+    from counted where users.id = counted.id
+    returning users.id, counted.attempts >= ${MAX_FAILED_ATTEMPTS} as locked_now`);
+  const row = result.rows[0];
+  if (row?.locked_now) {
+    await auditSystem({
+      action: "auth.locked_out",
+      actorUserId: userId,
+      entityType: "user",
+      entityId: userId,
+    });
+  }
+  return row !== undefined;
+}
+
+export async function recordFailure(userId: string, action: AuditAction): Promise<void> {
+  await auditSystem({
+    action,
+    actorUserId: userId,
+    entityType: "user",
+    entityId: userId,
+    ipAddress: await clientIp(),
+  });
+}
+
+/**
+ * Checks a TOTP code and claims its time step atomically, so two simultaneous submissions of the
+ * same code can't both succeed (single-use codes). On success the attempt counter resets and, when
+ * enrolling, enrollment is recorded.
+ */
+export async function claimTotp(
+  user: { id: string; totpSecretEnc: string; totpLastStep: number | null },
+  code: string,
+  enrolling: boolean,
+): Promise<"ok" | "mismatch" | "reused"> {
+  const step = verifyTotp(decryptField(user.totpSecretEnc), code, user.totpLastStep);
+  if (step === null) return "mismatch";
+  const claimed = await systemDb()
+    .update(users)
+    .set({
+      totpLastStep: step,
+      failedLoginCount: 0,
+      lockedUntil: null,
+      ...(enrolling ? { mfaEnrolledAt: new Date() } : {}),
+    })
+    .where(and(eq(users.id, user.id), or(isNull(users.totpLastStep), lt(users.totpLastStep, step))))
+    .returning({ id: users.id });
+  return claimed.length === 0 ? "reused" : "ok";
+}
+
+export const CODE_MISMATCH = "That code didn't match. Check your authenticator app and try again.";
+export const CODE_REUSED = "That code was already used. Wait for the next code and try again.";

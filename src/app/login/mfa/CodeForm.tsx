@@ -6,9 +6,12 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
 
-export function CodeForm({ mode }: { mode: "verify" | "enroll" }) {
+type CodeAction = (state: FormState, formData: FormData) => Promise<FormState>;
+
+/** Practice sign-in by default; the operator console passes its own server action. */
+export function CodeForm({ mode, submit }: { mode: "verify" | "enroll"; submit?: CodeAction }) {
   const [state, action] = useActionState<FormState, FormData>(
-    mode === "enroll" ? confirmMfaEnrollment : verifyMfa,
+    submit ?? (mode === "enroll" ? confirmMfaEnrollment : verifyMfa),
     {},
   );
   return (

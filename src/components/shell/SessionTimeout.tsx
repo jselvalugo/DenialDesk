@@ -13,7 +13,16 @@ import { Button } from "@/components/ui/Button";
  * Warns before the 15-minute idle timeout (R-7.2.7, DESIGN.md §12). The server enforces the
  * timeout regardless; this only keeps people from losing work by surprise.
  */
-export function SessionTimeout() {
+export function SessionTimeout({
+  keepAlive = keepSessionAlive,
+  signOutAction = signOut,
+  timeoutHref = "/login?reason=timeout",
+}: {
+  /** The operator console passes its own session's actions and sign-in page. */
+  keepAlive?: () => Promise<boolean>;
+  signOutAction?: () => Promise<void>;
+  timeoutHref?: string;
+} = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
@@ -38,7 +47,7 @@ export function SessionTimeout() {
       const remaining = CLIENT_IDLE_MS - (Date.now() - lastActive.current);
       if (remaining <= 0) {
         window.clearInterval(timer);
-        router.push("/login?reason=timeout");
+        router.push(timeoutHref);
       } else if (remaining <= SESSION_WARNING_MS) {
         setSecondsLeft(Math.ceil(remaining / 1000));
       }
@@ -48,7 +57,7 @@ export function SessionTimeout() {
       window.removeEventListener("popstate", onActivity);
       document.removeEventListener("submit", onActivity);
     };
-  }, [router]);
+  }, [router, timeoutHref]);
 
   const warning = secondsLeft !== null;
   useEffect(() => {
@@ -78,7 +87,7 @@ export function SessionTimeout() {
           </span>
         </p>
         <div className="mt-5 flex justify-end gap-2">
-          <form action={signOut}>
+          <form action={signOutAction}>
             <Button type="submit" variant="ghost">
               Sign out
             </Button>
@@ -86,9 +95,7 @@ export function SessionTimeout() {
           <Button
             ref={stayButton}
             variant="primary"
-            onClick={async () =>
-              (await keepSessionAlive()) ? reset() : router.push("/login?reason=timeout")
-            }
+            onClick={async () => ((await keepAlive()) ? reset() : router.push(timeoutHref))}
           >
             Stay signed in
           </Button>

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { appHome, locate, navApps } from "./navigation";
 
-const all = { showRevenueCycle: true, showOperatorConsole: true, showDesignSystem: true };
-const none = { showRevenueCycle: false, showOperatorConsole: false, showDesignSystem: false };
+const all = { showRevenueCycle: true, showDesignSystem: true };
+const none = { showRevenueCycle: false, showDesignSystem: false };
 
 describe("navApps", () => {
   it("hides revenue cycle and setup from users who can't open them", () => {

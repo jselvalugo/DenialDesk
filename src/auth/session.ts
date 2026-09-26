@@ -3,15 +3,29 @@ import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import { systemDb } from "@/db/client";
 import { memberships, sessions, tenants, users } from "@/db/schema";
 import { auditSystem } from "@/lib/audit";
 import { demoLoginEnabled } from "@/lib/env";
 import { requestContext } from "@/lib/request-context";
-import { SESSION_ABSOLUTE_MS, SESSION_COOKIE, SESSION_IDLE_MS, SESSION_TOUCH_MS } from "./policy";
+import {
+  OPERATOR_SESSION_COOKIE,
+  SESSION_ABSOLUTE_MS,
+  SESSION_COOKIE,
+  SESSION_IDLE_MS,
+  SESSION_TOUCH_MS,
+} from "./policy";
 
 export type Role = (typeof memberships.$inferSelect)["role"];
+export type AuthMethod = "password_mfa" | "demo" | "operator";
+
+/**
+ * Practice sessions (password + MFA, or demo) and platform operator sessions live in separate
+ * cookies and are never accepted in place of each other (docs/specs/operator-login.md).
+ */
+export type Realm = "practice" | "operator";
+const COOKIE: Record<Realm, string> = { practice: SESSION_COOKIE, operator: OPERATOR_SESSION_COOKIE };
 
 export interface SessionInfo {
   sessionId: string;
@@ -22,7 +36,7 @@ export interface SessionInfo {
   email: string;
   mfaEnrolled: boolean;
   mustChangePassword: boolean;
-  authMethod: "password_mfa" | "demo";
+  authMethod: AuthMethod;
 }
 
 export interface AuthContext {
@@ -33,7 +47,7 @@ export interface AuthContext {
   tenantName: string;
   role: Role;
   tenantKind: "customer" | "demo";
-  authMethod: "password_mfa" | "demo";
+  authMethod: Exclude<AuthMethod, "operator">;
   email: string;
 }
 
@@ -43,11 +57,12 @@ export async function clientIp(): Promise<string | null> {
   return (await requestContext()).ip;
 }
 
-async function setCookie(token: string) {
-  (await cookies()).set(SESSION_COOKIE, token, {
+async function setCookie(token: string, realm: Realm) {
+  (await cookies()).set(COOKIE[realm], token, {
     httpOnly: true,
     secure: true,
-    sameSite: "lax",
+    // The console is never reached from another site, so its cookie is never sent cross-site.
+    sameSite: realm === "operator" ? "strict" : "lax",
     path: "/",
     maxAge: SESSION_ABSOLUTE_MS / 1000,
   });
@@ -56,21 +71,25 @@ async function setCookie(token: string) {
 /**
  * Starts a session. After a correct password, MFA is still required (`mfaVerified` false).
  * Demo sessions are created already verified and pinned to the demo practice (see src/auth/demo.ts).
- * Suspended practices are skipped when choosing the session's practice.
+ * Operator sessions have no practice and use the operator cookie. Suspended practices are skipped
+ * when choosing the session's practice.
  */
 export async function createSession(
   userId: string,
-  options: { authMethod?: "password_mfa" | "demo"; tenantId?: string } = {},
+  options: { authMethod?: AuthMethod; tenantId?: string } = {},
 ): Promise<void> {
-  const [membership] = options.tenantId
-    ? [{ tenantId: options.tenantId }]
-    : await systemDb()
-        .select({ tenantId: memberships.tenantId })
-        .from(memberships)
-        .innerJoin(tenants, eq(tenants.id, memberships.tenantId))
-        .where(and(eq(memberships.userId, userId), isNull(tenants.suspendedAt)))
-        .orderBy(asc(memberships.createdAt))
-        .limit(1);
+  const operator = options.authMethod === "operator";
+  const [membership] = operator
+    ? []
+    : options.tenantId
+      ? [{ tenantId: options.tenantId }]
+      : await systemDb()
+          .select({ tenantId: memberships.tenantId })
+          .from(memberships)
+          .innerJoin(tenants, eq(tenants.id, memberships.tenantId))
+          .where(and(eq(memberships.userId, userId), isNull(tenants.suspendedAt)))
+          .orderBy(asc(memberships.createdAt))
+          .limit(1);
   const demo = options.authMethod === "demo";
   if (demo && !demoLoginEnabled()) throw new Error("Demo sessions are disabled in this environment");
   const token = randomBytes(32).toString("base64url");
@@ -81,20 +100,20 @@ export async function createSession(
       userId,
       tenantId: membership?.tenantId ?? null,
       mfaVerified: demo,
-      authMethod: demo ? "demo" : "password_mfa",
+      authMethod: options.authMethod ?? "password_mfa",
       expiresAt: new Date(Date.now() + SESSION_ABSOLUTE_MS),
     });
-  await setCookie(token);
+  await setCookie(token, operator ? "operator" : "practice");
 }
 
 /** Marks MFA done and rotates the token so a pre-MFA token can't be reused (session fixation). */
-export async function completeMfa(sessionId: string): Promise<void> {
+export async function completeMfa(sessionId: string, realm: Realm = "practice"): Promise<void> {
   const token = randomBytes(32).toString("base64url");
   await systemDb()
     .update(sessions)
     .set({ mfaVerified: true, tokenHash: hashToken(token), lastSeenAt: new Date() })
     .where(eq(sessions.id, sessionId));
-  await setCookie(token);
+  await setCookie(token, realm);
 }
 
 /** Revokes a session without touching the cookie (for when a new session replaces it). */
@@ -102,14 +121,20 @@ export async function revokeSession(sessionId: string): Promise<void> {
   await systemDb().update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, sessionId));
 }
 
-export async function endSession(sessionId: string): Promise<void> {
+export async function endSession(sessionId: string, realm: Realm = "practice"): Promise<void> {
   await revokeSession(sessionId);
-  (await cookies()).delete(SESSION_COOKIE);
+  (await cookies()).delete(COOKIE[realm]);
 }
 
-/** Reads and validates the session cookie once per request; enforces idle and absolute timeouts. */
-export const getSession = cache(async (): Promise<SessionInfo | null> => {
-  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+/** The practice (or demo) session, once per request. Never returns an operator session. */
+export const getSession = cache(async (): Promise<SessionInfo | null> => readSession("practice"));
+
+/** The platform operator session, once per request. Never returns a practice or demo session. */
+export const getOperatorSession = cache(async (): Promise<SessionInfo | null> => readSession("operator"));
+
+/** Reads and validates a realm's session cookie; enforces idle and absolute timeouts. */
+async function readSession(realm: Realm): Promise<SessionInfo | null> {
+  const token = (await cookies()).get(COOKIE[realm])?.value;
   if (!token) return null;
   const [row] = await systemDb()
     .select({
@@ -128,7 +153,15 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
-    .where(and(eq(sessions.tokenHash, hashToken(token)), isNull(sessions.revokedAt)))
+    .where(
+      and(
+        eq(sessions.tokenHash, hashToken(token)),
+        isNull(sessions.revokedAt),
+        // A token only works in its own cookie: an operator token pasted into the practice cookie
+        // (or the reverse) is rejected.
+        realm === "operator" ? eq(sessions.authMethod, "operator") : ne(sessions.authMethod, "operator"),
+      ),
+    )
     .limit(1);
   if (!row) return null;
 
@@ -160,12 +193,13 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
     mustChangePassword: row.mustChangePassword,
     authMethod: row.authMethod,
   };
-});
+}
 
 /** For pages and actions that need a fully signed-in user with a practice. Redirects otherwise. */
 export const requireAuth = cache(async (): Promise<AuthContext> => {
   const session = await getSession();
-  if (!session) redirect("/login");
+  // getSession never returns an operator session; the check also narrows the type.
+  if (!session || session.authMethod === "operator") redirect("/login");
   if (session.mustChangePassword) redirect("/login/password");
   if (!session.mfaVerified) redirect(session.mfaEnrolled ? "/login/mfa" : "/login/mfa/setup");
   if (!session.tenantId) redirect("/login?error=no-practice");

@@ -3,15 +3,16 @@ import { eq } from "drizzle-orm";
 import { systemDb } from "@/db/client";
 import { users } from "@/db/schema";
 import { decryptField, encryptField } from "@/lib/crypto/field";
-import { getSession } from "./session";
+import type { SessionInfo } from "./session";
 import { generateTotpSecret } from "./totp";
 
 /**
- * Returns the pending TOTP secret for a signed-in-by-password user who hasn't enrolled yet,
- * creating one if needed. Only callable in that state.
+ * Returns the pending TOTP secret for a signed-in-by-password user (practice or operator session)
+ * who hasn't enrolled yet, creating one if needed. Only callable in that state.
  */
-export async function pendingEnrollmentSecret(): Promise<{ secret: string; email: string } | null> {
-  const session = await getSession();
+export async function pendingEnrollmentSecret(
+  session: SessionInfo | null,
+): Promise<{ secret: string; email: string } | null> {
   if (!session || session.mfaVerified || session.mfaEnrolled) return null;
   const [user] = await systemDb().select().from(users).where(eq(users.id, session.userId)).limit(1);
   if (!user) return null;

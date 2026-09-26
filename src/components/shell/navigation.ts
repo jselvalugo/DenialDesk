@@ -1,7 +1,6 @@
 import {
   BarChart3,
   BookOpenCheck,
-  Building2,
   FileSpreadsheet,
   FileText,
   Gavel,
@@ -41,16 +40,11 @@ export interface NavApp {
 
 export interface NavVisibility {
   showRevenueCycle: boolean;
-  showOperatorConsole: boolean;
   showDesignSystem: boolean;
 }
 
 /** What the menus show. Not access control: every page still enforces its own permission on the server. */
-export function navApps({
-  showRevenueCycle,
-  showOperatorConsole,
-  showDesignSystem,
-}: NavVisibility): NavApp[] {
+export function navApps({ showRevenueCycle, showDesignSystem }: NavVisibility): NavApp[] {
   const apps: NavApp[] = [
     {
       id: "denials",
@@ -104,9 +98,7 @@ export function navApps({
     items: [{ label: "Reports", href: "/reports", icon: BarChart3, available: false }],
   });
   const setup: NavItem[] = [];
-  if (showOperatorConsole) {
-    setup.push({ label: "Platform console", href: "/operator", icon: Building2, available: true });
-  }
+  // The platform console isn't linked from practices: it has its own sign-in (/operator/login).
   if (showDesignSystem) {
     setup.push({ label: "Design system", href: "/design", icon: Palette, available: true });
   }

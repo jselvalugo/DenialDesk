@@ -10,7 +10,10 @@ const schema = z.object({
     .refine((value) => Buffer.from(value, "base64").length === 32, "must be base64 of 32 bytes"),
   /** "true" shows the one-click demo login (never in production, whatever this says). */
   DEMO_LOGIN_ENABLED: z.enum(["true", "false"]).optional(),
-  /** The one account allowed into the platform operator console (/operator). */
+  /**
+   * The platform operator's account (/operator/login). Must be an address used only for the
+   * console: an account with a practice membership never qualifies (docs/specs/operator-login.md).
+   */
   PLATFORM_OPERATOR_EMAIL: z.email().optional(),
 });
 

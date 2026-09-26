@@ -1,32 +1,51 @@
 import "server-only";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { cache } from "react";
-import { isDemoGuestEmail } from "./demo";
-import { getSession, requireAuth, type AuthContext } from "./session";
+import { auditSystem } from "@/lib/audit";
+import { hasPracticeMembership, isOperatorEmail } from "./operator-account";
+import { clientIp, getOperatorSession, revokeSession } from "./session";
 
-/**
- * The platform operator: exactly one account, named by PLATFORM_OPERATOR_EMAIL, signed in with
- * password + MFA. Demo sessions never qualify, even if misconfigured.
- */
-export function isPlatformOperator(
-  auth: Pick<AuthContext, "email" | "authMethod">,
-  operatorEmail: string | undefined = process.env.PLATFORM_OPERATOR_EMAIL,
-): boolean {
-  if (!operatorEmail) return false;
-  if (auth.authMethod !== "password_mfa" || isDemoGuestEmail(auth.email)) return false;
-  return auth.email.trim().toLowerCase() === operatorEmail.trim().toLowerCase();
+/** Who is using the platform console. The operator belongs to no practice. */
+export interface OperatorContext {
+  sessionId: string;
+  userId: string;
+  email: string;
+  displayName: string;
 }
 
 /**
- * For the operator console. Signed-out visitors and demo sessions go to sign-in (the owner needs a
- * way in, and a shared demo session must not trap them behind a 404); every signed-in practice
- * account that isn't the operator gets a 404 so the console stays invisible to practice users.
+ * For the platform console. Reads only the operator session (its own cookie), so practice and demo
+ * sessions in the same browser neither grant access nor get in the way. Anyone without a verified
+ * operator session is sent to /operator/login. A session whose account stopped qualifying (email no
+ * longer configured, or it gained a practice membership) is ended.
  */
-export const requireOperator = cache(async (): Promise<AuthContext> => {
-  const session = await getSession();
-  if (!session) redirect("/login");
-  if (session.authMethod === "demo") redirect("/login?reason=account");
-  const auth = await requireAuth();
-  if (!isPlatformOperator(auth)) notFound();
-  return auth;
+export const requireOperator = cache(async (): Promise<OperatorContext> => {
+  const session = await getOperatorSession();
+  if (!session) redirect("/operator/login");
+  if (!session.mfaVerified) {
+    redirect(session.mfaEnrolled ? "/operator/login/mfa" : "/operator/login/mfa/setup");
+  }
+  const reason = !isOperatorEmail(session.email)
+    ? "email_mismatch"
+    : (await hasPracticeMembership(session.userId))
+      ? "practice_membership"
+      : null;
+  if (reason) {
+    await revokeSession(session.sessionId);
+    await auditSystem({
+      action: "operator.session_revoked",
+      actorUserId: session.userId,
+      entityType: "session",
+      entityId: session.sessionId,
+      ipAddress: await clientIp(),
+      metadata: { reason },
+    });
+    redirect("/operator/login");
+  }
+  return {
+    sessionId: session.sessionId,
+    userId: session.userId,
+    email: session.email,
+    displayName: session.displayName,
+  };
 });

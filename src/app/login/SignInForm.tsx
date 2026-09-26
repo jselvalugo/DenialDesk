@@ -6,8 +6,11 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
 
-export function SignInForm({ notice }: { notice?: string }) {
-  const [state, action] = useActionState<FormState, FormData>(signIn, {});
+type SignInAction = (state: FormState, formData: FormData) => Promise<FormState>;
+
+/** Practice sign-in by default; the operator console passes its own server action. */
+export function SignInForm({ notice, submit }: { notice?: string; submit?: SignInAction }) {
+  const [state, action] = useActionState<FormState, FormData>(submit ?? signIn, {});
   return (
     <form action={action} className="flex flex-col gap-5" noValidate>
       <FormAlert message={state.error} />
