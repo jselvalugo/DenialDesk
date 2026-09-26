@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCents, formatDate } from "./format";
+import { formatCents, formatDate, parseDollarsToCents } from "./format";
 
 describe("formatCents", () => {
   it.each([
@@ -25,5 +25,21 @@ describe("formatDate", () => {
 
   it("rejects timestamps", () => {
     expect(() => formatDate("2026-01-01T10:00:00Z")).toThrow();
+  });
+});
+
+describe("parseDollarsToCents", () => {
+  it.each([
+    ["0.29", 29],
+    ["125", 12500],
+    ["1250.00", 125000],
+    ["0", 0],
+    ["999999999", 99999999900],
+  ])("parses %s as %i cents", (text, cents) => {
+    expect(parseDollarsToCents(text)).toBe(cents);
+  });
+
+  it.each([["1.005"], [""], ["-5"], ["1,250"], ["$5"], ["five"], ["1.5.5"], [" "]])("rejects %j", (text) => {
+    expect(parseDollarsToCents(text)).toBeNull();
   });
 });
