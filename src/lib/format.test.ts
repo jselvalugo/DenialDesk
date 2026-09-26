@@ -8,6 +8,9 @@ describe("formatCents", () => {
     [123456, "$1,234.56"],
     [-98765, "-$987.65"],
     [100000000, "$1,000,000.00"],
+    // F2: negative zero (e.g. deductions negated for display with no net adjustment) must read
+    // as $0.00, never -$0.00.
+    [-0, "$0.00"],
   ])("formats %i cents as %s", (cents, expected) => {
     expect(formatCents(cents)).toBe(expected);
   });
