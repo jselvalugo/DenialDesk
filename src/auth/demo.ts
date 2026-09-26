@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { and, desc, eq, isNull, like } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { systemDb } from "@/db/client";
+import { isUniqueViolation } from "@/db/errors";
 import { memberships, tenants, users } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { demoLoginEnabled } from "@/lib/env";
@@ -74,10 +75,6 @@ export async function createDemoPractice(
   });
   return { tenantId, userId: userIds[0]! };
 }
-
-const isUniqueViolation = (error: unknown) =>
-  (error as { cause?: { code?: string } })?.cause?.code === "23505" ||
-  (error as { code?: string })?.code === "23505";
 
 /**
  * The current demo practice's guest, creating the practice on first use. A unique index allows

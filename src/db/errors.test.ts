@@ -1,7 +1,15 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { DrizzleQueryError } from "drizzle-orm";
+import { PgPreparedQuery } from "drizzle-orm/pg-core";
 import { DatabaseError as PgDatabaseError } from "pg";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DatabaseError, sanitizeDatabaseError } from "./tenant";
+import {
+  DatabaseError,
+  installQueryErrorSanitizer,
+  isUniqueViolation,
+  sanitizeDatabaseError,
+  TRIGGER_MESSAGE_FORMATS,
+} from "./errors";
 
 // Synthetic values only (CLAUDE.md #1). Each one must never survive sanitizing.
 const NAME = "Synthia Testpatient";
@@ -100,6 +108,8 @@ describe("sanitizeDatabaseError: integrity violations (class 23)", () => {
   it('keeps callers\' `.code === "23505"` checks working', () => {
     const sanitized = sanitizeDatabaseError(drizzleError(uniqueViolation()));
     expect((sanitized as { code?: string }).code === "23505").toBe(true);
+    expect(isUniqueViolation(sanitized)).toBe(true);
+    expect(isUniqueViolation(sanitizeDatabaseError(drizzleError(checkViolation())))).toBe(false);
   });
 
   it("logs only status and constraint, at warn (callers often handle these races)", () => {
@@ -115,7 +125,7 @@ describe("sanitizeDatabaseError: other errors", () => {
     const error = pgError({ message: `invalid input syntax for type date: "${NAME}"`, code: "22007" });
     const sanitized = sanitizeDatabaseError(drizzleError(error)) as DatabaseError;
     expect(sanitized.code).toBe("22007");
-    expect(sanitized.message).toBe("Database query failed");
+    expect(sanitized.message).toBe("Database query failed (SQLSTATE 22007)");
     expect(sanitized.cause).toBeUndefined();
     expect(surface(sanitized)).not.toContain(NAME);
     expect(stderr.join("")).not.toContain(NAME);
@@ -156,5 +166,113 @@ describe("sanitizeDatabaseError: other errors", () => {
     expect(sanitizeDatabaseError(redirect)).toBe(redirect);
     const sanitized = sanitizeDatabaseError(drizzleError(uniqueViolation()));
     expect(sanitizeDatabaseError(sanitized)).toBe(sanitized);
+  });
+});
+
+describe("sanitizeDatabaseError: messages are kept only when known to be value-free", () => {
+  const sanitize = (fields: { message: string; code: string }) =>
+    sanitizeDatabaseError(drizzleError(pgError(fields))) as DatabaseError;
+
+  it("keeps object-only messages (permissions, row-level security)", () => {
+    const message = 'permission denied for table "audit_events"';
+    expect(sanitize({ message, code: "42501" }).message).toBe(message);
+  });
+
+  it("drops the message for any SQLSTATE not on the allow-list", () => {
+    for (const code of ["XX000", "P0004", "0A000", "42883"]) {
+      const sanitized = sanitize({ message: `something about ${NAME}`, code });
+      expect(sanitized.message).toBe(`Database query failed (SQLSTATE ${code})`);
+      expect(surface(sanitized)).not.toContain(NAME);
+    }
+  });
+
+  it("keeps a trigger message that matches a listed format with ID, number, or status arguments", () => {
+    for (const message of [
+      "claim 3f2a0c1e-8d4b-4c6a-9e7f-0a1b2c3d4e5f must move to version 4",
+      "rcm_voucher_workflow: posted -> draft is not allowed",
+      "audit_events is append-only",
+    ]) {
+      expect(sanitize({ message, code: "P0001" }).message).toBe(message);
+    }
+  });
+
+  it("drops a trigger message that isn't listed or whose argument isn't an ID, number, or status", () => {
+    for (const message of [
+      `claim ${NAME} must move to version 4`,
+      `rcm_voucher_workflow: ${MRN} -> draft is not allowed`,
+      `patient ${NAME} already has a claim`,
+    ]) {
+      const sanitized = sanitize({ message, code: "P0001" });
+      expect(sanitized.message).toBe("Database query failed (SQLSTATE P0001)");
+      expect(surface(sanitized)).not.toContain(NAME);
+      expect(surface(sanitized)).not.toContain(MRN);
+    }
+  });
+});
+
+describe("migrations raise only listed, value-free trigger messages", () => {
+  const dir = new URL("../../drizzle/", import.meta.url);
+  const raises = readdirSync(dir)
+    .filter((file) => file.endsWith(".sql"))
+    .flatMap((file) =>
+      [
+        ...readFileSync(new URL(file, dir), "utf8").matchAll(
+          /RAISE\s+EXCEPTION\s+'([^']*)'\s*(?:,([^;]*))?;/gi,
+        ),
+      ].map((match) => ({
+        file,
+        format: match[1]!,
+        args: (match[2] ?? "")
+          .split(",")
+          .map((a) => a.trim())
+          .filter(Boolean),
+      })),
+    );
+
+  it("finds the RAISE statements", () => {
+    expect(raises.length).toBeGreaterThanOrEqual(TRIGGER_MESSAGE_FORMATS.length);
+  });
+
+  it.each(raises.map((raise) => [raise.file, raise.format, raise] as const))(
+    "%s: '%s' is listed in TRIGGER_MESSAGE_FORMATS",
+    (_, format) => {
+      expect(TRIGGER_MESSAGE_FORMATS as readonly string[]).toContain(format);
+    },
+  );
+
+  it.each(
+    raises
+      .filter((raise) => raise.args.length > 0)
+      .map((raise) => [raise.file, raise.format, raise] as const),
+  )("%s: '%s' interpolates only IDs, versions, counts, or statuses", (_, __, raise) => {
+    for (const arg of raise.args) {
+      expect(arg).toMatch(/^(?:(?:OLD|NEW)\.(?:id|claim_id|version|status)(?: \+ 1)?|missing)$/);
+    }
+  });
+
+  it("has no RAISE with a USING clause (DETAIL/HINT would bypass the format check)", () => {
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql"))) {
+      expect(readFileSync(new URL(file, dir), "utf8")).not.toMatch(/RAISE[^;]*\bUSING\b/i);
+    }
+  });
+});
+
+describe("installQueryErrorSanitizer", () => {
+  it("sanitizes errors where Drizzle creates them, so systemDb() errors never carry params", async () => {
+    installQueryErrorSanitizer();
+    installQueryErrorSanitizer(); // idempotent: never wraps twice
+    const query = Object.create(PgPreparedQuery.prototype) as {
+      queryWithCache(query: string, params: unknown[], run: () => Promise<unknown>): Promise<unknown>;
+    };
+    const error = await query
+      .queryWithCache('insert into "users" ("email") values ($1)', [NAME, MRN], () =>
+        Promise.reject(uniqueViolation()),
+      )
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("23505");
+    expect(surface(error)).not.toContain(NAME);
+    expect(surface(error)).not.toContain(MRN);
+    expect(stderr).toHaveLength(1); // logged once, not once per wrapper
   });
 });

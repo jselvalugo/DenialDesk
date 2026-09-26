@@ -234,4 +234,19 @@ describe("database errors from tenant queries", () => {
     expect((error as DatabaseError).constraint).toBe("gl_accounts_ar_routing");
     expect(leaks(error, [name, "SYN-9999", a.tenantId])).toEqual([]);
   });
+
+  it("sanitize system (non-tenant) query errors too: no email, name, or password hash", async () => {
+    const email = `synthia.duplicate-${Date.now()}@example.test`;
+    const values = { email, displayName: "Synthia Systemuser", passwordHash: "$argon2id$SYN-HASH-0000" };
+    await systemDb().insert(users).values(values);
+    const error = await systemDb()
+      .insert(users)
+      .values({ ...values, email: email.toUpperCase() })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("23505");
+    expect((error as DatabaseError).constraint).toBe("users_email_key");
+    expect(leaks(error, [email, email.toUpperCase(), values.displayName, values.passwordHash])).toEqual([]);
+    await systemDb().delete(users).where(eq(users.email, email));
+  });
 });

@@ -1,6 +1,7 @@
 import "server-only";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { systemDb } from "@/db/client";
+import { isUniqueViolation } from "@/db/errors";
 import { memberships, sessions, users } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import type { TenantTx } from "@/db/tenant";
@@ -122,10 +123,7 @@ export async function setUpOperatorAccount(input: {
     })
     .catch((error: unknown) => {
       // Two first-time setups racing both miss the row lock; the loser hits the unique email index.
-      const code =
-        (error as { cause?: { code?: string }; code?: string })?.cause?.code ??
-        (error as { code?: string })?.code;
-      if (code === "23505")
+      if (isUniqueViolation(error))
         throw new OperatorSetupError("Setup was just completed elsewhere. Try again.", "conflict");
       throw error;
     });

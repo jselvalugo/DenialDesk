@@ -98,11 +98,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
-- Direct `systemDb()` errors (auth, operator, practices, audit, rate-limit) are not sanitized:
-  a failed query logs Drizzle's `params`, which can hold staff emails and password hashes
-  (PR #28 reviews; SOC 2 CC6.1). Fix before production with a sanitizing system wrapper.
-- DB messages outside SQLSTATE classes 22/23 (e.g. P0001 trigger `RAISE`) are kept verbatim; today
-  they carry only IDs, versions and statuses. Consider an allow-list of codes (PR #28 reviews).
+- Log-sink residency and BAA (R-7.5.5): confirm the Azure log destination is U.S.-only and under
+  a BAA at the Azure deploy gate (owner decision 2026-09-26: hold until the Azure deployment).
 
 ## Lessons / conventions learned
 - Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
@@ -111,7 +108,6 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   an integration test); prefer separate grouped queries.
 - Tenant data only through `withTenant()` (src/db/tenant.ts); FK references from user input must be
   checked against the tenant in code (FKs bypass RLS).
-- Drizzle wraps DB errors: the Postgres message is on `error.cause` (see test helper `expectDbError`).
 - Next.js renders a hidden `role="alert"` route announcer; scope e2e alert queries to `main`.
 - Once production exists, record tables (imports, vouchers, audit) change by adding columns only;
   C0's column drops were a one-time pre-production change on synthetic data.
@@ -123,10 +119,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):
   tenant tables FORCE RLS, so a non-superuser migration owner (Netlify, Azure) sees no rows
   otherwise. Local and CI databases use a superuser and hide this.
-- Server-side validation must reject impossible dates (`z.iso.date()`); `sanitizeDatabaseError`
-  drops messages for SQLSTATE class 22 because they quote values, and for class 23 (unique/check/FK/
-  not-null) keeps only `code` + `constraint` (Postgres puts row values in `detail`). Match integrity
-  errors on `.code` / `.constraint`, never on message text.
+- Server-side validation must reject impossible dates (`z.iso.date()`).
+- Every Drizzle query error (system and tenant) is sanitized where Drizzle creates it (ADR 0005,
+  `src/db/errors.ts`): SQLSTATE + constraint for class 23, messages only for allow-listed codes and
+  listed trigger formats. Match DB errors on `.code` / `.constraint` (`isUniqueViolation`), never on
+  message text. A new trigger `RAISE` must be added to `TRIGGER_MESSAGE_FORMATS`.
 - `onRequestError` (src/instrumentation.ts) logs route template, digest, error name and SQLSTATE
   only; Next.js still logs the error itself, so error messages must be PHI-free where thrown.
   `log.ts` checks the values of `route`/`routeType`/`digest`/`errorName`/`constraint` by pattern.

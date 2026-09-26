@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { Pool } from "pg";
 import { serverEnv } from "@/lib/env";
 import { netlifyDatabaseUrl } from "@/platform/netlify/database";
+import { installQueryErrorSanitizer } from "./errors";
 import * as schema from "./schema";
 
 export type Database = NodePgDatabase<typeof schema>;
@@ -33,6 +34,8 @@ function getPool(): Pool {
  * is known. All practice data goes through `withTenant` (src/db/tenant.ts).
  */
 export function systemDb(): Database {
+  // Every query error, system or tenant, is stripped of params and row values (src/db/errors.ts).
+  installQueryErrorSanitizer();
   database ??= drizzle(getPool(), { schema });
   return database;
 }
