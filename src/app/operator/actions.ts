@@ -63,7 +63,12 @@ export async function toggleSuspended(_: ActionState, formData: FormData): Promi
 
 export async function resetDemo(): Promise<ActionState> {
   const operator = await requireOperator();
-  await reset(operator);
+  try {
+    await reset(operator);
+  } catch (error) {
+    if (error instanceof PracticeError) return { error: error.message };
+    throw error;
+  }
   revalidatePath("/operator");
   return {};
 }

@@ -9,6 +9,7 @@ import { denials, memberships, tenants, users } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { auditSystem } from "@/lib/audit";
+import { demoLoginEnabled } from "@/lib/env";
 
 // Platform operator actions (spec: docs/specs/demo-login-and-operator-console.md).
 // Practice-level metadata and counts only; never patient or claim data.
@@ -67,15 +68,28 @@ export async function createPractice(
 
   const temporaryPassword = randomBytes(12).toString("base64url");
   const passwordHash = await hashPassword(temporaryPassword);
-  const tenantId = await systemDb().transaction(async (tx) => {
-    const [tenant] = await tx.insert(tenants).values({ name: input.name, kind: "customer" }).returning();
-    const [admin] = await tx
-      .insert(users)
-      .values({ email: input.adminEmail, displayName: input.adminName, passwordHash })
-      .returning();
-    await tx.insert(memberships).values({ tenantId: tenant!.id, userId: admin!.id, role: "admin" });
-    return tenant!.id;
-  });
+  const tenantId = await systemDb()
+    .transaction(async (tx) => {
+      const [tenant] = await tx.insert(tenants).values({ name: input.name, kind: "customer" }).returning();
+      const [admin] = await tx
+        .insert(users)
+        .values({
+          email: input.adminEmail,
+          displayName: input.adminName,
+          passwordHash,
+          mustChangePassword: true,
+        })
+        .returning();
+      await tx.insert(memberships).values({ tenantId: tenant!.id, userId: admin!.id, role: "admin" });
+      return tenant!.id;
+    })
+    .catch((error: unknown) => {
+      // Two operators' submissions racing on the same email hit the unique index.
+      if ((error as { cause?: { code?: string } })?.cause?.code === "23505") {
+        throw new PracticeError("An account with that email already exists.");
+      }
+      throw error;
+    });
   await auditSystem({
     action: "operator.practice_created",
     actorUserId: operator.userId,
@@ -97,9 +111,11 @@ export async function setPracticeSuspended(
   const updated = await systemDb()
     .update(tenants)
     .set({ suspendedAt: suspended ? new Date() : null })
-    .where(eq(tenants.id, tenantId))
+    // Customer practices only: demo practices are archived and replaced via resetDemoPractice.
+    .where(and(eq(tenants.id, tenantId), eq(tenants.kind, "customer")))
     .returning({ id: tenants.id });
-  if (updated.length === 0) throw new PracticeError("That practice no longer exists.");
+  if (updated.length === 0)
+    throw new PracticeError("That practice no longer exists or isn't a customer practice.");
   await auditSystem({
     action: suspended ? "operator.practice_suspended" : "operator.practice_reactivated",
     actorUserId: operator.userId,
@@ -114,6 +130,7 @@ export async function setPracticeSuspended(
  * and creates a fresh one. Existing demo sessions end on their next request.
  */
 export async function resetDemoPractice(operator: AuthContext): Promise<void> {
+  if (!demoLoginEnabled()) throw new PracticeError("The demo practice is disabled in this environment.");
   await systemDb()
     .update(tenants)
     .set({ suspendedAt: new Date() })

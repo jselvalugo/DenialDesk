@@ -10,6 +10,7 @@ export default async function MfaPage() {
   const session = await getSession();
   if (!session) redirect("/login");
   if (session.mfaVerified) redirect("/");
+  if (session.mustChangePassword) redirect("/login/password");
   if (!session.mfaEnrolled) redirect("/login/mfa/setup");
 
   return (

@@ -7,6 +7,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { systemDb } from "@/db/client";
 import { memberships, sessions, tenants, users } from "@/db/schema";
 import { auditSystem } from "@/lib/audit";
+import { demoLoginEnabled } from "@/lib/env";
 import { requestContext } from "@/lib/request-context";
 import { SESSION_ABSOLUTE_MS, SESSION_COOKIE, SESSION_IDLE_MS, SESSION_TOUCH_MS } from "./policy";
 
@@ -20,6 +21,7 @@ export interface SessionInfo {
   displayName: string;
   email: string;
   mfaEnrolled: boolean;
+  mustChangePassword: boolean;
   authMethod: "password_mfa" | "demo";
 }
 
@@ -70,6 +72,7 @@ export async function createSession(
         .orderBy(asc(memberships.createdAt))
         .limit(1);
   const demo = options.authMethod === "demo";
+  if (demo && !demoLoginEnabled()) throw new Error("Demo sessions are disabled in this environment");
   const token = randomBytes(32).toString("base64url");
   await systemDb()
     .insert(sessions)
@@ -115,6 +118,7 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
       displayName: users.displayName,
       email: users.email,
       mfaEnrolledAt: users.mfaEnrolledAt,
+      mustChangePassword: users.mustChangePassword,
       disabledAt: users.disabledAt,
     })
     .from(sessions)
@@ -148,6 +152,7 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
     displayName: row.displayName,
     email: row.email,
     mfaEnrolled: row.mfaEnrolledAt !== null,
+    mustChangePassword: row.mustChangePassword,
     authMethod: row.authMethod,
   };
 });
@@ -156,6 +161,7 @@ export const getSession = cache(async (): Promise<SessionInfo | null> => {
 export const requireAuth = cache(async (): Promise<AuthContext> => {
   const session = await getSession();
   if (!session) redirect("/login");
+  if (session.mustChangePassword) redirect("/login/password");
   if (!session.mfaVerified) redirect(session.mfaEnrolled ? "/login/mfa" : "/login/mfa/setup");
   if (!session.tenantId) redirect("/login?error=no-practice");
   const [membership] = await systemDb()
@@ -170,8 +176,14 @@ export const requireAuth = cache(async (): Promise<AuthContext> => {
     .where(and(eq(memberships.userId, session.userId), eq(memberships.tenantId, session.tenantId)))
     .limit(1);
   if (!membership) redirect("/login?error=no-practice");
-  // Demo sessions may only ever use a demo practice.
-  if (session.authMethod === "demo" && membership.tenantKind !== "demo") redirect("/login");
+  // Demo sessions may only ever use a demo practice, and only while the demo is enabled here.
+  if (session.authMethod === "demo" && (membership.tenantKind !== "demo" || !demoLoginEnabled())) {
+    await systemDb()
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(eq(sessions.id, session.sessionId));
+    redirect("/login");
+  }
   if (membership.suspendedAt) {
     // Revoke in the database (cookies can't be changed while rendering); the cookie is now inert.
     await systemDb()

@@ -7,6 +7,9 @@ test.describe("demo login", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
     await expect(page.getByText("Sunrise Coast Medical Group (demo)")).toBeVisible();
     await expect(page.getByText(/Demo practice · shared/)).toBeVisible();
+    await expect(page.getByRole("note", { name: "Demo practice notice" })).toContainText(
+      "Never enter real patient information",
+    );
     await page.goto("/denials");
     await expect(page.getByRole("table").getByRole("row")).not.toHaveCount(0);
   });
@@ -38,7 +41,8 @@ test.describe("operator console access", () => {
 test.describe("as the platform operator", () => {
   test.use({ storageState: "test/e2e/.auth/operator.json" });
 
-  test("sees every practice and can create, suspend, and reactivate one", async ({ page }) => {
+  test("sees every practice and can create, suspend, and reactivate one", async ({ page, browser }) => {
+    test.setTimeout(60_000);
     await page.goto("/");
     await page.getByRole("link", { name: "Platform console" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Practices" })).toBeVisible();
@@ -48,10 +52,38 @@ test.describe("as the platform operator", () => {
     const name = `Synthetic Harbor Clinic ${Date.now()}`;
     await page.getByLabel("Practice name").fill(name);
     await page.getByLabel("Admin's full name").fill("Synthetic Admin");
-    await page.getByLabel("Admin's work email").fill(`admin-${Date.now()}@e2e.denialdesk.test`);
+    const adminEmail = `admin-${Date.now()}@e2e.denialdesk.test`;
+    await page.getByLabel("Admin's work email").fill(adminEmail);
     await page.getByRole("button", { name: "Create practice" }).click();
     await expect(page.getByRole("status")).toContainText(`${name} created`);
     await expect(page.getByRole("status")).toContainText("Temporary password");
+
+    const temporaryPassword = (await page.getByRole("status").locator("dd").nth(1).textContent())!.trim();
+
+    // The new admin must replace the temporary password before setting up MFA.
+    const adminContext = await browser.newContext({
+      baseURL: new URL(page.url()).origin,
+      storageState: undefined,
+    });
+    const adminPage = await adminContext.newPage();
+    await adminPage.goto("/login");
+    await adminPage.getByLabel("Work email").fill(adminEmail);
+    await adminPage.getByLabel("Password").fill(temporaryPassword);
+    await adminPage.getByRole("button", { name: "Sign in" }).click();
+    await expect(adminPage.getByRole("heading", { name: "Choose your password" })).toBeVisible();
+    await adminPage.goto("/login/mfa/setup");
+    await expect(adminPage).toHaveURL(/\/login\/password$/);
+    await adminPage.getByLabel("New password", { exact: true }).fill(temporaryPassword);
+    await adminPage.getByLabel("Confirm new password").fill(temporaryPassword);
+    await adminPage.getByRole("button", { name: "Set password" }).click();
+    await expect(adminPage.getByRole("main").getByRole("alert")).toContainText(
+      "different from the temporary one",
+    );
+    await adminPage.getByLabel("New password", { exact: true }).fill("a synthetic harbor passphrase");
+    await adminPage.getByLabel("Confirm new password").fill("a synthetic harbor passphrase");
+    await adminPage.getByRole("button", { name: "Set password" }).click();
+    await expect(adminPage.getByRole("heading", { name: "Set up two-step verification" })).toBeVisible();
+    await adminContext.close();
 
     const row = table.getByRole("row").filter({ hasText: name });
     await row.getByRole("button", { name: `Suspend ${name}` }).click();

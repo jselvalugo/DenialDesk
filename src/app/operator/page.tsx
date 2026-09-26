@@ -7,6 +7,7 @@ import { Panel } from "@/components/ui/Panel";
 import { StatTile } from "@/components/ui/StatTile";
 import { listPractices } from "@/domain/platform/practices";
 import { auditSystem } from "@/lib/audit";
+import { demoLoginEnabled } from "@/lib/env";
 import { CreatePracticeForm, ResetDemoButton, SuspendToggle } from "./controls";
 
 export const metadata: Metadata = { title: "Platform console" };
@@ -35,7 +36,7 @@ export default async function OperatorPage() {
       <PageHeader
         title="Practices"
         description="Every practice on this DenialDesk environment. Practice-level details only; patient data stays inside each practice."
-        actions={<ResetDemoButton />}
+        actions={demoLoginEnabled() ? <ResetDemoButton /> : undefined}
       />
 
       <section aria-label="Platform totals" className="grid grid-cols-4 gap-4">

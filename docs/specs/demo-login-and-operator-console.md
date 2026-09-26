@@ -56,6 +56,21 @@ practices (retention/legal hold, R-9.2), Netlify deploy management (stays in Net
 - Operator access is by configured email plus a fully MFA-verified session. Cross-tenant counts
   run per tenant through `withTenant`, so RLS still applies.
 
+## Security review follow-ups (2026-09-26, done)
+- [x] Demo creation/reset refused when the demo is disabled (incl. production); reset button hidden.
+- [x] Existing demo sessions stop working as soon as the demo is disabled; demo sessions can't be
+      created in production.
+- [x] One active demo practice enforced by a unique partial index; concurrent first clicks share it.
+- [x] Operator-issued temporary passwords must be replaced before MFA setup.
+- [x] Signing in to a suspended practice says so (after a correct password only).
+- [x] Suspend/reactivate limited to customer practices; duplicate-email race returns a clean error.
+- [x] Demo practice shows a persistent "never enter real patient information" notice.
+
+## Open decisions (human)
+- Demo visitors share one guest account with the manager role, so they can add notes others see.
+  Options: keep (interactive demo, warning shown), make demo read-only, or one demo per visitor.
+- Rate limiting on the public demo button (today: unauthenticated, not rate-limited).
+
 ## Test evidence
 - Unit: operator check (configured email, case-insensitive; rejects demo sessions, demo guests, unset config).
 - Integration: create practice (admin can sign in with the temporary password; MFA not yet

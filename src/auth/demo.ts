@@ -5,6 +5,7 @@ import { todayIn } from "@rules/calendar";
 import { systemDb } from "@/db/client";
 import { memberships, tenants, users } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
+import { demoLoginEnabled } from "@/lib/env";
 
 // The one-click demo (spec: docs/specs/demo-login-and-operator-console.md). A dedicated demo
 // practice with synthetic data, created on first use. Only its "guest" user can be signed into
@@ -40,6 +41,7 @@ async function findDemoGuest(): Promise<{ tenantId: string; userId: string } | n
 
 /** Creates a fresh demo practice with synthetic data and returns its guest user. */
 export async function createDemoPractice(): Promise<{ tenantId: string; userId: string }> {
+  if (!demoLoginEnabled()) throw new Error("The demo practice is disabled in this environment");
   const suffix = randomBytes(4).toString("hex");
   const { tenantId, userIds } = await seedPractice({
     practiceName: DEMO_NAME,
@@ -63,7 +65,26 @@ export async function createDemoPractice(): Promise<{ tenantId: string; userId: 
   return { tenantId, userId: userIds[0]! };
 }
 
-/** The current demo practice's guest, creating the practice on first use. */
+const isUniqueViolation = (error: unknown) =>
+  (error as { cause?: { code?: string } })?.cause?.code === "23505" ||
+  (error as { code?: string })?.code === "23505";
+
+/**
+ * The current demo practice's guest, creating the practice on first use. A unique index allows
+ * one active demo practice, so if two first clicks race, the loser waits for the winner's.
+ */
 export async function ensureDemoPractice(): Promise<{ tenantId: string; userId: string }> {
-  return (await findDemoGuest()) ?? createDemoPractice();
+  const existing = await findDemoGuest();
+  if (existing) return existing;
+  try {
+    return await createDemoPractice();
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const created = await findDemoGuest();
+      if (created) return created;
+    }
+    throw new Error("Timed out waiting for the demo practice to be created");
+  }
 }

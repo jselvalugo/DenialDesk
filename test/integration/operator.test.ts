@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
-import { ensureDemoPractice } from "@/auth/demo";
+import { createDemoPractice as ensureDemoPracticeFresh, ensureDemoPractice } from "@/auth/demo";
 import { verifyPassword } from "@/auth/password";
 import type { AuthContext } from "@/auth/session";
 import { closeDatabase, systemDb } from "@/db/client";
@@ -45,6 +45,7 @@ describe("createPractice", () => {
     const [admin] = await systemDb().select().from(users).where(eq(users.email, email));
     expect(await verifyPassword(temporaryPassword, admin!.passwordHash)).toBe(true);
     expect(admin!.mfaEnrolledAt).toBeNull(); // MFA set up on first sign-in
+    expect(admin!.mustChangePassword).toBe(true); // temporary password must be replaced
     const [membership] = await systemDb().select().from(memberships).where(eq(memberships.userId, admin!.id));
     expect(membership).toMatchObject({ tenantId, role: "admin" });
     const [event] = await systemDb()
@@ -79,6 +80,11 @@ describe("suspension", () => {
     ).toBeNull();
   });
 
+  it("only suspends customer practices (demo practices are reset instead)", async () => {
+    const demo = await ensureDemoPractice();
+    await expect(setPracticeSuspended(demo.tenantId, true, operator)).rejects.toBeInstanceOf(PracticeError);
+  });
+
   it("won't suspend the operator's own practice", async () => {
     await expect(setPracticeSuspended(operator.tenantId, true, operator)).rejects.toBeInstanceOf(
       PracticeError,
@@ -105,6 +111,25 @@ describe("demo practice", () => {
       .from(tenants)
       .where(and(eq(tenants.kind, "demo"), isNull(tenants.suspendedAt)));
     expect(active.map((t) => t.id)).toEqual([after.tenantId]);
+  });
+});
+
+describe("demo guards", () => {
+  it("refuse to create or reset a demo practice when the demo is disabled", async () => {
+    process.env.DEMO_LOGIN_ENABLED = "false";
+    try {
+      await expect(ensureDemoPracticeFresh()).rejects.toThrow(/disabled/);
+      await expect(resetDemoPractice(operator)).rejects.toBeInstanceOf(PracticeError);
+    } finally {
+      process.env.DEMO_LOGIN_ENABLED = "true";
+    }
+  });
+
+  it("allow only one active demo practice, even under concurrent first use", async () => {
+    await resetDemoPractice(operator); // archive, leaving exactly one active
+    await systemDb().update(tenants).set({ suspendedAt: new Date() }).where(eq(tenants.kind, "demo"));
+    const results = await Promise.all([ensureDemoPractice(), ensureDemoPractice(), ensureDemoPractice()]);
+    expect(new Set(results.map((r) => r.tenantId)).size).toBe(1);
   });
 });
 

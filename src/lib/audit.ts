@@ -23,6 +23,7 @@ export type AuditAction =
   | "patient.member_id_revealed"
   | "system.demo_seeded"
   | "auth.demo_login"
+  | "auth.password_changed"
   | "operator.console_viewed"
   | "operator.practice_created"
   | "operator.practice_suspended"

@@ -38,15 +38,24 @@ export const roleEnum = pgEnum("member_role", ["admin", "manager", "specialist",
 
 export const tenantKindEnum = pgEnum("tenant_kind", ["customer", "demo"]);
 
-export const tenants = pgTable("tenants", {
-  id: id(),
-  name: text("name").notNull(),
-  /** "demo" = synthetic demo practice for the preview's one-click demo login. */
-  kind: tenantKindEnum("kind").notNull().default("customer"),
-  /** Set by the platform operator; blocks sign-in and existing sessions for the practice. */
-  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
-  createdAt: createdAt(),
-});
+export const tenants = pgTable(
+  "tenants",
+  {
+    id: id(),
+    name: text("name").notNull(),
+    /** "demo" = synthetic demo practice for the preview's one-click demo login. */
+    kind: tenantKindEnum("kind").notNull().default("customer"),
+    /** Set by the platform operator; blocks sign-in and existing sessions for the practice. */
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  // At most one active demo practice, so concurrent first demo clicks can't each create one.
+  (t) => [
+    uniqueIndex("tenants_one_active_demo")
+      .on(t.kind)
+      .where(sql`kind = 'demo' and suspended_at is null`),
+  ],
+);
 
 export const users = pgTable(
   "users",
@@ -58,6 +67,8 @@ export const users = pgTable(
     totpSecretEnc: text("totp_secret_enc"),
     mfaEnrolledAt: timestamp("mfa_enrolled_at", { withTimezone: true }),
     totpLastStep: bigint("totp_last_step", { mode: "number" }),
+    /** Set for operator-issued temporary passwords; the user must choose a new one before MFA. */
+    mustChangePassword: boolean("must_change_password").notNull().default(false),
     failedLoginCount: integer("failed_login_count").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
     disabledAt: timestamp("disabled_at", { withTimezone: true }),

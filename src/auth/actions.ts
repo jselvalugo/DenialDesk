@@ -4,10 +4,10 @@ import { redirect } from "next/navigation";
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { systemDb } from "@/db/client";
-import { users } from "@/db/schema";
+import { memberships, tenants, users } from "@/db/schema";
 import { auditSystem } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
-import { decoyHash, verifyPassword } from "./password";
+import { decoyHash, hashPassword, passwordProblem, verifyPassword } from "./password";
 import { LOCKOUT_MS, MAX_FAILED_ATTEMPTS } from "./policy";
 import { clientIp, completeMfa, createSession, endSession, getSession, touchSession } from "./session";
 import { verifyTotp } from "./totp";
@@ -96,8 +96,21 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
   }
 
   // The attempt counter is deliberately NOT reset here: it resets only after MFA succeeds.
+  // Only someone with the right password learns that their practice is suspended.
+  const practices = await systemDb()
+    .select({ suspendedAt: tenants.suspendedAt })
+    .from(memberships)
+    .innerJoin(tenants, eq(tenants.id, memberships.tenantId))
+    .where(eq(memberships.userId, user.id));
+  if (practices.length > 0 && practices.every((p) => p.suspendedAt !== null)) {
+    await auditSystem({ action: "auth.login_failed", actorUserId: user.id, metadata: { suspended: true } });
+    return { error: "This practice's access is suspended. Contact DenialDesk support." };
+  }
+
   await createSession(user.id);
-  redirect(user.mfaEnrolledAt ? "/login/mfa" : "/login/mfa/setup");
+  redirect(
+    user.mustChangePassword ? "/login/password" : user.mfaEnrolledAt ? "/login/mfa" : "/login/mfa/setup",
+  );
 }
 
 const codeSchema = z.object({
@@ -117,6 +130,7 @@ async function checkCode(formData: FormData, enrolling: boolean): Promise<FormSt
   if (!parsed.success) return { error: "Enter the 6-digit code from your authenticator app." };
 
   const [user] = await systemDb().select().from(users).where(eq(users.id, session.userId)).limit(1);
+  if (user?.mustChangePassword) redirect("/login/password");
   if (!user?.totpSecretEnc || (enrolling ? user.mfaEnrolledAt !== null : user.mfaEnrolledAt === null)) {
     redirect("/login");
   }
@@ -206,4 +220,37 @@ export async function signInDemo(): Promise<FormState> {
     ipAddress: await clientIp(),
   });
   redirect("/");
+}
+
+const newPasswordSchema = z.object({ password: z.string().max(128), confirm: z.string().max(128) });
+
+/** Replaces an operator-issued temporary password before MFA setup. */
+export async function setNewPassword(_: FormState, formData: FormData): Promise<FormState> {
+  const session = await getSession();
+  if (!session || session.mfaVerified) redirect("/login");
+  const parsed = newPasswordSchema.safeParse({
+    password: formData.get("password"),
+    confirm: formData.get("confirm"),
+  });
+  if (!parsed.success) return { error: "Enter and confirm your new password." };
+  const problem = passwordProblem(parsed.data.password);
+  if (problem) return { error: problem };
+  if (parsed.data.password !== parsed.data.confirm) return { error: "The passwords don't match." };
+
+  const [user] = await systemDb().select().from(users).where(eq(users.id, session.userId)).limit(1);
+  if (!user?.mustChangePassword) redirect("/login");
+  if (await verifyPassword(parsed.data.password, user.passwordHash)) {
+    return { error: "Choose a password different from the temporary one." };
+  }
+  await systemDb()
+    .update(users)
+    .set({ passwordHash: await hashPassword(parsed.data.password), mustChangePassword: false })
+    .where(eq(users.id, user.id));
+  await auditSystem({
+    action: "auth.password_changed",
+    actorUserId: user.id,
+    entityType: "user",
+    entityId: user.id,
+  });
+  redirect(user.mfaEnrolledAt ? "/login/mfa" : "/login/mfa/setup");
 }

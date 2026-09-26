@@ -5,3 +5,4 @@ if (!process.env.DATABASE_URL) {
 process.env.APP_ENV ||= "development";
 // Test-only key; real keys come from Netlify env (pre-prod) or Key Vault (prod).
 process.env.FIELD_ENCRYPTION_KEY ||= Buffer.alloc(32, 1).toString("base64");
+process.env.DEMO_LOGIN_ENABLED ||= "true";
