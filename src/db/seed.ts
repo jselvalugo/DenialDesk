@@ -7,7 +7,8 @@ import { snapshotOf } from "@/domain/claims/correction";
 import { generateDataset, type SyntheticDataset } from "@/domain/synthetic/generator";
 import { importMonthlyFile } from "@/domain/revenue-cycle/imports";
 import { seedRevenueCycleDefaults } from "@/domain/revenue-cycle/setup";
-import { generateMonthlyFiles } from "@/domain/revenue-cycle/synthetic-file";
+import { importDeposits } from "@/domain/revenue-cycle/receivables";
+import { generateDeposits, generateMonthlyFiles } from "@/domain/revenue-cycle/synthetic-file";
 import { prepareVoucher } from "@/domain/revenue-cycle/vouchers";
 import { encryptField } from "@/lib/crypto/field";
 import { systemDb } from "./client";
@@ -252,6 +253,16 @@ export async function seedPractice(options: {
           defaultSiteId: firstSite?.id ?? null,
           lines: file.lines,
         });
+      }
+      // The bank side of those months, deposited by the first administrator or manager.
+      const runner = options.users.findIndex((u) => u.role === "admin" || u.role === "manager");
+      if (runner >= 0) {
+        const deposits = generateDeposits(months, dataset.claims.length);
+        await importDeposits(
+          tx,
+          { tenantId, userId: userIds[runner]!, role: options.users[runner]!.role },
+          deposits.map((d, i) => ({ ...d, rowNumber: i + 2 })),
+        );
       }
       const preparer = options.sampleVoucherBy;
       if (preparer !== undefined) {

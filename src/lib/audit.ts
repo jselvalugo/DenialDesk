@@ -43,13 +43,25 @@ export type AuditAction =
   | "rcm.voucher_approved"
   | "rcm.voucher_exported"
   | "rcm.voucher_voided"
-  | "rcm.voucher_superseded";
+  | "rcm.voucher_voided"
+  | "rcm.voucher_superseded"
+  | "rcm.deposits_imported"
+  | "rcm.deposits_rejected";
 
 export interface AuditEvent {
   action: AuditAction;
   actorUserId?: string | null;
   tenantId?: string | null;
-  entityType?: "denial" | "claim" | "patient" | "user" | "session" | "tenant" | "rcm_file" | "rcm_voucher";
+  entityType?:
+    | "denial"
+    | "claim"
+    | "patient"
+    | "user"
+    | "session"
+    | "tenant"
+    | "rcm_file"
+    | "rcm_voucher"
+    | "rcm_deposit_file";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;

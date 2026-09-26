@@ -28,3 +28,12 @@ Data: Restricted PHI (patient name, practice account number, service date, CPT, 
 | Export triggered by a link (CSRF) | Export is a server action (origin-checked), not a GET route | Low |
 | PHI in the GL file or audit | Lines carry accounts, sites, amounts, period memos only; audit holds IDs/counts; test asserts no account numbers in the CSV | Low |
 | Formula injection in the GL file | `csvCell` neutralizes `= + - @` | Low |
+
+## Deposits and aging (B4)
+
+| Threat | Control | Residual risk / owner |
+|---|---|---|
+| Bank account numbers or payer descriptions stored | Parser reads only the Date and Amount columns; nothing else is kept | Low |
+| Tampering with deposits | Insert/select only, FORCE RLS, non-zero CHECK; corrections are reversing entries | Owner DB role (open decision) |
+| Parser DoS | 1 MB, 5,000 rows, 50 columns, linear parser | Low |
+| PHI through aging | Aging, credit balances, roll-forward, and reconciliation are totals by class and month | Low |
