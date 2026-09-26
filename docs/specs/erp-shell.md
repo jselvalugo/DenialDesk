@@ -44,8 +44,11 @@ None. Navigation is computed client-side from role flags already passed to the s
 None.
 
 ## Out of scope
-Record search (patients, claims) from the header search field; favorites; per-user app ordering;
-dark theme.
+Record search (patients, claims) from the "Go to" field; favorites; per-user module ordering; dark
+theme. Today the query only filters the static navigation list in the browser (no request, URL,
+storage, or log). If record search is added, it must follow the patients pattern: POST search, no
+names in URLs, and an audit event (`specs/patients.md`, R-7.4.8). Module visibility in the switcher
+is a menu, not access control: every page enforces its own permission on the server.
 
 ## Test evidence
 - Unit: `src/components/shell/navigation.test.ts` (module visibility, path → module/page

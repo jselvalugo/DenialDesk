@@ -16,11 +16,14 @@ advice; the owner's counsel review (open item in `PROJECT_STATE.md`) covers the 
 ## What we checked (2026-09-26)
 - **No vendor code or assets.** The repo contains no third-party design-system CSS, components,
   icon sets, or fonts from any CRM/ERP vendor. Fonts are Inter, Playfair Display, and Space Mono
-  (SIL OFL 1.1); icons are `lucide-react` (ISC); primitives are Radix UI (MIT); tokens, components,
+  (SIL OFL 1.1, `src/app/fonts/LICENSE-*.txt`); icons are `lucide-react` (ISC, with
+  Feather-derived icons under MIT); the switcher is a native `<dialog>`, and Radix UI (MIT) is
+  planned for interactive primitives but is not yet a dependency (ADR 0004); tokens, components,
   and copy are our own (`src/app/globals.css`, `src/components/`).
 - **No vendor trademarks or product names** in the UI, copy, code identifiers, or public docs. The
   only mentions were in internal docs (`PROJECT_STATE.md`, `specs/erp-shell.md`, ADR 0004) and
-  are removed or reduced to this record.
+  are removed or reduced to this record. Git history retains the earlier wording; whether that
+  matters if the repository becomes public is a question for counsel.
 - **Structure is generic.** A global header, a module switcher, a tab bar of the current module's
   pages, and a keyboard-shortcut "go to" palette are conventions shared by many suites (office,
   ERP, issue trackers, developer tools). We rely on the convention, never on any one vendor's
@@ -37,8 +40,10 @@ Keep the ERP structure; change the expression so it is recognizably DenialDesk:
 | "Apps" vocabulary in the UI | **Modules** and **pages** in every label (`NavApp` stays as the code type). |
 | Centered header search "Search apps and pages" | Left-aligned "Go to a module or page" field beside the logo; practice, demo badge, and user menu on the right. |
 
-Unchanged, because they were already ours: the navy/teal palette, the serif page titles, the
-teal-underlined tabs, the white global header with the unaltered logo, and the page header band.
+Kept as they were, since they came from DenialDesk's own visual identity (ADR 0004 amendment): the
+navy/teal palette, the serif page titles, the teal-underlined tabs, the white global header with
+the unaltered logo, and the page header band. Trade dress is judged on the overall look and feel,
+so these retained elements are part of what counsel should review.
 
 ## Rules going forward
 1. Never copy a vendor's glyphs, palette, layout proportions, copy, or naming. When a screen is

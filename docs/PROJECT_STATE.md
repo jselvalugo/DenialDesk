@@ -90,8 +90,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
-- Counsel review of the overall look and feel (trade dress) before public launch; ADR 0005 records
-  the engineering checks and the changes made, and is not legal advice.
+- Counsel review of the overall look and feel (trade dress) before public launch, including the
+  elements ADR 0005 kept (navy/teal chrome, white header, tab bar with teal underline, serif
+  titles); ADR 0005 records the engineering checks and the changes made, and is not legal advice.
+  Related: git history still carries a competitor's name in earlier doc wording, and no
+  requirement ID covers third-party IP / brand compliance yet (R-15.7 covers licensing).
 - A vector (SVG) version of the logo from a designer; the app currently uses the PNG.
 - Confirm and record the license and generating tool for the sign-in reception image
   (`public/brand/README.md`); it is owner-supplied and described as a synthetic render.
