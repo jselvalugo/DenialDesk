@@ -12,12 +12,14 @@ _Last updated: 2026-09-26_
 - Claims module C1 (`specs/claims.md`): claims list with timely-filing warnings, claim detail,
   corrections of draft/rejected claims with a required reason, and append-only version history
   enforced by database triggers. Next: C2 CSV charge import, C3 837P + filing block, C4 999/277CA.
-- UI shell is ERP-style (Salesforce-like): global header with search/launcher shortcut, navy app bar
-  with the current app's tabs, and an app launcher (`specs/erp-shell.md`).
+- UI shell is ERP-style: global header with a "Go to" field (Ctrl/⌘ K), navy tab bar whose first
+  control is the current module's name, and a grouped module switcher (`specs/erp-shell.md`).
+  Deliberately not a copy of any vendor's shell: no grid icon, no "app launcher", tinted module
+  tiles, "modules/pages" vocabulary (ADR 0005).
 - Patient records P1 (`specs/patients.md`): `/patients` list, POST search (no names in URLs),
   register/edit with primary coverage (encrypted member ID), admin-only sensitivity tags, and a
   patient chart linking claims and denials; claim and denial pages link back. "Patients" is in the
-  app launcher as its own app. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
+  module switcher as its own module. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
 - Operator console can reset the demo with sample data or empty (setup only) to test features
   from a clean slate.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
@@ -43,7 +45,8 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Secrets scanning: gitleaks in CI | `specs/project-skeleton.md` |
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
-| 2026-09-26 | ERP shell: global header, navy app bar with tabs, app launcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
+| 2026-09-26 | ERP shell: global header, navy tab bar, module switcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
+| 2026-09-26 | Shell differentiated from any vendor's product; no third-party design IP; competitor names out of product copy and public docs | ADR 0005 |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -68,6 +71,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
+- Counsel review of the overall look and feel (trade dress) before public launch; ADR 0005 records
+  the engineering checks and the changes made, and is not legal advice.
 - A vector (SVG) version of the logo from a designer; the app currently uses the PNG.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.

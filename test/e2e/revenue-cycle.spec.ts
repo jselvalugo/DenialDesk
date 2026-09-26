@@ -100,7 +100,7 @@ test.describe("journal vouchers", () => {
     page,
   }) => {
     await openDemo(page);
-    await openFromLauncher(page, "Revenue cycle app");
+    await openFromLauncher(page, "Revenue cycle module");
     await expect(page.getByRole("heading", { level: 1, name: "Monthly files" })).toBeVisible();
     // Inside the Revenue cycle app its pages are tabs.
     await page
@@ -239,9 +239,9 @@ test.describe("revenue cycle as a denial specialist", () => {
   test("is hidden from navigation and returns 404", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("navigation", { name: "Primary" })).not.toContainText("Revenue cycle");
-    await page.getByRole("button", { name: "App launcher" }).click();
-    const launcher = page.getByRole("dialog", { name: "App launcher" });
-    await expect(launcher.getByRole("link", { name: "Claims app" })).toBeVisible();
+    await page.getByRole("button", { name: /^Module: / }).click();
+    const launcher = page.getByRole("dialog", { name: "Go to" });
+    await expect(launcher.getByRole("link", { name: "Claims module" })).toBeVisible();
     await expect(launcher).not.toContainText("Revenue cycle");
     await expect(launcher).not.toContainText("Journal vouchers");
     await expect(launcher).not.toContainText("A/R aging");

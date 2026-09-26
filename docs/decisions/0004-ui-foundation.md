@@ -39,8 +39,9 @@ DenialDesk's brand; the product doesn't reference any other product (owner instr
 - The logo is never recolored; it sits on the white global header and on the sign-in page.
 
 ## Amendment (2026-09-26): ERP shell
-The owner asked for an ERP-style layout "like Salesforce" (2026-09-26). The left sidebar is replaced by
-a white global header, a navy app bar with the current app's pages as tabs, and an app launcher
-(`specs/erp-shell.md`). No new dependency: the launcher is a native modal `<dialog>` (focus
+The owner asked for an ERP-style layout (2026-09-26). The left sidebar is replaced by a white
+global header, a navy tab bar with the current module's pages, and a module switcher
+(`specs/erp-shell.md`; its expression was differentiated from any vendor's shell the same day,
+ADR 0005). No new dependency: the switcher is a native modal `<dialog>` (focus
 containment, Escape, inert background) rather than a Radix dialog. Radii move to 6px/8px and panels
 get a hairline shadow; the palette, fonts, and logo are unchanged.

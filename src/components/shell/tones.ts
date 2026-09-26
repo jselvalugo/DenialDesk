@@ -1,10 +1,13 @@
 import type { NavApp } from "./navigation";
 
-/** App tile colors: chart-series tokens, each ≥ 3:1 against the white icon (DESIGN.md §4). */
+/**
+ * Module tile colors (DESIGN.md §4): a colored glyph on its own light tint with a 1px border, so a
+ * tile reads like one of our badges rather than a solid colored square. Each glyph is ≥ 5:1 on its tint.
+ */
 export const toneClasses: Record<NavApp["tone"], string> = {
-  teal: "bg-chart-1",
-  navy: "bg-chart-2",
-  blue: "bg-chart-3",
-  amber: "bg-chart-4",
-  slate: "bg-neutral-fg",
+  teal: "border-tile-teal-border bg-tile-teal-bg text-tile-teal-fg",
+  navy: "border-tile-navy-border bg-tile-navy-bg text-tile-navy-fg",
+  blue: "border-tile-blue-border bg-tile-blue-bg text-tile-blue-fg",
+  amber: "border-tile-amber-border bg-tile-amber-bg text-tile-amber-fg",
+  slate: "border-tile-slate-border bg-tile-slate-bg text-tile-slate-fg",
 };

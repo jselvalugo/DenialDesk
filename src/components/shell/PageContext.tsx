@@ -1,12 +1,12 @@
 "use client";
 
-import { AppIcon } from "./AppLauncher";
+import { ModuleIcon } from "./ModuleSwitcher";
 import { useShellLocation } from "./ShellContext";
 
-/** The current app's icon tile, beside a page title; nothing outside the app shell. */
+/** The current module's icon tile, beside a page title; nothing outside the app shell. */
 export function PageIcon() {
   const location = useShellLocation();
-  return location ? <AppIcon app={location.app} size="lg" /> : null;
+  return location ? <ModuleIcon app={location.app} size="lg" /> : null;
 }
 
 /** "App · Page" line above a page title, so a detail page still says where it lives. */
