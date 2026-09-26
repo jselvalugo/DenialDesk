@@ -74,3 +74,86 @@ None.
 - Resolved 2026-09-26 (owner): S2 (values on records) is part of the Phase 1 MVP.
 - Resolved 2026-09-26 (owner): administrators only create and change fields; role permissions
   are intentionally unchanged.
+- Open (human): a non-sensitive free-text field holding an identifier is encrypted at rest but shown
+  unmasked (threat model I5). Accept, or mask all free text?
+
+## Implementation plan (S2)
+
+Design: ADR `docs/decisions/0007-custom-field-value-storage.md`. Threat model:
+`docs/threat-models/custom-field-values.md`. All parts built by **builder** (no legal rules, no X12).
+Ship as small PRs in this order: **PR 1** crypto AAD + table + domain; **PR 2** patients UI;
+**PR 3** claims and denials; **PR 4** payers.
+
+### Data model: `drizzle/0025_custom_field_values.sql` (+ `src/db/schema` entry)
+`custom_field_values`: `id uuid pk`, `tenant_id uuid not null -> tenants`, `field_id uuid not null
+-> custom_fields`, `patient_id`, `claim_id`, `denial_id`, `payer_id` (nullable FKs), `value_enc text`
+(NULL = cleared), `created_by`, `updated_by -> users`, `created_at`, `updated_at`.
+- CHECK `num_nonnulls(patient_id, claim_id, denial_id, payer_id) = 1`; CHECK
+  `value_enc IS NULL OR length(value_enc) <= 8192`.
+- Unique partial indexes `(tenant_id, field_id, patient_id) WHERE patient_id IS NOT NULL` (and one
+  per record column); lookup index `(tenant_id, patient_id)` etc.
+- Trigger `custom_field_values_guard` (BEFORE INSERT/UPDATE): field and record exist in
+  `tenant_id` and the set column matches `custom_fields.entity`; `tenant_id`, `field_id`, record
+  columns, `created_*` immutable. ⚠️ VERIFY whether `payers` is tenant-scoped or global; if global,
+  the guard checks the practice has that payer.
+- RLS ENABLE + FORCE, policy `tenant_isolation` as in 0023. `GRANT SELECT, INSERT, UPDATE` only
+  (R-9.2.1).
+
+### Crypto
+- `src/lib/crypto/field.ts`: optional `aad?: string` on `encryptField`/`decryptField`
+  (`cipher.setAAD`). Tests: round trip with AAD, wrong AAD fails, no-AAD callers unchanged.
+
+### Domain: `src/domain/custom-fields/values.ts` (+ `values.test.ts`)
+- `serializeValue(field, raw)` / `parseValue(field, stored)`: per-type validation and canonical
+  strings (text <= 200, long_text <= 4,000, number finite, date `YYYY-MM-DD`, checkbox
+  `true|false`, select must be a current option). Required enforced for active fields only.
+- `activeFieldsFor(tx, entity)` (reuse `src/domain/settings/queries.ts`).
+- `loadValuesForRecord(tx, entity, recordId, { recordSensitive })` returns
+  `{ fieldId, key, label, type, masked: boolean, value?: typed }[]`; masked when the field has
+  `sensitivity` or the record has sensitivity tags; masked values are **not decrypted**. Decrypt
+  failure yields `{ unavailable: true }` and audits `custom_field.value_integrity_failed`.
+- `saveValuesForRecord(tx, actor, entity, recordId, inputs): Promise<string[]>` upserts changed
+  values only (compare decrypted), returns changed keys; called inside the record's create/update
+  transaction so the record's `expectedUpdatedAt` check covers them. Masked sensitive values not
+  re-submitted are left unchanged (the form never receives them).
+- `revealCustomFieldValue(tx, actor, { fieldId, entity, recordId, reason: RevealReason })`
+  decrypts one value and audits.
+
+### Audit events (IDs and enum keys only, never values)
+- Existing `patient.created|updated` metadata gains custom field keys in `changedFields` as `cf:<key>`
+  (same for claim/denial/payer updates).
+- `custom_field.value_revealed` (entityType `custom_field_value`, metadata: fieldId, entity,
+  recordId, reason).
+- `custom_field.value_integrity_failed` (fieldId, recordId).
+
+### API / UI (patients first)
+- `src/app/(app)/patients/actions.ts`: `registerPatient`/`savePatient` parse `cf.<fieldId>` form
+  entries into `inputs`; new `revealCustomField(prev, formData)` action (fieldId, recordId, reason;
+  same roles as `revealPatientMemberId`).
+- `src/components/custom-fields/CustomFieldInputs.tsx`: renders active fields by type with label,
+  help, required; sensitive fields show "Locked" and a "Change" button that clears and replaces
+  (no prefill).
+- `src/components/custom-fields/CustomFieldValues.tsx` + `MaskedCustomValue.tsx` (pattern of
+  `MaskedMemberId.tsx`): read-only list on `/patients/[id]`; masked with "Open" + reason dialog;
+  revealed value held in client state only.
+- Wire into `PatientForm.tsx`, `patients/new`, `patients/[id]/edit`, `patients/[id]/page.tsx`.
+  `PatientTable`, `PatientSearch`, and any export do **not** load values.
+- Follow `docs/DESIGN.md`. No values in URLs, titles, or toasts.
+
+### Tests
+- Unit: serializer/validator per type and boundaries (200/201 chars, 4,000/4,001, empty required,
+  unknown choice, inactive field); crypto AAD.
+- Integration (`pnpm test:integration`): RLS isolation (tenant B cannot read/insert/update tenant A
+  values); guard trigger rejects entity mismatch, cross-tenant record/field, two record columns,
+  identity change; no DELETE grant; ciphertext copied to another row fails decrypt; sensitive values
+  not decrypted in `loadValuesForRecord`; reveal audits without the value (assert value string absent
+  from all `audit_events` rows); stale edit refuses both record and values.
+- Guard test: list/search/export query modules do not import `custom-fields/values`.
+- E2E (Playwright, synthetic): admin adds a text and a sensitive field; user fills them on a new
+  patient; detail shows text and masked sensitive; Open with reason shows value; list page does not.
+
+### Risks
+- Values not queryable (by design, ADR 0007).
+- Patient-level sensitivity masks all values on that record: more clicks, safer default.
+- Payers table scope unverified (see ⚠️ above).
+- Owner DB role and composite tenant FKs remain the existing open decisions.
