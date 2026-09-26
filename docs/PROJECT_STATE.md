@@ -6,9 +6,10 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
-- Phase 0 (Foundation). Planning docs, project skeleton, and design foundation done.
-- App runs: shell, preview banner, Overview empty state, `/design` style guide, `/api/health`.
-- Working branch: `claude/adoring-hypatia-5co7fz` (no PR opened yet).
+- Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
+  rules engine, synthetic data, Netlify config (not yet deployed — see `docs/runbooks/netlify.md`).
+- Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
+- Working branch: `claude/adoring-hypatia-5co7fz`.
 
 ## Decisions made (details in `docs/decisions/`)
 | Date | Decision | Record |
@@ -25,9 +26,11 @@ The product owner delegated technical decisions to the implementing agent ("make
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
-1. Netlify deploy previews with pre-prod guards (ADR 0003) + a production-mode e2e test.
-2. Synthetic data generator.
-3. Tenancy + RLS; auth; audit log; rules-engine skeleton.
+1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
+2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
+3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
+4. Claims list + 837P submission via clearinghouse stub; 999/277CA capture.
+5. Appeal letter templates (human review before export).
 
 ## Open questions for humans
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
@@ -36,6 +39,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - A vector (SVG) version of the logo from a designer; the app currently uses the PNG.
 
 ## Lessons / conventions learned
+- Tenant data only through `withTenant()` (src/db/tenant.ts); FK references from user input must be
+  checked against the tenant in code (FKs bypass RLS).
+- Drizzle wraps DB errors: the Postgres message is on `error.cause` (see test helper `expectDbError`).
+- Next.js renders a hidden `role="alert"` route announcer; scope e2e alert queries to `main`.
+- Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
 - Local test DB without Docker: `initdb`/`pg_ctl` from `/usr/lib/postgresql/16/bin` as the
   `postgres` user, with the data dir somewhere that user can reach.

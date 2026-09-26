@@ -105,7 +105,8 @@ export async function seedPractice(options: {
       put(p.key, row!.id);
     }
 
-    const specialists = userIds.slice(1);
+    // Only people who can work denials get assignments (compliance and admins don't in the demo).
+    const specialists = userIds.filter((_, i) => ["specialist", "manager"].includes(options.users[i]!.role));
     for (const [index, c] of dataset.claims.entries()) {
       const billed = c.lines.reduce((sum, line) => sum + line.chargeCents, 0);
       const denied = c.denial?.deniedCents ?? 0;

@@ -277,16 +277,25 @@ export function generateDataset(options: {
                 ["new", 6],
                 ["in_review", 2],
               ] as const)
-            : random.weighted([
-                ["new", 2],
-                ["in_review", 3],
-                ["needs_records", 2],
-                ["appeal_drafted", 2],
-                ["appeal_submitted", 2],
-                ["overturned", 2],
-                ["upheld", 1],
-                ["written_off", 1],
-              ] as const);
+            : age > 75
+              ? // Older denials are mostly worked or resolved; only a few slip past the deadline.
+                random.weighted([
+                  ["appeal_submitted", 3],
+                  ["overturned", 4],
+                  ["upheld", 2],
+                  ["written_off", 2],
+                  ["needs_records", 1],
+                ] as const)
+              : random.weighted([
+                  ["new", 2],
+                  ["in_review", 3],
+                  ["needs_records", 2],
+                  ["appeal_drafted", 2],
+                  ["appeal_submitted", 2],
+                  ["overturned", 2],
+                  ["upheld", 1],
+                  ["written_off", 1],
+                ] as const);
         denial = {
           groupCode: carc === "22" ? "OA" : "CO",
           carc,

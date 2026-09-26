@@ -16,6 +16,7 @@ const browser = {
 
 export default defineConfig({
   testDir: "test/e2e",
+  globalSetup: "./test/e2e/global-setup.ts",
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
@@ -23,8 +24,14 @@ export default defineConfig({
   use: { trace: "retain-on-failure" },
   projects: [
     {
+      name: "setup",
+      testMatch: /auth\.setup\.ts/,
+      use: { ...browser, baseURL: `http://localhost:${previewPort}` },
+    },
+    {
       name: "preview",
       testIgnore: /production\.spec\.ts/,
+      dependencies: ["setup"],
       use: { ...browser, baseURL: `http://localhost:${previewPort}` },
     },
     {

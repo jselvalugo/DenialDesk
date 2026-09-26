@@ -16,12 +16,12 @@ Engineering:
 - [x] ADR 0001 tech stack accepted (ADR 0003 Netlify pre-prod accepted; ADR 0002 Azure confirmed at cutover)
 - [x] Project skeleton: app, DB, test runner, lint, CI on every PR [R-7.4.2, R-7.4.4]
 - [x] Design system foundation + app shell (`docs/DESIGN.md`, ADR 0004)
-- [ ] Netlify deploy previews + demo site with pre-prod guards: synthetic banner, synthetic-only uploads, restricted access (ADR 0003) [R-7.1.3]
-- [ ] Synthetic data generator: practices, providers, payers, patients, claims, denials [R-15.1]
-- [ ] Tenancy + RBAC skeleton with row-level security and isolation tests [R-7.2.3, R-7.2.4]
-- [ ] Auth: OIDC SSO behind an interface (Entra ID at cutover), MFA, session timeouts [R-7.2.1, R-7.2.2, R-7.2.7]
-- [ ] Immutable audit log skeleton [R-7.5.1]
-- [ ] Rules-engine skeleton: versioned, effective-dated rules with citations; business-day
+- [ ] Netlify deploy previews + demo site with pre-prod guards: synthetic banner, synthetic-only uploads, restricted access (ADR 0003) [R-7.1.3] — config, banner, and sign-in done; upload guard arrives with the first upload feature; site not yet created (runbook: docs/runbooks/netlify.md)
+- [x] Synthetic data generator: practices, providers, payers, patients, claims, denials [R-15.1]
+- [x] Tenancy + RBAC skeleton with row-level security and isolation tests [R-7.2.3, R-7.2.4]
+- [x] Auth: OIDC SSO behind an interface (Entra ID at cutover), MFA, session timeouts [R-7.2.1, R-7.2.2, R-7.2.7]
+- [x] Immutable audit log skeleton [R-7.5.1]
+- [x] Rules-engine skeleton: versioned, effective-dated rules with citations; business-day
       and holiday calendars in America/New_York [R-15.6, §11]
 
 ## Phase 1 — MVP (FL commercial, FL HMO, Medicare, Medicare Advantage)
@@ -44,11 +44,11 @@ Prompt pay (FL-regulated claims only):
 Remittance and denials:
 - [ ] 835 ERA ingestion and posting with exception queue [§8.2]
 - [ ] Denial capture with CARC/RARC/group code and categorization [§8.3]
-- [ ] Denial work queue prioritized by $ and days to appeal deadline [§8.3]
-- [ ] Denial detail: notes, assignment, status
+- [x] Denial work queue prioritized by $ and days to appeal deadline [§8.3]
+- [x] Denial detail: notes, assignment, status
 
 Appeals:
-- [ ] Appeal deadline engine per payer regime [§8.4]
+- [x] Appeal deadline engine per payer regime [§8.4]
 - [ ] Appeal letter templates with merge fields and attachments; human review before export [R-7.11.2]
 - [ ] Corrected (freq 7) and void (freq 8) claims [§8.3]
 - [ ] Medicare 5-level appeal workflow [R-4.2.1]

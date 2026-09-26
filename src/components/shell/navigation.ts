@@ -15,7 +15,7 @@ export const navigation: NavSection[] = [
     label: "Work",
     items: [
       { label: "Overview", href: "/", available: true },
-      { label: "Denial queue", href: "/denials", available: false },
+      { label: "Denial queue", href: "/denials", available: true },
       { label: "Appeals", href: "/appeals", available: false },
     ],
   },

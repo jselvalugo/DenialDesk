@@ -19,20 +19,19 @@ export interface FormState {
 const GENERIC_FAILURE = "Email or password is incorrect.";
 const LOCKED = "Too many attempts. Try again in 15 minutes or contact your administrator.";
 
-async function recordFailure(
-  userId: string,
-  failedCount: number,
-  action: "auth.login_failed" | "auth.mfa_failed",
-) {
-  const lock = failedCount + 1 >= MAX_FAILED_ATTEMPTS;
-  await systemDb()
-    .update(users)
-    .set(
-      lock
-        ? { failedLoginCount: 0, lockedUntil: new Date(Date.now() + LOCKOUT_MS) }
-        : { failedLoginCount: failedCount + 1 },
-    )
-    .where(eq(users.id, userId));
+/**
+ * Counts a failed attempt atomically (concurrent attempts can't overwrite each other's count) and
+ * locks the account once the limit is reached. Returns true when the account is now locked.
+ */
+async function recordFailure(userId: string, action: "auth.login_failed" | "auth.mfa_failed") {
+  const result = await systemDb().execute<{ locked: boolean }>(sql`
+    update users set
+      failed_login_count = case when failed_login_count + 1 >= ${MAX_FAILED_ATTEMPTS} then 0 else failed_login_count + 1 end,
+      locked_until = case when failed_login_count + 1 >= ${MAX_FAILED_ATTEMPTS}
+        then now() + make_interval(secs => ${LOCKOUT_MS / 1000}) else locked_until end
+    where id = ${userId}
+    returning coalesce(locked_until > now(), false) as locked`);
+  const locked = result.rows[0]?.locked === true;
   await auditSystem({
     action,
     actorUserId: userId,
@@ -40,7 +39,7 @@ async function recordFailure(
     entityId: userId,
     ipAddress: await clientIp(),
   });
-  if (lock) {
+  if (locked) {
     await auditSystem({
       action: "auth.locked_out",
       actorUserId: userId,
@@ -48,7 +47,7 @@ async function recordFailure(
       entityId: userId,
     });
   }
-  return lock;
+  return locked;
 }
 
 const loginSchema = z.object({
@@ -76,7 +75,7 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
     return { error: LOCKED };
   }
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
-    const locked = await recordFailure(user.id, user.failedLoginCount, "auth.login_failed");
+    const locked = await recordFailure(user.id, "auth.login_failed");
     return { error: locked ? LOCKED : GENERIC_FAILURE };
   }
 
@@ -109,7 +108,7 @@ async function checkCode(formData: FormData, enrolling: boolean): Promise<FormSt
 
   const step = verifyTotp(decryptField(user.totpSecretEnc), parsed.data.code, user.totpLastStep);
   if (step === null) {
-    const locked = await recordFailure(user.id, user.failedLoginCount, "auth.mfa_failed");
+    const locked = await recordFailure(user.id, "auth.mfa_failed");
     if (locked) {
       await endSession(session.sessionId);
       return { error: LOCKED };

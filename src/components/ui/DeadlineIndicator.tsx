@@ -20,7 +20,7 @@ export function DeadlineIndicator({
 }) {
   const tone = deadlineTone(daysRemaining, dueSoonDays);
   return (
-    <span className="inline-flex flex-col leading-tight">
+    <span className="inline-flex flex-col leading-tight whitespace-nowrap">
       <span className="tabular text-text">{formatDate(dueDate)}</span>
       <span className={cn("tabular text-label", toneText[tone], tone !== "neutral" && "font-medium")}>
         {describeDaysRemaining(daysRemaining)}

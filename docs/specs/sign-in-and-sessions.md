@@ -1,0 +1,24 @@
+# Spec: Sign-in, MFA, and sessions
+
+Status: done (2026-09-26) — approved by delegated technical authority
+Roadmap item: Phase 0 → "Auth: OIDC SSO behind an interface…, MFA, session timeouts"
+Requirement IDs: R-7.2.2, R-7.2.7, R-7.2.9, R-7.5.1
+
+## Acceptance criteria
+- [x] Email + password sign-in; scrypt hashing (N=2^17); generic error for wrong password and
+      unknown account, with equal timing.
+- [x] TOTP MFA (RFC 6238) required for every account; first sign-in enrolls via QR code or key;
+      codes are single-use (replay-protected); ±1 step drift.
+- [x] Password alone never opens the app; session token rotated after MFA.
+- [x] Sessions: DB-backed, hashed token, `__Host-` cookie (HttpOnly, Secure, SameSite=Lax);
+      15-minute idle and 12-hour absolute timeouts; warning dialog 2 minutes before idle logout.
+- [x] Lockout: 5 failed password or MFA attempts → 15 minutes; counted atomically.
+- [x] Sign-in, failures, lockouts, MFA enrollment, sign-out, and expiry are audit events.
+- [x] Roles: admin, manager, specialist, compliance (read-only for denials).
+- [x] E2E tests: redirect when signed out, wrong password, unknown account, password-only,
+      lockout, first-time enrollment, role display.
+
+## Deferred
+- Customer SSO (SAML/OIDC, Entra ID) and SCIM — at Azure cutover (R-7.2.1).
+- Phishing-resistant MFA (WebAuthn) for admins (R-7.2.2) — next auth iteration.
+- Breached-password screening (R-7.2.9); admin MFA reset; practice switcher for multi-practice users.

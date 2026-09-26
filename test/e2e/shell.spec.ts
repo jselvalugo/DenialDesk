@@ -1,14 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-test("home page shows the synthetic-data banner and an honest empty state", async ({ page }) => {
-  await page.goto("/");
+test("sign-in page shows the synthetic-data banner", async ({ page }) => {
+  await page.goto("/login");
   await expect(page.getByRole("note", { name: "Environment notice" })).toContainText("Synthetic data only");
-  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
-  await expect(page.getByText("No claim data yet")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
 });
 
 test("skip link moves focus to the main content", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/design");
   await page.keyboard.press("Tab");
   const skip = page.getByRole("link", { name: "Skip to content" });
   await expect(skip).toBeFocused();
@@ -24,8 +23,9 @@ test("design system page renders the sample queue", async ({ page }) => {
 });
 
 test("unbuilt sections are not links", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("link", { name: /Denial queue/ })).toHaveCount(0);
+  await page.goto("/design");
+  await expect(page.getByRole("link", { name: /^Appeals/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Denial queue" })).toBeVisible();
 });
 
 test("health endpoint reports status without leaking config", async ({ request }) => {
