@@ -64,6 +64,8 @@ interface DenialFixture {
   paidCents?: number;
   serviceDate?: string;
   submittedAt?: Date | null;
+  /** Patient sensitivity tags (R-3.5.1) — drives small-cell suppression (R-8.7) when set. */
+  sensitivityTags?: string[];
 }
 
 /** Inserts one payer (by name, not reused across calls — tests that want a shared name pass the
@@ -98,6 +100,7 @@ async function seedDenial(actor: Actor, fixture: DenialFixture) {
         birthDate: "1990-01-01",
         memberIdEnc: "x",
         memberIdLast4: "",
+        sensitivityTags: fixture.sensitivityTags ?? [],
       })
       .returning();
     const patientId = patient!.id;
@@ -405,6 +408,105 @@ describe("Insight reports — filters", () => {
     const filtered = { ...wideFilters, payerId: kept.payerId };
     const result = await withTenant(t, (tx) => fetchDenialsByCategory(tx, filtered));
     expect(result.reduce((s, g) => s + g.sumCents, 0)).toBe(1_000);
+  });
+});
+
+describe("Insight reports — small-cell suppression (R-8.7)", () => {
+  it("suppresses a small, sensitive-tagged row's count and dollars, on-screen and in the export, while leaving a much larger non-sensitive row visible", async () => {
+    const t = await bareTenant("suppress", 94);
+    const today = todayIn();
+    const sensitivePayer = "Suppress Sensitive Payer (synthetic)";
+    const mediumPayer = "Suppress Medium Payer (synthetic)";
+    const hugePayer = "Suppress Huge Payer (synthetic)";
+
+    // One denial for a sensitive-tagged patient (count 1, under the threshold of 11).
+    await seedDenial(t, {
+      payerName: sensitivePayer,
+      category: "coding",
+      deniedCents: 12_345,
+      noticeDate: today,
+      sensitivityTags: ["hiv"],
+    });
+    // A medium, non-sensitive group — expected to pick up complementary suppression as the
+    // next-smallest visible row once the sensitive row above is suppressed on its own.
+    for (let i = 0; i < 5; i++) {
+      await seedDenial(t, {
+        payerName: mediumPayer,
+        category: "eligibility",
+        deniedCents: 1_000,
+        noticeDate: today,
+      });
+    }
+    // A much larger, non-sensitive group that must stay visible — it is never the next-smallest
+    // candidate, so complementary suppression never reaches it.
+    for (let i = 0; i < 40; i++) {
+      await seedDenial(t, {
+        payerName: hugePayer,
+        category: "eligibility",
+        deniedCents: 1_000,
+        noticeDate: today,
+      });
+    }
+
+    const byPayer = await withTenant(t, (tx) => fetchDenialsByPayer(tx, wideFilters));
+    const sensitiveRow = byPayer.find((g) => g.payerName === sensitivePayer)!;
+    const mediumRow = byPayer.find((g) => g.payerName === mediumPayer)!;
+    const hugeRow = byPayer.find((g) => g.payerName === hugePayer)!;
+    expect(sensitiveRow.suppressed).toBe(true);
+    expect(mediumRow.suppressed).toBe(true); // complementary suppression (next-smallest visible)
+    expect(hugeRow.suppressed).toBe(false);
+    expect(hugeRow.count).toBe(40);
+
+    const workbook = await withTenant(t, (tx) =>
+      buildSingleReportWorkbook(tx, "denials-by-payer", wideFilters, {
+        practiceName: "Insight suppression (synthetic)",
+        userId: t.userId,
+      }),
+    );
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(workbook.buffer as unknown as ArrayBuffer);
+    const sheet = wb.getWorksheet("Denials by payer")!;
+    const values = sheet.getSheetValues();
+    const sensitiveExcelRow = values.find((row) => Array.isArray(row) && row.includes(sensitivePayer)) as
+      unknown[] | undefined;
+    expect(sensitiveExcelRow).toBeDefined();
+    expect(sensitiveExcelRow!.some((v) => typeof v === "string" && v.startsWith("Suppressed"))).toBe(true);
+    // Never a bare number (the raw count/deniedCents) for the suppressed payer's row.
+    expect(sensitiveExcelRow!.some((v) => v === 12_345 || v === 123.45)).toBe(false);
+
+    const about = wb.getWorksheet("About")!;
+    const aboutText = about
+      .getSheetValues()
+      .flat()
+      .filter((v): v is string => typeof v === "string")
+      .join(" ");
+    expect(aboutText).toContain("Small-cell suppression");
+  });
+
+  it("complementary suppression hides the next-smallest row when exactly one row would otherwise be suppressed alone", async () => {
+    const t = await bareTenant("complement", 95);
+    const today = todayIn();
+    // Two payer rows: one sensitive at count 1 (suppressed), one non-sensitive at count 3. With
+    // only these two rows, if only the sensitive one were suppressed, the total minus the visible
+    // row would reveal it — so the non-sensitive row must be suppressed too.
+    await seedDenial(t, {
+      payerName: "Complement Sensitive Payer (synthetic)",
+      category: "coding",
+      deniedCents: 500,
+      noticeDate: today,
+      sensitivityTags: ["mental_health"],
+    });
+    for (let i = 0; i < 3; i++) {
+      await seedDenial(t, {
+        payerName: "Complement Other Payer (synthetic)",
+        category: "coding",
+        deniedCents: 900,
+        noticeDate: today,
+      });
+    }
+    const byPayer = await withTenant(t, (tx) => fetchDenialsByPayer(tx, wideFilters));
+    expect(byPayer).toHaveLength(2);
+    expect(byPayer.every((g) => g.suppressed)).toBe(true);
   });
 });
 

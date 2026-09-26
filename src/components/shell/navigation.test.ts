@@ -19,9 +19,9 @@ describe("navApps", () => {
   });
 
   it("an app with only planned pages has no home", () => {
-    const claims = navApps(none).find((app) => app.id === "claims")!;
-    const remittances = claims.items.find((i) => i.label === "Remittances")!;
-    expect(remittances.available).toBe(false);
+    const denials = navApps(none).find((app) => app.id === "denials")!;
+    const appeals = denials.items.find((i) => i.label === "Appeals")!;
+    expect(appeals.available).toBe(false);
     // Insight now has a working "Reports" page (docs/specs/insight-standard-reports.md).
     const insight = navApps(none).find((app) => app.id === "insight")!;
     expect(appHome(insight)).toBe("/insight");

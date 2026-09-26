@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { isSuppressedValue } from "./suppression";
 
 /**
  * Builds well-formatted .xlsx workbooks for Insight standard reports (owner decision 2026-09-26:
@@ -56,6 +57,9 @@ const DATE_FORMAT = "mm/dd/yyyy";
 
 function cellValue(type: ColumnType, value: string | number | null): string | number | Date | null {
   if (value === null) return null;
+  // Small-cell suppression (R-8.7): the marker is text regardless of the column's declared type
+  // (currency/percent/number), so it never gets coerced into a number or a currency format.
+  if (isSuppressedValue(value)) return sanitizeCellText(String(value));
   if (type === "text") return sanitizeCellText(String(value));
   if (type === "date") return new Date(`${value}T00:00:00Z`);
   // currency: convert integer cents to dollars only at write time (never stored as dollars elsewhere).
@@ -142,6 +146,8 @@ function addDataSheet(workbook: ExcelJS.Workbook, spec: SheetSpec, sheetName: st
     }
     const added = sheet.addRow(values);
     for (const column of spec.columns) {
+      const raw = row[column.key] ?? null;
+      if (isSuppressedValue(raw)) continue; // leave the suppression marker as plain text
       const fmt = numberFormat(column.type);
       if (fmt) added.getCell(column.key).numFmt = fmt;
     }

@@ -2,6 +2,39 @@
 
 Status: approved
 
+## Owner decisions (2026-09-26, second round)
+
+- **Small-cell suppression: yes.** In every report row/cell — on screen and in the .xlsx export,
+  including the "All reports" workbook and totals — if the row's underlying claims include at
+  least one claim for a patient carrying a sensitive-category tag (`patients.sensitivityTags`,
+  R-3.5.1/R-4.5.1) and the row's count is between 1 and `threshold − 1`, the row's count and its
+  dollar amounts/rates are shown as suppressed ("Suppressed (<11)"-style marker) instead of their
+  values. The threshold is a named config constant, `SMALL_CELL_SUPPRESSION_THRESHOLD` in
+  `src/domain/insight/suppression-config.ts` (default 11) — a product privacy policy, not a
+  statute, so it is never read by or written into `rules/`, and never hard-coded in a report query
+  or calculation. Rationale for 11: CMS's public-use-file cell-size suppression convention, used
+  here only as a reasonable starting point. ⚠️ VERIFY with counsel before relying on 11 as the
+  right number for DenialDesk's own risk profile. Complementary suppression prevents
+  back-calculation: when exactly one row in a sibling set (e.g. one payer's row among all payer
+  rows, or one CARC row within one category) would be suppressed, the next-smallest-count row
+  among the rest is also suppressed, even if it isn't itself sensitive-linked. Totals still reflect
+  every row (suppressed or not) — they combine enough rows, or (after complementary suppression)
+  at least two, that they never reveal one hidden row's value on their own; this is documented on
+  every workbook's About sheet as a caveat. Suppression is implemented once, in the domain layer
+  (`src/domain/insight/suppression.ts`, wired through `src/domain/insight/calculations.ts`), so the
+  on-screen table and the .xlsx export always agree. Applies to reports #1, #2, #4, #5, and #6
+  (every report that groups rows by category/CARC, payer, deadline bucket, status, or outcome).
+  Report #3 (denial rate) is a single tenant-wide scalar, not a breakdown into sibling rows, so
+  cell-level suppression doesn't apply to it the same way; it is left as-is.
+- **Export roles: confirmed final, no change.** `specialist` views on-screen only; `admin`,
+  `manager`, and `compliance` can view and download. This matches what shipped in the first round
+  (see "Owner decisions (2026-09-26)" below) — the owner reconfirmed it on the same date.
+- **Written handling/retention policy for downloaded workbooks: not decided yet.** The owner said
+  "not sure, let's confirm." Tracked as `OA-023` in `docs/owner/OWNER_ACTION_ITEMS.xlsx` (asks
+  owner/counsel to decide whether practices need a written policy for handling/retaining exported
+  Insight workbooks once they leave the audited system as files — R-9.2.1, SOC 2 C1.1/CC6.7) and
+  as an open question in `docs/PROJECT_STATE.md` and (via that file) `docs/OWNER_ACTIONS.md`.
+
 ## Owner decisions (2026-09-26)
 
 The open questions below are resolved by the owner as follows; the spec text further down is kept
@@ -320,6 +353,24 @@ Performance:
   run against a fixture-sized tenant, no page-load timing); left for a follow-up check, see
   "anything left undone".
 
+Small-cell suppression (R-8.7, owner decision 2026-09-26):
+- [x] A report row/cell whose underlying claims include ≥1 claim for a sensitivity-tagged patient
+  and whose count is under `SMALL_CELL_SUPPRESSION_THRESHOLD` (default 11) shows "Suppressed
+  (<11)" instead of its count/dollars/rate, identically on-screen and in the .xlsx export
+  (including the "All reports" workbook).
+- [x] Threshold boundary: count 10 is suppressed, count 11 is shown, count 0 is shown as 0 (unit
+  tests in `src/domain/insight/suppression.test.ts`).
+- [x] Complementary suppression: when exactly one row in a sibling set would be suppressed, the
+  next-smallest-count row among the rest is also suppressed (unit and integration tests).
+- [x] Non-sensitive rows are never suppressed, regardless of count.
+- [x] An integration test seeds a synthetic sensitive-tagged patient and asserts suppression in
+  both the fetched report data and the exported workbook's cells.
+- [x] The About sheet states the suppression policy and threshold as a data caveat on every
+  report that groups rows (denials-by-category, denials-by-payer, denials-by-deadline-bucket,
+  claims-by-status, appeal-outcomes).
+- [x] Suppression logic lives once in the domain layer (`src/domain/insight/suppression.ts`), not
+  duplicated between the on-screen page and the workbook builder.
+
 Legal deadlines:
 - [x] None of these reports compute or display a new legal deadline; they read
   `denials.appealDeadline` as already computed by the rules engine, so no new day-before/of/after
@@ -382,8 +433,13 @@ statutory deadline, rate, or threshold. No `rules/` changes.
 
 ## Open questions
 
-All resolved by the owner on 2026-09-26 — see "Owner decisions" at the top of this spec. Left here
-for the historical record of what was asked:
+Almost all resolved by the owner on 2026-09-26 — see "Owner decisions" at the top of this spec.
+One remains open:
+- **Written handling/retention policy for downloaded .xlsx workbooks** (R-9.2.1, SOC 2
+  C1.1/CC6.7): owner said "not sure, let's confirm" — tracked as `OA-023` in
+  `docs/owner/OWNER_ACTION_ITEMS.xlsx`.
+
+Left here for the historical record of what was asked in the first round:
 - Role access for export: admin/manager/compliance export, specialist view-only. **Resolved.**
 - Aggregate-only, no drill-down, for this slice. **Resolved: yes, for this slice.**
 - Report #6's date anchor (`noticeDate` vs. `updatedAt`). **Resolved: keep `noticeDate`.**

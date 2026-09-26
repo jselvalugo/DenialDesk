@@ -13,6 +13,7 @@ import { catalogEntry, isAvailableReportId } from "@/domain/insight/catalog";
 import { parseFilters } from "@/domain/insight/filters";
 import { listPayers, recordReportViewed } from "@/domain/insight/queries";
 import { runReport } from "@/domain/insight/report";
+import { isSuppressedValue } from "@/domain/insight/suppression";
 import type { ColumnType, SheetSpec } from "@/domain/insight/workbook";
 import { formatCents } from "@/lib/format";
 
@@ -27,6 +28,8 @@ export async function generateMetadata({
 
 function formatCell(type: ColumnType, value: string | number | null): string {
   if (value === null) return "—";
+  // Small-cell suppression (R-8.7): shown verbatim, regardless of the column's declared type.
+  if (isSuppressedValue(value)) return String(value);
   if (type === "currency") return formatCents(Number(value));
   if (type === "percent") return `${(Number(value) * 100).toFixed(2)}%`;
   return String(value);

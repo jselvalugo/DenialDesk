@@ -11,10 +11,10 @@ import {
 describe("denialsByCategoryReport", () => {
   it("sums, counts, and averages per category and CARC, ordered by sum descending", () => {
     const result = denialsByCategoryReport([
-      { category: "coding", carc: "11", deniedCents: 1000 },
-      { category: "coding", carc: "11", deniedCents: 500 },
-      { category: "coding", carc: "4", deniedCents: 200 },
-      { category: "eligibility", carc: "27", deniedCents: 5000 },
+      { category: "coding", carc: "11", deniedCents: 1000, patientSensitive: false },
+      { category: "coding", carc: "11", deniedCents: 500, patientSensitive: false },
+      { category: "coding", carc: "4", deniedCents: 200, patientSensitive: false },
+      { category: "eligibility", carc: "27", deniedCents: 5000, patientSensitive: false },
     ]);
     expect(result[0]!.category).toBe("eligibility");
     expect(result[0]!.sumCents).toBe(5000);
@@ -28,20 +28,66 @@ describe("denialsByCategoryReport", () => {
   });
 
   it("keeps a CARC outside the reference list rather than dropping it", () => {
-    const result = denialsByCategoryReport([{ category: "other", carc: "999999", deniedCents: 300 }]);
+    const result = denialsByCategoryReport([
+      { category: "other", carc: "999999", deniedCents: 300, patientSensitive: false },
+    ]);
     expect(result[0]!.carcs[0]!.carc).toBe("999999");
   });
 
   it("returns an empty list for zero denials, never a divide-by-zero average", () => {
     expect(denialsByCategoryReport([])).toEqual([]);
   });
+
+  it("suppresses a small, sensitive-tagged CARC row and, by complementary suppression, the next-smallest sibling row, while a much larger row stays visible", () => {
+    const sensitiveRows = Array.from({ length: 5 }, () => ({
+      category: "coding" as const,
+      carc: "11",
+      deniedCents: 100,
+      patientSensitive: true,
+    }));
+    const mediumRows = Array.from({ length: 8 }, () => ({
+      category: "coding" as const,
+      carc: "4",
+      deniedCents: 200,
+      patientSensitive: false,
+    }));
+    const bulkRows = Array.from({ length: 1_000 }, () => ({
+      category: "coding" as const,
+      carc: "29",
+      deniedCents: 300,
+      patientSensitive: false,
+    }));
+    const result = denialsByCategoryReport([...sensitiveRows, ...mediumRows, ...bulkRows]);
+    const coding = result.find((g) => g.category === "coding")!;
+    // "11" (count 5, sensitive) is suppressed outright.
+    expect(coding.carcs.find((c) => c.carc === "11")!.suppressed).toBe(true);
+    // "4" (count 8, not sensitive) is the next-smallest visible row — complementary suppression
+    // hides it too, so a reader can't back out "11" from the category total minus "4" and "29".
+    expect(coding.carcs.find((c) => c.carc === "4")!.suppressed).toBe(true);
+    // "29" (count 1000) is far larger and stays visible.
+    expect(coding.carcs.find((c) => c.carc === "29")!.suppressed).toBe(false);
+  });
 });
 
 describe("denialsByPayerReport", () => {
   it("picks the top category by sum, breaking ties by category enum order", () => {
     const result = denialsByPayerReport([
-      { payerId: "p1", payerName: "Payer One", verified: true, category: "coding", deniedCents: 100 },
-      { payerId: "p1", payerName: "Payer One", verified: true, category: "eligibility", deniedCents: 100 },
+      {
+        payerId: "p1",
+        payerName: "Payer One",
+        verified: true,
+        category: "coding",
+        deniedCents: 100,
+        patientSensitive: false,
+      },
+      {
+        payerId: "p1",
+        payerName: "Payer One",
+        verified: true,
+        category: "eligibility",
+        deniedCents: 100,
+        patientSensitive: false,
+      },
     ]);
     // eligibility precedes coding in the enum order (see src/db/schema.ts denialCategoryEnum).
     expect(result[0]!.topCategory).toBe("eligibility");
@@ -49,8 +95,22 @@ describe("denialsByPayerReport", () => {
 
   it("labels an unverified payer without merging it into another payer's row", () => {
     const result = denialsByPayerReport([
-      { payerId: "p1", payerName: "Acme", verified: false, category: "coding", deniedCents: 100 },
-      { payerId: "p2", payerName: "Acme", verified: true, category: "coding", deniedCents: 200 },
+      {
+        payerId: "p1",
+        payerName: "Acme",
+        verified: false,
+        category: "coding",
+        deniedCents: 100,
+        patientSensitive: false,
+      },
+      {
+        payerId: "p2",
+        payerName: "Acme",
+        verified: true,
+        category: "coding",
+        deniedCents: 200,
+        patientSensitive: false,
+      },
     ]);
     expect(result).toHaveLength(2);
     expect(result.find((r) => r.payerId === "p1")!.verified).toBe(false);
@@ -82,15 +142,18 @@ describe("denialsByDeadlineBucketReport", () => {
   });
 
   it("buckets a null deadline as no_deadline, never guessed", () => {
-    const result = denialsByDeadlineBucketReport([{ appealDeadline: null, deniedCents: 500 }], today);
+    const result = denialsByDeadlineBucketReport(
+      [{ appealDeadline: null, deniedCents: 500, patientSensitive: false }],
+      today,
+    );
     expect(result.find((r) => r.bucket === "no_deadline")!.count).toBe(1);
   });
 
   it("puts exactly 7 days out in 0-7 and 8 days out in 8-30 (boundary)", () => {
     const result = denialsByDeadlineBucketReport(
       [
-        { appealDeadline: "2026-10-03", deniedCents: 100 }, // +7 days
-        { appealDeadline: "2026-10-04", deniedCents: 200 }, // +8 days
+        { appealDeadline: "2026-10-03", deniedCents: 100, patientSensitive: false }, // +7 days
+        { appealDeadline: "2026-10-04", deniedCents: 200, patientSensitive: false }, // +8 days
       ],
       today,
     );
@@ -103,8 +166,8 @@ describe("denialsByDeadlineBucketReport", () => {
   it("puts exactly 30 days out in 8-30 and 31 days out in 31-plus (boundary)", () => {
     const result = denialsByDeadlineBucketReport(
       [
-        { appealDeadline: "2026-10-26", deniedCents: 100 }, // +30 days
-        { appealDeadline: "2026-10-27", deniedCents: 200 }, // +31 days
+        { appealDeadline: "2026-10-26", deniedCents: 100, patientSensitive: false }, // +30 days
+        { appealDeadline: "2026-10-27", deniedCents: 200, patientSensitive: false }, // +31 days
       ],
       today,
     );
@@ -115,8 +178,8 @@ describe("denialsByDeadlineBucketReport", () => {
   it("puts a deadline of yesterday in past_deadline and today's deadline in 0-7 (boundary)", () => {
     const result = denialsByDeadlineBucketReport(
       [
-        { appealDeadline: "2026-09-25", deniedCents: 100 }, // -1 day
-        { appealDeadline: "2026-09-26", deniedCents: 200 }, // 0 days
+        { appealDeadline: "2026-09-25", deniedCents: 100, patientSensitive: false }, // -1 day
+        { appealDeadline: "2026-09-26", deniedCents: 200, patientSensitive: false }, // 0 days
       ],
       today,
     );
@@ -128,9 +191,9 @@ describe("denialsByDeadlineBucketReport", () => {
 describe("claimsByStatusReport", () => {
   it("sums billed, paid, and outstanding per status", () => {
     const result = claimsByStatusReport([
-      { status: "paid", billedCents: 10000, paidCents: 10000 },
-      { status: "denied", billedCents: 5000, paidCents: 0 },
-      { status: "denied", billedCents: 3000, paidCents: 1000 },
+      { status: "paid", billedCents: 10000, paidCents: 10000, patientSensitive: false },
+      { status: "denied", billedCents: 5000, paidCents: 0, patientSensitive: false },
+      { status: "denied", billedCents: 3000, paidCents: 1000, patientSensitive: false },
     ]);
     const denied = result.find((r) => r.status === "denied")!;
     expect(denied.count).toBe(2);
@@ -140,7 +203,9 @@ describe("claimsByStatusReport", () => {
   });
 
   it("omits statuses with no rows rather than showing a fake zero row", () => {
-    const result = claimsByStatusReport([{ status: "paid", billedCents: 100, paidCents: 100 }]);
+    const result = claimsByStatusReport([
+      { status: "paid", billedCents: 100, paidCents: 100, patientSensitive: false },
+    ]);
     expect(result).toHaveLength(1);
   });
 });
@@ -149,8 +214,8 @@ describe("appealOutcomesReport", () => {
   it("computes overturn rate per group and totals reversed cents from overturned rows only", () => {
     const report = appealOutcomesReport(
       [
-        { key: "p1", label: "Payer One", status: "overturned", deniedCents: 1000 },
-        { key: "p1", label: "Payer One", status: "upheld", deniedCents: 2000 },
+        { key: "p1", label: "Payer One", status: "overturned", deniedCents: 1000, patientSensitive: false },
+        { key: "p1", label: "Payer One", status: "upheld", deniedCents: 2000, patientSensitive: false },
       ],
       [],
     );

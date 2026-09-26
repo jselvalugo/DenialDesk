@@ -57,9 +57,19 @@ _Last updated: 2026-09-26_
   sheet(s) with a bold frozen header, autofilter, real numeric/date/percent cells, a totals row, and
   formula-injection sanitization; an "All reports" workbook is also offered. New indexes:
   `denials(tenant_id, notice_date)`, `claims(tenant_id, submitted_at)`,
-  `claims(tenant_id, service_date)` (migration 0026). Navigation's Insight "Reports" item now
-  points at `/insight` and is `available: true`. Next: custom/user-built reports, drill-down once
-  sensitivity-tag enforcement lands (R-3.5.1), and the two planned reports once their blockers clear.
+  `claims(tenant_id, service_date)` (migration 0029). Navigation's Insight "Reports" item now
+  points at `/insight` and is `available: true`. Small-cell suppression (owner decision
+  2026-09-26, R-8.7): a report row whose underlying claims include a sensitivity-tagged patient
+  (R-3.5.1) and whose count is under `SMALL_CELL_SUPPRESSION_THRESHOLD` (default 11, config in
+  `src/domain/insight/suppression-config.ts`, ⚠️ VERIFY with counsel — modeled on CMS's public-
+  use-file cell-size suppression policy, not a Florida statute) shows "Suppressed (<11)" instead
+  of its count/dollars/rate, on-screen and in the export; complementary suppression also hides
+  the next-smallest sibling row when only one row would otherwise be suppressed, so the hidden
+  value can't be inferred; totals still reflect every row. Logic lives once in the domain layer
+  (`src/domain/insight/suppression.ts`, wired through `calculations.ts`) so the on-screen table
+  and the .xlsx both suppress identically. Next: custom/user-built reports, patient-level drill-
+  down once broader sensitivity-tag enforcement lands (R-3.5.1), and the two planned reports once
+  their blockers clear.
 - Payer catalog P1 (`specs/payer-catalog.md`): `payers.edi_payer_id`/`regime` are now nullable plus
   a `payers.source` column; a payer missing either is "unverified". Starter Florida insurer catalog
   by name only (`src/domain/payers/florida-catalog.ts`, no payer IDs/regimes) loaded per-tenant,
@@ -123,6 +133,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
 | 2026-09-26 | Insight standard reports: all roles view, export limited to admin/manager/compliance, aggregate-only (no drill-down), primary export is a formatted .xlsx workbook (not CSV); `exceljs` added | `specs/insight-standard-reports.md` |
+| 2026-09-26 | Insight small-cell suppression (R-8.7): rows tied to a sensitivity-tagged patient with a count under 11 (config, ⚠️ VERIFY) show "Suppressed (<11)" instead of values on-screen and in exports, with complementary suppression to prevent back-calculation | `specs/insight-standard-reports.md` |
 | 2026-09-26 | ERP shell: global header, navy tab bar, module switcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
 | 2026-09-26 | Operator two-step is off on the Netlify console for now (`PLATFORM_OPERATOR_MFA=off`; ignored in production); unset the variable to turn it back on | `specs/operator-login.md` |
 | 2026-09-26 | No self-service sign-up; the operator creates practices after the BAA is signed, and records the BAA on the practice page | `specs/practice-agreements.md` |
@@ -167,6 +178,10 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   (`public/brand/README.md`); it is owner-supplied and described as a synthetic render.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.
+- Insight exported .xlsx workbooks (R-9.2.1, SOC 2 C1.1/CC6.7): owner said "not sure, let's
+  confirm" on 2026-09-26 whether practices need a written handling/retention policy for downloaded
+  workbooks (they leave the audited system as files on a user's device). See `OA-023` in
+  `docs/owner/OWNER_ACTION_ITEMS.xlsx`.
 
 - Revenue cycle imports (before real data, `docs/threat-models/revenue-cycle-imports.md`):
   sensitivity tags for lines (Part 2/HIV/behavioral CPTs); encrypt account numbers or confirm

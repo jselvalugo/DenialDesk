@@ -16,6 +16,26 @@ import type {
 } from "./calculations";
 import type { SheetSpec } from "./workbook";
 import { catalogEntry, type ReportId } from "./catalog";
+import { suppressedLabel } from "./suppression";
+
+/**
+ * Small-cell suppression (R-8.7, owner decision 2026-09-26): when `suppressed` is true, every
+ * numeric/rate value in `values` is replaced with the suppression marker text so neither the
+ * on-screen table nor the .xlsx export shows the underlying count or dollar amount. Non-numeric
+ * identifying columns (category, payer name, status, bucket label) are left untouched — only the
+ * count/dollar/rate cells are hidden.
+ */
+function suppressRow<T extends Record<string, string | number | null>>(
+  values: T,
+  suppressed: boolean,
+  numericKeys: (keyof T)[],
+): T {
+  if (!suppressed) return values;
+  const label = suppressedLabel();
+  const next = { ...values };
+  for (const key of numericKeys) next[key] = label as T[typeof key];
+  return next;
+}
 
 export function reportTitle(reportId: ReportId): string {
   return catalogEntry(reportId)?.title ?? reportId;
@@ -27,13 +47,19 @@ export function filenameFor(reportId: string, dateFrom: string, dateTo: string):
 
 export function denialsByCategorySheet(groups: CategoryGroup[]): SheetSpec {
   const rows = groups.flatMap((group) =>
-    group.carcs.map((carc) => ({
-      category: CATEGORY_LABELS[group.category],
-      carc: carc.carc,
-      count: carc.count,
-      sumCents: carc.sumCents,
-      avgCents: carc.avgCents,
-    })),
+    group.carcs.map((carc) =>
+      suppressRow(
+        {
+          category: CATEGORY_LABELS[group.category],
+          carc: carc.carc,
+          count: carc.count,
+          sumCents: carc.sumCents,
+          avgCents: carc.avgCents,
+        },
+        carc.suppressed,
+        ["count", "sumCents", "avgCents"],
+      ),
+    ),
   );
   const totalCount = groups.reduce((t, g) => t + g.count, 0);
   const totalSum = groups.reduce((t, g) => t + g.sumCents, 0);
@@ -63,13 +89,19 @@ export function denialsByPayerSheet(groups: PayerGroup[]): SheetSpec {
       { header: "Denied ($)", key: "sumCents", type: "currency", width: 16 },
       { header: "Top category", key: "topCategory", type: "text", width: 20 },
     ],
-    rows: groups.map((g) => ({
-      payerName: g.payerName,
-      verified: g.verified ? "Verified" : "Unverified",
-      count: g.count,
-      sumCents: g.sumCents,
-      topCategory: CATEGORY_LABELS[g.topCategory],
-    })),
+    rows: groups.map((g) =>
+      suppressRow(
+        {
+          payerName: g.payerName,
+          verified: g.verified ? "Verified" : "Unverified",
+          count: g.count,
+          sumCents: g.sumCents,
+          topCategory: CATEGORY_LABELS[g.topCategory],
+        },
+        g.suppressed,
+        ["count", "sumCents"],
+      ),
+    ),
     totals: { payerName: "Total", verified: "", count: totalCount, sumCents: totalSum, topCategory: "" },
   };
 }
@@ -105,11 +137,13 @@ export function denialsByDeadlineBucketSheet(groups: BucketGroup[]): SheetSpec {
       { header: "Count", key: "count", type: "number", width: 10 },
       { header: "Denied ($)", key: "sumCents", type: "currency", width: 16 },
     ],
-    rows: groups.map((g) => ({
-      bucket: DEADLINE_BUCKET_LABELS[g.bucket],
-      count: g.count,
-      sumCents: g.sumCents,
-    })),
+    rows: groups.map((g) =>
+      suppressRow(
+        { bucket: DEADLINE_BUCKET_LABELS[g.bucket], count: g.count, sumCents: g.sumCents },
+        g.suppressed,
+        ["count", "sumCents"],
+      ),
+    ),
     totals: { bucket: "Total", count: totalCount, sumCents: totalSum },
   };
 }
@@ -139,13 +173,19 @@ export function claimsByStatusSheet(groups: StatusGroup[]): SheetSpec {
       { header: "Paid ($)", key: "paidCents", type: "currency", width: 16 },
       { header: "Outstanding ($)", key: "outstandingCents", type: "currency", width: 18 },
     ],
-    rows: groups.map((g) => ({
-      status: STATUS_LABELS[g.status],
-      count: g.count,
-      billedCents: g.billedCents,
-      paidCents: g.paidCents,
-      outstandingCents: g.outstandingCents,
-    })),
+    rows: groups.map((g) =>
+      suppressRow(
+        {
+          status: STATUS_LABELS[g.status],
+          count: g.count,
+          billedCents: g.billedCents,
+          paidCents: g.paidCents,
+          outstandingCents: g.outstandingCents,
+        },
+        g.suppressed,
+        ["count", "billedCents", "paidCents", "outstandingCents"],
+      ),
+    ),
     totals: {
       status: "Total",
       count: totalCount,
@@ -157,13 +197,19 @@ export function claimsByStatusSheet(groups: StatusGroup[]): SheetSpec {
 }
 
 function outcomeRows(groups: OutcomeGroup[]) {
-  return groups.map((g) => ({
-    group: g.label,
-    overturned: g.overturned,
-    upheld: g.upheld,
-    overturnRate: g.overturnRate,
-    reversedCents: g.reversedCents,
-  }));
+  return groups.map((g) =>
+    suppressRow(
+      {
+        group: g.label,
+        overturned: g.overturned,
+        upheld: g.upheld,
+        overturnRate: g.overturnRate,
+        reversedCents: g.reversedCents,
+      },
+      g.suppressed,
+      ["overturned", "upheld", "overturnRate", "reversedCents"],
+    ),
+  );
 }
 
 export function appealOutcomesSheets(byPayer: OutcomeGroup[], byCategory: OutcomeGroup[]): SheetSpec[] {
@@ -249,21 +295,38 @@ export const METRIC_DEFINITIONS: Record<ReportId, { term: string; definition: st
   ],
 };
 
+const SMALL_CELL_SUPPRESSION_CAVEAT =
+  "Small-cell suppression (R-8.7): a row that includes a claim for a patient carrying a " +
+  "sensitivity tag (R-3.5.1) and whose count is under the suppression threshold shows " +
+  '"Suppressed (<11)" instead of its count and dollar amounts/rates, to avoid identifying that ' +
+  "patient. When exactly one row in a breakdown would be suppressed, the next-smallest row is " +
+  "also suppressed so the hidden value can't be inferred from the others. Totals still reflect " +
+  "every row, suppressed or not. ⚠️ VERIFY: the threshold (11) follows CMS's public-use-file " +
+  "cell-size suppression convention as a policy baseline, not a Florida statute — confirm with " +
+  "counsel.";
+
 export const DATA_CAVEATS: Record<ReportId, string[]> = {
   "denials-by-category": [
     "A CARC code outside the reference list (src/domain/carc.ts) is shown by its raw code with no description.",
+    SMALL_CELL_SUPPRESSION_CAVEAT,
   ],
-  "denials-by-payer": ["The payer filter is not applicable to this report — it is the payer breakdown."],
+  "denials-by-payer": [
+    "The payer filter is not applicable to this report — it is the payer breakdown.",
+    SMALL_CELL_SUPPRESSION_CAVEAT,
+  ],
   "denial-rate": [
     "Submission-date tracking (C3 837P) is not yet built; falls back to service date when submittedAt is null.",
   ],
   "denials-by-deadline-bucket": [
     '"No deadline configured" includes unverified payers and payers with no configured appeal window.',
+    SMALL_CELL_SUPPRESSION_CAVEAT,
   ],
   "claims-by-status": [
     "Paid amounts are recorded only where captured — 835 remittance posting is not yet built.",
+    SMALL_CELL_SUPPRESSION_CAVEAT,
   ],
   "appeal-outcomes": [
     "Reports on current denial status only; there is no appeals history table yet, so a denial that flipped status is shown by its latest outcome.",
+    SMALL_CELL_SUPPRESSION_CAVEAT,
   ],
 };

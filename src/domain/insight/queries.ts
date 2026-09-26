@@ -1,7 +1,7 @@
 import { and, eq, exists, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { easternDayBoundsUtc, todayIn } from "@rules/calendar";
 import type { TenantTx } from "@/db/tenant";
-import { claims, denials, payers } from "@/db/schema";
+import { claims, denials, patients, payers } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { isPayerVerified } from "@/domain/payers/verification";
@@ -84,11 +84,17 @@ export async function fetchDenialsByCategory(tx: TenantTx, filters: ReportFilter
     filters.payerId ? eq(claims.payerId, filters.payerId) : undefined,
   );
   const rows = await tx
-    .select({ category: denials.category, carc: denials.carc, deniedCents: denials.deniedCents })
+    .select({
+      category: denials.category,
+      carc: denials.carc,
+      deniedCents: denials.deniedCents,
+      sensitivityTags: patients.sensitivityTags,
+    })
     .from(denials)
     .innerJoin(claims, eq(claims.id, denials.claimId))
+    .innerJoin(patients, eq(patients.id, claims.patientId))
     .where(where);
-  return denialsByCategoryReport(rows);
+  return denialsByCategoryReport(rows.map((r) => ({ ...r, patientSensitive: r.sensitivityTags.length > 0 })));
 }
 
 export async function fetchDenialsByPayer(tx: TenantTx, filters: ReportFilters) {
@@ -100,10 +106,12 @@ export async function fetchDenialsByPayer(tx: TenantTx, filters: ReportFilters) 
       regime: payers.regime,
       category: denials.category,
       deniedCents: denials.deniedCents,
+      sensitivityTags: patients.sensitivityTags,
     })
     .from(denials)
     .innerJoin(claims, eq(claims.id, denials.claimId))
     .innerJoin(payers, eq(payers.id, claims.payerId))
+    .innerJoin(patients, eq(patients.id, claims.patientId))
     .where(noticeDateRange(filters));
   return denialsByPayerReport(
     rows.map((r) => ({
@@ -112,6 +120,7 @@ export async function fetchDenialsByPayer(tx: TenantTx, filters: ReportFilters) 
       verified: isPayerVerified({ ediPayerId: r.ediPayerId, regime: r.regime }),
       category: r.category,
       deniedCents: r.deniedCents,
+      patientSensitive: r.sensitivityTags.length > 0,
     })),
   );
 }
@@ -172,11 +181,19 @@ export async function fetchDenialsByDeadlineBucket(tx: TenantTx, filters: Report
     filters.payerId ? eq(claims.payerId, filters.payerId) : undefined,
   );
   const rows = await tx
-    .select({ appealDeadline: denials.appealDeadline, deniedCents: denials.deniedCents })
+    .select({
+      appealDeadline: denials.appealDeadline,
+      deniedCents: denials.deniedCents,
+      sensitivityTags: patients.sensitivityTags,
+    })
     .from(denials)
     .innerJoin(claims, eq(claims.id, denials.claimId))
+    .innerJoin(patients, eq(patients.id, claims.patientId))
     .where(where);
-  return denialsByDeadlineBucketReport(rows, today);
+  return denialsByDeadlineBucketReport(
+    rows.map((r) => ({ ...r, patientSensitive: r.sensitivityTags.length > 0 })),
+    today,
+  );
 }
 
 export async function fetchClaimsByStatus(tx: TenantTx, filters: ReportFilters) {
@@ -186,10 +203,16 @@ export async function fetchClaimsByStatus(tx: TenantTx, filters: ReportFilters) 
     filters.payerId ? eq(claims.payerId, filters.payerId) : undefined,
   );
   const rows = await tx
-    .select({ status: claims.status, billedCents: claims.billedCents, paidCents: claims.paidCents })
+    .select({
+      status: claims.status,
+      billedCents: claims.billedCents,
+      paidCents: claims.paidCents,
+      sensitivityTags: patients.sensitivityTags,
+    })
     .from(claims)
+    .innerJoin(patients, eq(patients.id, claims.patientId))
     .where(where);
-  return claimsByStatusReport(rows);
+  return claimsByStatusReport(rows.map((r) => ({ ...r, patientSensitive: r.sensitivityTags.length > 0 })));
 }
 
 export async function fetchAppealOutcomes(tx: TenantTx, filters: ReportFilters) {
@@ -205,10 +228,12 @@ export async function fetchAppealOutcomes(tx: TenantTx, filters: ReportFilters) 
       category: denials.category,
       status: denials.status,
       deniedCents: denials.deniedCents,
+      sensitivityTags: patients.sensitivityTags,
     })
     .from(denials)
     .innerJoin(claims, eq(claims.id, denials.claimId))
     .innerJoin(payers, eq(payers.id, claims.payerId))
+    .innerJoin(patients, eq(patients.id, claims.patientId))
     .where(where);
   const outcomeStatus = (s: string) => (s === "overturned" ? ("overturned" as const) : ("upheld" as const));
   return appealOutcomesReport(
@@ -217,12 +242,14 @@ export async function fetchAppealOutcomes(tx: TenantTx, filters: ReportFilters) 
       label: r.payerName,
       status: outcomeStatus(r.status),
       deniedCents: r.deniedCents,
+      patientSensitive: r.sensitivityTags.length > 0,
     })),
     rows.map((r) => ({
       key: r.category,
       label: r.category,
       status: outcomeStatus(r.status),
       deniedCents: r.deniedCents,
+      patientSensitive: r.sensitivityTags.length > 0,
     })),
   );
 }
