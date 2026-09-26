@@ -14,7 +14,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Select } from "@/components/ui/Select";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
-import { CLAIMS_PAGE_SIZE, claimsOverview } from "@/domain/claims/queries";
+import { CLAIMS_PAGE_SIZE, claimsOverview, UNSUBMITTED_LIMIT } from "@/domain/claims/queries";
 import { CLAIM_STATUSES, FILING_WARNING_DAYS } from "@/domain/claims/status";
 import { REGIME_LABELS } from "@/domain/denial-status";
 import { payerOptions } from "@/domain/denials/queries";
@@ -140,7 +140,8 @@ export default async function ClaimsPage({
             role="note"
             className="border-b border-border bg-warning-bg px-4 py-2 text-label text-warning-fg"
           >
-            Showing the oldest unsubmitted claims only. Narrow by payer to see the rest.
+            More than {UNSUBMITTED_LIMIT.toLocaleString("en-US")} unsubmitted claims: the list, filters, and
+            totals cover the oldest {UNSUBMITTED_LIMIT.toLocaleString("en-US")} by date of service only.
           </p>
         )}
 

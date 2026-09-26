@@ -17,7 +17,6 @@ ALTER TABLE "claim_versions" ADD CONSTRAINT "claim_versions_changed_by_users_id_
 CREATE UNIQUE INDEX "claims_tenant_id_key" ON "claims" USING btree ("tenant_id","id");--> statement-breakpoint
 ALTER TABLE "claim_versions" ADD CONSTRAINT "claim_versions_claim_fk" FOREIGN KEY ("tenant_id","claim_id") REFERENCES "public"."claims"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "claim_versions_claim_version_key" ON "claim_versions" USING btree ("tenant_id","claim_id","version");--> statement-breakpoint
---> statement-breakpoint
 
 -- Tenant isolation (R-7.2.4, CLAUDE.md #5). Claim history is append-only (R-3.10.3).
 ALTER TABLE "claim_versions" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
