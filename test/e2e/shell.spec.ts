@@ -160,4 +160,16 @@ test.describe("signed in", () => {
       page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Claims" }),
     ).toHaveAttribute("aria-current", "page");
   });
+
+  test("the logo opens the welcome page", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("link", { name: "DenialDesk home" }).click();
+    await expect(page).toHaveURL(/\/welcome$/);
+    await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
+    for (const name of ["How DenialDesk works", "Your modules", "Safeguards"]) {
+      await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+    }
+    // Unshipped steps are labelled, never linked.
+    await expect(page.getByRole("link", { name: "Appeal with approval" })).toHaveCount(0);
+  });
 });
