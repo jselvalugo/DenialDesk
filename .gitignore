@@ -7,3 +7,8 @@ dist/
 coverage/
 *.log
 .DS_Store
+next-env.d.ts
+*.tsbuildinfo
+playwright-report/
+test-results/
+test/e2e/.auth/

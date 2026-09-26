@@ -2,6 +2,7 @@
 
 Status: draft | approved | in progress | done
 Roadmap item: <link>
+Requirement IDs: R-x.x, R-y.y
 
 ## Goal
 One or two sentences: what the user can do after this ships.
@@ -11,10 +12,14 @@ One or two sentences: what the user can do after this ships.
 
 ## Acceptance criteria
 - [ ] Concrete, testable statement
+- [ ] For each legal deadline: day before, day of, day after
 - [ ] ...
 
 ## Data / API changes
-Tables, fields, endpoints touched.
+Tables, fields, endpoints touched. Data classification (REQUIREMENTS §9.1) and audit events.
+
+## Legal rules used
+Rule IDs from `rules/` with citations; ⚠️ VERIFY status. "None" if the feature has no legal clock.
 
 ## Out of scope
 What this spec deliberately does not cover.

@@ -1,0 +1,12 @@
+# Keeps GitHub Actions and npm dependencies patched (R-7.4.2, REQUIREMENTS §7.6 SLAs).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
