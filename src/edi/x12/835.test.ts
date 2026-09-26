@@ -243,3 +243,9 @@ describe("835 rejection cases", () => {
     }
   });
 });
+
+describe("tokenizer failures", () => {
+  it("reports a truncated ISA as an Edi835Error", () => {
+    expect(() => parse835("ISA*00*short~")).toThrow(Edi835Error);
+  });
+});

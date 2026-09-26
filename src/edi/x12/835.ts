@@ -128,7 +128,13 @@ function addRarc(list: string[], seen: Set<string>, code: string): void {
 // ---------------------------------------------------------------------------
 
 export function parse835(text: string): Remittance835 {
-  const { segments } = tokenize(text);
+  let segments: ReturnType<typeof tokenize>["segments"];
+  try {
+    ({ segments } = tokenize(text));
+  } catch (error) {
+    // Tokenizer problems (size, short ISA) are file problems the uploader can fix.
+    throw new Edi835Error(error instanceof Error ? error.message : "The file isn't a readable X12 file.");
+  }
 
   const stSegments835 = segments.filter((s) => s.id === "ST" && s.elements[0] === "835");
   if (stSegments835.length !== 1) {
