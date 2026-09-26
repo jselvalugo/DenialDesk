@@ -1,0 +1,139 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { canConfigureSettings } from "@/auth/permissions";
+import { requireAuth } from "@/auth/session";
+import { isUniqueViolation } from "@/db/errors";
+import { withTenant } from "@/db/tenant";
+import {
+  customFieldChangesSchema,
+  keyFromLabel,
+  newCustomFieldSchema,
+  parseOptions,
+} from "@/domain/settings/custom-fields";
+import {
+  CustomFieldError,
+  setCustomFieldActive,
+  updateCustomField,
+  createCustomField,
+} from "@/domain/settings/queries";
+import { customFields } from "@/db/schema";
+import { eq } from "drizzle-orm";
+
+export interface CustomFieldFormState {
+  error?: string;
+  field?: string;
+}
+
+const NOT_ALLOWED = "Only administrators can change custom fields.";
+const uuid = z.uuid();
+
+function text(formData: FormData, name: string, max = 200) {
+  return String(formData.get(name) ?? "").slice(0, max);
+}
+
+function common(formData: FormData) {
+  return {
+    label: text(formData, "label"),
+    options: parseOptions(text(formData, "options", 4000)),
+    required: formData.get("required") === "on",
+    helpText: text(formData, "helpText", 400),
+    sensitivity: text(formData, "sensitivity", 40),
+  };
+}
+
+function failure(error: unknown): CustomFieldFormState {
+  if (error instanceof CustomFieldError) return { error: error.message, field: error.field };
+  if (isUniqueViolation(error))
+    return { error: "Another field on these records already uses this key.", field: "key" };
+  throw error;
+}
+
+function issue(error: z.ZodError): CustomFieldFormState {
+  const first = error.issues[0]!;
+  return { error: first.message, field: String(first.path[0] ?? "") };
+}
+
+export async function addCustomField(
+  _: CustomFieldFormState,
+  formData: FormData,
+): Promise<CustomFieldFormState> {
+  const auth = await requireAuth();
+  if (!canConfigureSettings(auth.role)) return { error: NOT_ALLOWED };
+  const label = text(formData, "label");
+  const parsed = newCustomFieldSchema.safeParse({
+    ...common(formData),
+    entity: text(formData, "entity"),
+    key: text(formData, "key", 60).trim() || keyFromLabel(label),
+    fieldType: text(formData, "fieldType"),
+  });
+  if (!parsed.success) return issue(parsed.error);
+  try {
+    await withTenant(auth, (tx) => createCustomField(tx, auth, parsed.data));
+  } catch (error) {
+    return failure(error);
+  }
+  revalidatePath("/settings/fields");
+  redirect(`/settings/fields?records=${parsed.data.entity}`);
+}
+
+export async function saveCustomField(
+  _: CustomFieldFormState,
+  formData: FormData,
+): Promise<CustomFieldFormState> {
+  const auth = await requireAuth();
+  if (!canConfigureSettings(auth.role)) return { error: NOT_ALLOWED };
+  const id = uuid.safeParse(text(formData, "id"));
+  if (!id.success) return { error: "Field not found." };
+  const expected = text(formData, "updatedAt", 40);
+  let entity: string;
+  try {
+    entity = await withTenant(auth, async (tx) => {
+      const [stored] = await tx
+        .select({ fieldType: customFields.fieldType, entity: customFields.entity })
+        .from(customFields)
+        .where(eq(customFields.id, id.data))
+        .limit(1);
+      if (!stored) throw new CustomFieldError("Field not found.");
+      const parsed = customFieldChangesSchema.safeParse({ ...common(formData), fieldType: stored.fieldType });
+      if (!parsed.success) {
+        const state = issue(parsed.error);
+        throw new CustomFieldError(state.error!, state.field);
+      }
+      await updateCustomField(tx, auth, id.data, expected, parsed.data);
+      return stored.entity;
+    });
+  } catch (error) {
+    return failure(error);
+  }
+  revalidatePath("/settings/fields");
+  redirect(`/settings/fields?records=${entity}`);
+}
+
+/** Deactivate or reactivate from the list; errors (stale row) come back to the list. */
+export async function toggleCustomField(
+  _: CustomFieldFormState,
+  formData: FormData,
+): Promise<CustomFieldFormState> {
+  const auth = await requireAuth();
+  if (!canConfigureSettings(auth.role)) return { error: NOT_ALLOWED };
+  const id = uuid.safeParse(text(formData, "id"));
+  if (!id.success) return { error: "Field not found." };
+  try {
+    await withTenant(auth, (tx) =>
+      setCustomFieldActive(
+        tx,
+        auth,
+        id.data,
+        text(formData, "updatedAt", 40),
+        formData.get("active") === "true",
+      ),
+    );
+  } catch (error) {
+    return failure(error);
+  }
+  revalidatePath("/settings/fields");
+  return {};
+}

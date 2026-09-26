@@ -68,7 +68,7 @@ the focus ring inside navy chrome.
 Module tiles (module switcher, page headers) are a colored glyph on the module's own light tint with
 a 1px border (`tile-<tone>-fg/-bg/-border`), like our badges, never a solid colored square with a
 white glyph (ADR 0005): Denials teal, Claims blue, Revenue cycle navy, Insight amber, Patients and
-Setup slate. Every glyph is ≥ 5:1 on its tint. Tiles identify the module; they never carry status.
+Settings slate. Every glyph is ≥ 5:1 on its tint. Tiles identify the module; they never carry status.
 
 ## 5. Color tokens
 Neutrals are cool slate.
@@ -142,7 +142,8 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
     row (tinted tile, name, one-line description) links to its home, and its pages follow as compact
     links; planned modules and pages are shown as "Planned" with a dashed border, never links.
   - Modules ("apps" in code): Denials, Patients, Claims, Revenue cycle (roles that can view it),
-    Insight, Setup (style guide; only when available). Defined once in
+    Insight, Settings (section tabs: General, Custom fields, and planned sections; the design
+    style guide in pre-production; `specs/settings-and-custom-fields.md`). Defined once in
     `src/components/shell/navigation.ts`.
 - **Page header:** white band (panel style) with the module tile, an uppercase "Module · Page"
   eyebrow, the serif title, a one-line description, and actions on the right.
