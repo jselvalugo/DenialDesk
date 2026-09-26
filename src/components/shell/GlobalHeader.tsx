@@ -43,7 +43,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
   return (
     <header className="shrink-0">
       <div className="flex h-14 items-center gap-6 border-b border-border bg-surface px-4">
-        <Link href="/" aria-label="DenialDesk home" className="shrink-0">
+        <Link href="/welcome" aria-label="DenialDesk home" className="shrink-0">
           <Image src="/brand/denialdesk-logo.png" alt="DenialDesk" width={140} height={33} priority />
         </Link>
 
