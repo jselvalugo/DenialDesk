@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
+import { decryptField, encryptField } from "@/lib/crypto/field";
 import {
   auditEvents,
   claims,
@@ -617,6 +618,137 @@ describe("custom field values", () => {
       sql`select has_table_privilege('denialdesk_app', 'custom_field_value_versions', 'DELETE') as has_delete`,
     )) as unknown as { has_delete: boolean }[];
     expect(deleteGrant[0]!.has_delete).toBe(false);
+  });
+
+  it("the version guard trigger rejects a version whose field or record doesn't match its parent value row", async () => {
+    const fieldA = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "version_guard_a" })),
+    );
+    const fieldB = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "version_guard_b" })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldA, "a1"]])),
+    );
+    const [valueRow] = await systemDb()
+      .select()
+      .from(customFieldValues)
+      .where(eq(customFieldValues.fieldId, fieldA));
+
+    // field_id doesn't match the parent value row's field.
+    await expectDbError(
+      withTenant(a.ctx, (tx) =>
+        tx.insert(customFieldValueVersions).values({
+          tenantId: a.ctx.tenantId,
+          valueId: valueRow!.id,
+          fieldId: fieldB,
+          patientId: a.patientId,
+          valueEnc: valueRow!.valueEnc,
+          changedBy: a.ctx.userId,
+        }),
+      ),
+      /field_id does not match/,
+    );
+
+    // Record column doesn't match the parent value row's record (claim_id instead of patient_id).
+    await expectDbError(
+      withTenant(a.ctx, (tx) =>
+        tx.insert(customFieldValueVersions).values({
+          tenantId: a.ctx.tenantId,
+          valueId: valueRow!.id,
+          fieldId: fieldA,
+          claimId: a.claimId,
+          valueEnc: valueRow!.valueEnc,
+          changedBy: a.ctx.userId,
+        }),
+      ),
+      /record does not match/,
+    );
+  });
+
+  it("a genuine concurrent first save keeps exactly one version row and doesn't lose the loser's overwrite silently", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "race_field" })),
+    );
+
+    let blockerInserted!: () => void;
+    const inserted = new Promise<void>((resolve) => {
+      blockerInserted = resolve;
+    });
+    let releaseBlocker!: () => void;
+    const released = new Promise<void>((resolve) => {
+      releaseBlocker = resolve;
+    });
+
+    // A first transaction that inserts the winning row and holds it open, uncommitted, until told
+    // to proceed — simulating the second transaction of a genuine concurrent first save.
+    const blocker = systemDb()
+      .transaction(async (tx) => {
+        await tx.execute(sql`set local role denialdesk_app`);
+        await tx.execute(sql`select set_config('app.tenant_id', ${a.ctx.tenantId}, true)`);
+        await tx.execute(sql`select set_config('app.user_id', ${a.ctx.userId}, true)`);
+        await tx.insert(customFieldValues).values({
+          tenantId: a.ctx.tenantId,
+          fieldId,
+          patientId: a.patientId,
+          valueEnc: encryptField("winner value", undefined, `${a.ctx.tenantId}|${fieldId}|${a.patientId}`),
+          createdBy: a.ctx.userId,
+          updatedBy: a.ctx.userId,
+        });
+        blockerInserted();
+        await released;
+      })
+      .catch(() => undefined);
+    await inserted;
+
+    // The "loser": its own first-save INSERT blocks behind the blocker's uncommitted row.
+    const racerPromise = withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "loser value"]])),
+    );
+
+    await expect
+      .poll(
+        async () => {
+          const rows = (await systemDb().execute(
+            sql`select count(*)::int as waiting from pg_stat_activity
+                where datname = current_database() and wait_event_type = 'Lock'
+                  and query ilike 'insert into "custom_field_values"%'`,
+          )) as unknown as { waiting: number }[];
+          return rows[0]?.waiting;
+        },
+        { timeout: 10_000, interval: 25 },
+      )
+      .toBe(1);
+
+    releaseBlocker();
+    await blocker;
+    const changed = await racerPromise;
+    expect(changed).toEqual(["race_field"]); // the loser's write is still recognized as a change
+
+    const rows = await systemDb()
+      .select()
+      .from(customFieldValues)
+      .where(and(eq(customFieldValues.fieldId, fieldId), eq(customFieldValues.patientId, a.patientId)));
+    expect(rows).toHaveLength(1); // no duplicate row from the race
+
+    const versions = await systemDb()
+      .select()
+      .from(customFieldValueVersions)
+      .where(eq(customFieldValueVersions.valueId, rows[0]!.id));
+    expect(versions).toHaveLength(1); // exactly one version: the winner's value, kept before being overwritten
+    const keptPlain = decryptField(
+      versions[0]!.valueEnc!,
+      undefined,
+      `${a.ctx.tenantId}|${fieldId}|${a.patientId}`,
+    );
+    expect(keptPlain).toBe("winner value"); // the winner's write was never silently discarded
+
+    const finalPlain = decryptField(
+      rows[0]!.valueEnc!,
+      undefined,
+      `${a.ctx.tenantId}|${fieldId}|${a.patientId}`,
+    );
+    expect(finalPlain).toBe("loser value"); // the loser's write still lands, on top of a kept history
   });
 });
 

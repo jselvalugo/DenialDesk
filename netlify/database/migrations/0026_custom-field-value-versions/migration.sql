@@ -41,6 +41,36 @@ CREATE POLICY tenant_isolation ON "custom_field_value_versions"
   USING (tenant_id = app_current_tenant()) WITH CHECK (tenant_id = app_current_tenant());--> statement-breakpoint
 GRANT SELECT, INSERT ON "custom_field_value_versions" TO denialdesk_app;--> statement-breakpoint
 
+-- A version row is a snapshot of one custom_field_values row: its field_id and record column must
+-- match that row's, not just any field/record in the tenant (the one-record-column CHECK above and
+-- the tenant FK don't catch a version pointing at the right value_id but the wrong field or record).
+CREATE FUNCTION custom_field_value_versions_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  parent_field_id uuid;
+  parent_patient_id uuid;
+  parent_claim_id uuid;
+  parent_denial_id uuid;
+  parent_payer_id uuid;
+BEGIN
+  SELECT field_id, patient_id, claim_id, denial_id, payer_id
+    INTO parent_field_id, parent_patient_id, parent_claim_id, parent_denial_id, parent_payer_id
+    FROM custom_field_values WHERE id = NEW.value_id;
+  IF parent_field_id IS NULL THEN
+    RAISE EXCEPTION 'custom_field_value_versions: value_id does not exist';
+  END IF;
+  IF NEW.field_id != parent_field_id THEN
+    RAISE EXCEPTION 'custom_field_value_versions: field_id does not match the value row';
+  END IF;
+  IF NEW.patient_id IS DISTINCT FROM parent_patient_id OR NEW.claim_id IS DISTINCT FROM parent_claim_id
+     OR NEW.denial_id IS DISTINCT FROM parent_denial_id OR NEW.payer_id IS DISTINCT FROM parent_payer_id THEN
+    RAISE EXCEPTION 'custom_field_value_versions: record does not match the value row';
+  END IF;
+  RETURN NEW;
+END
+$$;--> statement-breakpoint
+CREATE TRIGGER custom_field_value_versions_guard BEFORE INSERT ON "custom_field_value_versions"
+  FOR EACH ROW EXECUTE FUNCTION custom_field_value_versions_guard();--> statement-breakpoint
+
 CREATE FUNCTION custom_field_value_versions_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   RAISE EXCEPTION 'custom_field_value_versions is append-only';

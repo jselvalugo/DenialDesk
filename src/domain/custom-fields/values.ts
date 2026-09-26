@@ -318,7 +318,7 @@ export async function saveValuesForRecord(
       .limit(1);
 
     const currentPlain = current?.valueEnc
-      ? safeDecrypt(current.valueEnc, aadFor(actor.tenantId, field.id, recordId))
+      ? await decryptOrAuditFailure(tx, actor, entity, recordId, field.id, current.valueEnc)
       : null;
     if (currentPlain === serialized) continue; // unchanged (including two nulls).
 
@@ -329,24 +329,16 @@ export async function saveValuesForRecord(
         : encryptField(serialized, undefined, aadFor(actor.tenantId, field.id, recordId));
 
     if (current) {
-      // A prior state existed (an update or a clear): keep it, append-only, before overwriting.
-      await tx.insert(customFieldValueVersions).values({
-        tenantId: actor.tenantId,
-        valueId: current.id,
-        fieldId: field.id,
-        [entityColumnKey(entity)]: recordId,
-        valueEnc: current.valueEnc,
-        changedBy: actor.userId,
-      });
-      await tx
-        .update(customFieldValues)
-        .set({ valueEnc: nextEnc, updatedBy: actor.userId, updatedAt: new Date() })
-        .where(eq(customFieldValues.id, current.id));
+      await versionThenUpdate(tx, actor, entity, recordId, field.id, current, nextEnc);
     } else {
-      // No existing row: upsert (rather than a plain INSERT) so two concurrent first saves of the
-      // same field/record can't both race an INSERT into the partial unique index.
+      // No existing row: try a plain INSERT first (so the common case never pays for a version
+      // lookup it doesn't need), but guard the race where another transaction's first save of the
+      // same field/record commits first. `onConflictDoNothing` on the entity's partial unique index
+      // means the loser's INSERT is silently skipped rather than either failing or blindly
+      // overwriting the winner's row without a version record; the loser then re-reads the row the
+      // winner just created and goes through the same version-then-update path as any other update.
       const { target, where } = CONFLICT_TARGET[entity];
-      await tx
+      const inserted = await tx
         .insert(customFieldValues)
         .values({
           tenantId: actor.tenantId,
@@ -356,11 +348,26 @@ export async function saveValuesForRecord(
           createdBy: actor.userId,
           updatedBy: actor.userId,
         })
-        .onConflictDoUpdate({
-          target,
-          targetWhere: where,
-          set: { valueEnc: nextEnc, updatedBy: actor.userId, updatedAt: new Date() },
-        });
+        .onConflictDoNothing({ target, where })
+        .returning({ id: customFieldValues.id });
+      if (inserted.length === 0) {
+        const [raced] = await tx
+          .select({ id: customFieldValues.id, valueEnc: customFieldValues.valueEnc })
+          .from(customFieldValues)
+          .where(and(eq(customFieldValues.fieldId, field.id), eq(column, recordId)))
+          .for("update")
+          .limit(1);
+        // The winner's row must exist by now (it committed the conflicting row); re-derive whether
+        // this actor's value actually differs from what the winner wrote, versioning it first.
+        const racedPlain = raced?.valueEnc
+          ? await decryptOrAuditFailure(tx, actor, entity, recordId, field.id, raced.valueEnc)
+          : null;
+        if (racedPlain === serialized) {
+          changed.pop(); // the winner already wrote the same value: not a change after all.
+          continue;
+        }
+        await versionThenUpdate(tx, actor, entity, recordId, field.id, raced!, nextEnc);
+      }
     }
   }
   if (changed.length > 0) {
@@ -375,11 +382,55 @@ export async function saveValuesForRecord(
   return changed;
 }
 
-function safeDecrypt(valueEnc: string, aad: string): string | null {
+/** Appends the row's current ciphertext to `custom_field_value_versions`, then overwrites it. */
+async function versionThenUpdate(
+  tx: TenantTx,
+  actor: Actor,
+  entity: CustomFieldEntity,
+  recordId: string,
+  fieldId: string,
+  current: { id: string; valueEnc: string | null },
+  nextEnc: string | null,
+): Promise<void> {
+  await tx.insert(customFieldValueVersions).values({
+    tenantId: actor.tenantId,
+    valueId: current.id,
+    fieldId,
+    [entityColumnKey(entity)]: recordId,
+    valueEnc: current.valueEnc,
+    changedBy: actor.userId,
+  });
+  await tx
+    .update(customFieldValues)
+    .set({ valueEnc: nextEnc, updatedBy: actor.userId, updatedAt: new Date() })
+    .where(eq(customFieldValues.id, current.id));
+}
+
+/**
+ * Decrypts the current row's ciphertext during a save, or `null` if it can't be (a bad ciphertext
+ * is treated as "changed" so a fresh save overwrites it) — auditing the failure either way, since a
+ * value that fails to decrypt during a write is the same integrity signal as one found on a read.
+ */
+async function decryptOrAuditFailure(
+  tx: TenantTx,
+  actor: Actor,
+  entity: CustomFieldEntity,
+  recordId: string,
+  fieldId: string,
+  valueEnc: string,
+): Promise<string | null> {
   try {
-    return decryptField(valueEnc, undefined, aad);
+    return decryptField(valueEnc, undefined, aadFor(actor.tenantId, fieldId, recordId));
   } catch {
-    return null; // treated as "changed" so a bad ciphertext gets overwritten by a fresh save.
+    await audit(tx, {
+      action: "custom_field.value_integrity_failed",
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      entityType: "custom_field_value",
+      entityId: fieldId,
+      metadata: { entity, recordId },
+    });
+    return null;
   }
 }
 
