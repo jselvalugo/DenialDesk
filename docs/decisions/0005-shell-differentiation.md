@@ -35,7 +35,7 @@ Keep the ERP structure; change the expression so it is recognizably DenialDesk:
 | Before (vendor-like) | Now |
 |---|---|
 | Nine-dot grid icon at the left of the tab bar | The current **module's name** is the first control of the tab bar, with a chevron; it opens the switcher. No grid glyph anywhere. |
-| "App Launcher" dialog: tile grid of apps, then an "all items" list | **"Go to"** (Ctrl/⌘ K): one grouped list. Each module row (tinted icon, name, description) links to its home; its pages follow as compact links; planned pages are dashed and never links. |
+| "App Launcher" dialog: tile grid of apps, then an "all items" list | **"Go to"** (Ctrl/⌘ K): a Module | Pages table. Each module row (tinted icon, name, description) links to its home, beside its pages as one aligned column; planned pages are muted, tagged "Planned", never links. |
 | Solid colored square with a white glyph as the app icon | **Tinted tile**: the module's color as the glyph on its own light tint with a 1px border (`tile-*` tokens), matching our badge language. Each glyph ≥ 5:1 on its tint. |
 | "Apps" vocabulary in the UI | **Modules** and **pages** in every label (`NavApp` stays as the code type). |
 | Centered header search "Search apps and pages" | Left-aligned "Go to a module or page" field beside the logo; practice, demo badge, and user menu on the right. |
