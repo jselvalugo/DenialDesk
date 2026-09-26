@@ -43,15 +43,24 @@ If a task is not backed by a spec, write or update the spec first.
 - [ ] Unit + integration tests; boundary tests (day before / of / after) for any legal deadline
 - [ ] Lint/typecheck clean
 - [ ] `reviewer`: no blocking findings open
-- [ ] `compliance-checker`: no blocking findings open
-- [ ] Docs updated
+- [ ] `security-reviewer`: no Critical/High findings open
+- [ ] `compliance-checker`: no blocking findings open; SOC 2 controls listed in the PR
+- [ ] Docs/runbooks updated
 - [ ] Human approval
 
-## Agents
-Defined today in `.claude/agents/`: `spec-writer`, `architect`, `builder`, `reviewer`,
-`compliance-checker` (see `docs/AGENT_WORKFLOW.md`). The fuller roster in
-`docs/REQUIREMENTS.md` §15.1 (security-reviewer, hipaa-compliance-reviewer,
-florida-rules-engine, edi-x12-specialist, soc2-evidence-auditor, …) is planned, not yet defined.
+## Delegation guide
+Agents live in `.claude/agents/`; details in `docs/AGENT_WORKFLOW.md`.
+
+| Work | Agent |
+|---|---|
+| Specs and acceptance criteria | spec-writer |
+| Design, ADRs, threat models | architect |
+| API, services, DB, UI, IaC, tests, docs | builder |
+| Legal deadlines, interest, thresholds | florida-rules-engine |
+| X12 / clearinghouse | edi-x12-specialist |
+| Correctness review | reviewer |
+| Security review | security-reviewer |
+| HIPAA / Florida law / SOC 2 review | compliance-checker |
 
 ## Stack
 TBD — see `docs/decisions/0001-tech-stack.md`. Once decided, list here:
@@ -60,3 +69,4 @@ TBD — see `docs/decisions/0001-tech-stack.md`. Once decided, list here:
 - Test command:
 - Lint / typecheck command:
 - Run locally:
+- Hosting: Microsoft Azure, U.S. regions only — `docs/decisions/0002-azure-hosting.md`
