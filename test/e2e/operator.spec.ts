@@ -4,7 +4,7 @@ import { SESSION_COOKIE } from "@/auth/policy";
 import { currentStep } from "@/auth/totp";
 import { systemDb } from "@/db/client";
 import { auditEvents, users } from "@/db/schema";
-import { e2eUser, freshCode, signInWithPassword } from "./support";
+import { e2eUser, freshCode, openFromLauncher, signInWithPassword } from "./support";
 
 test.describe("demo login", () => {
   test("one click opens the demo practice without MFA", async ({ page }) => {
@@ -29,6 +29,8 @@ test.describe("demo login", () => {
     await page.goto("/login");
     await page.getByRole("button", { name: "Explore the demo practice" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    await page.getByRole("button", { name: "App launcher" }).click();
+    await expect(page.getByRole("dialog", { name: "App launcher" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Platform console" })).toHaveCount(0);
     await page.goto("/operator");
     await expect(page).toHaveURL(/\/login\?reason=account$/);
@@ -46,7 +48,7 @@ test.describe("demo login", () => {
       .getByLabel("6-digit code")
       .fill(await freshCode(operator.totpSecret!, new Set([currentStep()])));
     await page.getByRole("button", { name: "Verify" }).click();
-    await page.getByRole("link", { name: "Platform console" }).click();
+    await openFromLauncher(page, "Platform console");
     await expect(page.getByRole("heading", { level: 1, name: "Practices" })).toBeVisible();
 
     // Signing in ended the demo session: its old cookie no longer works anywhere, and that's audited.
@@ -82,6 +84,8 @@ test.describe("operator console access", () => {
     test.use({ storageState: "test/e2e/.auth/worker.json" });
     test("is a 404 and not linked", async ({ page }) => {
       await page.goto("/");
+      await page.getByRole("button", { name: "App launcher" }).click();
+      await expect(page.getByRole("dialog", { name: "App launcher" })).toBeVisible();
       await expect(page.getByRole("link", { name: "Platform console" })).toHaveCount(0);
       expect((await page.goto("/operator"))?.status()).toBe(404);
     });
@@ -94,7 +98,7 @@ test.describe("as the platform operator", () => {
   test("sees every practice and can create, suspend, and reactivate one", async ({ page, browser }) => {
     test.setTimeout(60_000);
     await page.goto("/");
-    await page.getByRole("link", { name: "Platform console" }).click();
+    await openFromLauncher(page, "Platform console");
     await expect(page.getByRole("heading", { level: 1, name: "Practices" })).toBeVisible();
     const table = page.getByRole("table", { name: "All practices on this environment" });
     await expect(table.getByText("E2E operator practice (synthetic)").first()).toBeVisible();

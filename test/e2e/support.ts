@@ -32,3 +32,12 @@ export async function signIn(page: Page, user: E2EUser) {
   await page.getByRole("button", { name: "Verify" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
 }
+
+/**
+ * Opens a page, or an app ("Revenue cycle app"), through the app launcher: the tab bar only shows
+ * the current app's pages.
+ */
+export async function openFromLauncher(page: Page, name: string) {
+  await page.getByRole("button", { name: "App launcher" }).click();
+  await page.getByRole("dialog", { name: "App launcher" }).getByRole("link", { name, exact: true }).click();
+}
