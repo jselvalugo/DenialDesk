@@ -16,3 +16,15 @@ Data: Restricted PHI (patient name, practice account number, service date, CPT, 
 | Member IDs in the account column (would need field encryption, CLAUDE.md #6) | Spec: the column must hold the practice account number only | **Human**: confirm per PM system, or encrypt account numbers |
 | Sensitive services (Part 2, HIV, behavioral) visible via CPT | None yet | **Blocking before real data** (R-3.5.1, R-4.5.1) |
 | Formula injection on export | `csvCell` neutralizes `= + - @` | Low |
+
+## Journal vouchers (B3)
+
+| Threat | Control | Residual risk / owner |
+|---|---|---|
+| One person posts revenue alone | Approver ≠ preparer (app check + DB CHECK); approval requires all five checks | Two colluding users; audit trail shows both |
+| Altering a posted voucher | Lines insert-only and only into drafts (trigger); voucher updates limited to workflow columns (column grant), forward-only and write-once (trigger); tenant-scoped FKs; no DELETE | Owner DB role can bypass (separate roles: open decision, owner: product owner, before Azure cutover) |
+| Posting a month twice | Partial unique index: one approved/exported voucher per month; check 5; voiding an exported voucher requires confirming its GL reversal (audited) | The confirmation is attestation-level: nothing checks the external GL |
+| Export/void racing | Row lock (`FOR UPDATE`) and checked updates before audit or CSV | Low |
+| Export triggered by a link (CSRF) | Export is a server action (origin-checked), not a GET route | Low |
+| PHI in the GL file or audit | Lines carry accounts, sites, amounts, period memos only; audit holds IDs/counts; test asserts no account numbers in the CSV | Low |
+| Formula injection in the GL file | `csvCell` neutralizes `= + - @` | Low |

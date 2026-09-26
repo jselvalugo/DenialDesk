@@ -67,7 +67,10 @@ export async function createDemoPractice(
         role: "specialist",
       },
       { email: `h.ashby-${suffix}@demo.denialdesk.test`, displayName: "Harper Ashby", role: "specialist" },
+      // Prepares last month's journal voucher so the guest can approve it (separation of duties).
+      { email: `d.whitfield-${suffix}@demo.denialdesk.test`, displayName: "Dana Whitfield", role: "manager" },
     ],
+    sampleVoucherBy: 3,
   });
   return { tenantId, userId: userIds[0]! };
 }

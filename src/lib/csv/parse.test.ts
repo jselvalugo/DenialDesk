@@ -48,5 +48,9 @@ describe("csvCell", () => {
     expect(csvCell(-5)).toBe("-5");
     expect(csvCell('a,"b"')).toBe('"a,""b"""');
     expect(csvCell("plain")).toBe("plain");
+    expect(csvCell("  =HYPERLINK(1)")).toBe("'  =HYPERLINK(1)");
+    expect(csvCell("＝1+1")).toBe("'＝1+1");
+    expect(csvCell("\t=1")).toBe("'\t=1");
+    expect(csvCell("a = b")).toBe("a = b");
   });
 });

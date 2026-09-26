@@ -8,6 +8,7 @@ import { generateDataset, type SyntheticDataset } from "@/domain/synthetic/gener
 import { importMonthlyFile } from "@/domain/revenue-cycle/imports";
 import { seedRevenueCycleDefaults } from "@/domain/revenue-cycle/setup";
 import { generateMonthlyFiles } from "@/domain/revenue-cycle/synthetic-file";
+import { prepareVoucher } from "@/domain/revenue-cycle/vouchers";
 import { encryptField } from "@/lib/crypto/field";
 import { systemDb } from "./client";
 import {
@@ -55,6 +56,11 @@ export async function seedPractice(options: {
    * denials, or imported files, so every number on screen comes from what the user does.
    */
   withSampleActivity?: boolean;
+  /**
+   * With sample activity: the user (index into `users`, an admin or manager) who prepares a draft
+   * journal voucher for the latest month, so another user can review and approve it.
+   */
+  sampleVoucherBy?: number;
 }): Promise<{ tenantId: string; userIds: string[] }> {
   if (process.env.APP_ENV === "production") {
     throw new Error("Refusing to seed synthetic data with APP_ENV=production");
@@ -236,8 +242,9 @@ export async function seedPractice(options: {
         months: 3,
         facilities: dataset.locations.map((l) => l.name),
       });
+      let latestFileId = "";
       for (const file of months) {
-        await importMonthlyFile(tx, {
+        latestFileId = await importMonthlyFile(tx, {
           tenantId,
           userId: userIds[0]!,
           periodYear: file.periodYear,
@@ -245,6 +252,11 @@ export async function seedPractice(options: {
           defaultSiteId: firstSite?.id ?? null,
           lines: file.lines,
         });
+      }
+      const preparer = options.sampleVoucherBy;
+      if (preparer !== undefined) {
+        const role = options.users[preparer]!.role;
+        await prepareVoucher(tx, { tenantId, userId: userIds[preparer]!, role }, latestFileId);
       }
     }
   });

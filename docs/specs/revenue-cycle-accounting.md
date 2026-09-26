@@ -136,8 +136,8 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       practice, never in URLs, page titles, or logs. Pre-production accepts synthetic files only.
 - [x] The rules engine is deterministic and first-match-wins by priority; each line records the
       rule that matched. Rules choose accounts only; amounts always post as recorded.
-- [ ] Journal vouchers can't be approved unless all five checks pass; the approver can't be the
-      preparer.
+- [x] Journal vouchers can't be approved unless all five checks pass; the approver can't be the
+      preparer (app check and DB CHECK).
 - [ ] Rule and GL-account edits are limited to admins and audited, and keep a version history of
       every rule change (who, when, before/after) before any editing UI ships (PI1, CC8.1).
 - [x] Loading the starter configuration: administrators only, practices without rules only,
@@ -175,7 +175,24 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       invalid codes paid later) whose files roll forward exactly; three consecutive months seeded
       per demo practice. Practices seeded earlier keep their stored rules and version-1 files;
       reset pre-production demo practices from the operator console (`docs/runbooks/netlify.md`).
-- [ ] B3 · [ ] B4 · [ ] B5
+- [x] **B3** (2026-09-26): `rcm_journal_vouchers` + `rcm_journal_lines` (FORCE RLS, no DELETE,
+      tenant-scoped foreign keys). Lines insert-only and only into a draft (trigger). Vouchers
+      update only workflow columns (column grant), forward only (draft → approved → exported;
+      draft → superseded; approved/exported → void) with write-once who/when columns and actors
+      who belong to the practice (trigger), plus CHECKs: one side per line, approver ≠ preparer,
+      approval/export recorded, void with a 10–500-character reason. Partial unique indexes: one
+      draft and one approved/exported voucher per month. Pure `journal.ts` (lines, reclass,
+      five checks, GL CSV) and `vouchers.ts` (prepare/approve/export/void with row locks,
+      audited; superseded drafts audited individually). Voiding an exported voucher requires
+      confirming it was reversed in the GL (recorded in the audit), so a month isn't posted
+      twice. A payments-clearing cash account (`is_payments_clearing`, one per practice,
+      backfilled for existing practices) receives payments. Export is a server action returning
+      the CSV (origin-checked, no GET side effects). The first imported month takes opening
+      balances from the practice's GL; a later month whose prior month is missing fails check 3.
+      Demo practices get last month's draft prepared by a synthetic manager so the guest can
+      approve it. B4's roll-forward only reports; the voucher is what blocks a file that doesn't
+      roll forward. Preparer may export an approved voucher (approval is the second person).
+- [ ] B4 · [ ] B5
 
 ## Security notes
 - Uploads: CSV only, size-capped, parsed in memory, never written to disk or object storage;

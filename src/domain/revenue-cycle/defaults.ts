@@ -18,12 +18,13 @@ export interface DefaultGlAccount {
   revenueGl?: string;
   adjustmentGl?: string;
   isDefaultAr?: boolean;
+  isPaymentsClearing?: boolean;
 }
 
 /** One receivable per line-of-business family (REQUIREMENTS §1.3), each with its own revenue pair. */
 export const DEFAULT_GL_ACCOUNTS: DefaultGlAccount[] = [
   { number: "1000", name: "Cash — operating account", kind: "cash" },
-  { number: "1050", name: "Patient payments clearing", kind: "cash" },
+  { number: "1050", name: "Patient payments clearing", kind: "cash", isPaymentsClearing: true },
   {
     number: "1200",
     name: "Patient receivables — commercial and HMO",
