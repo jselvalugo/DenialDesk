@@ -14,8 +14,8 @@ Compliance and legal (human):
 
 Engineering:
 - [x] ADR 0001 tech stack accepted (ADR 0003 Netlify pre-prod accepted; ADR 0002 Azure confirmed at cutover)
-- [ ] Project skeleton: app, DB, test runner, lint, CI on every PR [R-7.4.2, R-7.4.4]
-- [ ] Design system foundation + app shell (`docs/DESIGN.md`, ADR 0004)
+- [x] Project skeleton: app, DB, test runner, lint, CI on every PR [R-7.4.2, R-7.4.4]
+- [x] Design system foundation + app shell (`docs/DESIGN.md`, ADR 0004)
 - [ ] Netlify deploy previews + demo site with pre-prod guards: synthetic banner, synthetic-only uploads, restricted access (ADR 0003) [R-7.1.3]
 - [ ] Synthetic data generator: practices, providers, payers, patients, claims, denials [R-15.1]
 - [ ] Tenancy + RBAC skeleton with row-level security and isolation tests [R-7.2.3, R-7.2.4]

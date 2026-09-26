@@ -6,7 +6,8 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
-- Phase 0 (Foundation). Planning docs done; project skeleton + design foundation in progress.
+- Phase 0 (Foundation). Planning docs, project skeleton, and design foundation done.
+- App runs: shell, preview banner, Overview empty state, `/design` style guide, `/api/health`.
 - Working branch: `claude/adoring-hypatia-5co7fz` (no PR opened yet).
 
 ## Decisions made (details in `docs/decisions/`)
@@ -24,10 +25,9 @@ The product owner delegated technical decisions to the implementing agent ("make
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
-1. Finish project skeleton + design foundation (`docs/specs/project-skeleton.md`,
-   `docs/specs/design-system-foundation.md`).
-2. Netlify deploy previews with pre-prod guards (ADR 0003).
-3. Synthetic data generator; tenancy + RLS; auth; audit log; rules-engine skeleton.
+1. Netlify deploy previews with pre-prod guards (ADR 0003) + a production-mode e2e test.
+2. Synthetic data generator.
+3. Tenancy + RLS; auth; audit log; rules-engine skeleton.
 
 ## Open questions for humans
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
@@ -36,5 +36,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - A vector (SVG) version of the logo from a designer; the app currently uses the PNG.
 
 ## Lessons / conventions learned
+- Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
+- Local test DB without Docker: `initdb`/`pg_ctl` from `/usr/lib/postgresql/16/bin` as the
+  `postgres` user, with the data dir somewhere that user can reach.
+- Playwright in this cloud env: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
 - Azure has no Florida region; § 408.051(3) only requires continental U.S. storage.
 - Local environment: Node 22 is installed; CI and Docker use Node 24 LTS. `engines` allows ≥ 22.
