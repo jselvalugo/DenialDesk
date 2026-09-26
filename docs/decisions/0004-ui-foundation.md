@@ -31,7 +31,8 @@ DenialDesk logo. Changes:
 - **Palette:** navy `#1A2C4E` chrome and primary, teal `#1F6B75` accent, blue `#2E75B6` focus;
   status colors from the RevCycle brief, each re-checked for WCAG AA (DESIGN.md §4–5).
 - **Fonts:** Inter (UI), Playfair Display (page titles), Space Mono (codes and headline figures),
-  replacing IBM Plex. Still self-hosted via `next/font`.
+  replacing IBM Plex. Bundled in `src/app/fonts/` (SIL OFL 1.1) and loaded with `next/font/local`,
+  so builds never download fonts (a flaky Google Fonts fetch broke the container build).
 - **Icons:** `lucide-react` (ISC, actively maintained), 16px, 1.75 stroke, always `aria-hidden`
   next to a text label.
 - The logo is never recolored; it sits on a white header in the sidebar and on the sign-in page.
