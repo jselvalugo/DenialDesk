@@ -127,6 +127,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
+- Member-ID reveal on a denial decrypts the patient's primary-payer member ID even when the claim was
+  billed to another payer (R-5.1.2); fix with coverage records (review §6.1), and until then reveal
+  only when the claim's payer is the patient's primary payer (2026-09-26 review, security).
+- `claims.status` / `paid_cents` are not covered by the version trigger, and no DB CHECK enforces
+  0 ≤ paid ≤ billed, 0 < denied ≤ billed, charges ≥ 0; must land with C3 / 835 posting, before the
+  Azure cutover (2026-09-26 review, security; owner decision §8.4).
 
 ## Lessons / conventions learned
 - Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
