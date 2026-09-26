@@ -6,7 +6,7 @@ import { hashPassword } from "@/auth/password";
 import { generateDataset, type SyntheticDataset } from "@/domain/synthetic/generator";
 import { importMonthlyFile } from "@/domain/revenue-cycle/imports";
 import { seedRevenueCycleDefaults } from "@/domain/revenue-cycle/setup";
-import { generateMonthlyLines } from "@/domain/revenue-cycle/synthetic-file";
+import { generateMonthlyFiles } from "@/domain/revenue-cycle/synthetic-file";
 import { encryptField } from "@/lib/crypto/field";
 import { systemDb } from "./client";
 import {
@@ -195,7 +195,7 @@ export async function seedPractice(options: {
     await insertInChunks(denialRows, (chunk) => tx.insert(denials).values(chunk));
     await seedRevenueCycleDefaults(tx, tenantId, userIds[0]!);
     if (withActivity) {
-      // Last month's synthetic practice-management file, classified by the default rules.
+      // The last three months of synthetic activity files, routed by the starter rules.
       const [year, month] = dataset.asOf.split("-").map(Number) as [number, number];
       const period = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
       const [firstSite] = await tx
@@ -203,19 +203,23 @@ export async function seedPractice(options: {
         .from(rcmSites)
         .orderBy(asc(rcmSites.code))
         .limit(1);
-      await importMonthlyFile(tx, {
-        tenantId,
-        userId: userIds[0]!,
+      const months = generateMonthlyFiles({
+        seed: dataset.claims.length,
         periodYear: period.year,
         periodMonth: period.month,
-        defaultSiteId: firstSite?.id ?? null,
-        lines: generateMonthlyLines({
-          seed: dataset.claims.length,
-          periodYear: period.year,
-          periodMonth: period.month,
-          facilities: dataset.locations.map((l) => l.name),
-        }),
+        months: 3,
+        facilities: dataset.locations.map((l) => l.name),
       });
+      for (const file of months) {
+        await importMonthlyFile(tx, {
+          tenantId,
+          userId: userIds[0]!,
+          periodYear: file.periodYear,
+          periodMonth: file.periodMonth,
+          defaultSiteId: firstSite?.id ?? null,
+          lines: file.lines,
+        });
+      }
     }
   });
 

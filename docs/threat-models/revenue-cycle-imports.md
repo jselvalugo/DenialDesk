@@ -6,7 +6,7 @@ Data: Restricted PHI (patient name, practice account number, service date, CPT, 
 
 | Threat | Control | Residual risk / owner |
 |---|---|---|
-| Real PHI uploaded to pre-production (Netlify) | `syntheticDataOnly()` is true unless `APP_ENV=production` **and** not on Netlify; every Account # must start with `SYN-`; attestation checkbox | **Attestation, not proof**: a real file with `SYN-` added would pass. Human: accept, or add stronger synthetic markers |
+| Real PHI uploaded to pre-production (Netlify) | `syntheticDataOnly()` is true unless `APP_ENV=production` **and** not on Netlify; every Account number must start with `SYN-`; attestation checkbox | **Attestation, not proof**: a real file with `SYN-` added would pass. Human: accept, or add stronger synthetic markers |
 | Cross-tenant read/write | FORCE RLS on both tables; default site validated in-tenant (FKs bypass RLS) | Composite `(tenant_id, id)` FKs deferred (PROJECT_STATE) |
 | Tampering with imported records | App role has SELECT/INSERT only; corrections are new imports | Owner role can still modify (separate DB roles: open decision) |
 | Parser DoS | 6 MB body limit, 5 MB file cap, 50,000 data rows, 100 columns, linear parser | Low |

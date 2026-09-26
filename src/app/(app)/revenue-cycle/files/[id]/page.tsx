@@ -18,12 +18,17 @@ import {
   maskAccount,
   maskPatientName,
   periodLabel,
+  REVIEW_REASONS,
+  type ReviewReason,
 } from "@/domain/revenue-cycle/imports";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { audit } from "@/lib/audit";
 import { formatCents, formatDate } from "@/lib/format";
 
 // Page title never includes PHI (DESIGN.md §12).
+const reasonText = (reasons: string[]) =>
+  reasons.map((r) => REVIEW_REASONS[r as ReviewReason] ?? r).join("; ");
+
 export const metadata: Metadata = { title: "Monthly file" };
 
 const params = z.object({
@@ -103,17 +108,18 @@ export default async function FilePage({
 
       <section
         aria-label="File control totals"
-        className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6"
+        className="grid grid-cols-2 gap-4 lg:grid-cols-4 xl:grid-cols-7"
       >
         <StatTile label="Lines" value={file.rowCount.toLocaleString("en-US")} />
-        <StatTile label="Gross charges" value={formatCents(file.billedCents)} />
-        <StatTile label="Contra" value={formatCents(file.contraCents)} />
+        <StatTile label="Charges" value={formatCents(file.billedCents)} />
+        <StatTile label="Adjustments" value={formatCents(file.adjustmentCents)} />
         <StatTile label="Net revenue" value={formatCents(file.netCents)} />
         <StatTile label="Payments" value={formatCents(file.paymentCents)} />
+        <StatTile label="Open balance" value={formatCents(file.balanceCents)} detail="At period end" />
         <StatTile
           label="Needs review"
           value={file.flaggedCount}
-          detail={`${file.excludedCount} excluded from AR`}
+          detail={file.flaggedCount === 1 ? "line to check" : "lines to check"}
           emphasis={file.flaggedCount > 0 ? "warning" : undefined}
         />
       </section>
@@ -125,7 +131,7 @@ export default async function FilePage({
               <tr>
                 <Th>Rule</Th>
                 <Th numeric>Lines</Th>
-                <Th numeric>Contra</Th>
+                <Th numeric>Adjustments</Th>
                 <Th numeric>Net</Th>
               </tr>
             </thead>
@@ -142,7 +148,7 @@ export default async function FilePage({
                   </Td>
                   <Td numeric>{r.lines}</Td>
                   <Td numeric>
-                    <Money cents={r.contraCents} />
+                    <Money cents={r.adjustmentCents} />
                   </Td>
                   <Td numeric>
                     <Money cents={r.netCents} />
@@ -152,13 +158,13 @@ export default async function FilePage({
             </tbody>
           </Table>
         </Panel>
-        <Panel title="By payer class" flush>
-          <Table caption="Totals by payer class">
+        <Panel title="By financial class" flush>
+          <Table caption="Totals by financial class">
             <thead>
               <tr>
                 <Th>Class</Th>
                 <Th numeric>Lines</Th>
-                <Th numeric>Gross</Th>
+                <Th numeric>Charges</Th>
                 <Th numeric>Payments</Th>
               </tr>
             </thead>
@@ -242,15 +248,15 @@ export default async function FilePage({
                 <Th numeric>Row</Th>
                 <Th>Patient</Th>
                 <Th>Account</Th>
-                <Th>Svc date</Th>
-                <Th>CPT</Th>
+                <Th>Service date</Th>
+                <Th>Code</Th>
                 <Th>Class</Th>
                 <Th>Site</Th>
                 <Th>Rule</Th>
-                <Th numeric>Billed</Th>
-                <Th numeric>Contra</Th>
+                <Th numeric>Charges</Th>
+                <Th numeric>Adjustments</Th>
                 <Th numeric>Net</Th>
-                <Th numeric>Paid</Th>
+                <Th numeric>Payments</Th>
                 <Th numeric>Balance</Th>
                 <Th>AR</Th>
               </tr>
@@ -276,14 +282,19 @@ export default async function FilePage({
                   <Td>
                     <span className="flex flex-wrap items-center gap-1">
                       <span className="font-mono text-label">{l.ruleCode}</span>
-                      {l.flagged && <Badge tone="warning">Review</Badge>}
+                      {l.flagged && (
+                        <span title={reasonText(l.reviewReasons)}>
+                          <Badge tone="warning">Review</Badge>
+                          <span className="sr-only">: {reasonText(l.reviewReasons)}</span>
+                        </span>
+                      )}
                     </span>
                   </Td>
                   <Td numeric>
                     <Money cents={l.billedCents} />
                   </Td>
                   <Td numeric>
-                    <Money cents={l.contraCents} />
+                    <Money cents={l.adjustmentCents} />
                   </Td>
                   <Td numeric className="font-medium">
                     <Money cents={l.netCents} />

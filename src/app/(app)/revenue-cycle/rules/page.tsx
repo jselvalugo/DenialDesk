@@ -17,10 +17,6 @@ export const metadata: Metadata = { title: "Rules and ledger" };
 
 const kindLabels = { cash: "Cash", ar: "Accounts receivable", revenue: "Revenue", adjustment: "Adjustment" };
 
-function percent(bps: number) {
-  return `${(bps / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
-}
-
 export default async function RulesPage() {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
@@ -39,14 +35,14 @@ export default async function RulesPage() {
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <PageHeader
         title="Rules and ledger"
-        description="How each line of the monthly practice-management export is classified and posted to the general ledger. The first active rule that matches wins."
+        description="Which general-ledger accounts each line of the monthly activity file posts to. The first active rule that matches wins; amounts always post as the practice-management system recorded them."
       />
 
       {rules.length === 0 ? (
         <Panel>
           <EmptyState
             title="No accounting rules yet"
-            description="Load the default rule set (12 rules, GL accounts, payer classes, and one site per location) to start processing monthly files. You can review every rule before the first import."
+            description="Load DenialDesk's starter configuration (rules, a chart of accounts, one payer class per payer type, and one site per location) to start processing monthly files. Review every rule and map the accounts to your general ledger before the first import."
             action={
               canConfigureRevenueCycle(auth.role) ? (
                 <LoadDefaults />
@@ -64,7 +60,6 @@ export default async function RulesPage() {
                 <Th numeric>#</Th>
                 <Th>Rule</Th>
                 <Th>Matches when</Th>
-                <Th numeric>Contra</Th>
                 <Th>AR</Th>
                 <Th>Revenue</Th>
                 <Th>Adjustment</Th>
@@ -97,9 +92,6 @@ export default async function RulesPage() {
                         <Badge tone="danger">Invalid conditions</Badge>
                       )}
                     </Td>
-                    <Td numeric className="align-top">
-                      {percent(rule.contraBps)}
-                    </Td>
                     <Td className="align-top">{gl(rule.arGl, "Payer class or default")}</Td>
                     <Td className="align-top">{gl(rule.revenueGl, "From AR account")}</Td>
                     <Td className="align-top">{gl(rule.adjustmentGl, "From AR account")}</Td>
@@ -108,7 +100,6 @@ export default async function RulesPage() {
                         <Badge tone={rule.active ? "success" : "neutral"}>
                           {rule.active ? "Active" : "Inactive"}
                         </Badge>
-                        {rule.excluded && <Badge tone="warning">Excluded from AR</Badge>}
                       </div>
                     </Td>
                   </Tr>

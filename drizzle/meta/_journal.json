@@ -78,6 +78,20 @@
       "when": 1790423221902,
       "tag": "0010_revenue_cycle_imports",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790428958852,
+      "tag": "0011_revenue_cycle_retire_contra",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790428959784,
+      "tag": "0012_revenue_cycle_activity_file",
+      "breakpoints": true
     }
   ]
 }

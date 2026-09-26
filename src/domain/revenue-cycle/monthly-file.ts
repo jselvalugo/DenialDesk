@@ -1,11 +1,14 @@
 import { CsvError, parseCsv, type CsvRow } from "@/lib/csv/parse";
 
 /**
- * Monthly practice-management export (charges and payments by line), as used by RevCycle IQ.
- * Columns from the RevCycle IQ build specification; header matching is case- and
- * punctuation-insensitive and accepts common aliases. Values are validated strictly: the whole
- * file is rejected if any row is invalid, so a month is never half-imported. Error messages name
- * the row and column, never the cell value (cells hold PHI).
+ * Month-end activity file from the practice-management (PM) system, DenialDesk's own layout: one
+ * row per charge line that had activity in the period or is still open at period end. Charges,
+ * payments, and adjustments are the amounts *posted in the period*; the balance is the line's open
+ * balance at period end. So the file carries both the month's ledger activity and the full open
+ * receivable for aging. Header matching is case- and punctuation-insensitive and accepts common
+ * alternative names. Values are validated strictly: the whole file is rejected if any row is
+ * invalid, so a month is never half-imported. Error messages name the row and column, never the
+ * cell value (cells hold PHI).
  */
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const MAX_ROWS = 50_000;
@@ -14,34 +17,27 @@ export const MAX_COLUMNS = 100;
 export const SYNTHETIC_ACCOUNT_PREFIX = "SYN-";
 
 const COLUMNS = {
-  patientName: { label: "Patient", aliases: ["patient", "patient name"], required: true },
+  patientName: { label: "Patient name", aliases: ["patient name", "patient"], required: true },
   accountNumber: {
-    label: "Account #",
-    aliases: ["account #", "account", "account number", "acct"],
+    label: "Account number",
+    aliases: ["account number", "account", "account no", "acct"],
     required: true,
   },
   serviceDate: {
-    label: "Svc Date",
-    aliases: ["svc date", "service date", "dos", "date of service"],
+    label: "Service date",
+    aliases: ["service date", "date of service", "dos"],
     required: true,
   },
-  cpt: { label: "CPT", aliases: ["cpt", "cpt code", "hcpcs", "procedure"], required: true },
-  description: { label: "Description", aliases: ["description", "cpt description"], required: false },
-  facility: { label: "Facility", aliases: ["facility", "facility name", "location"], required: false },
-  payerName: { label: "Payer", aliases: ["payer", "payer name", "insurance"], required: false },
-  payerClass: { label: "Payer Class", aliases: ["payer class", "financial class", "class"], required: true },
-  status: { label: "Status", aliases: ["status", "claim status"], required: false },
-  billed: {
-    label: "Billed Charge",
-    aliases: ["billed charge", "charge", "charges", "billed"],
-    required: true,
-  },
-  payment: {
-    label: "Total Payment",
-    aliases: ["total payment", "payment", "payments", "paid"],
-    required: true,
-  },
-  balance: { label: "Balance", aliases: ["balance", "ar balance"], required: true },
+  cpt: { label: "Procedure code", aliases: ["procedure code", "cpt", "hcpcs", "cpt hcpcs"], required: true },
+  description: { label: "Description", aliases: ["description", "procedure description"], required: false },
+  facility: { label: "Facility", aliases: ["facility", "location", "place of service"], required: false },
+  payerName: { label: "Payer", aliases: ["payer", "insurance", "payer name"], required: false },
+  payerClass: { label: "Financial class", aliases: ["financial class", "payer class"], required: true },
+  status: { label: "Status", aliases: ["status", "line status"], required: false },
+  billed: { label: "Charges", aliases: ["charges", "charge amount"], required: true },
+  payment: { label: "Payments", aliases: ["payments", "payment amount"], required: true },
+  adjustment: { label: "Adjustments", aliases: ["adjustments", "adjustment amount"], required: true },
+  balance: { label: "Balance", aliases: ["balance", "open balance", "ending balance"], required: true },
 } as const;
 
 type ColumnKey = keyof typeof COLUMNS;
@@ -57,8 +53,13 @@ export interface MonthlyLine {
   payerName: string;
   payerClass: string;
   status: string;
+  /** Charges posted in the period (zero for older lines with only payments or adjustments). */
   billedCents: number;
+  /** Payments posted in the period. */
   paymentCents: number;
+  /** Adjustments (write-offs) posted in the period; negative for reversals. */
+  adjustmentCents: number;
+  /** Open balance at period end; negative is a credit balance. */
   balanceCents: number;
 }
 
@@ -177,15 +178,15 @@ export function parseMonthlyFile(text: string, options: { syntheticOnly: boolean
     };
     const accountNumber = cell("accountNumber");
     const serviceDate = parseServiceDate(cell("serviceDate"));
-    if (!cell("patientName")) add(rowNumber, "Patient is blank.");
-    if (!accountNumber) add(rowNumber, "Account # is blank.");
+    if (!cell("patientName")) add(rowNumber, "Patient name is blank.");
+    if (!accountNumber) add(rowNumber, "Account number is blank.");
     else if (options.syntheticOnly && !accountNumber.startsWith(SYNTHETIC_ACCOUNT_PREFIX)) {
       add(
         rowNumber,
-        `Account # must start with ${SYNTHETIC_ACCOUNT_PREFIX}: this environment accepts synthetic files only.`,
+        `Account number must start with ${SYNTHETIC_ACCOUNT_PREFIX}: this environment accepts synthetic files only.`,
       );
     }
-    if (!serviceDate) add(rowNumber, "Svc Date isn't a valid date (use MM/DD/YYYY).");
+    if (!serviceDate) add(rowNumber, "Service date isn't a valid date (use MM/DD/YYYY).");
     for (const key of Object.keys(COLUMNS) as ColumnKey[]) {
       if (cell(key).length > 200) add(rowNumber, `${COLUMNS[key].label} is longer than 200 characters.`);
     }
@@ -202,6 +203,7 @@ export function parseMonthlyFile(text: string, options: { syntheticOnly: boolean
       status: cell("status"),
       billedCents: money("billed"),
       paymentCents: money("payment"),
+      adjustmentCents: money("adjustment"),
       balanceCents: money("balance"),
     });
   }

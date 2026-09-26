@@ -37,8 +37,8 @@ Bloomberg-terminal discipline with modern typography, not a consumer app.
 - Inconsistent capitalization. Sentence case everywhere except proper nouns and codes.
 
 ## 4. Brand
-DenialDesk shares the look of the owner's **RevCycle IQ** product family (navy chrome, teal
-accent, serif page titles, mono figures) and keeps its own logo (`docs/assets/denialdesk-logo.png`),
+DenialDesk's visual identity is navy chrome, a teal accent, serif page titles, and mono figures,
+around its own logo (`docs/assets/denialdesk-logo.png`),
 always shown unaltered on a white background (sign-in page, sidebar header). Adopted 2026-09-26,
 ADR 0004 amendment.
 

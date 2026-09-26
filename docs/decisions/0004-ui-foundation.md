@@ -25,11 +25,12 @@ consistent across hundreds of agent-built screens. Requirements: WCAG 2.1 AA (§
 - New UI dependencies still go through the dependency check (R-15.7).
 - `reviewer` checks UI PRs against `docs/DESIGN.md` §3 (banned patterns) and §11 (accessibility).
 
-## Amendment (2026-09-26): RevCycle IQ look and feel
-The owner asked DenialDesk to share the look of their RevCycle IQ product while keeping the
-DenialDesk logo. Changes:
+## Amendment (2026-09-26): visual identity
+The owner asked for this visual identity around the unchanged DenialDesk logo (2026-09-26). It is
+DenialDesk's brand; the product doesn't reference any other product (owner instruction of
+2026-09-26 in the implementing Claude Code session). Changes:
 - **Palette:** navy `#1A2C4E` chrome and primary, teal `#1F6B75` accent, blue `#2E75B6` focus;
-  status colors from the RevCycle brief, each re-checked for WCAG AA (DESIGN.md §4–5).
+  status colors, each checked for WCAG AA (DESIGN.md §4–5).
 - **Fonts:** Inter (UI), Playfair Display (page titles), Space Mono (codes and headline figures),
   replacing IBM Plex. Bundled in `src/app/fonts/` (SIL OFL 1.1) and loaded with `next/font/local`,
   so builds never download fonts (a flaky Google Fonts fetch broke the container build).

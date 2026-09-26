@@ -5,7 +5,12 @@ import { closeDatabase } from "@/db/client";
 import { auditEvents, rcmClaimLines, rcmFiles, rcmSites } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { withTenant } from "@/db/tenant";
-import { getFile, importMonthlyFile, listFiles } from "@/domain/revenue-cycle/imports";
+import {
+  CURRENT_FORMAT_VERSION,
+  getFile,
+  importMonthlyFile,
+  listFiles,
+} from "@/domain/revenue-cycle/imports";
 import type { MonthlyLine } from "@/domain/revenue-cycle/monthly-file";
 import { generateDataset } from "@/domain/synthetic/generator";
 import { expectDbError } from "./helpers";
@@ -34,11 +39,12 @@ const line = (rowNumber: number, overrides: Partial<MonthlyLine> = {}): MonthlyL
   description: "Office visit",
   facility: "Elsewhere",
   payerName: "Gulf Coast Mutual (synthetic)",
-  payerClass: "COM",
-  status: "PAID",
+  payerClass: "COMM",
+  status: "OPEN",
   billedCents: 10_000,
   paymentCents: 4_000,
-  balanceCents: 6_000,
+  adjustmentCents: 2_500,
+  balanceCents: 3_500,
   ...overrides,
 });
 
@@ -52,13 +58,13 @@ afterAll(() => closeDatabase());
 describe("synthetic practices", () => {
   it("come with last month's classified file whose control totals match its lines", async () => {
     const [file] = await withTenant(a, (tx) => listFiles(tx));
-    expect(file!.rowCount).toBe(150);
+    expect(file!.rowCount).toBeGreaterThan(100);
     const [totals] = await withTenant(a, (tx) =>
       tx
         .select({
           lines: sql<number>`count(*)::int`,
           billed: sql<number>`sum(billed_cents)::bigint`.mapWith(Number),
-          contra: sql<number>`sum(contra_cents)::bigint`.mapWith(Number),
+          adjustments: sql<number>`sum(adjustment_cents)::bigint`.mapWith(Number),
           net: sql<number>`sum(net_cents)::bigint`.mapWith(Number),
           payments: sql<number>`sum(payment_cents)::bigint`.mapWith(Number),
           balance: sql<number>`sum(balance_cents)::bigint`.mapWith(Number),
@@ -69,20 +75,34 @@ describe("synthetic practices", () => {
     expect(totals).toEqual({
       lines: file!.rowCount,
       billed: file!.billedCents,
-      contra: file!.contraCents,
+      adjustments: file!.adjustmentCents,
       net: file!.netCents,
       payments: file!.paymentCents,
       balance: file!.balanceCents,
     });
-    expect(file!.netCents).toBe(file!.billedCents - file!.contraCents);
+    expect(file!.netCents).toBe(file!.billedCents - file!.adjustmentCents);
+    expect(file!.formatVersion).toBe(CURRENT_FORMAT_VERSION);
     const detail = await withTenant(a, (tx) => getFile(tx, file!.id, { page: 1 }));
-    expect(detail!.byRule.length).toBeGreaterThan(3);
+    expect(detail!.byRule.length).toBeGreaterThanOrEqual(3);
     expect(detail!.bySite.every((s) => s.siteId !== null)).toBe(true);
   });
 });
 
+describe("seeded activity files", () => {
+  it("cover three consecutive months that roll forward exactly", async () => {
+    const files = (await withTenant(a, (tx) => listFiles(tx))).reverse();
+    expect(files).toHaveLength(3);
+    for (let i = 1; i < files.length; i++) {
+      const [prior, file] = [files[i - 1]!, files[i]!];
+      expect(prior.balanceCents + file.billedCents - file.paymentCents - file.adjustmentCents).toBe(
+        file.balanceCents,
+      );
+    }
+  });
+});
+
 describe("importMonthlyFile", () => {
-  it("classifies lines, detects sites from the facility, and audits the import", async () => {
+  it("routes lines, records review reasons, detects sites, and audits the import", async () => {
     const [site] = await withTenant(a, (tx) => tx.select().from(rcmSites).limit(1));
     const fileId = await withTenant(a, (tx) =>
       importMonthlyFile(tx, {
@@ -92,9 +112,12 @@ describe("importMonthlyFile", () => {
         defaultSiteId: null,
         lines: [
           line(2, { facility: `${site!.name.toUpperCase()} annex` }),
-          line(3, { payerClass: "SPY" }),
-          line(4, { status: "51CR" }),
-          line(5, { cpt: "", billedCents: 0, paymentCents: 0, balanceCents: 0 }),
+          line(3, { payerClass: "SELF", adjustmentCents: 0, balanceCents: 6_000 }),
+          line(4, { status: "VOID", paymentCents: 0, adjustmentCents: 10_000, balanceCents: 0 }),
+          line(5, { cpt: "", billedCents: 0, paymentCents: 0, adjustmentCents: 0, balanceCents: 0 }),
+          line(7, { cpt: "9921", payerClass: "MCR" }),
+          // An older line: this month's payment and write-off overshot, leaving a credit balance.
+          line(6, { serviceDate: "2026-01-20", billedCents: 0, balanceCents: -500 }),
         ],
       }),
     );
@@ -105,16 +128,28 @@ describe("importMonthlyFile", () => {
         .where(eq(rcmClaimLines.fileId, fileId))
         .orderBy(rcmClaimLines.rowNumber),
     );
-    expect(rows.map((r) => [r.ruleCode, r.arGl, r.contraCents, r.flagged])).toEqual([
-      ["STANDARD", "1310", 0, false],
-      ["SELF_PAY", "1320", 0, false],
-      ["EXCL_51CR", "1310", 10_000, false],
-      ["INVALID_CPT", "1310", 0, true],
+    expect(rows.map((r) => [r.ruleCode, r.arGl, r.adjustmentGl, r.netCents, r.reviewReasons])).toEqual([
+      ["STANDARD", "1200", "4050", 7_500, []],
+      ["STANDARD", "1240", "4450", 10_000, []],
+      ["VOIDED", "1200", "4990", 0, []],
+      ["STANDARD", "1200", "4050", 0, ["no_activity", "blank_code"]],
+      ["STANDARD", "1200", "4050", -2_500, ["credit_balance"]],
+      ["STANDARD", "1210", "4150", 7_500, ["invalid_code"]],
     ]);
+    expect(rows.every((r) => r.flagged === r.reviewReasons.length > 0)).toBe(true);
     expect(rows[0]!.siteId).toBe(site!.id);
     expect(rows[1]!.siteId).toBeNull();
     const [file] = await withTenant(a, (tx) => tx.select().from(rcmFiles).where(eq(rcmFiles.id, fileId)));
-    expect(file).toMatchObject({ rowCount: 4, billedCents: 30_000, contraCents: 10_000, netCents: 20_000 });
+    expect(file).toMatchObject({
+      rowCount: 6,
+      billedCents: 40_000,
+      paymentCents: 16_000,
+      adjustmentCents: 17_500,
+      netCents: 22_500,
+      balanceCents: 12_500,
+      flaggedCount: 3,
+      formatVersion: CURRENT_FORMAT_VERSION,
+    });
     const events = await withTenant(a, (tx) =>
       tx.select().from(auditEvents).where(eq(auditEvents.entityId, fileId)),
     );
@@ -221,9 +256,7 @@ describe("imported files are tenant-isolated and immutable", () => {
           billedCents: 0,
           paymentCents: 0,
           balanceCents: 0,
-          contraCents: 0,
           netCents: 0,
-          excludedCount: 0,
           flaggedCount: 0,
         }),
       ),

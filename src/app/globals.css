@@ -5,7 +5,7 @@
  * Components use these via Tailwind classes (bg-surface, text-muted, …), never raw hex.
  */
 :root {
-  /* Brand (RevCycle IQ family, docs/DESIGN.md §4). The DenialDesk logo keeps its own colors. */
+  /* Brand (docs/DESIGN.md §4). The DenialDesk logo keeps its own colors. */
   --dd-navy: #1a2c4e;
   --dd-navy-700: #13213b;
   --dd-blue: #2e75b6;
