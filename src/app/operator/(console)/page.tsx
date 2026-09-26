@@ -9,9 +9,12 @@ import { StatTile } from "@/components/ui/StatTile";
 import { listPractices } from "@/domain/platform/practices";
 import { auditSystem } from "@/lib/audit";
 import { AgreementStatusBadge } from "./AgreementStatusBadge";
-import { CreatePracticeForm, SuspendToggle } from "./controls";
+import { SuspendToggle } from "./controls";
 
 export const metadata: Metadata = { title: "Platform console" };
+
+const primaryLinkClass =
+  "inline-flex h-8 items-center rounded-control border border-primary bg-primary px-3 text-body font-medium text-white hover:border-primary-hover hover:bg-primary-hover";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", {
   month: "2-digit",
@@ -38,6 +41,11 @@ export default async function OperatorPage() {
       <PageHeader
         title="Practices"
         description="Every practice on this DenialDesk environment. Practice-level details only; patient data stays inside each practice."
+        actions={
+          <Link href="/operator/practices/new" className={primaryLinkClass}>
+            New practice
+          </Link>
+        }
       />
 
       <section aria-label="Platform totals" className="grid grid-cols-5 gap-4">
@@ -118,15 +126,6 @@ export default async function OperatorPage() {
             ))}
           </tbody>
         </Table>
-      </Panel>
-
-      <Panel
-        title="Create a practice"
-        description="Creates the practice and its first administrator, who can then add their team."
-      >
-        <div className="max-w-2xl">
-          <CreatePracticeForm />
-        </div>
       </Panel>
     </div>
   );

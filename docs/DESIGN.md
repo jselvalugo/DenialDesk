@@ -148,6 +148,11 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 - **Preview banner:** 32px strip above everything in non-production (ADR 0003).
 - **Page:** page header, then filters toolbar, then content. Page padding 24px (16px under 1024px).
 - Tables use the full content width. Forms max 720px wide, labels above fields.
+- **Create flows get their own page** (owner rule, 2026-09-26). A list page never embeds a
+  "create" form: it has a primary "New <thing>" button in the page header's actions that opens
+  `/<list>/new`, which has a breadcrumb back to the list, a Cancel link, and after saving links to
+  the new record and back to the list. Examples: `/patients/new`, `/operator/practices/new`.
+  Small row-level actions (suspend, mark in error) may stay inline.
 - Minimum supported viewport 1280×800 for working screens; usable down to 1024px.
 
 ## 9. Components (build these, reuse them, don't fork them)
