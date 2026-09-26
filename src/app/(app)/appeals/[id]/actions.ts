@@ -4,15 +4,15 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { todayIn } from "@rules/calendar";
-import { addCalendarDays } from "@rules/calendar";
 import { canWorkAppeals } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { appealNotes, appeals, appealSubmittedMethodEnum, claims, denials, patients } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
-import { getAppealFollowUpDays } from "@/domain/appeals/settings";
+import { recordSubmission } from "@/domain/appeals/actions";
 import { denialStatusForDecision, isCloseOutcome } from "@/domain/appeals/status";
 import { audit } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
+import { parseDollarsToCents } from "@/lib/format";
 
 export interface ActionState {
   error?: string;
@@ -46,56 +46,16 @@ export async function recordAppealSubmission(_: ActionState, formData: FormData)
       followUpOn: formData.get("followUpOn") || undefined,
     });
   if (!parsed.success) return { error: "Choose a method and a valid submitted date." };
-  const today = todayIn();
-  if (parsed.data.submittedOn > today) return { error: "The submitted date can't be in the future." };
 
-  const result = await withTenant(auth, async (tx) => {
-    const [current] = await tx
-      .select({
-        id: appeals.id,
-        status: appeals.status,
-        denialId: appeals.denialId,
-        createdAt: appeals.createdAt,
-      })
-      .from(appeals)
-      .where(eq(appeals.id, parsed.data.appealId))
-      .for("update");
-    if (!current) return { error: "This appeal no longer exists." };
-    if (!["draft", "in_review", "ready"].includes(current.status)) {
-      return { error: "This appeal has already been submitted." };
-    }
-    const createdDate = current.createdAt.toISOString().slice(0, 10);
-    if (parsed.data.submittedOn < createdDate) {
-      return { error: "The submitted date can't be before the appeal was created." };
-    }
-    const followUpDays = await getAppealFollowUpDays(tx, auth.tenantId);
-    const followUpOn = parsed.data.followUpOn || addCalendarDays(parsed.data.submittedOn, followUpDays);
-
-    await tx
-      .update(appeals)
-      .set({
-        status: "submitted",
-        submittedMethod: parsed.data.method,
-        submittedOn: parsed.data.submittedOn,
-        trackingReference: parsed.data.trackingReference || null,
-        followUpOn,
-        updatedAt: new Date(),
-      })
-      .where(eq(appeals.id, parsed.data.appealId));
-    await tx
-      .update(denials)
-      .set({ status: "appeal_submitted", appealSubmittedOn: parsed.data.submittedOn, updatedAt: new Date() })
-      .where(eq(denials.id, current.denialId));
-    await audit(tx, {
-      action: "appeal.submission_recorded",
-      actorUserId: auth.userId,
-      tenantId: auth.tenantId,
-      entityType: "appeal",
-      entityId: parsed.data.appealId,
-      metadata: { method: parsed.data.method },
-    });
-    return { ok: true };
-  });
+  const result = await withTenant(auth, (tx) =>
+    recordSubmission(tx, auth, {
+      appealId: parsed.data.appealId,
+      method: parsed.data.method,
+      submittedOn: parsed.data.submittedOn,
+      trackingReference: parsed.data.trackingReference,
+      followUpOn: parsed.data.followUpOn || undefined,
+    }),
+  );
   revalidatePath(`/appeals/${parsed.data.appealId}`);
   return result;
 }
@@ -108,16 +68,16 @@ export async function recordAppealDecision(_: ActionState, formData: FormData): 
       appealId,
       outcome: z.enum(["overturned_full", "overturned_partial", "upheld", "withdrawn", "dismissed"]),
       decisionOn: z.iso.date(),
-      // Entered in dollars in the form (money is stored as integer cents everywhere else).
-      // z.coerce.number() on "" would coerce to 0 (Number("") === 0); check the empty literal first.
-      recoveredCents: z.union([z.literal(""), z.coerce.number().nonnegative()]).optional(),
+      // Entered in dollars in the form (money is stored as integer cents everywhere else);
+      // parsed below with parseDollarsToCents, which rejects anything but a plain amount.
+      recoveredDollars: z.string().trim().optional(),
       closeReason: z.string().trim().max(2000).optional(),
     })
     .safeParse({
       appealId: formData.get("appealId"),
       outcome: formData.get("outcome"),
       decisionOn: formData.get("decisionOn"),
-      recoveredCents: formData.get("recoveredCents") ?? "",
+      recoveredDollars: formData.get("recoveredDollars") ?? "",
       closeReason: formData.get("closeReason") || undefined,
     });
   if (!parsed.success) return { error: "Choose an outcome and a valid decision date." };
@@ -130,10 +90,13 @@ export async function recordAppealDecision(_: ActionState, formData: FormData): 
   }
   const needsRecovered =
     parsed.data.outcome === "overturned_full" || parsed.data.outcome === "overturned_partial";
-  const recoveredCents =
-    parsed.data.recoveredCents === "" || parsed.data.recoveredCents === undefined
-      ? undefined
-      : Math.round(parsed.data.recoveredCents * 100);
+  const recoveredText = parsed.data.recoveredDollars ?? "";
+  let recoveredCents: number | undefined;
+  if (recoveredText !== "") {
+    const cents = parseDollarsToCents(recoveredText);
+    if (cents === null) return { error: "Enter the recovered amount as a plain dollar figure, e.g. 125.00." };
+    recoveredCents = cents;
+  }
   if (needsRecovered && recoveredCents === undefined) {
     return { error: "Enter the recovered amount for an overturned appeal." };
   }
@@ -160,10 +123,11 @@ export async function recordAppealDecision(_: ActionState, formData: FormData): 
       return { error: "The decision date can't be before the appeal was submitted." };
     }
     const [denial] = await tx
-      .select({ deniedCents: denials.deniedCents })
+      .select({ deniedCents: denials.deniedCents, status: denials.status })
       .from(denials)
       .where(eq(denials.id, current.denialId));
-    if (recoveredCents !== undefined && denial && recoveredCents > denial.deniedCents) {
+    if (!denial) return { error: "The linked denial no longer exists." };
+    if (recoveredCents !== undefined && recoveredCents > denial.deniedCents) {
       return { error: "The recovered amount can't exceed the denied amount." };
     }
 
@@ -171,6 +135,7 @@ export async function recordAppealDecision(_: ActionState, formData: FormData): 
       parsed.data.outcome === "withdrawn" || parsed.data.outcome === "dismissed"
         ? parsed.data.outcome
         : "decided";
+    const newDenialStatus = denialStatusForDecision(parsed.data.outcome);
     await tx
       .update(appeals)
       .set({
@@ -184,7 +149,7 @@ export async function recordAppealDecision(_: ActionState, formData: FormData): 
       .where(eq(appeals.id, parsed.data.appealId));
     await tx
       .update(denials)
-      .set({ status: denialStatusForDecision(parsed.data.outcome), updatedAt: new Date() })
+      .set({ status: newDenialStatus, updatedAt: new Date() })
       .where(eq(denials.id, current.denialId));
     await audit(tx, {
       action: "appeal.decision_recorded",
@@ -192,8 +157,18 @@ export async function recordAppealDecision(_: ActionState, formData: FormData): 
       tenantId: auth.tenantId,
       entityType: "appeal",
       entityId: parsed.data.appealId,
-      metadata: { outcome: parsed.data.outcome },
+      metadata: { outcome: parsed.data.outcome, denialId: current.denialId },
     });
+    if (denial.status !== newDenialStatus) {
+      await audit(tx, {
+        action: "denial.status_changed",
+        actorUserId: auth.userId,
+        tenantId: auth.tenantId,
+        entityType: "denial",
+        entityId: current.denialId,
+        metadata: { from: denial.status, to: newDenialStatus, appealId: parsed.data.appealId },
+      });
+    }
     return { ok: true };
   });
   revalidatePath(`/appeals/${parsed.data.appealId}`);

@@ -20,6 +20,7 @@ import {
   APPEAL_LEVEL_LABELS,
   APPEAL_STATUSES,
   APPEAL_SUBMITTED_METHOD_LABELS,
+  submissionTimeliness,
 } from "@/domain/appeals/status";
 import { audit } from "@/lib/audit";
 import { formatDate } from "@/lib/format";
@@ -149,12 +150,10 @@ export default async function AppealPage({ params }: { params: Promise<{ id: str
                 </Field>
                 <Field label="Submitted">
                   <span className="tabular">{formatDate(appeal.submittedOn)}</span>{" "}
-                  {appeal.deadline ? (
-                    appeal.submittedOn <= appeal.deadline ? (
-                      <Badge tone="success">On time</Badge>
-                    ) : (
-                      <Badge tone="danger">Late</Badge>
-                    )
+                  {submissionTimeliness(appeal.submittedOn, appeal.deadline) === "on_time" ? (
+                    <Badge tone="success">On time</Badge>
+                  ) : submissionTimeliness(appeal.submittedOn, appeal.deadline) === "late" ? (
+                    <Badge tone="danger">Late</Badge>
                   ) : null}
                 </Field>
                 <Field label="Tracking / reference">{appeal.trackingReference ?? "—"}</Field>

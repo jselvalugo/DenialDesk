@@ -115,11 +115,10 @@ export function DecisionForm({
         <label className="flex flex-col gap-1 text-label font-medium text-muted">
           Recovered amount ($, overturned only)
           <input
-            type="number"
-            name="recoveredCents"
-            step="0.01"
-            min={0}
-            max={deniedCents / 100}
+            type="text"
+            inputMode="decimal"
+            name="recoveredDollars"
+            placeholder={`Up to ${(deniedCents / 100).toFixed(2)}`}
             disabled={disabled}
             className={fieldClass}
           />

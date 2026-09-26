@@ -13,6 +13,7 @@ import { firstLevelDeadline } from "@/domain/appeals/deadline";
 import { openAppealsForDenial } from "@/domain/appeals/queries";
 import { CATEGORY_LABELS } from "@/domain/carc";
 import { ACTION_STATUSES } from "@/domain/denial-status";
+import { audit } from "@/lib/audit";
 import { formatCents, formatDate } from "@/lib/format";
 import { NewAppealForm } from "./NewAppealForm";
 
@@ -37,6 +38,13 @@ export default async function NewAppealPage({
       .where(eq(denials.id, parsed.data));
     if (!row) return null;
     const openAppeals = await openAppealsForDenial(tx, parsed.data);
+    await audit(tx, {
+      action: "appeal.create_form_viewed",
+      actorUserId: auth.userId,
+      tenantId: auth.tenantId,
+      entityType: "denial",
+      entityId: row.denial.id,
+    });
     return { ...row, openAppeals };
   });
   if (!data) notFound();
