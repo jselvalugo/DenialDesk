@@ -425,6 +425,8 @@ export const glAccounts = pgTable(
     adjustmentGl: text("adjustment_gl"),
     /** The AR account used when no rule or payer class says otherwise (one per practice). */
     isDefaultAr: boolean("is_default_ar").notNull().default(false),
+    /** The cash account payments post to before the bank deposit clears them (one per practice). */
+    isPaymentsClearing: boolean("is_payments_clearing").notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [
@@ -432,6 +434,9 @@ export const glAccounts = pgTable(
     uniqueIndex("gl_accounts_one_default_ar")
       .on(t.tenantId)
       .where(sql`is_default_ar`),
+    uniqueIndex("gl_accounts_one_payments_clearing")
+      .on(t.tenantId)
+      .where(sql`is_payments_clearing`),
   ],
 );
 
@@ -552,6 +557,85 @@ export const rcmClaimLines = pgTable(
     uniqueIndex("rcm_claim_lines_file_row_key").on(t.fileId, t.rowNumber),
     index("rcm_claim_lines_tenant_dos_idx").on(t.tenantId, t.serviceDate),
   ],
+);
+
+export const voucherStatusEnum = pgEnum("rcm_voucher_status", [
+  "draft",
+  "approved",
+  "exported",
+  "superseded",
+  "void",
+]);
+
+/**
+ * Revenue-recognition journal voucher for one monthly file (B3). Amounts and lines never change
+ * after insert; the app role may update only the workflow columns (drizzle/0012). At most one
+ * draft and one approved-or-exported voucher per period.
+ */
+export const rcmJournalVouchers = pgTable(
+  "rcm_journal_vouchers",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    fileId: uuid("file_id")
+      .notNull()
+      .references(() => rcmFiles.id),
+    periodYear: integer("period_year").notNull(),
+    periodMonth: integer("period_month").notNull(),
+    /** 1, 2, … per period; part of the journal number. */
+    version: integer("version").notNull(),
+    number: text("number").notNull(),
+    status: voucherStatusEnum("status").notNull().default("draft"),
+    debitCents: cents("debit_cents").notNull(),
+    creditCents: cents("credit_cents").notNull(),
+    preparedBy: uuid("prepared_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    approvedBy: uuid("approved_by").references(() => users.id),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    exportedBy: uuid("exported_by").references(() => users.id),
+    exportedAt: timestamp("exported_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by").references(() => users.id),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidReason: text("void_reason"),
+  },
+  (t) => [
+    uniqueIndex("rcm_vouchers_period_version_key").on(t.tenantId, t.periodYear, t.periodMonth, t.version),
+    uniqueIndex("rcm_vouchers_one_posted_per_period")
+      .on(t.tenantId, t.periodYear, t.periodMonth)
+      .where(sql`status in ('approved', 'exported')`),
+    uniqueIndex("rcm_vouchers_one_draft_per_period")
+      .on(t.tenantId, t.periodYear, t.periodMonth)
+      .where(sql`status = 'draft'`),
+  ],
+);
+
+export const voucherLineRoleEnum = pgEnum("rcm_voucher_line_role", [
+  "charges",
+  "adjustments",
+  "payments",
+  "reclass",
+]);
+
+/** One debit or credit line of a journal voucher (no PHI: accounts, sites, amounts, period memo). */
+export const rcmJournalLines = pgTable(
+  "rcm_journal_lines",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    voucherId: uuid("voucher_id")
+      .notNull()
+      .references(() => rcmJournalVouchers.id),
+    lineNumber: integer("line_number").notNull(),
+    role: voucherLineRoleEnum("role").notNull(),
+    account: text("account").notNull(),
+    siteCode: text("site_code").notNull(),
+    debitCents: cents("debit_cents").notNull(),
+    creditCents: cents("credit_cents").notNull(),
+    memo: text("memo").notNull(),
+  },
+  (t) => [uniqueIndex("rcm_journal_lines_voucher_line_key").on(t.voucherId, t.lineNumber)],
 );
 
 // ---------------------------------------------------------------------------------------------

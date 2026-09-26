@@ -33,6 +33,7 @@ export async function seedRevenueCycleDefaults(
         revenueGl: a.revenueGl ?? null,
         adjustmentGl: a.adjustmentGl ?? null,
         isDefaultAr: a.isDefaultAr ?? false,
+        isPaymentsClearing: a.isPaymentsClearing ?? false,
       })),
     )
     .onConflictDoNothing();

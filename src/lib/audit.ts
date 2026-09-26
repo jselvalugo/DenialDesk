@@ -38,13 +38,17 @@ export type AuditAction =
   | "rcm.defaults_loaded"
   | "rcm.file_imported"
   | "rcm.file_viewed"
-  | "rcm.file_rejected";
+  | "rcm.file_rejected"
+  | "rcm.voucher_prepared"
+  | "rcm.voucher_approved"
+  | "rcm.voucher_exported"
+  | "rcm.voucher_voided";
 
 export interface AuditEvent {
   action: AuditAction;
   actorUserId?: string | null;
   tenantId?: string | null;
-  entityType?: "denial" | "claim" | "patient" | "user" | "session" | "tenant" | "rcm_file";
+  entityType?: "denial" | "claim" | "patient" | "user" | "session" | "tenant" | "rcm_file" | "rcm_voucher";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;

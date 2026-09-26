@@ -175,7 +175,18 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       invalid codes paid later) whose files roll forward exactly; three consecutive months seeded
       per demo practice. Practices seeded earlier keep their stored rules and version-1 files;
       reset pre-production demo practices from the operator console (`docs/runbooks/netlify.md`).
-- [ ] B3 · [ ] B4 · [ ] B5
+- [x] **B3** (2026-09-26): `rcm_journal_vouchers` + `rcm_journal_lines` (FORCE RLS, no DELETE;
+      lines insert-only; vouchers update only workflow columns through column grants; DB checks:
+      one side per line, approver ≠ preparer, void needs a reason; partial unique indexes: one
+      draft and one approved/exported voucher per month). Pure `journal.ts` (lines, reclass, five
+      checks, GL CSV) and `vouchers.ts` (prepare/approve/export/void, audited). A payments-clearing
+      cash account (`is_payments_clearing`, one per practice) receives payments. Export is a
+      server action returning the CSV (framework origin check; no GET side effects). Demo
+      practices get last month's draft prepared by a synthetic manager, so the guest can approve.
+      Vouchers use only current-format files; the first imported month takes its opening
+      balances from the practice's GL (no reclassification). B4's roll-forward only reports; the
+      voucher is what blocks a file that doesn't roll forward.
+- [ ] B4 · [ ] B5
 
 ## Security notes
 - Uploads: CSV only, size-capped, parsed in memory, never written to disk or object storage;

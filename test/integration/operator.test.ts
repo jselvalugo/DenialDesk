@@ -191,7 +191,7 @@ describe("listPractices", () => {
     const demo = await ensureDemoPractice();
     const practices = await listPractices(operator);
     const demoRow = practices.find((p) => p.id === demo.tenantId);
-    expect(demoRow?.teamSize).toBe(3);
+    expect(demoRow?.teamSize).toBe(4);
     expect(demoRow?.openDenials).toBeGreaterThan(0);
     expect(practices.some((p) => p.id === operator.tenantId)).toBe(true);
   });

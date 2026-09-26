@@ -94,12 +94,52 @@ test.describe("monthly files", () => {
   });
 });
 
+test.describe("journal vouchers", () => {
+  test("the demo manager approves a voucher prepared by a colleague and exports the GL file", async ({
+    page,
+  }) => {
+    await openDemo(page);
+    await page
+      .getByRole("navigation", { name: "Primary" })
+      .getByRole("link", { name: "Journal vouchers" })
+      .click();
+    const list = page.getByRole("table", { name: "Journal vouchers" });
+    await expect(list).toContainText("Draft");
+    await expect(list).toContainText("Dana Whitfield");
+    await list.getByRole("link").first().click();
+    await expect(page.getByRole("region", { name: "Voucher summary" })).toContainText("5 of 5");
+    const checks = page.getByRole("list", { name: "Voucher checks" });
+    await expect(checks.getByText("Pass")).toHaveCount(5);
+    await page.getByRole("button", { name: "Approve voucher" }).click();
+    await expect(page.getByRole("region", { name: "Voucher summary" })).toContainText("Approved");
+
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Export GL file" }).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/^RCM-\d{4}-\d{2}-v\d+\.csv$/);
+    await expect(page.getByRole("region", { name: "Voucher summary" })).toContainText("Exported");
+    await expect(page.getByRole("button", { name: "Download GL file again" })).toBeVisible();
+  });
+
+  test.describe("as compliance (read-only)", () => {
+    test.use({ storageState: "test/e2e/.auth/viewer.json" });
+
+    test("can review vouchers but not prepare or approve them", async ({ page }) => {
+      await page.goto("/revenue-cycle/journal");
+      await expect(page.getByRole("heading", { name: "Journal vouchers", level: 1 })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Prepare a voucher" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Approve voucher" })).toHaveCount(0);
+    });
+  });
+});
+
 test.describe("revenue cycle as a denial specialist", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
   test("is hidden from navigation and returns 404", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("navigation", { name: "Primary" })).not.toContainText("Revenue cycle");
+    expect((await page.goto("/revenue-cycle/journal"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/rules"))?.status()).toBe(404);
     expect((await page.goto("/revenue-cycle/files"))?.status()).toBe(404);
     expect((await page.request.get("/api/revenue-cycle/sample-file")).status()).toBe(404);

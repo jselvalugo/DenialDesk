@@ -45,6 +45,7 @@ export async function seedDemoPractice(
       { email: "j.chen@denialdesk.test", displayName: "Jonah Chen", role: "specialist" },
       { email: "t.okafor@denialdesk.test", displayName: "Tobi Okafor", role: "manager" },
     ],
+    sampleVoucherBy: 3,
   });
   return "seeded";
 }

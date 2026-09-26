@@ -99,6 +99,13 @@
       "when": 1790430575112,
       "tag": "0013_revenue_cycle_activity_file",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790430771011,
+      "tag": "0014_revenue_cycle_journal_vouchers",
+      "breakpoints": true
     }
   ]
 }
