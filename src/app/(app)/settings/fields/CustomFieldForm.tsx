@@ -5,6 +5,7 @@ import { useActionState, useState } from "react";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
+import { SENSITIVITY_TAGS } from "@/domain/patients/record";
 import {
   CUSTOM_FIELD_ENTITIES,
   CUSTOM_FIELD_TYPES,
@@ -26,6 +27,7 @@ export interface CustomFieldValues {
   options: string[];
   required: boolean;
   helpText: string | null;
+  sensitivity: string | null;
   updatedAt: string;
 }
 
@@ -145,6 +147,33 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
         hint="Shown under the field on the form."
         error={errorFor("helpText")}
       />
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="field-sensitivity" className="text-label font-medium text-text">
+          Sensitivity
+        </label>
+        <select
+          id="field-sensitivity"
+          name="sensitivity"
+          defaultValue={field?.sensitivity ?? ""}
+          aria-describedby="field-sensitivity-hint"
+          aria-invalid={errorFor("sensitivity") ? true : undefined}
+          className={selectClass}
+        >
+          <option value="">Not sensitive</option>
+          {Object.entries(SENSITIVITY_TAGS).map(([value, name]) => (
+            <option key={value} value={value}>
+              Sensitive: {name}
+            </option>
+          ))}
+        </select>
+        <p id="field-sensitivity-hint" className="text-label text-muted">
+          A sensitive field is locked on every record: its value stays hidden until someone opens it with a
+          reason, and each opening is recorded in the audit log.
+        </p>
+        {errorFor("sensitivity") && (
+          <p className="text-label font-medium text-danger-fg">{errorFor("sensitivity")}</p>
+        )}
+      </div>
       <label className="flex items-center gap-2 text-body text-text">
         <input type="checkbox" name="required" defaultChecked={field?.required ?? false} className="size-4" />
         Required: the record can&apos;t be saved without it

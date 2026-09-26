@@ -8,6 +8,7 @@ import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
+import { SENSITIVITY_TAGS, type SensitivityTag } from "@/domain/patients/record";
 import {
   CUSTOM_FIELD_ENTITIES,
   CUSTOM_FIELD_TYPES,
@@ -91,6 +92,7 @@ export default async function CustomFieldsPage({
                 <Th>Key</Th>
                 <Th>Type</Th>
                 <Th>Required</Th>
+                <Th>Sensitivity</Th>
                 <Th>Status</Th>
                 {canEdit && <Th className="text-right">Actions</Th>}
               </tr>
@@ -112,6 +114,15 @@ export default async function CustomFieldsPage({
                     )}
                   </Td>
                   <Td>{field.required ? "Yes" : "No"}</Td>
+                  <Td>
+                    {field.sensitivity ? (
+                      <Badge tone="warning">
+                        Locked · {SENSITIVITY_TAGS[field.sensitivity as SensitivityTag] ?? field.sensitivity}
+                      </Badge>
+                    ) : (
+                      <span className="text-label text-muted">Not sensitive</span>
+                    )}
+                  </Td>
                   <Td>
                     {field.active ? (
                       <Badge tone="success">Active</Badge>

@@ -169,6 +169,13 @@
       "when": 1790455130648,
       "tag": "0023_settings_custom_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790456155138,
+      "tag": "0024_custom_field_sensitivity",
+      "breakpoints": true
     }
   ]
 }

@@ -40,6 +40,7 @@ function common(formData: FormData) {
     options: parseOptions(text(formData, "options", 4000)),
     required: formData.get("required") === "on",
     helpText: text(formData, "helpText", 400),
+    sensitivity: text(formData, "sensitivity", 40),
   };
 }
 

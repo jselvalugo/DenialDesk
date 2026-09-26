@@ -9,6 +9,7 @@ const base = {
   options: [],
   required: false,
   helpText: "",
+  sensitivity: "",
 };
 
 describe("keyFromLabel", () => {
@@ -49,13 +50,14 @@ describe("newCustomFieldSchema", () => {
 
 describe("customFieldChangesSchema", () => {
   it("applies the stored type's choice rules", () => {
-    const edit = { label: "Tier", options: [], required: true, helpText: "" };
+    const edit = { label: "Tier", options: [], required: true, helpText: "", sensitivity: "" };
     expect(customFieldChangesSchema.safeParse({ ...edit, fieldType: "select" }).success).toBe(false);
     expect(customFieldChangesSchema.parse({ ...edit, fieldType: "number" })).toEqual({
       label: "Tier",
       options: [],
       required: true,
       helpText: null,
+      sensitivity: null,
     });
   });
 });
@@ -75,5 +77,13 @@ describe("choice limits", () => {
     const many = Array.from({ length: 51 }, (_, i) => `C${i}`);
     expect(newCustomFieldSchema.safeParse({ ...select, options: many }).success).toBe(false);
     expect(newCustomFieldSchema.safeParse({ ...select, options: ["x".repeat(61)] }).success).toBe(false);
+  });
+});
+
+describe("sensitivity", () => {
+  it("accepts a known category, blank as not sensitive, and refuses anything else", () => {
+    expect(newCustomFieldSchema.parse({ ...base, sensitivity: "hiv" }).sensitivity).toBe("hiv");
+    expect(newCustomFieldSchema.parse(base).sensitivity).toBeNull();
+    expect(newCustomFieldSchema.safeParse({ ...base, sensitivity: "secret" }).success).toBe(false);
   });
 });

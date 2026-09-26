@@ -32,6 +32,7 @@ function field(overrides: Partial<Record<string, unknown>> = {}): NewCustomField
     options: [],
     required: false,
     helpText: "",
+    sensitivity: "",
     ...overrides,
   });
 }
@@ -104,6 +105,7 @@ describe("custom fields", () => {
         options: [],
         required: true,
         helpText: null,
+        sensitivity: null,
       }),
     );
     expect(changed).toEqual(["label", "required"]);
@@ -162,6 +164,34 @@ describe("custom fields", () => {
         and(eq(auditEvents.entityId, row!.id), eq(auditEvents.action, "settings.custom_field_reactivated")),
       );
     expect(event).toBeDefined();
+  });
+
+  it("records sensitivity, audits a change with both categories, and the database refuses unknown ones", async () => {
+    const id = await withTenant(a, (tx) =>
+      createCustomField(tx, a, field({ entity: "denial", key: "hiv_program", sensitivity: "hiv" })),
+    );
+    const [row] = await withTenant(a, (tx) => tx.select().from(customFields).where(eq(customFields.id, id)));
+    expect(row!.sensitivity).toBe("hiv");
+    await withTenant(a, (tx) =>
+      updateCustomField(tx, a, id, row!.updatedAt.toISOString(), {
+        label: row!.label,
+        options: [],
+        required: false,
+        helpText: null,
+        sensitivity: null,
+      }),
+    );
+    const [event] = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(and(eq(auditEvents.entityId, id), eq(auditEvents.action, "settings.custom_field_updated")));
+    expect(event!.metadata).toMatchObject({ sensitivityFrom: "hiv", sensitivityTo: null });
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.update(customFields).set({ sensitivity: "secret" }).where(eq(customFields.id, id)),
+      ),
+      /SQLSTATE 23514/,
+    );
   });
 
   it("the database keeps a field's identity fixed and forbids deletes", async () => {

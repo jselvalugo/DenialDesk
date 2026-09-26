@@ -91,6 +91,7 @@ export async function createCustomField(tx: TenantTx, actor: Actor, input: NewCu
       options: input.options,
       required: input.required,
       helpText: input.helpText,
+      sensitivity: input.sensitivity,
       position: (existing?.last ?? -1) + 1,
       createdBy: actor.userId,
     })
@@ -101,7 +102,12 @@ export async function createCustomField(tx: TenantTx, actor: Actor, input: NewCu
     tenantId: actor.tenantId,
     entityType: "custom_field",
     entityId: row!.id,
-    metadata: { entity: input.entity, fieldType: input.fieldType, required: input.required },
+    metadata: {
+      entity: input.entity,
+      fieldType: input.fieldType,
+      required: input.required,
+      sensitivity: input.sensitivity,
+    },
   });
   return row!.id;
 }
@@ -134,6 +140,7 @@ export async function updateCustomField(
   if ((current.helpText ?? null) !== changes.helpText) changed.push("helpText");
   if (current.required !== changes.required) changed.push("required");
   if (current.options.join("\n") !== changes.options.join("\n")) changed.push("options");
+  if ((current.sensitivity ?? null) !== changes.sensitivity) changed.push("sensitivity");
   if (changed.length === 0) return [];
   await tx
     .update(customFields)
@@ -145,7 +152,14 @@ export async function updateCustomField(
     tenantId: actor.tenantId,
     entityType: "custom_field",
     entityId: fieldId,
-    metadata: { entity: current.entity, changed: changed.join(",") },
+    metadata: {
+      entity: current.entity,
+      changed: changed.join(","),
+      // Lowering or removing a sensitivity category is recorded with both values (enum keys only).
+      ...(changed.includes("sensitivity")
+        ? { sensitivityFrom: current.sensitivity, sensitivityTo: changes.sensitivity }
+        : {}),
+    },
   });
   return changed;
 }

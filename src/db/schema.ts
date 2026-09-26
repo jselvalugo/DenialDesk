@@ -874,6 +874,11 @@ export const customFields = pgTable(
       .default(sql`'{}'::text[]`),
     required: boolean("required").notNull().default(false),
     helpText: text("help_text"),
+    /**
+     * Sensitive category (R-3.5.1), e.g. "hiv": values are masked on screen and opening one is an
+     * audited action with a reason. Null means ordinary. Same keys as SENSITIVITY_TAGS.
+     */
+    sensitivity: text("sensitivity"),
     /** Display order within the record type (lower first). */
     position: integer("position").notNull().default(0),
     active: boolean("active").notNull().default(true),

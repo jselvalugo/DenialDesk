@@ -2,7 +2,7 @@
 
 Status: in progress (S1 done: Settings area + custom field definitions)
 Roadmap item: owner request 2026-09-26 ("Setup" becomes an enterprise-grade Settings area)
-Requirement IDs: R-5.1.2 (role-based access), R-7.2.4 (tenant isolation), R-7.5.1 (audit),
+Requirement IDs: R-3.5.1 (sensitive categories), R-5.1.2 (role-based access), R-7.2.4 (tenant isolation), R-7.5.1 (audit),
 R-9.2.1 (retention: deactivate, never delete)
 
 ## Goal
@@ -37,6 +37,15 @@ tab per section; administrators add their own fields to patients, claims, denial
 - [x] Fields are never deleted (no DELETE grant); deactivated fields are hidden from forms.
 - [x] Tenant isolation: RLS (forced) with an isolation test.
 - [x] Every create / update / deactivate / reactivate is audited with IDs and enum values only.
+- [x] An administrator can mark a field sensitive with one of the record sensitivity categories
+      (HIV, mental health, substance use (42 CFR Part 2), genetic testing, minor, reproductive
+      health); the list shows it as "Locked". Unknown categories are refused (app and database).
+      Changing or removing a category is audited with both values (enum keys only).
+- [ ] S2: values of a sensitive field are **locked** on every record: shown masked with an
+      "Open" button; opening asks for a reason (as the member ID reveal does), shows the value for
+      that view only, and writes an audit event (field ID, record ID, reason; never the value).
+      Sensitive values are left out of lists, search, exports, and snapshots unless opened.
+      Field-level encryption at rest for sensitive values and free-text types.
 - [ ] S2: record forms (patient, claim, denial, payer) render active fields and store values.
 - [ ] S3: Users and roles tab (invite, change role, disable), then Security and Notifications.
 
@@ -62,4 +71,5 @@ None.
   keep creation order for now). Custom fields on accounting tables.
 
 ## Open questions
-- Should managers be allowed to add fields, or administrators only? (Built as administrators only.)
+- Resolved 2026-09-26 (owner): administrators only create and change fields; role permissions
+  are intentionally unchanged.
