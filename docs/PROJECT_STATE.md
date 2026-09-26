@@ -84,6 +84,7 @@ _Last updated: 2026-09-26_
 |---|---|---|
 | 2026-09-26 | MVP = Florida claims + denial platform (REQUIREMENTS §12 Phase 1) | `PRODUCT_BRIEF.md`, `ROADMAP.md` |
 | 2026-09-26 | 8-agent roster instead of 11 | `AGENT_WORKFLOW.md` |
+| 2026-09-26 | App opens on the welcome page at `/` (sign-in and logo land there); Denials overview moved to `/overview` | `specs/welcome-page.md` |
 | 2026-09-26 | Stack: TypeScript, Next.js, PostgreSQL + Drizzle, Vitest, Playwright | ADR 0001 |
 | 2026-09-26 | Production on Azure, U.S. only; primary likely East US 2 (confirm at cutover) | ADR 0002 |
 | 2026-09-26 | Pre-production on Netlify, synthetic data only | ADR 0003 |
