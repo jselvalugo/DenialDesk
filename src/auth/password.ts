@@ -5,6 +5,9 @@ const N = 2 ** 17;
 const R = 8;
 const P = 1;
 const KEY_LENGTH = 64;
+const SALT_LENGTH = 16;
+/** The parameters every hash from hashPassword uses (operator hashes are held to exactly these). */
+export const SCRYPT_PARAMS = { N, R, P, KEY_LENGTH, SALT_LENGTH } as const;
 const MAX_MEM = 256 * 1024 * 1024;
 
 function derive(password: string, salt: Buffer, n: number, r: number, p: number): Promise<Buffer> {
@@ -17,7 +20,7 @@ function derive(password: string, salt: Buffer, n: number, r: number, p: number)
 
 /** Format: scrypt$N$r$p$salt$hash (base64url). */
 export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16);
+  const salt = randomBytes(SALT_LENGTH);
   const key = await derive(password, salt, N, R, P);
   return ["scrypt", N, R, P, salt.toString("base64url"), key.toString("base64url")].join("$");
 }

@@ -6,9 +6,6 @@ import { systemDb } from "@/db/client";
 import { auditEvents, users } from "@/db/schema";
 import { e2eUser, freshCode, signInOperator, signInWithPassword } from "./support";
 
-// Must match SEED_TOKEN for the preview test server (playwright.config.ts). Test-only value.
-const E2E_SETUP_CODE = "e2e-operator-setup-code-synthetic-0000000000";
-
 test.describe("demo login", () => {
   test("one click opens the demo practice without MFA", async ({ page }) => {
     await page.goto("/login");
@@ -100,14 +97,10 @@ test.describe("operator console access", () => {
     await expect(page.getByRole("main").getByRole("alert")).toContainText("Email or password is incorrect");
   });
 
-  test("setup refuses a wrong setup code", async ({ page }) => {
-    await page.goto("/operator/setup");
-    await page.getByLabel("Operator email").fill(e2eUser("operator").email);
-    await page.getByLabel("Setup code").fill(`${E2E_SETUP_CODE}-wrong`);
-    await page.getByLabel("New password", { exact: true }).fill("a synthetic operator passphrase");
-    await page.getByLabel("Confirm new password").fill("a synthetic operator passphrase");
-    await page.getByRole("button", { name: "Set up and continue" }).click();
-    await expect(page.getByRole("main").getByRole("alert")).toContainText("email or setup code is incorrect");
+  test("there is no operator setup page: the account comes only from hosting configuration", async ({
+    request,
+  }) => {
+    expect((await request.get("/operator/setup")).status()).toBe(404);
   });
 });
 

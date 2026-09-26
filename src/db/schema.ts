@@ -757,3 +757,16 @@ export const rateLimits = pgTable(
     index("rate_limits_window_idx").on(t.windowStart),
   ],
 );
+
+// ---------------------------------------------------------------------------------------------
+// Operator credentials (docs/specs/operator-login.md): fingerprints (SHA-256 of email + hash) of
+// every operator credential ever applied from hosting configuration, so a rotation only moves forward: a
+// deployment still configured with a retired hash can never re-apply it. Not tenant data; no grants
+// to the app role; accessed through the connection owner in src/auth/operator-account.ts.
+// ---------------------------------------------------------------------------------------------
+
+export const operatorCredentials = pgTable("operator_credentials", {
+  fingerprint: text("fingerprint").primaryKey(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+});
