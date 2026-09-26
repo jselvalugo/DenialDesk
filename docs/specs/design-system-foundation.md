@@ -1,5 +1,7 @@
 # Spec: Design system foundation
 
+> 2026-09-26: the `/design` page was removed at the owner's request; tokens and components remain.
+
 Status: done (2026-09-26)
 Roadmap item: `docs/ROADMAP.md` → Phase 0 → "Design system foundation + app shell"
 Requirement IDs: §11 (WCAG 2.1 AA), R-7.1.3, R-7.4.8

@@ -45,10 +45,7 @@ export interface NavVisibility {
 }
 
 /** What the menus show. Not access control: every page still enforces its own permission on the server. */
-export function navApps({
-  showRevenueCycle,
-  showSettings = false,
-}: NavVisibility): NavApp[] {
+export function navApps({ showRevenueCycle, showSettings = false }: NavVisibility): NavApp[] {
   const apps: NavApp[] = [
     {
       id: "denials",
