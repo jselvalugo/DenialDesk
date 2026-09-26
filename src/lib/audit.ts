@@ -24,6 +24,7 @@ export type AuditAction =
   | "system.demo_seeded"
   | "auth.demo_login"
   | "auth.password_changed"
+  | "security.rate_limited"
   | "operator.console_viewed"
   | "operator.practice_created"
   | "operator.practice_suspended"

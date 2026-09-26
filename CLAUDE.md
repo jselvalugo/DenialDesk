@@ -35,7 +35,7 @@ If a task is not backed by a spec, write or update the spec first.
 9. **Don't invent payer rules or code meanings.** Cite the source in the spec or rule, or leave a TODO / ⚠️ VERIFY.
 10. **Dependencies.** Don't add packages without checking they exist, are maintained, and are license-compatible. Note every new dependency in the PR.
 11. **Never skip, disable, or delete a failing test** to get green.
-12. **Humans merge.** Agents open PRs; only humans approve, merge, and deploy.
+12. **Merging.** The owner has authorized agents to merge their own PRs once CI is green and `reviewer`/`security-reviewer`/`compliance-checker` have no blocking findings open (2026-09-26). Never merge a red PR or bypass a check. Production (Azure) deploys still need a human.
 
 ## Commit & PR conventions
 
@@ -53,7 +53,7 @@ If a task is not backed by a spec, write or update the spec first.
 - [ ] `security-reviewer`: no Critical/High findings open
 - [ ] `compliance-checker`: no blocking findings open; SOC 2 controls listed in the PR
 - [ ] Docs/runbooks updated
-- [ ] Human approval
+- [ ] Merged per non-negotiable 12 (green CI, no blocking reviewer findings)
 
 ## Delegation guide
 

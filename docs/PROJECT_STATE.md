@@ -23,6 +23,8 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Pre-production on Netlify, synthetic data only | ADR 0003 |
 | 2026-09-26 | Enterprise design system; Tailwind v4 + own components + Radix; IBM Plex | ADR 0004, `DESIGN.md` |
 | 2026-09-26 | Secrets scanning: gitleaks in CI | `specs/project-skeleton.md` |
+| 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
+| 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.

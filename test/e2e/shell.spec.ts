@@ -49,9 +49,10 @@ test("pages send a nonce-based Content-Security-Policy and load without violatio
 });
 
 test("the preview seed endpoint rejects requests without the secret token", async ({ request }) => {
-  expect((await request.post("/api/preview/seed")).status()).toBe(404);
+  // 404 without a valid token; 429 once this network exceeds the endpoint's rate limit.
+  expect([404, 429]).toContain((await request.post("/api/preview/seed")).status());
   const wrong = await request.post("/api/preview/seed", {
     headers: { authorization: `Bearer ${"w".repeat(40)}` },
   });
-  expect(wrong.status()).toBe(404);
+  expect([404, 429]).toContain(wrong.status());
 });

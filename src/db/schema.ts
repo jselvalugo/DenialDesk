@@ -9,6 +9,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -364,5 +365,24 @@ export const auditEvents = pgTable(
   (t) => [
     index("audit_events_tenant_time_idx").on(t.tenantId, t.occurredAt),
     index("audit_events_entity_idx").on(t.entityType, t.entityId),
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------
+// Rate limiting (R-7.4.7): global counters, not tenant data. IPs are stored only as salted hashes.
+// No grants to the app role; accessed through the connection owner in src/lib/rate-limit.ts.
+// ---------------------------------------------------------------------------------------------
+
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    bucket: text("bucket").notNull(),
+    keyHash: text("key_hash").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    hits: integer("hits").notNull().default(1),
+  },
+  (t) => [
+    primaryKey({ columns: [t.bucket, t.keyHash, t.windowStart] }),
+    index("rate_limits_window_idx").on(t.windowStart),
   ],
 );

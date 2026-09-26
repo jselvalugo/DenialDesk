@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { seedDemoPractice } from "@/db/demo";
 import { auditSystem } from "@/lib/audit";
 import { isProduction } from "@/lib/env";
+import { limitCurrentRequest } from "@/lib/rate-limit";
 
 // Pre-production only (ADR 0003): seeds the synthetic demo practice where the database is only
 // reachable from inside the platform (Netlify Database). Locked three ways: 404 in production,
@@ -20,6 +21,10 @@ function authorized(request: Request): boolean {
 
 export async function POST(request: Request) {
   if (isProduction()) return new Response(null, { status: 404 });
+  const limited = await limitCurrentRequest("seed");
+  if (!limited.allowed) {
+    return new Response(null, { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } });
+  }
   if (!authorized(request)) return new Response(null, { status: 404 });
 
   const email = process.env.SEED_ADMIN_EMAIL;

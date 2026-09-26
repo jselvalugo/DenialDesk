@@ -22,6 +22,7 @@ Site: https://denialdesk.netlify.app
   | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Demo admin account created by the seed (password secret) |
   | `DEMO_LOGIN_ENABLED` | `true` shows "Explore the demo practice" on sign-in (ignored in production) |
   | `PLATFORM_OPERATOR_EMAIL` | The one account allowed into the platform console at `/operator` |
+  | `RATE_LIMIT_DEMO` / `RATE_LIMIT_SIGNIN` / `RATE_LIMIT_MFA` | Optional overrides for per-network limits (defaults 10/10 min, 30/15 min, 30/15 min) |
 
   If `APP_ENV` is missing the app still treats itself as non-production — safe by default.
 - **Access:** Netlify password protection is on for the whole site, in front of the app's own

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { systemDb } from "@/db/client";
 import { memberships, tenants, users } from "@/db/schema";
 import { auditSystem } from "@/lib/audit";
+import { limitCurrentRequest, retryMessage, type Bucket, type RateLimitResult } from "@/lib/rate-limit";
 import { decryptField } from "@/lib/crypto/field";
 import { decoyHash, hashPassword, passwordProblem, verifyPassword } from "./password";
 import { LOCKOUT_MS, MAX_FAILED_ATTEMPTS } from "./policy";
@@ -16,6 +17,11 @@ import { demoLoginEnabled } from "@/lib/env";
 
 export interface FormState {
   error?: string;
+}
+
+async function rateLimited(bucket: Bucket, what: string, result: RateLimitResult): Promise<FormState> {
+  await auditSystem({ action: "security.rate_limited", ipAddress: await clientIp(), metadata: { bucket } });
+  return { error: retryMessage(what, result) };
 }
 
 // One message for wrong password, unknown account, and locked account, so responses never reveal
@@ -73,6 +79,8 @@ const loginSchema = z.object({
 export async function signIn(_: FormState, formData: FormData): Promise<FormState> {
   const parsed = loginSchema.safeParse({ email: formData.get("email"), password: formData.get("password") });
   if (!parsed.success) return { error: "Enter your email and password." };
+  const limited = await limitCurrentRequest("sign_in");
+  if (!limited.allowed) return rateLimited("sign_in", "sign-in attempts", limited);
 
   const [user] = await systemDb()
     .select()
@@ -126,6 +134,8 @@ async function checkCode(formData: FormData, enrolling: boolean): Promise<FormSt
   if (!session) redirect("/login");
   if (session.mfaVerified) redirect("/");
 
+  const limited = await limitCurrentRequest("mfa");
+  if (!limited.allowed) return rateLimited("mfa", "verification attempts", limited);
   const parsed = codeSchema.safeParse({ code: formData.get("code") });
   if (!parsed.success) return { error: "Enter the 6-digit code from your authenticator app." };
 
@@ -211,6 +221,8 @@ export async function keepSessionAlive(): Promise<boolean> {
  */
 export async function signInDemo(): Promise<FormState> {
   if (!demoLoginEnabled()) return { error: "The demo isn't available here." };
+  const limited = await limitCurrentRequest("demo_login");
+  if (!limited.allowed) return rateLimited("demo_login", "demo sessions", limited);
   const { tenantId, userId } = await ensureDemoPractice();
   await createSession(userId, { authMethod: "demo", tenantId });
   await auditSystem({
