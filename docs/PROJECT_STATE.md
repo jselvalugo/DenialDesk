@@ -74,7 +74,6 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
-- Pin GitHub Actions to commit SHAs (Dependabot now keeps them current).
 
 ## Lessons / conventions learned
 - Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
@@ -91,4 +90,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   `postgres` user, with the data dir somewhere that user can reach.
 - Playwright in this cloud env: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.
 - Azure has no Florida region; § 408.051(3) only requires continental U.S. storage.
+- CI actions are pinned to full commit SHAs with a `# vX.Y.Z` comment (Dependabot bumps both);
+  resolve annotated tags to the commit (`git ls-remote … 'refs/tags/vX.Y.Z^{}'`), not the tag object.
+  Checkout runs with `persist-credentials: false`; gitleaks runs with PR comments off (token is `contents: read`).
 - Local environment: Node 22 is installed; CI and Docker use Node 24 LTS. `engines` allows ≥ 22.
