@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DatabaseError } from "@/db/tenant";
+import { onRequestError } from "@/instrumentation";
 import { buildLogRecord } from "./log";
 import { requestErrorFields } from "./request-error";
 
@@ -34,8 +35,59 @@ describe("requestErrorFields", () => {
     expect(fields).toEqual({ route: "unknown", routeType: "unknown", errorName: "unknown" });
   });
 
+  it("logs a SQLSTATE-looking code only for sanitized database errors", () => {
+    const epipe = Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+    expect(requestErrorFields(epipe, context)).not.toHaveProperty("status");
+  });
+
   it("handles thrown non-errors", () => {
     expect(requestErrorFields(undefined, context).errorName).toBe("unknown");
     expect(requestErrorFields(NAME, context)).not.toHaveProperty("status");
+  });
+});
+
+describe("onRequestError", () => {
+  const error = Object.assign(new DatabaseError(`Integrity ${NAME}`, "23505"), { digest: "123" });
+  const request = { path: `/patients?name=${NAME}`, method: "POST", headers: {} };
+  const errorContext = {
+    routerKind: "App Router",
+    routePath: "/patients",
+    routeType: "action",
+    revalidateReason: undefined,
+  } as const;
+  let stderr: string[];
+  beforeEach(() => {
+    stderr = [];
+    vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+      stderr.push(String(chunk));
+      return true;
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it("writes one record with route, digest, error name and SQLSTATE only", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    await onRequestError(error, request, errorContext);
+    expect(stderr).toHaveLength(1);
+    const record = JSON.parse(stderr[0]!) as Record<string, unknown>;
+    expect(record).toMatchObject({
+      level: "error",
+      event: "request.unhandled_error",
+      route: "/patients",
+      routeType: "action",
+      digest: "123",
+      errorName: "DatabaseError",
+      status: "23505",
+    });
+    expect(stderr[0]).not.toContain(NAME);
+  });
+
+  it("does nothing outside the Node.js runtime", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "edge");
+    await onRequestError(error, request, errorContext);
+    expect(stderr).toHaveLength(0);
   });
 });

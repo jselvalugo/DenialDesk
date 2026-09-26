@@ -204,4 +204,34 @@ describe("database errors from tenant queries", () => {
       expect((error as Error).cause).toBeUndefined();
     }
   });
+
+  // Postgres puts row values in `detail` ("Key (tenant_id, mrn)=(…)", "Failing row contains (…)").
+  const leaks = (error: unknown, values: string[]) => {
+    const e = error as Error;
+    const text = [e.message, e.stack, JSON.stringify(e), String(e.cause)].join("\n");
+    return [...values, "Key (", "Failing row"].filter((value) => text.includes(value));
+  };
+
+  it("keep only SQLSTATE and constraint for a unique violation (23505)", async () => {
+    const [existing] = await withTenant(a, (tx) => tx.select().from(patients).limit(1));
+    const name = "Synthia Duplicatepatient";
+    const error = await withTenant(a, (tx) =>
+      tx.insert(patients).values({ ...existing!, id: undefined, firstName: name, createdAt: undefined }),
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("23505");
+    expect((error as DatabaseError).constraint).toBe("patients_tenant_mrn_key");
+    expect(leaks(error, [name, existing!.mrn, a.tenantId])).toEqual([]);
+  });
+
+  it("keep only SQLSTATE and constraint for a check violation (23514)", async () => {
+    const name = "SYN-GL-Synthia Checkpatient";
+    const error = await withTenant(a, (tx) =>
+      tx.insert(glAccounts).values({ tenantId: a.tenantId, number: "SYN-9999", name, kind: "ar" }),
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("23514");
+    expect((error as DatabaseError).constraint).toBe("gl_accounts_ar_routing");
+    expect(leaks(error, [name, "SYN-9999", a.tenantId])).toEqual([]);
+  });
 });

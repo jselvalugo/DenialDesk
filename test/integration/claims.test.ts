@@ -369,25 +369,25 @@ describe("claim_versions tenant isolation (R-7.2.4)", () => {
 
   it("rejects a version in its own tenant that points at another tenant's claim", async () => {
     const { claim } = await draftClaim(b);
-    await expectDbError(
-      withTenant(a, (tx) =>
-        tx.insert(claimVersions).values({
-          tenantId: a.tenantId,
-          claimId: claim.id,
-          version: claim.version + 1,
-          snapshot: {
-            serviceDate: claim.serviceDate,
-            diagnosisCodes: [],
-            billedCents: 0,
-            status: "draft",
-            lines: [],
-          },
-          reason: "Cross-tenant attempt",
-        }),
-      ),
-      // Integrity violations keep only SQLSTATE 23503 (foreign key) and the constraint name.
-      /SQLSTATE 23503\) on "claim_versions_claim_fk"/,
-    );
+    const error = await withTenant(a, (tx) =>
+      tx.insert(claimVersions).values({
+        tenantId: a.tenantId,
+        claimId: claim.id,
+        version: claim.version + 1,
+        snapshot: {
+          serviceDate: claim.serviceDate,
+          diagnosisCodes: [],
+          billedCents: 0,
+          status: "draft",
+          lines: [],
+        },
+        reason: "Cross-tenant attempt",
+      }),
+    ).catch((e: unknown) => e);
+    // Integrity violations keep only the SQLSTATE (23503: foreign key) and the constraint name.
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("23503");
+    expect((error as DatabaseError).constraint).toBe("claim_versions_claim_fk");
   });
 
   it("can't correct another tenant's claim", async () => {

@@ -12,8 +12,9 @@ export function register() {
 
 /**
  * One structured record per unhandled server error: route, digest, error name and SQLSTATE only.
- * Next.js still logs the error itself, so messages are made PHI-free at the source
- * (`sanitizeDatabaseError`, src/db/tenant.ts).
+ * Next.js still logs the error itself, so its message must be PHI-free where it is thrown. Errors
+ * from `withTenant` (all practice data) are sanitized by `sanitizeDatabaseError`; direct
+ * `systemDb()` errors are not yet (see docs/PROJECT_STATE.md).
  */
 export const onRequestError: Instrumentation.onRequestError = (error, _request, context) => {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;

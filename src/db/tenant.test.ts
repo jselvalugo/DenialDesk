@@ -102,11 +102,11 @@ describe("sanitizeDatabaseError: integrity violations (class 23)", () => {
     expect((sanitized as { code?: string }).code === "23505").toBe(true);
   });
 
-  it("logs only status and constraint", () => {
+  it("logs only status and constraint, at warn (callers often handle these races)", () => {
     sanitizeDatabaseError(drizzleError(uniqueViolation()));
     const record = JSON.parse(stderr.join("")) as Record<string, unknown>;
     expect(Object.keys(record).sort()).toEqual(["constraint", "event", "level", "status", "ts"]);
-    expect(record).toMatchObject({ event: "db.query_failed", status: "23505" });
+    expect(record).toMatchObject({ event: "db.query_failed", level: "warn", status: "23505" });
   });
 });
 
@@ -116,6 +116,9 @@ describe("sanitizeDatabaseError: other errors", () => {
     const sanitized = sanitizeDatabaseError(drizzleError(error)) as DatabaseError;
     expect(sanitized.code).toBe("22007");
     expect(sanitized.message).toBe("Database query failed");
+    expect(sanitized.cause).toBeUndefined();
+    expect(surface(sanitized)).not.toContain(NAME);
+    expect(stderr.join("")).not.toContain(NAME);
   });
 
   it("keeps the PostgreSQL message (never detail or params) for other SQLSTATEs", () => {
@@ -137,6 +140,13 @@ describe("sanitizeDatabaseError: other errors", () => {
     expect(sanitized.message).toBe("Database query failed");
     expect(surface(sanitized)).not.toContain(NAME);
     expect(surface(sanitized)).not.toContain(MRN);
+  });
+
+  it("passes through a non-database error whose cause has a non-SQLSTATE code", () => {
+    const error = new Error("fetch failed", {
+      cause: Object.assign(new Error("refused"), { code: "ECONNREFUSED" }),
+    });
+    expect(sanitizeDatabaseError(error)).toBe(error);
   });
 
   it("passes non-database errors through and does not re-wrap a sanitized one", () => {

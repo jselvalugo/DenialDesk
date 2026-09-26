@@ -98,6 +98,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
+- Direct `systemDb()` errors (auth, operator, practices, audit, rate-limit) are not sanitized:
+  a failed query logs Drizzle's `params`, which can hold staff emails and password hashes
+  (PR #28 reviews; SOC 2 CC6.1). Fix before production with a sanitizing system wrapper.
+- DB messages outside SQLSTATE classes 22/23 (e.g. P0001 trigger `RAISE`) are kept verbatim; today
+  they carry only IDs, versions and statuses. Consider an allow-list of codes (PR #28 reviews).
 
 ## Lessons / conventions learned
 - Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
@@ -123,7 +128,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   not-null) keeps only `code` + `constraint` (Postgres puts row values in `detail`). Match integrity
   errors on `.code` / `.constraint`, never on message text.
 - `onRequestError` (src/instrumentation.ts) logs route template, digest, error name and SQLSTATE
-  only; Next.js still logs the error itself, so error messages must be PHI-free at the source.
+  only; Next.js still logs the error itself, so error messages must be PHI-free where thrown.
+  `log.ts` checks the values of `route`/`routeType`/`digest`/`errorName`/`constraint` by pattern.
 - Local test DB without Docker: `initdb`/`pg_ctl` from `/usr/lib/postgresql/16/bin` as the
   `postgres` user, with the data dir somewhere that user can reach.
 - Playwright in this cloud env: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.

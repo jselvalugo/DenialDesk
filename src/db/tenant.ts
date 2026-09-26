@@ -1,5 +1,5 @@
 import { DrizzleQueryError, sql } from "drizzle-orm";
-import { log } from "@/lib/log";
+import { LOG_VALUE_PATTERNS, log } from "@/lib/log";
 import { systemDb, type Database } from "./client";
 
 export type TenantTx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -46,7 +46,7 @@ export class DatabaseError extends Error {
 
 const SQLSTATE = /^[0-9A-Z]{5}$/;
 // Constraint and index names are schema identifiers; anything else is not trusted into a message.
-const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_$]{0,62}$/;
+const IDENTIFIER = LOG_VALUE_PATTERNS.constraint!;
 
 interface PgErrorFields {
   code?: unknown;
@@ -54,15 +54,12 @@ interface PgErrorFields {
   constraint?: unknown;
 }
 
+const isSqlState = (code: unknown): code is string => typeof code === "string" && SQLSTATE.test(code);
+
 /** A node-postgres server error thrown without Drizzle's wrapper (it carries `severity` and a SQLSTATE). */
 function isBarePgError(error: unknown): error is Error & PgErrorFields {
   const fields = error as { code?: unknown; severity?: unknown } | null;
-  return (
-    error instanceof Error &&
-    typeof fields?.severity === "string" &&
-    typeof fields.code === "string" &&
-    SQLSTATE.test(fields.code)
-  );
+  return error instanceof Error && typeof fields?.severity === "string" && isSqlState(fields.code);
 }
 
 /**
@@ -82,11 +79,11 @@ export function sanitizeDatabaseError(error: unknown): unknown {
   let pg: PgErrorFields | undefined;
   if (error instanceof DrizzleQueryError) pg = (error.cause ?? {}) as PgErrorFields;
   else if (isBarePgError(error)) pg = error;
-  else if (error instanceof Error && typeof (error.cause as PgErrorFields | undefined)?.code === "string")
+  else if (error instanceof Error && isSqlState((error.cause as PgErrorFields | undefined)?.code))
     pg = error.cause as PgErrorFields;
   else return error;
 
-  const code = typeof pg.code === "string" && SQLSTATE.test(pg.code) ? pg.code : undefined;
+  const code = isSqlState(pg.code) ? pg.code : undefined;
   const constraint =
     typeof pg.constraint === "string" && IDENTIFIER.test(pg.constraint) ? pg.constraint : undefined;
   let message = "Database query failed";
@@ -95,6 +92,8 @@ export function sanitizeDatabaseError(error: unknown): unknown {
   } else if (code && !code.startsWith("22") && typeof pg.message === "string") {
     message = pg.message;
   }
-  log.error("db.query_failed", { status: code ?? "unknown", ...(constraint ? { constraint } : {}) });
+  // Integrity violations are often expected races that callers handle (e.g. a 23505 retry): warn.
+  const level = code?.startsWith("23") ? "warn" : "error";
+  log[level]("db.query_failed", { status: code ?? "unknown", ...(constraint ? { constraint } : {}) });
   return new DatabaseError(message, code, constraint);
 }
