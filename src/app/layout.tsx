@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { connection } from "next/server";
-import { AppShell } from "@/components/shell/AppShell";
-import { appEnv } from "@/lib/env";
+import { PreviewBanner } from "@/components/shell/PreviewBanner";
+import { appEnv, isProduction } from "@/lib/env";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -32,8 +32,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   await connection();
   return (
     <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
-      <body>
-        <AppShell appEnv={appEnv()}>{children}</AppShell>
+      <body className="flex h-dvh flex-col">
+        {!isProduction() && <PreviewBanner appEnv={appEnv()} />}
+        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
       </body>
     </html>
   );

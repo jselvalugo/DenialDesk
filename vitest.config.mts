@@ -1,7 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-const alias = { "@": fileURLToPath(new URL("./src", import.meta.url)) };
+const alias = {
+  "@rules": fileURLToPath(new URL("./rules", import.meta.url)),
+  "@": fileURLToPath(new URL("./src", import.meta.url)),
+};
 
 export default defineConfig({
   test: {
