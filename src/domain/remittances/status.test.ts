@@ -59,3 +59,13 @@ describe("isBalanced", () => {
     );
   });
 });
+
+describe("remittance permissions (R-5.1.2)", () => {
+  it("lets billing roles post but only admins and managers void", async () => {
+    const { canPostRemittances, canVoidRemittances } = await import("@/auth/permissions");
+    expect(canPostRemittances("specialist")).toBe(true);
+    expect(canPostRemittances("compliance")).toBe(false);
+    expect(canVoidRemittances("specialist")).toBe(false);
+    expect(canVoidRemittances("manager")).toBe(true);
+  });
+});

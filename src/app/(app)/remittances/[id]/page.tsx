@@ -10,6 +10,8 @@ import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { Money } from "@/components/ui/Money";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
+import { CATEGORY_LABELS } from "@/domain/carc";
+import { DENIAL_STATUSES } from "@/domain/denial-status";
 import { getRemittance } from "@/domain/remittances/queries";
 import {
   CLP_STATUS_LABELS,
@@ -220,6 +222,31 @@ export default async function RemittancePage({ params }: { params: Promise<{ id:
           {ready && !canPost && !canVoid && (
             <Panel title="Actions">
               <p className="text-body text-muted">Your role can view remittances but not post them.</p>
+            </Panel>
+          )}
+          {detail.captured.length > 0 && (
+            <Panel
+              title="Denials captured"
+              description="Added to the denial queue when this remittance was posted."
+            >
+              <ul className="flex flex-col gap-3">
+                {detail.captured.map((d) => (
+                  <li key={d.id} className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <Link href={`/denials/${d.id}`} className="font-medium text-link hover:underline">
+                        {CATEGORY_LABELS[d.category]}
+                      </Link>
+                      <span className="block font-mono text-label text-muted">
+                        {d.claimNumber} · {d.groupCode}-{d.carc}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <Money cents={d.deniedCents} className="block" />
+                      <Badge tone={DENIAL_STATUSES[d.status].tone}>{DENIAL_STATUSES[d.status].label}</Badge>
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </Panel>
           )}
           <Panel

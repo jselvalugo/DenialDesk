@@ -89,7 +89,12 @@ export async function postRemittanceAction(
     );
     revalidatePath(`/remittances/${id.data}`);
     revalidatePath("/remittances");
-    return { done: `Posted to ${result.claims} claim${result.claims === 1 ? "" : "s"}.` };
+    const denials = result.denialsCaptured;
+    return {
+      done: `Posted to ${result.claims} claim${result.claims === 1 ? "" : "s"}${
+        denials > 0 ? `; ${denials} denial${denials === 1 ? "" : "s"} added to the queue` : ""
+      }.`,
+    };
   } catch (error) {
     if (error instanceof RemittanceError) return { error: error.message };
     throw error;

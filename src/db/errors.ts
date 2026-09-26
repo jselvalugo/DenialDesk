@@ -72,6 +72,8 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
   { format: "remittance % is evidence; only its status changes", args: ["uuid"] },
   { format: "remittance % is final", args: ["uuid"] },
   { format: "remittance % changed status without a history row", args: ["uuid"] },
+  { format: "remittance % already has its loaded event", args: ["uuid"] },
+  { format: "remittance % is not ready to post", args: ["uuid"] },
   { format: "a correction must point at an original response of the same claim", args: [] },
   { format: "claim_versions.changed_by must be the current user", args: [] },
   { format: "claims.created_at cannot change", args: [] },

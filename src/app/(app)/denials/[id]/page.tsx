@@ -113,6 +113,17 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
           <p className="mt-1 text-body text-muted">
             {CATEGORY_LABELS[denial.category]} denial · {payer.name} · notice dated{" "}
             {formatDate(denial.noticeDate)}
+            {denial.remittanceId && (
+              <>
+                {" · "}
+                <Link
+                  href={`/remittances/${denial.remittanceId}`}
+                  className="font-medium text-link hover:underline"
+                >
+                  captured from remittance
+                </Link>
+              </>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-4">

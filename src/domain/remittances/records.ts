@@ -1,10 +1,14 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { appealDeadline } from "@rules/deadlines";
+import type { Regime } from "@rules/types";
 import type { TenantTx } from "@/db/tenant";
 import {
   claimLines,
   claims,
   claimVersions,
+  denials,
   payers,
+  type RemittanceAdjustment,
   promptPayResponses,
   remittanceClaims,
   remittanceEvents,
@@ -14,7 +18,8 @@ import { snapshotOf } from "@/domain/claims/correction";
 import { isUnsubmitted } from "@/domain/claims/status";
 import type { Remittance835 } from "@/edi/x12/835";
 import { audit } from "@/lib/audit";
-import { postedClaimStatus } from "./status";
+import { CARC } from "@/domain/carc";
+import { isExpected, postedClaimStatus } from "./status";
 
 export class RemittanceError extends Error {
   constructor(message: string) {
@@ -62,14 +67,18 @@ export async function loadRemittance(
       `No payer in this practice has EDI payer ID ${parsed.payer.ediPayerId}. Add the payer first, then upload again.`,
     );
   }
-  const reversals = parsed.claims.filter((c) => c.statusCode === "22" || c.paidCents < 0);
-  if (reversals.length > 0) {
+  const badReversals = parsed.claims.filter(
+    (c) => (c.statusCode === "22") !== c.paidCents < 0 && c.paidCents !== 0,
+  );
+  if (badReversals.length > 0) {
     throw new RemittanceError(
-      `This file reverses earlier payments (${nameSome(reversals.map((c) => c.claimNumber))}). Reversals can't be posted yet; post them by hand in the practice management system.`,
+      `Negative payments must be reversals (CLP02 22) and reversals must be negative: ${nameSome(badReversals.map((c) => c.claimNumber))}.`,
     );
   }
   const numbers = parsed.claims.map((c) => c.claimNumber);
-  const repeated = numbers.filter((n, i) => numbers.indexOf(n) !== i);
+  // A reversal and its corrected claim share a claim number; anything else repeated is an error.
+  const keys = parsed.claims.map((c) => `${c.claimNumber}|${c.statusCode === "22" ? "R" : "P"}`);
+  const repeated = keys.filter((k, i) => keys.indexOf(k) !== i).map((k) => k.split("|")[0]!);
   if (repeated.length > 0) {
     throw new RemittanceError(
       `Claims appear more than once in this file: ${nameSome([...new Set(repeated)])}.`,
@@ -91,7 +100,7 @@ export async function loadRemittance(
     .from(claims)
     .where(and(eq(claims.payerId, payer.id), inArray(claims.claimNumber, numbers)));
   const byNumber = new Map(found.map((c) => [c.claimNumber, c]));
-  const missing = numbers.filter((n) => !byNumber.has(n));
+  const missing = [...new Set(numbers)].filter((n) => !byNumber.has(n));
   if (missing.length > 0) {
     throw new RemittanceError(`No claim to this payer matches ${nameSome(missing)}. Nothing was loaded.`);
   }
@@ -158,7 +167,7 @@ export async function loadRemittance(
 export async function postRemittance(
   tx: TenantTx,
   input: { tenantId: string; userId: string; remittanceId: string },
-): Promise<{ claims: number }> {
+): Promise<{ claims: number; denialsCaptured: number }> {
   const [remittance] = await tx
     .select()
     .from(remittances)
@@ -176,7 +185,19 @@ export async function postRemittance(
     .from(remittanceClaims)
     .where(eq(remittanceClaims.remittanceId, remittance.id))
     .orderBy(asc(remittanceClaims.createdAt), asc(remittanceClaims.id));
+  // Reversals first, so a corrected claim in the same file posts on top of the reversed total.
+  payments.sort((x, y) => Number(y.statusCode === "22") - Number(x.statusCode === "22"));
   const reason = `Posted from remittance ${remittance.traceNumber}`;
+  const claimsPaid = payments.reduce((sum, p) => sum + p.paidCents, 0);
+  if (claimsPaid - remittance.providerAdjustmentCents !== remittance.totalPaidCents) {
+    throw new RemittanceError("This remittance doesn't balance, so it can't be posted.");
+  }
+  const [payer] = await tx
+    .select({ regime: payers.regime, appealWindowDays: payers.appealWindowDays })
+    .from(payers)
+    .where(eq(payers.id, remittance.payerId))
+    .limit(1);
+  let captured = 0;
 
   for (const payment of payments) {
     const [claim] = await tx
@@ -190,11 +211,17 @@ export async function postRemittance(
       throw new RemittanceError(`Claim ${claim.claimNumber} is ${claim.status} and can't take a payment.`);
     }
     const paidTotal = claim.paidCents + payment.paidCents;
-    const status = postedClaimStatus({
-      statusCode: payment.statusCode,
-      paidTotalCents: paidTotal,
-      adjustments: payment.adjustments,
-    });
+    // A reversal takes the claim back to "accepted" until the payer's corrected claim posts.
+    const status =
+      payment.statusCode === "22"
+        ? paidTotal > 0
+          ? "partially_paid"
+          : "acknowledged"
+        : postedClaimStatus({
+            statusCode: payment.statusCode,
+            paidTotalCents: paidTotal,
+            adjustments: payment.adjustments,
+          });
     const lines = await tx
       .select()
       .from(claimLines)
@@ -217,6 +244,15 @@ export async function postRemittance(
       .update(claims)
       .set({ status, paidCents: paidTotal, version, updatedAt: new Date() })
       .where(eq(claims.id, claim.id));
+    if (payment.statusCode === "22") {
+      await recordReversal(tx, {
+        ...input,
+        claimId: claim.id,
+        remittance,
+        reversedCents: -payment.paidCents,
+      });
+      continue;
+    }
     await tx.insert(promptPayResponses).values({
       tenantId: input.tenantId,
       claimId: claim.id,
@@ -230,6 +266,15 @@ export async function postRemittance(
       cents: Math.max(0, payment.paidCents),
       remittanceId: remittance.id,
       recordedBy: input.userId,
+    });
+    captured += await captureDenials(tx, {
+      tenantId: input.tenantId,
+      claimId: claim.id,
+      remittanceId: remittance.id,
+      noticeDate: remittance.paymentDate,
+      payer: payer!,
+      adjustments: payment.adjustments,
+      rarcs: payment.rarcs,
     });
   }
 
@@ -250,9 +295,13 @@ export async function postRemittance(
     tenantId: input.tenantId,
     entityType: "remittance",
     entityId: remittance.id,
-    metadata: { claims: payments.length, claimIds: payments.map((p) => p.claimId).join(",") },
+    metadata: {
+      claims: payments.length,
+      claimIds: payments.map((p) => p.claimId).join(","),
+      denialsCaptured: captured,
+    },
   });
-  return { claims: payments.length };
+  return { claims: payments.length, denialsCaptured: captured };
 }
 
 /** Voids a remittance loaded in error, before posting. It stays on file, marked void, with the reason. */
@@ -295,4 +344,84 @@ export async function voidRemittance(
     entityId: remittance.id,
     reason: "remittance_void",
   });
+}
+
+/**
+ * A reversal takes back an earlier payment: the payment response it reverses is marked recorded in
+ * error on the prompt-pay clock (the matching amount, else the latest), so the clock and interest
+ * follow the money. Nothing is deleted.
+ */
+async function recordReversal(
+  tx: TenantTx,
+  input: {
+    tenantId: string;
+    userId: string;
+    claimId: string;
+    remittance: { id: string; traceNumber: string; paymentDate: string };
+    reversedCents: number;
+  },
+) {
+  const responses = await tx
+    .select()
+    .from(promptPayResponses)
+    .where(eq(promptPayResponses.claimId, input.claimId))
+    .orderBy(desc(promptPayResponses.responseDate), desc(promptPayResponses.createdAt));
+  const voided = new Set(responses.flatMap((r) => (r.voidsResponseId ? [r.voidsResponseId] : [])));
+  const open = responses.filter((r) => r.kind === "payment" && !r.voidsResponseId && !voided.has(r.id));
+  const target = open.find((r) => r.cents === input.reversedCents) ?? open[0];
+  if (!target) return;
+  await tx.insert(promptPayResponses).values({
+    tenantId: input.tenantId,
+    claimId: input.claimId,
+    kind: "payment",
+    responseDate: target.responseDate,
+    note: `Reversed by remittance ${input.remittance.traceNumber}`,
+    voidsResponseId: target.id,
+    remittanceId: input.remittance.id,
+    recordedBy: input.userId,
+  });
+}
+
+/**
+ * Denials captured from a posted claim payment: one per adjustment the practice didn't expect
+ * (see isExpected). The category is DenialDesk's own ⚠️ VERIFY mapping (src/domain/carc.ts, OA-021).
+ */
+async function captureDenials(
+  tx: TenantTx,
+  input: {
+    tenantId: string;
+    claimId: string;
+    remittanceId: string;
+    noticeDate: string;
+    payer: { regime: Regime | null; appealWindowDays: number | null };
+    adjustments: RemittanceAdjustment[];
+    rarcs: string[];
+  },
+): Promise<number> {
+  const rows = input.adjustments
+    .filter((a) => !isExpected(a) && a.cents > 0)
+    .map((a) => {
+      const deadline = input.payer.regime
+        ? appealDeadline({
+            regime: input.payer.regime,
+            noticeDate: input.noticeDate,
+            payerAppealWindowDays: input.payer.appealWindowDays,
+          })
+        : null;
+      return {
+        tenantId: input.tenantId,
+        claimId: input.claimId,
+        groupCode: a.group,
+        carc: a.carc,
+        rarcs: input.rarcs,
+        category: CARC[a.carc]?.category ?? ("other" as const),
+        deniedCents: a.cents,
+        noticeDate: input.noticeDate,
+        appealDeadline: deadline?.date ?? null,
+        appealDeadlineBasis: deadline?.basis ?? null,
+        remittanceId: input.remittanceId,
+      };
+    });
+  if (rows.length > 0) await tx.insert(denials).values(rows);
+  return rows.length;
 }
