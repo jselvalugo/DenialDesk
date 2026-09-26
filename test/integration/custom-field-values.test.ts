@@ -2,23 +2,46 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
-import { auditEvents, claims, customFieldValues, denials, patients } from "@/db/schema";
+import {
+  auditEvents,
+  claims,
+  customFieldValues,
+  customFieldValueVersions,
+  denials,
+  memberships,
+  patients,
+  users,
+} from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { withTenant } from "@/db/tenant";
+import type { Role } from "@/auth/session";
 import { generateDataset } from "@/domain/synthetic/generator";
 import { newCustomFieldSchema, type NewCustomField } from "@/domain/settings/custom-fields";
 import { createCustomField } from "@/domain/settings/queries";
 import {
+  CustomFieldValueError,
   loadValuesForRecord,
   revealCustomFieldValue,
   saveValuesForRecord,
 } from "@/domain/custom-fields/values";
 import { expectDbError } from "./helpers";
 
-// docs/specs/settings-and-custom-fields.md S2; ADR 0007; docs/threat-models/custom-field-values.md.
-// Values are never queryable, only reachable through this domain module and always audited.
+// docs/specs/settings-and-custom-fields.md S2; ADR 0007 (+ addendum 2026-09-26);
+// docs/threat-models/custom-field-values.md. Values are never queryable, only reachable through
+// this domain module and always audited.
 
-type Ctx = { tenantId: string; userId: string };
+type Ctx = { tenantId: string; userId: string; role: Role };
+
+/** Adds a second user with the given role to an existing (already-seeded) practice. */
+async function addUser(tenantId: string, role: Role, label: string): Promise<Ctx> {
+  const suffix = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const [row] = await systemDb()
+    .insert(users)
+    .values({ email: `cfv-${suffix}@synthetic.test`, displayName: `CFV ${label}`, passwordHash: "not-used" })
+    .returning();
+  await systemDb().insert(memberships).values({ tenantId, userId: row!.id, role });
+  return { tenantId, userId: row!.id, role };
+}
 
 function field(overrides: Partial<Record<string, unknown>> = {}): NewCustomField {
   return newCustomFieldSchema.parse({
@@ -43,7 +66,7 @@ async function seededPractice(label: string, seed: number) {
     users: [{ email: `cfv-${suffix}@synthetic.test`, displayName: `CFV ${label}`, role: "admin" }],
     dataset: generateDataset({ asOf: todayIn(), seed, patients: 2, claims: 4 }),
   });
-  const ctx: Ctx = { tenantId, userId: userIds[0]! };
+  const ctx: Ctx = { tenantId, userId: userIds[0]!, role: "admin" };
   const [row] = await withTenant(ctx, (tx) =>
     tx
       .select({
@@ -83,9 +106,7 @@ describe("custom field values", () => {
     );
     expect(changed).toEqual(["referring_clinic"]);
 
-    const loaded = await withTenant(a.ctx, (tx) =>
-      loadValuesForRecord(tx, a.ctx, "patient", a.patientId, { recordSensitive: false }),
-    );
+    const loaded = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "patient", a.patientId));
     expect(loaded).toEqual([
       {
         fieldId,
@@ -127,9 +148,7 @@ describe("custom field values", () => {
     await withTenant(a.ctx, (tx) =>
       saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "positive"]])),
     );
-    const loaded = await withTenant(a.ctx, (tx) =>
-      loadValuesForRecord(tx, a.ctx, "patient", a.patientId, { recordSensitive: false }),
-    );
+    const loaded = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "patient", a.patientId));
     const found = loaded.find((v) => v.fieldId === fieldId)!;
     expect(found.masked).toBe(true);
     expect(found.value).toBeUndefined();
@@ -152,17 +171,24 @@ describe("custom field values", () => {
     for (const e of events) expect(JSON.stringify(e)).not.toContain("positive");
   });
 
-  it("masks every value on a record the caller marks sensitive, even a non-sensitive field", async () => {
+  it("masks every value on a record with sensitivity tags, even a non-sensitive field (looked up internally, not from the caller)", async () => {
     const fieldId = await withTenant(a.ctx, (tx) =>
       createCustomField(tx, a.ctx, field({ key: "plain_note" })),
     );
     await withTenant(a.ctx, (tx) =>
       saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "unmasked normally"]])),
     );
-    const loaded = await withTenant(a.ctx, (tx) =>
-      loadValuesForRecord(tx, a.ctx, "patient", a.patientId, { recordSensitive: true }),
-    );
-    expect(loaded.find((v) => v.fieldId === fieldId)!.masked).toBe(true);
+    await systemDb()
+      .update(patients)
+      .set({ sensitivityTags: ["hiv"] })
+      .where(eq(patients.id, a.patientId));
+    try {
+      const loaded = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "patient", a.patientId));
+      expect(loaded.find((v) => v.fieldId === fieldId)!.masked).toBe(true);
+      expect(loaded.find((v) => v.fieldId === fieldId)!.value).toBeUndefined();
+    } finally {
+      await systemDb().update(patients).set({ sensitivityTags: [] }).where(eq(patients.id, a.patientId));
+    }
   });
 
   it("isolates tenants: cannot read, insert, or update another tenant's values", async () => {
@@ -325,11 +351,9 @@ describe("custom field values", () => {
       saveValuesForRecord(tx, a.ctx, "claim", a.claimId, new Map([[claimFieldId, "claim value"]])),
     );
     expect(
-      (
-        await withTenant(a.ctx, (tx) =>
-          loadValuesForRecord(tx, a.ctx, "claim", a.claimId, { recordSensitive: false }),
-        )
-      ).find((v) => v.fieldId === claimFieldId)?.value,
+      (await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "claim", a.claimId))).find(
+        (v) => v.fieldId === claimFieldId,
+      )?.value,
     ).toBe("claim value");
 
     if (a.denialId) {
@@ -340,11 +364,9 @@ describe("custom field values", () => {
         saveValuesForRecord(tx, a.ctx, "denial", a.denialId!, new Map([[denialFieldId, "denial value"]])),
       );
       expect(
-        (
-          await withTenant(a.ctx, (tx) =>
-            loadValuesForRecord(tx, a.ctx, "denial", a.denialId!, { recordSensitive: false }),
-          )
-        ).find((v) => v.fieldId === denialFieldId)?.value,
+        (await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "denial", a.denialId!))).find(
+          (v) => v.fieldId === denialFieldId,
+        )?.value,
       ).toBe("denial value");
     }
 
@@ -355,12 +377,246 @@ describe("custom field values", () => {
       saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[payerFieldId, "payer value"]])),
     );
     expect(
-      (
-        await withTenant(a.ctx, (tx) =>
-          loadValuesForRecord(tx, a.ctx, "payer", a.payerId, { recordSensitive: false }),
-        )
-      ).find((v) => v.fieldId === payerFieldId)?.value,
+      (await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "payer", a.payerId))).find(
+        (v) => v.fieldId === payerFieldId,
+      )?.value,
     ).toBe("payer value");
+  });
+
+  it("only roles that may reveal member IDs can reveal a sensitive value; others are refused with no decrypt", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "role_gated", sensitivity: "mental_health" })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "confidential"]])),
+    );
+    const compliance = await addUser(a.ctx.tenantId, "compliance", "compliance-reveal");
+    const before = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.value_revealed"));
+
+    const result = await withTenant(compliance, (tx) =>
+      revealCustomFieldValue(tx, compliance, {
+        fieldId,
+        entity: "patient",
+        recordId: a.patientId,
+        reason: "appeal",
+      }),
+    );
+    expect(result.value).toBeUndefined();
+    expect(result.error).toBe("Your role can't reveal custom field values.");
+
+    // No new reveal audit event: the refusal happened before any decrypt was attempted.
+    const after = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.value_revealed"));
+    expect(after.length).toBe(before.length);
+
+    // A role that may work denials (and so may reveal member IDs) can.
+    const specialist = await addUser(a.ctx.tenantId, "specialist", "specialist-reveal");
+    const allowed = await withTenant(specialist, (tx) =>
+      revealCustomFieldValue(tx, specialist, {
+        fieldId,
+        entity: "patient",
+        recordId: a.patientId,
+        reason: "appeal",
+      }),
+    );
+    expect(allowed.value).toBe("confidential");
+  });
+
+  it("refuses to reveal a field that isn't actually locked, or belongs to another entity, or is inactive", async () => {
+    const fieldId = await withTenant(
+      a.ctx,
+      (tx) => createCustomField(tx, a.ctx, field({ key: "not_locked" })), // no sensitivity
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "plain"]])),
+    );
+    const notLocked = await withTenant(a.ctx, (tx) =>
+      revealCustomFieldValue(tx, a.ctx, {
+        fieldId,
+        entity: "patient",
+        recordId: a.patientId,
+        reason: "other",
+      }),
+    );
+    expect(notLocked.error).toBe("This value isn't locked.");
+
+    const wrongEntity = await withTenant(a.ctx, (tx) =>
+      revealCustomFieldValue(tx, a.ctx, { fieldId, entity: "claim", recordId: a.claimId, reason: "other" }),
+    );
+    expect(wrongEntity.error).toBe("Field not found.");
+  });
+
+  it("refuses to write a sensitive (masked) field's value unless the actor may reveal it", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "write_gated", sensitivity: "genetic" })),
+    );
+    const compliance = await addUser(a.ctx.tenantId, "compliance", "compliance-write");
+    await expect(
+      withTenant(compliance, (tx) =>
+        saveValuesForRecord(tx, compliance, "patient", a.patientId, new Map([[fieldId, "genetic data"]])),
+      ),
+    ).rejects.toBeInstanceOf(CustomFieldValueError);
+
+    const [row] = await systemDb()
+      .select()
+      .from(customFieldValues)
+      .where(eq(customFieldValues.fieldId, fieldId));
+    expect(row).toBeUndefined(); // nothing was written
+
+    // The same write from a role that may reveal member IDs succeeds.
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "genetic data"]])),
+    );
+    const [saved] = await systemDb()
+      .select()
+      .from(customFieldValues)
+      .where(eq(customFieldValues.fieldId, fieldId));
+    expect(saved).toBeDefined();
+  });
+
+  it("emits custom_field.values_read once per load, listing decrypted (unmasked) field IDs only", async () => {
+    const textField = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "read_audit_text" })),
+    );
+    const sensitiveField = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "read_audit_sensitive", sensitivity: "sud" })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(
+        tx,
+        a.ctx,
+        "patient",
+        a.patientId,
+        new Map([
+          [textField, "readable"],
+          [sensitiveField, "hidden"],
+        ]),
+      ),
+    );
+    await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "patient", a.patientId));
+    const [event] = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.values_read"))
+      .orderBy(sql`created_at desc`)
+      .limit(1);
+    expect(event).toBeDefined();
+    expect(event!.metadata).toMatchObject({ entity: "patient", recordId: a.patientId });
+    const fieldIds = String((event!.metadata as Record<string, string>).fieldIds).split(",");
+    expect(fieldIds).toContain(textField);
+    expect(fieldIds).not.toContain(sensitiveField);
+    expect(JSON.stringify(event)).not.toContain("readable");
+  });
+
+  it("emits custom_field.values_updated with the changed keys, never values, only when something changed", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "update_audit" })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "audited value"]])),
+    );
+    const [event] = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.values_updated"))
+      .orderBy(sql`created_at desc`)
+      .limit(1);
+    expect(event!.metadata).toMatchObject({
+      entity: "patient",
+      recordId: a.patientId,
+      changed: "update_audit",
+    });
+    expect(JSON.stringify(event)).not.toContain("audited value");
+
+    const before = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.values_updated"));
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "audited value"]])),
+    );
+    const after = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.values_updated"));
+    expect(after.length).toBe(before.length); // no-op save: no audit event
+  });
+
+  it("keeps the prior ciphertext in custom_field_value_versions on every update or clear, but not on first save", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "history_field" })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "v1"]])),
+    );
+    const [row1] = await systemDb()
+      .select()
+      .from(customFieldValues)
+      .where(eq(customFieldValues.fieldId, fieldId));
+    let versions = await systemDb()
+      .select()
+      .from(customFieldValueVersions)
+      .where(eq(customFieldValueVersions.valueId, row1!.id));
+    expect(versions).toHaveLength(0); // first save: no prior state to keep
+
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "v2"]])),
+    );
+    versions = await systemDb()
+      .select()
+      .from(customFieldValueVersions)
+      .where(eq(customFieldValueVersions.valueId, row1!.id));
+    expect(versions).toHaveLength(1);
+    expect(versions[0]!.valueEnc).toBe(row1!.valueEnc); // the prior ciphertext, kept as-is
+
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, ""]])),
+    );
+    versions = await systemDb()
+      .select()
+      .from(customFieldValueVersions)
+      .where(eq(customFieldValueVersions.valueId, row1!.id));
+    expect(versions).toHaveLength(2); // the clear is recorded too
+  });
+
+  it("custom_field_value_versions is append-only and tenant-isolated", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "history_immutable" })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "v1"]])),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[fieldId, "v2"]])),
+    );
+    const [version] = await systemDb().select().from(customFieldValueVersions).limit(1);
+
+    await expectDbError(
+      withTenant(a.ctx, (tx) =>
+        tx
+          .update(customFieldValueVersions)
+          .set({ valueEnc: "tampered" })
+          .where(eq(customFieldValueVersions.id, version!.id)),
+      ),
+      /append-only/,
+    );
+    await expectDbError(
+      withTenant(a.ctx, (tx) =>
+        tx.delete(customFieldValueVersions).where(eq(customFieldValueVersions.id, version!.id)),
+      ),
+      /append-only/,
+    );
+
+    expect(await withTenant(b.ctx, (tx) => tx.select().from(customFieldValueVersions))).toEqual([]);
+    const deleteGrant = (await systemDb().execute(
+      sql`select has_table_privilege('denialdesk_app', 'custom_field_value_versions', 'DELETE') as has_delete`,
+    )) as unknown as { has_delete: boolean }[];
+    expect(deleteGrant[0]!.has_delete).toBe(false);
   });
 });
 

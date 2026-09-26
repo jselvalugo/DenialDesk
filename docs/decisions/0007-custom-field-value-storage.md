@@ -37,3 +37,36 @@ Options considered:
 - Key rotation follows the existing `v1` prefix plan; AAD does not change it.
 - No new dependency. U.S. residency unchanged (Azure Key Vault in U.S. region holds the key in
   production, ADR 0002).
+
+## Addendum (2026-09-26, owner, reviewer findings on PR 1)
+
+- **History is kept.** A new append-only table, `custom_field_value_versions`, stores the ciphertext
+  a `custom_field_values` row held just before an update or a clear (never on the first save, since
+  there is no prior state then), with `changed_by`/`changed_at`. Same tenant-scoped RLS as the parent
+  table; `GRANT SELECT, INSERT` only (no UPDATE/DELETE grant), plus an append-only trigger
+  (`audit_events` pattern). Superseded the earlier "no history yet" framing in the spec.
+- **Reveal roles match the member ID reveal exactly.** `revealCustomFieldValue` is limited to the
+  same roles as `revealPatientMemberIdFor` / `revealMemberId` (`canWorkDenials`: admin, manager,
+  specialist) — R-5.1.2 minimum necessary, one role list for every "open a locked value" action. It
+  also refuses (with no decrypt attempted) unless the field belongs to the given entity, is active,
+  and is actually masked (sensitive, or the record itself carries sensitivity tags); there is
+  nothing to reveal on an ordinary value.
+- **Record-level sensitivity is looked up, not trusted from the caller.** `loadValuesForRecord`,
+  `saveValuesForRecord`, and `revealCustomFieldValue` each resolve whether the target record itself
+  carries sensitivity tags (today: patients only) inside the domain module, rather than accepting a
+  `recordSensitive` flag from the caller.
+- **Writing a masked value needs reveal permission.** `saveValuesForRecord` refuses to write a field
+  that is masked (sensitive, or on a sensitivity-tagged record) unless the actor may reveal it —
+  otherwise masking would be cosmetic, since anyone editing the record could silently overwrite a
+  locked value.
+- **Two more audit actions**: `custom_field.values_read` (once per `loadValuesForRecord` call that
+  decrypts at least one unmasked value; the decrypted field IDs, never values) and
+  `custom_field.values_updated` (the changed field keys, never values), alongside the existing
+  `custom_field.value_revealed` / `custom_field.value_integrity_failed`.
+- **Crypto hardening**: `decryptField` now rejects a stored auth tag that isn't exactly 16 bytes
+  before calling into Node's crypto, and both `encryptField`/`decryptField` pass
+  `{ authTagLength: 16 }` explicitly rather than relying on the library default.
+- **Insert race**: `saveValuesForRecord` upserts a first value with `INSERT ... ON CONFLICT
+  (tenant_id, field_id, <record column>) WHERE <record column> IS NOT NULL DO UPDATE`, so two
+  concurrent first saves of the same field/record can't both race a plain INSERT into the partial
+  unique index and fail.

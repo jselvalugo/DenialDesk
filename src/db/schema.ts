@@ -943,5 +943,45 @@ export const customFieldValues = pgTable(
     index("custom_field_values_tenant_claim_idx").on(t.tenantId, t.claimId),
     index("custom_field_values_tenant_denial_idx").on(t.tenantId, t.denialId),
     index("custom_field_values_tenant_payer_idx").on(t.tenantId, t.payerId),
+    // Target of the version table's tenant-scoped foreign key (FKs bypass RLS).
+    uniqueIndex("custom_field_values_tenant_id_key").on(t.tenantId, t.id),
+  ],
+);
+
+/**
+ * Every prior state of a `custom_field_values` row (owner decision 2026-09-26; ADR 0007 addendum):
+ * written in the same transaction as an update or clear, before the new ciphertext overwrites the
+ * row. Append-only (INSERT + SELECT only, no UPDATE/DELETE grant, and a trigger refuses both) —
+ * the audit trail of what a value used to be, kept under the same encryption as the value itself.
+ */
+export const customFieldValueVersions = pgTable(
+  "custom_field_value_versions",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    valueId: uuid("value_id")
+      .notNull()
+      .references(() => customFieldValues.id),
+    fieldId: uuid("field_id")
+      .notNull()
+      .references(() => customFields.id),
+    patientId: uuid("patient_id").references(() => patients.id),
+    claimId: uuid("claim_id").references(() => claims.id),
+    denialId: uuid("denial_id").references(() => denials.id),
+    payerId: uuid("payer_id").references(() => payers.id),
+    /** The ciphertext the row held just before this change (NULL if it was already cleared). */
+    valueEnc: text("value_enc"),
+    changedBy: uuid("changed_by")
+      .notNull()
+      .references(() => users.id),
+    changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "custom_field_value_versions_value_fk",
+      columns: [t.tenantId, t.valueId],
+      foreignColumns: [customFieldValues.tenantId, customFieldValues.id],
+    }),
+    index("custom_field_value_versions_value_idx").on(t.valueId, t.changedAt),
   ],
 );

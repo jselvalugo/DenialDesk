@@ -41,4 +41,12 @@ describe("field encryption", () => {
   it("existing no-AAD callers are unaffected", () => {
     expect(decryptField(encryptField("SYN1", key), key)).toBe("SYN1");
   });
+
+  it("rejects an auth tag that isn't 16 bytes", () => {
+    const parts = encryptField("SYN1", key).split(".");
+    parts[2] = Buffer.alloc(8).toString("base64url"); // too short
+    expect(() => decryptField(parts.join("."), key)).toThrow("Unrecognized encrypted field format");
+    parts[2] = Buffer.alloc(32).toString("base64url"); // too long
+    expect(() => decryptField(parts.join("."), key)).toThrow("Unrecognized encrypted field format");
+  });
 });

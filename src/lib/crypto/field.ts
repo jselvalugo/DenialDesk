@@ -4,6 +4,7 @@ import { serverEnv } from "@/lib/env";
 // AES-256-GCM field encryption for high-risk identifiers (R-7.3.3).
 // Format: v1.<iv>.<tag>.<ciphertext>, each base64url. The version prefix allows key rotation.
 const VERSION = "v1";
+const AUTH_TAG_LENGTH = 16;
 
 function key(): Buffer {
   return Buffer.from(serverEnv().FIELD_ENCRYPTION_KEY, "base64");
@@ -17,7 +18,7 @@ function key(): Buffer {
  */
 export function encryptField(plaintext: string, encryptionKey: Buffer = key(), aad?: string): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv, { authTagLength: AUTH_TAG_LENGTH });
   if (aad !== undefined) cipher.setAAD(Buffer.from(aad, "utf8"));
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
@@ -31,9 +32,15 @@ export function decryptField(payload: string, encryptionKey: Buffer = key(), aad
   if (version !== VERSION || !iv || !tag || ciphertext === undefined) {
     throw new Error("Unrecognized encrypted field format");
   }
-  const decipher = createDecipheriv("aes-256-gcm", encryptionKey, Buffer.from(iv, "base64url"));
+  const tagBuffer = Buffer.from(tag, "base64url");
+  if (tagBuffer.length !== AUTH_TAG_LENGTH) {
+    throw new Error("Unrecognized encrypted field format");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey, Buffer.from(iv, "base64url"), {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
   if (aad !== undefined) decipher.setAAD(Buffer.from(aad, "utf8"));
-  decipher.setAuthTag(Buffer.from(tag, "base64url"));
+  decipher.setAuthTag(tagBuffer);
   return Buffer.concat([decipher.update(Buffer.from(ciphertext, "base64url")), decipher.final()]).toString(
     "utf8",
   );

@@ -62,11 +62,32 @@ describe("serializeValue / parseValue", () => {
     expect(() => serializeValue(f, Number.POSITIVE_INFINITY)).toThrow(CustomFieldValueError);
   });
 
+  it("rejects non-string, non-number input outright", () => {
+    const f = field({ fieldType: "number" });
+    expect(() => serializeValue(f, true)).toThrow(CustomFieldValueError);
+    expect(() => serializeValue(f, {})).toThrow(CustomFieldValueError);
+    expect(() => serializeValue(f, ["42"])).toThrow(CustomFieldValueError);
+  });
+
+  it("rejects a number with more than 15 significant digits", () => {
+    const f = field({ fieldType: "number" });
+    expect(serializeValue(f, "123456789012345")).toBe("123456789012345"); // exactly 15: ok
+    expect(() => serializeValue(f, "1234567890123456")).toThrow(/too many digits/);
+    expect(() => serializeValue(f, "1e30")).toThrow(/too many digits/);
+  });
+
   it("validates ISO dates", () => {
     const f = field({ fieldType: "date" });
     expect(serializeValue(f, "2026-09-26")).toBe("2026-09-26");
     expect(() => serializeValue(f, "09/26/2026")).toThrow(CustomFieldValueError);
     expect(() => serializeValue(f, "2026-13-40")).toThrow(CustomFieldValueError);
+  });
+
+  it("rejects impossible calendar dates even in YYYY-MM-DD shape", () => {
+    const f = field({ fieldType: "date" });
+    expect(() => serializeValue(f, "2026-02-29")).toThrow(CustomFieldValueError); // not a leap year
+    expect(() => serializeValue(f, "2026-04-31")).toThrow(CustomFieldValueError); // April has 30 days
+    expect(serializeValue(f, "2028-02-29")).toBe("2028-02-29"); // 2028 is a leap year: ok
   });
 
   it("stores checkboxes as true/false and parses back to boolean", () => {

@@ -87,6 +87,7 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
   { format: "custom_field_values: field is not a payer field", args: [] },
   { format: "custom_field_values: record does not belong to this tenant", args: [] },
   { format: "custom_field_values identity is immutable", args: [] },
+  { format: "custom_field_value_versions is append-only", args: [] },
   { format: "voiding may only set the void fields", args: [] },
   { format: "void fields belong to voided agreements only", args: [] },
   { format: "tenant_agreements status may only move to superseded or voided", args: [] },

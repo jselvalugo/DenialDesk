@@ -72,7 +72,9 @@ export type AuditAction =
   | "settings.custom_field_deactivated"
   | "settings.custom_field_reactivated"
   | "custom_field.value_revealed"
-  | "custom_field.value_integrity_failed";
+  | "custom_field.value_integrity_failed"
+  | "custom_field.values_read"
+  | "custom_field.values_updated";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
