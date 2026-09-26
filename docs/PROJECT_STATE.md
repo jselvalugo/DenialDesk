@@ -6,6 +6,14 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
+- Remittances and prompt pay R1/PP1 (`specs/remittances-and-prompt-pay.md`): 835 upload (parser in
+  `src/edi/x12/`), `/remittances` table and record page with balance check, post (claim version +
+  prompt-pay response per claim) and void with reason; `/prompt-pay` table and clock record page
+  (milestones, interest worksheet, contests with "recorded in error"); claim page Payments panel.
+  Migration 0025: append-only history enforced by triggers, RLS + isolation tests. Seed now posts
+  synthetic remittances. External data sources to connect are tracked in `docs/data-sources.xlsx`.
+  Next: R2 reversals + denial capture (needs cited CARC mapping), PP2 alerts/demand letter, R3 feed.
+  Open (counsel): interest accrual start; paper provider-response window.
 - Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
   section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
   planned; Design system in pre-production). Administrators define custom fields on patients,

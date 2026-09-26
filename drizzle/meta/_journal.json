@@ -176,6 +176,13 @@
       "when": 1790456155138,
       "tag": "0024_custom_field_sensitivity",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790459245715,
+      "tag": "0025_remittances_prompt_pay",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,7 @@ track outcomes. Product brief: `docs/PRODUCT_BRIEF.md`. Requirements baseline: `
 - Legal rules: `rules/` (versioned, effective-dated). **Never hard-code a statutory deadline, rate, or threshold anywhere else.**
 - How agents collaborate: `docs/AGENT_WORKFLOW.md`.
 - UI and visual design: `docs/DESIGN.md` (read before any UI work).
+- External data sources to connect (clearinghouse, bank, code sets): `docs/data-sources.xlsx` — update it in the PR that adds or changes an integration.
 - Current status, decisions, and open questions: `docs/PROJECT_STATE.md` — read at session start, update at session end.
 
 If a task is not backed by a spec, write or update the spec first.
