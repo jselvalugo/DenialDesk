@@ -1,6 +1,8 @@
 # Keeps GitHub Actions and npm dependencies patched (R-7.4.2, REQUIREMENTS §7.6 SLAs).
 version: 2
 updates:
+  # ci.yml pins actions to full commit SHAs with a `# vX.Y.Z` comment; Dependabot updates the
+  # SHA and the comment together.
   - package-ecosystem: github-actions
     directory: /
     schedule:
