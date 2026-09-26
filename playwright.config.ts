@@ -48,7 +48,6 @@ export default defineConfig({
       reuseExistingServer: false,
       env: {
         APP_ENV: "preview",
-        DEMO_LOGIN_ENABLED: "true",
         // Operator provisioned from configuration, as in production (test/e2e/operator-credentials.ts).
         PLATFORM_OPERATOR_EMAIL: E2E_OPERATOR_EMAIL,
         PLATFORM_OPERATOR_PASSWORD_HASH: E2E_OPERATOR_PASSWORD_HASH,
@@ -58,8 +57,7 @@ export default defineConfig({
       command: `pnpm start --port ${productionPort}`,
       port: productionPort,
       reuseExistingServer: false,
-      // DEMO_LOGIN_ENABLED is set here too, to prove production ignores it.
-      env: { APP_ENV: "production", DEMO_LOGIN_ENABLED: "true" },
+      env: { APP_ENV: "production" },
     },
   ],
 });

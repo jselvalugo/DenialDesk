@@ -10,7 +10,7 @@ No single network can hammer the public demo button or try passwords and codes a
 ## Acceptance criteria
 - [x] Fixed-window limits per client network (IP), stored in PostgreSQL so they hold across
       serverless instances:
-      - Demo login: 10 per 10 minutes.
+      - ~~Demo login: 10 per 10 minutes.~~ Removed with the demo (2026-09-26).
       - Password sign-in: 30 attempts per 15 minutes (complements the per-account lockout).
       - MFA codes: 30 attempts per 15 minutes.
       - Preview seed endpoint: 5 per hour.
@@ -23,7 +23,7 @@ No single network can hammer the public demo button or try passwords and codes a
 
 ## Data / API changes
 Table `rate_limits(bucket, key_hash, window_start, hits)` — global (not tenant data), no app-role
-access. Env: `RATE_LIMIT_DEMO`, `RATE_LIMIT_SIGNIN`, `RATE_LIMIT_MFA` (hits per window).
+access. Env: `RATE_LIMIT_SIGNIN`, `RATE_LIMIT_MFA` (hits per window).
 
 ## Out of scope
 Edge/WAF rate limiting (Azure Front Door at cutover, R-7.4.7), per-route limits for signed-in APIs.

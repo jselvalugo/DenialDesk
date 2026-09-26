@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef } from "react";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
-import { createPractice, resetDemo, toggleSuspended, type ActionState, type CreateState } from "./actions";
+import { createPractice, toggleSuspended, type ActionState, type CreateState } from "./actions";
 
 export function CreatePracticeForm() {
   const [state, action] = useActionState<CreateState, FormData>(createPractice, {});
@@ -76,27 +76,6 @@ export function SuspendToggle({
       >
         {suspended ? "Reactivate" : "Suspend"}
       </SubmitButton>
-    </form>
-  );
-}
-
-/**
- * Replaces the demo practice: with synthetic claims, denials, and a monthly file, or empty (setup
- * only) so everything on screen comes from what the visitor does. The old one is archived.
- */
-export function ResetDemoButton() {
-  const [state, action] = useActionState<ActionState, FormData>(resetDemo, {});
-  return (
-    <form action={action} className="flex flex-col items-end gap-2">
-      <div className="flex items-center gap-2">
-        <SubmitButton name="mode" value="sample" pendingLabel="Resetting…">
-          Reset demo with sample data
-        </SubmitButton>
-        <SubmitButton name="mode" value="empty" pendingLabel="Resetting…">
-          Reset demo empty
-        </SubmitButton>
-      </div>
-      <FormAlert message={state.error} />
     </form>
   );
 }

@@ -30,8 +30,6 @@ import {
   revokeSession,
   touchSession,
 } from "./session";
-import { ensureDemoPractice } from "./demo";
-import { demoLoginEnabled } from "@/lib/env";
 
 export type { FormState };
 
@@ -190,26 +188,6 @@ export async function keepSessionAlive(): Promise<boolean> {
   if (!session?.mfaVerified) return false;
   await touchSession(session.sessionId);
   return true;
-}
-
-/**
- * One-click demo sign-in (non-production only, DEMO_LOGIN_ENABLED=true). The only path that skips
- * MFA, and it can only reach the synthetic demo practice.
- */
-export async function signInDemo(): Promise<FormState> {
-  if (!demoLoginEnabled()) return { error: "The demo isn't available here." };
-  const limited = await limitCurrentRequest("demo_login");
-  if (!limited.allowed) return rateLimited("demo_login", "demo sessions", limited);
-  const { tenantId, userId } = await ensureDemoPractice();
-  await replacePreviousSession(userId);
-  await createSession(userId, { authMethod: "demo", tenantId });
-  await auditSystem({
-    action: "auth.demo_login",
-    actorUserId: userId,
-    tenantId,
-    ipAddress: await clientIp(),
-  });
-  redirect("/");
 }
 
 const newPasswordSchema = z.object({ password: z.string().max(128), confirm: z.string().max(128) });

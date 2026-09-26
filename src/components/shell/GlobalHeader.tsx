@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Grip, Search } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
 import { AppIcon, AppLauncher } from "./AppLauncher";
 import { useShellLocation } from "./ShellContext";
@@ -70,11 +69,6 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
               {user?.tenantName ?? "Style guide"}
             </span>
           </div>
-          {user?.demo && (
-            <Badge tone="info">
-              Demo practice<span className="max-xl:hidden"> · shared with other visitors</span>
-            </Badge>
-          )}
           {user && <UserMenu user={user} />}
         </div>
       </div>

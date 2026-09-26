@@ -3,7 +3,9 @@ import { expect, type Page } from "@playwright/test";
 import { currentStep, totpAt } from "@/auth/totp";
 import type { E2EUser } from "./global-setup";
 
-export function e2eUser(key: "worker" | "viewer" | "newbie" | "locked" | "guesser" | "operator"): E2EUser {
+export function e2eUser(
+  key: "worker" | "viewer" | "manager" | "newbie" | "locked" | "guesser" | "operator",
+): E2EUser {
   return JSON.parse(readFileSync("test/e2e/.auth/users.json", "utf8"))[key];
 }
 

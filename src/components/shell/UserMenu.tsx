@@ -9,7 +9,6 @@ export interface ShellUser {
   displayName: string;
   tenantName: string;
   role: string;
-  demo?: boolean;
 }
 
 const roleLabels: Record<string, string> = {

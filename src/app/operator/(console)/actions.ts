@@ -4,12 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { passwordProblem } from "@/auth/password";
 import { requireOperator } from "@/auth/operator";
-import {
-  createPractice as create,
-  PracticeError,
-  resetDemoPractice as reset,
-  setPracticeSuspended,
-} from "@/domain/platform/practices";
+import { createPractice as create, PracticeError, setPracticeSuspended } from "@/domain/platform/practices";
 
 export interface CreateState {
   error?: string;
@@ -53,20 +48,6 @@ export async function toggleSuspended(_: ActionState, formData: FormData): Promi
   if (!parsed.success) return { error: "Invalid request." };
   try {
     await setPracticeSuspended(parsed.data.tenantId, parsed.data.suspend === "true", operator);
-  } catch (error) {
-    if (error instanceof PracticeError) return { error: error.message };
-    throw error;
-  }
-  revalidatePath("/operator");
-  return {};
-}
-
-export async function resetDemo(_: ActionState, formData: FormData): Promise<ActionState> {
-  const operator = await requireOperator();
-  const mode = z.enum(["sample", "empty"]).safeParse(formData.get("mode"));
-  if (!mode.success) return { error: "Choose how to reset the demo." };
-  try {
-    await reset(operator, mode.data);
   } catch (error) {
     if (error instanceof PracticeError) return { error: error.message };
     throw error;

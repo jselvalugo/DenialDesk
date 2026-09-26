@@ -18,12 +18,11 @@ Site: https://denialdesk.netlify.app
   |---|---|
   | `APP_ENV` | `preview` — shows the synthetic-data banner, enables the seed endpoint |
   | `FIELD_ENCRYPTION_KEY` | AES-256 key for member IDs and MFA secrets (secret; pre-prod only) |
-  | `SEED_TOKEN` | Bearer token for the demo seed endpoint (secret); no operator power |
+  | `SEED_TOKEN` | Bearer token for the sample-practice seed endpoint (secret); no operator power |
   | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Admin of the seeded synthetic practice (password secret); not the operator |
-  | `DEMO_LOGIN_ENABLED` | `true` shows "Explore the demo practice" on sign-in (ignored in production) |
   | `PLATFORM_OPERATOR_EMAIL` | The operator account for the platform console; an address used only for the console, never a practice user |
   | `PLATFORM_OPERATOR_PASSWORD_HASH` | The operator's password hash from `pnpm operator:credential` (secret); the only way the operator account is created or reset |
-  | `RATE_LIMIT_DEMO` / `RATE_LIMIT_SIGNIN` / `RATE_LIMIT_MFA` | Optional overrides for per-network limits (defaults 10/10 min, 30/15 min, 30/15 min) |
+  | `RATE_LIMIT_SIGNIN` / `RATE_LIMIT_MFA` | Optional overrides for per-network limits (defaults 30/15 min each) |
 
   If `APP_ENV` is missing the app still treats itself as non-production — safe by default.
 - **Access:** Netlify password protection is on for the whole site, in front of the app's own
@@ -36,7 +35,7 @@ Site: https://denialdesk.netlify.app
 - **Manual:** from the repo root, run the command the Netlify connector's `deploy-site` returns
   (`npx @netlify/mcp … --site-id …`), which uploads the working tree and builds on Netlify.
 
-## Seeding the demo practice, and recovering the admin account
+## Seeding the synthetic sample practice, and recovering its admin account
 ```bash
 curl -X POST -H "Authorization: Bearer $SEED_TOKEN" https://denialdesk.netlify.app/api/preview/seed
 # first call: {"status":"seeded"}
@@ -53,18 +52,18 @@ token, or with a wrong token.
 
 Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step verification.
 
-## Demo practice and operator console
-- "Explore the demo practice" signs visitors into a shared synthetic demo practice, created on
-  first use. Reset it any time from `/operator` → *Reset demo with sample data* or *Reset demo empty* (setup only, no claims/denials/files); the old one is archived.
+## Practices and the operator console
+- There is no demo practice (removed 2026-09-26, owner request). Create practices from `/operator`;
+  the seed endpoint above adds one synthetic sample practice ("Coral Bay Physicians (synthetic)").
+  Remove `DEMO_LOGIN_ENABLED` and `RATE_LIMIT_DEMO` from Netlify; they do nothing now.
 - Migrations run with the deploy; never deploy app code ahead of its migrations or run a
   column-dropping migration while an older build is still serving.
 - After a release that changes the revenue cycle starter configuration or file layout (e.g. C0,
-  2026-09-26), reset the demo so it carries the new configuration and sample files. Other
-  pre-production practices keep their stored rules; an admin can review them on the Rules page.
+  2026-09-26), practices keep their stored rules; an admin can review them on the Rules page.
 - The platform console has its own sign-in at `/operator/login` (spec: `docs/specs/operator-login.md`).
   Only the `PLATFORM_OPERATOR_EMAIL` account can use it, with password + two-step verification. That
   account belongs to no practice and can't sign in at `/login`; practice users can't sign in to the console.
-  Operator and practice/demo sessions are separate, so one browser can hold both.
+  Operator and practice sessions are separate, so one browser can hold both.
 - **Operator account (sole administrator):** it exists only from configuration. On your own machine run
   `pnpm operator:credential`, then set `PLATFORM_OPERATOR_EMAIL` (an address used only for the console,
   never a practice user and not `SEED_ADMIN_EMAIL`) and `PLATFORM_OPERATOR_PASSWORD_HASH` (secret) in

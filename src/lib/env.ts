@@ -8,8 +8,6 @@ const schema = z.object({
   FIELD_ENCRYPTION_KEY: z
     .string()
     .refine((value) => Buffer.from(value, "base64").length === 32, "must be base64 of 32 bytes"),
-  /** "true" shows the one-click demo login (never in production, whatever this says). */
-  DEMO_LOGIN_ENABLED: z.enum(["true", "false"]).optional(),
   /**
    * The platform operator's account (/operator/login). Must be an address used only for the
    * console: an account with a practice membership never qualifies (docs/specs/operator-login.md).
@@ -53,11 +51,6 @@ export function appEnv(): string {
 
 export function isProduction(): boolean {
   return appEnv() === "production";
-}
-
-/** Demo login is available only outside production and only when explicitly enabled. */
-export function demoLoginEnabled(): boolean {
-  return !isProduction() && process.env.DEMO_LOGIN_ENABLED === "true";
 }
 
 /**

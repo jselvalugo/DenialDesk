@@ -52,6 +52,25 @@ export default async function globalSetup() {
     }
     enrolled[key] = { email: make(key), password, totpSecret: secret };
   }
+
+  // A second practice for manager workflows (revenue cycle), seeded like a fresh practice with
+  // sample activity. A colleague prepares last month's voucher so the manager can approve it
+  // (separation of duties).
+  const manager = await seedPractice({
+    practiceName: `E2E manager practice ${run} (synthetic)`,
+    asOf: todayIn(),
+    users: [
+      { email: make("manager"), displayName: "Morgan Manager", role: "manager", password },
+      { email: make("colleague"), displayName: "Dana Whitfield", role: "manager", password },
+    ],
+    sampleVoucherBy: 1,
+  });
+  const managerSecret = generateTotpSecret();
+  await systemDb()
+    .update(users)
+    .set({ totpSecretEnc: encryptField(managerSecret), mfaEnrolledAt: new Date() })
+    .where(eq(users.id, manager.userIds[0]!));
+  enrolled.manager = { email: make("manager"), password, totpSecret: managerSecret };
   // The platform operator: one fixed account, reused across runs with fresh credentials. Its row is
   // written directly, so the server adopts it as the one active credential: clear earlier records
   // (test database only).

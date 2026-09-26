@@ -1,7 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { and, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import { createDemoPractice, type DemoMode } from "@/auth/demo";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { hashPassword } from "@/auth/password";
 import type { OperatorContext } from "@/auth/operator";
 import { systemDb } from "@/db/client";
@@ -9,7 +8,6 @@ import { denials, memberships, tenants, users } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { auditSystem } from "@/lib/audit";
-import { demoLoginEnabled } from "@/lib/env";
 
 // Platform operator actions (spec: docs/specs/demo-login-and-operator-console.md).
 // Practice-level metadata and counts only; never patient or claim data.
@@ -108,7 +106,7 @@ export async function setPracticeSuspended(
   const updated = await systemDb()
     .update(tenants)
     .set({ suspendedAt: suspended ? new Date() : null })
-    // Customer practices only: demo practices are archived and replaced via resetDemoPractice.
+    // Customer practices only: legacy demo practices were archived when the demo was removed.
     .where(and(eq(tenants.id, tenantId), eq(tenants.kind, "customer")))
     .returning({ id: tenants.id });
   if (updated.length === 0)
@@ -119,32 +117,5 @@ export async function setPracticeSuspended(
     tenantId,
     entityType: "tenant",
     entityId: tenantId,
-  });
-}
-
-/**
- * Archives every active demo practice (suspended, never deleted — the audit trail references it)
- * and creates a fresh one. Existing demo sessions end on their next request.
- */
-export async function resetDemoPractice(operator: OperatorContext, mode: DemoMode = "sample"): Promise<void> {
-  if (!demoLoginEnabled()) throw new PracticeError("The demo practice is disabled in this environment.");
-  await systemDb()
-    .update(tenants)
-    .set({ suspendedAt: new Date() })
-    .where(and(eq(tenants.kind, "demo"), isNull(tenants.suspendedAt)));
-  const { tenantId } = await createDemoPractice(mode).catch((error: unknown) => {
-    // A guest's first click can create a demo practice between the archive and this create.
-    if ((error as { cause?: { code?: string } })?.cause?.code === "23505") {
-      throw new PracticeError("A demo practice was just created by a visitor. Try the reset again.");
-    }
-    throw error;
-  });
-  await auditSystem({
-    action: "operator.demo_reset",
-    actorUserId: operator.userId,
-    tenantId,
-    entityType: "tenant",
-    entityId: tenantId,
-    metadata: { mode },
   });
 }

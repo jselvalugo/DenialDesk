@@ -8,7 +8,7 @@ operator credential and TOTP secret (encrypted); `operator.*` audit events (IDs 
 
 | Threat | Control | Residual risk / owner |
 |---|---|---|
-| Practice or demo user reaches the console | Separate cookie and `auth_method = 'operator'`; `readSession` accepts a token only in its own cookie (integration test); `requireOperator` re-checks email and no-membership on every request, revoking (audited) otherwise | Low |
+| Practice user reaches the console | Separate cookie and `auth_method = 'operator'`; `readSession` accepts a token only in its own cookie (integration test); `requireOperator` re-checks email and no-membership on every request, revoking (audited) otherwise | Low |
 | Operator account used inside a practice | Operator has no membership; `/login` refuses it (same generic error); an account with a membership is never the operator | Low |
 | Password guessing / account enumeration | Shared lockout (5 attempts, 15 min), per-network rate limits, decoy hash, generic errors, account always looked up (no timing split on the operator email) | Low |
 | Stolen password | TOTP required, single-use codes, token rotated after MFA | **Not phishing-resistant**: R-7.2.2 requires WebAuthn for admins — production gate (ROADMAP) |

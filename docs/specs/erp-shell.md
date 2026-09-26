@@ -17,7 +17,7 @@ brand (navy, teal, Playfair/Inter/Space Mono, unaltered logo).
 
 ## Acceptance criteria
 - [x] Global header: logo (home link), "Search apps and pages" button that opens the launcher,
-      practice name, demo badge, user menu (name, role, practice, Sign out).
+      practice name, user menu (name, role, practice, Sign out). (The demo badge was removed with the demo, 2026-09-26.)
 - [x] Navy app bar: "App launcher" button, current app tile and name, the app's shipped pages as
       tabs in `nav` "Primary", the active tab marked `aria-current="page"`.
 - [x] App launcher: modal dialog "App launcher" with a search field (focused on open), app tiles

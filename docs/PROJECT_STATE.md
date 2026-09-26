@@ -18,18 +18,17 @@ _Last updated: 2026-09-26_
   register/edit with primary coverage (encrypted member ID), admin-only sensitivity tags, and a
   patient chart linking claims and denials; claim and denial pages link back. "Patients" is in the
   app launcher as its own app. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
-- Operator console can reset the demo with sample data or empty (setup only) to test features
-  from a clean slate.
 - Practice sign-in page shows the owner's DenialDesk reception image in a matted frame beside the
   card (`specs/sign-in-and-sessions.md`); the operator sign-in has no image.
-- Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
-  login and a platform operator console (`/operator`) for the owner, with its own sign-in at
+- Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). A platform operator console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
   The operator account exists only from hosting configuration (`PLATFORM_OPERATOR_PASSWORD_HASH`,
   made with `pnpm operator:credential`); no page can create or reset it (owner rebaseline 2026-09-26).
 - Next (owner rebaseline): tenancy lifecycle in the console: Pause for non-payment (read-only +
   export), Suspend for security, Terminate → offboarding (export, legal hold, certified destruction),
-  BAA-on-file gate in production. Demo stays on pre-production only.
+  BAA-on-file gate in production.
+- The one-click demo practice was removed entirely (owner request, 2026-09-26); migration 0020
+  archived any live demo practice and ended demo sessions. Practices are created from the console.
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
 - Open item (human decision): single-administrator risk acceptance with compensating controls
@@ -70,7 +69,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
 6. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
-   disclosures export (R-5.1.1), sensitivity-tag enforcement. Reset the demo after P1 deploys so
+   disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
