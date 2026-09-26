@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { addCalendarDays, todayIn } from "@rules/calendar";
 import { ensureDemoPractice } from "@/auth/demo";
@@ -50,6 +50,24 @@ const input = (tenantId: string, overrides: Partial<AgreementInput> = {}): Agree
   attestedSynthetic: false,
   ...overrides,
 });
+
+/**
+ * Resolves once another backend on this database is waiting for a transaction to end (the wait a
+ * unique-index insert makes on the uncommitted row's transaction); fails after a few seconds.
+ */
+async function waitForBlockedInsert(): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    const { rows } = await systemDb().execute(sql`
+      select pid from pg_stat_activity
+      where datname = current_database() and pid <> pg_backend_pid()
+        and wait_event_type = 'Lock' and wait_event = 'transactionid'
+        and query like 'insert into "tenant_agreements"%'`);
+    if (rows.length > 0) return;
+    if (Date.now() > deadline) throw new Error("The second recording never blocked on the one-active index");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
 
 beforeAll(async () => {
   // The operator belongs to no practice (docs/specs/operator-login.md); a bare user row is enough here.
@@ -201,25 +219,68 @@ describe("recordAgreement", () => {
 
   it("two recordings racing for one practice: one wins, the other gets a plain message with no file bytes", async () => {
     const { tenantId } = await createTestTenant("BAA race");
-    const results = await Promise.allSettled([
-      recordAgreement(
-        input(tenantId, { content: pdf("racer A"), practiceSigner: "Synthetic Racer A" }),
-        operator,
-      ),
-      recordAgreement(
+    // Two calls started together only sometimes overlap: when one commits before the other's
+    // `select ... for update` runs, the later one legitimately supersedes it. To exercise the
+    // loser's path every time, transaction A (the winner) is held open after inserting its active
+    // agreement, exactly as recordAgreement does, until B is seen blocked on the one-active index.
+    const winnerId = randomUUID();
+    let releaseA!: () => void;
+    const released = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    let inserted!: () => void;
+    const winnerInserted = new Promise<void>((resolve) => {
+      inserted = resolve;
+    });
+    const winner = pdf("racer A");
+    const a = systemDb().transaction(async (tx) => {
+      await tx.insert(tenantAgreements).values({
+        ...columnsOf(input(tenantId, { content: winner, practiceSigner: "Synthetic Racer A" })),
+        id: winnerId,
+        kind: "baa",
+        status: "active",
+        contentType: "application/pdf",
+        sizeBytes: winner.length,
+        sha256: createHash("sha256").update(winner).digest("hex"),
+        recordedBy: operator.userId,
+      });
+      inserted();
+      await released;
+    });
+    try {
+      await Promise.race([winnerInserted, a]);
+      // B sees no active agreement (A's row is uncommitted), so it inserts its own active row and
+      // blocks on the unique index until A's transaction ends. The handler is attached at once so
+      // a rejection while A is still held is never an unhandled one.
+      const b = recordAgreement(
         input(tenantId, { content: pdf("racer B"), practiceSigner: "Synthetic Racer B" }),
         operator,
-      ),
-    ]);
-    const fulfilled = results.filter((r) => r.status === "fulfilled");
-    const rejected = results.filter((r) => r.status === "rejected");
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    const error = (rejected[0] as PromiseRejectedResult).reason as Error;
-    expect(error).toBeInstanceOf(PracticeError);
-    expect(error.message).toMatch(/just recorded/);
-    expect(error.message).not.toMatch(/Racer|%PDF/);
-    expect(await listAgreements(tenantId)).toHaveLength(1);
+      );
+      const settled = b.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      await waitForBlockedInsert();
+      releaseA();
+      await a;
+      const error = (await settled) as Error | null;
+      expect(error, "the second recording should have been rejected").not.toBeNull();
+      expect(error).toBeInstanceOf(PracticeError);
+      expect(error!.message).toMatch(/just recorded/);
+      expect(error!.message).not.toMatch(/Racer|%PDF/);
+    } finally {
+      releaseA();
+      await a.catch(() => undefined);
+    }
+    const rows = await listAgreements(tenantId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: winnerId, status: "active" });
+    // The loser's transaction rolled back whole: no audit event for a recording that didn't happen.
+    const events = await systemDb()
+      .select({ id: auditEvents.id })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.action, "operator.agreement_recorded"), eq(auditEvents.tenantId, tenantId)));
+    expect(events).toHaveLength(0);
   });
 
   it("records the audit event in the same transaction as the agreement", async () => {
