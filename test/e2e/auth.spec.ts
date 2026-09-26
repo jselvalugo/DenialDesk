@@ -76,14 +76,14 @@ test("first sign-in requires setting up an authenticator", async ({ page }) => {
 
   await page.getByLabel("6-digit code").fill(await freshCode(key, new Set()));
   await page.getByRole("button", { name: "Turn on two-step verification" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
 });
 
 test.describe("signed in", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
   test("shows the user and practice, and signs out", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/overview");
     await expect(page.getByText("Riley Worker")).toBeVisible();
     await expect(page.getByText(/E2E practice .* \(synthetic\)/)).toBeVisible();
     await page.getByRole("button", { name: /Riley Worker/ }).click();

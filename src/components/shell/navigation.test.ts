@@ -28,7 +28,7 @@ describe("locate", () => {
   const apps = navApps(all);
 
   it("maps a path to its app and page, detail pages to their list", () => {
-    expect(locate(apps, "/")).toMatchObject({ app: { id: "denials" }, item: { label: "Overview" } });
+    expect(locate(apps, "/overview")).toMatchObject({ app: { id: "denials" }, item: { label: "Overview" } });
     expect(locate(apps, "/denials/abc")).toMatchObject({
       app: { id: "denials" },
       item: { label: "Denial queue" },

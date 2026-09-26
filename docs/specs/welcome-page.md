@@ -13,8 +13,11 @@ works and where to start.
 - As any signed-in user, I can reach every module I have access to from one page.
 
 ## Acceptance criteria
-- [x] The global-header logo links to `/welcome` (accessible name "DenialDesk home").
-- [x] `/welcome` requires sign-in (inside the `(app)` group) and shows the user's first name,
+- [x] The welcome page is the home page at `/`: sign-in (password + MFA) always lands there, as do
+      the site root and the global-header logo (accessible name "DenialDesk home"). There is no
+      "return to where you left off". `/welcome` redirects to `/` for old bookmarks. (2026-09-26)
+- [x] The Denials overview moves to `/overview` (tab "Overview").
+- [x] `/` requires sign-in (inside the `(app)` group) and shows the user's first name,
       practice name, and today's date in the practice time zone.
 - [x] "How DenialDesk works": five numbered steps (claims, classification, prioritization, appeals,
       outcomes). Shipped steps link to their page; unshipped steps show a "Planned" badge, never a link.
@@ -35,7 +38,7 @@ None. Reads only the session (name, practice). No PHI; no audit event (no PHI re
 None.
 
 ## Out of scope
-Per-user onboarding progress, product tours, marketing content, changing `/` (Denials overview).
+Per-user onboarding progress, product tours, marketing content.
 
 ## Open questions
 None.

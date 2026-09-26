@@ -26,7 +26,7 @@ test.describe("sign-in", () => {
     await signInWithPassword(page, worker);
     await page.getByLabel("6-digit code").fill(await freshCode(worker.totpSecret!, new Set([currentStep()])));
     await page.getByRole("button", { name: "Verify" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
 
     // The abandoned session no longer works anywhere, and its end is audited.
     const replay = await browser.newContext();
@@ -100,7 +100,7 @@ test.describe("operator and practice sessions side by side", () => {
   }) => {
     test.setTimeout(60_000); // may wait up to 30 s for a TOTP step the setup sign-in didn't use
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
 
     await page.goto("/operator");
     await expect(page).toHaveURL(/\/operator\/login$/);
@@ -110,13 +110,13 @@ test.describe("operator and practice sessions side by side", () => {
 
     // The practice session is untouched, and signing out of the console leaves it alone.
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
     await page.goto("/operator");
     await expect(page.getByRole("heading", { level: 1, name: "Practices" })).toBeVisible();
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/operator\/login$/);
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
   });
 });
 
