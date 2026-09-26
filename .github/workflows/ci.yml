@@ -102,10 +102,11 @@ jobs:
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
+      # No dependency cache: this job reads the lockfile only (no install), so there's nothing to
+      # save, and setup-node's post step fails when the cache path doesn't exist.
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
       - run: pnpm audit --audit-level=high
       - uses: gitleaks/gitleaks-action@v2
         env:
