@@ -155,7 +155,14 @@ describe("importDeposits", () => {
         .where(and(eq(auditEvents.entityId, earlier!.id), eq(auditEvents.action, "rcm.deposits_reversed"))),
     );
     expect(event!.metadata).toMatchObject({ reversalFileId: reversalId, rows: 2 });
-    // Now the corrected export imports.
+    // The reversed file itself stays refused; only a corrected export imports.
+    const original = [
+      { rowNumber: 2, depositDate: "2026-03-02", amountCents: 12_500 },
+      { rowNumber: 3, depositDate: "2026-03-03", amountCents: -500 },
+    ];
+    await expect(withTenant(a.manager, (tx) => importDeposits(tx, a.manager, original))).rejects.toThrow(
+      /reversed file can't be imported again/,
+    );
     await withTenant(a.manager, (tx) => importDeposits(tx, a.manager, march));
   });
 

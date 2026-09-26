@@ -54,6 +54,7 @@ export async function seedRevenueCycleDefaults(
         name: pc.name,
         arGl: pc.arGl,
         payerId: payerFor(pc.regime),
+        regime: pc.regime ?? null,
       })),
     )
     .onConflictDoNothing();

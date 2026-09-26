@@ -78,14 +78,25 @@ export async function reverseDeposits(
   formData: FormData,
 ): Promise<DepositUploadState> {
   const auth = await requireAuth();
+  const refused = (reason: string) =>
+    auditSystem({
+      action: "rcm.deposits_rejected",
+      actorUserId: auth.userId,
+      tenantId: auth.tenantId,
+      metadata: { reason, operation: "reverse" },
+    });
   const id = z.uuid().safeParse(formData.get("fileId"));
-  if (!id.success) return { error: "That deposit file doesn't exist." };
+  if (!id.success) {
+    await refused("bad_id");
+    return { error: "That deposit file doesn't exist." };
+  }
   try {
     await withTenant(auth, (tx) =>
       reverseDepositFile(tx, auth, id.data, String(formData.get("reason") ?? "")),
     );
   } catch (error) {
     if (!(error instanceof DepositError)) throw error;
+    await refused("refused");
     return { error: error.message };
   }
   revalidatePath("/revenue-cycle/deposits");

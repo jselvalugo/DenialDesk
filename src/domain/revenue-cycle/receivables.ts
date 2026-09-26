@@ -36,7 +36,10 @@ export async function importDeposits(tx: TenantTx, actor: Actor, deposits: Depos
     .from(rcmDepositFiles)
     .where(and(eq(rcmDepositFiles.contentHash, contentHash), isNull(rcmDepositFiles.reversesFileId)))
     .limit(1);
-  if (existing) throw new DepositError("This deposit file was already imported.");
+  if (existing)
+    throw new DepositError(
+      "This exact deposit file was already imported. A reversed file can't be imported again; import the corrected export instead.",
+    );
   // Bank exports often cover overlapping ranges; importing one twice would double deposits.
   const reversed = tx
     .select({ id: rcmDepositFiles.reversesFileId })

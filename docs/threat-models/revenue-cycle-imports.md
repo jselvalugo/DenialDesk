@@ -39,3 +39,14 @@ Data: Restricted PHI (patient name, practice account number, service date, CPT, 
 | Tampering with deposits | Insert/select only, FORCE RLS, non-zero CHECK; corrections are reversing entries | Owner DB role (open decision) |
 | Parser DoS | 1 MB, 5,000 rows, 50 columns, linear parser | Low |
 | PHI through aging | Aging is bucketed in SQL, so only totals by class and bucket leave the database; each report view is audited | Low |
+| PHI in a reversal reason | Free-text reason with a "no patient information" hint; stored only in the audit event | Medium: a coded reason list would remove it (follow-up) |
+| Unaudited refused reversals | Refusals (role, unknown file, already reversed) audited as `rcm.deposits_rejected` with `operation: "reverse"` | Low |
+
+## Statements and dashboard (B5)
+
+| Threat | Control | Residual risk / owner |
+|---|---|---|
+| PHI through statements or the dashboard | Sums and counts computed in SQL by GL account, month and regime; no line, name or account number leaves the database; each view audited as `rcm.report_viewed` | Low |
+| Cross-practice totals | Every query runs in `withTenant()` under FORCE RLS; integration test compares two practices | Low |
+| Denials shown to roles without revenue-cycle access | Pages 404 unless `canViewRevenueCycle` (admin, manager, compliance); e2e covers the specialist | Low |
+| Misleading financial presentation | Labelled a management view; figures tie to the imported files (integration test) | Accountant review pending (owner) |

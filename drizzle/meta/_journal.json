@@ -120,6 +120,13 @@
       "when": 1790432471541,
       "tag": "0016_revenue_cycle_deposit_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790432984563,
+      "tag": "0017_revenue_cycle_class_regime",
+      "breakpoints": true
     }
   ]
 }
