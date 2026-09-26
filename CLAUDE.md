@@ -81,13 +81,3 @@ Decided in `docs/decisions/0001-tech-stack.md` (layout and performance rules the
 - Run locally: `docker compose up db`, `pnpm db:migrate`, `pnpm dev`
 - Hosting: pre-production on Netlify, **synthetic data only** (`docs/decisions/0003-netlify-preproduction.md`);
   production on Microsoft Azure, U.S. regions only (`docs/decisions/0002-azure-hosting.md`). Keep platform code in adapters.
-
-<!-- BEGIN:nextjs-agent-rules -->
-
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
