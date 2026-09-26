@@ -8,7 +8,15 @@ import { DEMO_PRACTICE, seedDemoPractice } from "@/db/demo";
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL ?? "demo.admin@denialdesk.test";
   const password = process.env.SEED_ADMIN_PASSWORD ?? randomBytes(12).toString("base64url");
-  const result = await seedDemoPractice({ email, password });
+  // Only repair (reset) the admin's password when one is configured explicitly.
+  const result = await seedDemoPractice(
+    { email, password },
+    { repair: Boolean(process.env.SEED_ADMIN_PASSWORD) },
+  );
+  if (result === "exists") {
+    process.stdout.write(`"${DEMO_PRACTICE}" already exists; set SEED_ADMIN_PASSWORD to reset its admin.\n`);
+    return;
+  }
   process.stdout.write(
     [
       result === "seeded"

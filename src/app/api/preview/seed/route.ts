@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { seedDemoPractice } from "@/db/demo";
+import { SeedRefusedError, seedDemoPractice } from "@/db/demo";
 import { auditSystem } from "@/lib/audit";
 import { isProduction } from "@/lib/env";
 import { limitCurrentRequest } from "@/lib/rate-limit";
@@ -37,10 +37,14 @@ export async function POST(request: Request) {
     );
   }
   const body = (await request.json().catch(() => ({}))) as { resetMfa?: unknown };
-  const status = await seedDemoPractice({ email, password }, { resetMfa: body.resetMfa === true });
-  await auditSystem({
-    action: status === "seeded" ? "system.demo_seeded" : "system.admin_repaired",
-    metadata: { resetMfa: body.resetMfa === true },
-  });
+  let status: Awaited<ReturnType<typeof seedDemoPractice>>;
+  try {
+    status = await seedDemoPractice({ email, password }, { resetMfa: body.resetMfa === true });
+  } catch (error) {
+    if (error instanceof SeedRefusedError) return Response.json({ error: error.message }, { status: 409 });
+    throw error;
+  }
+  // Repairs are audited inside their own transaction (src/db/demo.ts).
+  if (status === "seeded") await auditSystem({ action: "system.demo_seeded" });
   return Response.json({ status }, { headers: { "Cache-Control": "no-store" } });
 }

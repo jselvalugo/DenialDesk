@@ -1,6 +1,8 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { hashPassword } from "@/auth/password";
+import { audit } from "@/lib/audit";
+import type { TenantTx } from "./tenant";
 import { systemDb } from "./client";
 import { memberships, sessions, tenants, users } from "./schema";
 import { seedPractice } from "./seed";
@@ -14,16 +16,23 @@ export const DEMO_PRACTICE = "Coral Bay Physicians (synthetic)";
  * be set up again. This is how the owner regains operator access in pre-production. Used by
  * `pnpm db:seed` and the pre-production seed endpoint (token-protected, never in production).
  */
+export class SeedRefusedError extends Error {}
+
 export async function seedDemoPractice(
   admin: { email: string; password: string },
-  options: { resetMfa?: boolean } = {},
-): Promise<"seeded" | "repaired"> {
+  options: { resetMfa?: boolean; repair?: boolean } = {},
+): Promise<"seeded" | "repaired" | "exists"> {
+  // Checked here, not only in seedPractice: the repair path never reaches seedPractice.
+  if (process.env.APP_ENV === "production") {
+    throw new SeedRefusedError("Refusing to seed or repair accounts with APP_ENV=production");
+  }
   const [existing] = await systemDb()
     .select({ id: tenants.id })
     .from(tenants)
     .where(eq(tenants.name, DEMO_PRACTICE))
     .limit(1);
   if (existing) {
+    if (options.repair === false) return "exists";
     await repairAdmin(existing.id, admin, options.resetMfa ?? false);
     return "repaired";
   }
@@ -52,6 +61,18 @@ async function repairAdmin(
       .from(users)
       .where(sql`lower(${users.email}) = lower(${admin.email})`)
       .limit(1);
+    if (user) {
+      // Only ever touch an account that belongs to the seeded practice alone: never another
+      // practice's user who happens to share the configured email.
+      const elsewhere = await tx
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(and(eq(memberships.userId, user.id), ne(memberships.tenantId, tenantId)))
+        .limit(1);
+      if (elsewhere.length > 0) {
+        throw new SeedRefusedError("The configured admin email belongs to another practice's user");
+      }
+    }
     const userId =
       user?.id ??
       (
@@ -60,6 +81,7 @@ async function repairAdmin(
           .values({ email: admin.email, displayName: "Morgan Delacroix", passwordHash })
           .returning({ id: users.id })
       )[0]!.id;
+    // A deliberately disabled account (disabled_at) stays disabled.
     await tx
       .update(users)
       .set({
@@ -67,7 +89,6 @@ async function repairAdmin(
         mustChangePassword: false,
         failedLoginCount: 0,
         lockedUntil: null,
-        disabledAt: null,
         ...(resetMfa ? { totpSecretEnc: null, mfaEnrolledAt: null, totpLastStep: null } : {}),
       })
       .where(eq(users.id, userId));
@@ -79,5 +100,13 @@ async function repairAdmin(
     if (!membership) await tx.insert(memberships).values({ tenantId, userId, role: "admin" });
     // Any session opened with the old credentials ends.
     await tx.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.userId, userId));
+    // Audited in the same transaction: a repair never commits without its audit event.
+    await audit(tx as unknown as TenantTx, {
+      action: "system.admin_repaired",
+      tenantId,
+      entityType: "user",
+      entityId: userId,
+      metadata: { resetMfa, created: !user },
+    });
   });
 }
