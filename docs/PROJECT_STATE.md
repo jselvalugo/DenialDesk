@@ -6,6 +6,20 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
+- Appeals A1 (`specs/appeals.md`): `appeals` + `appeal_notes` tables (tenant RLS, isolation test,
+  a DB trigger enforcing the status lifecycle draft → in_review → ready → submitted →
+  awaiting_decision → decided, with withdrawn/dismissed reachable from submitted/awaiting_decision).
+  `/appeals` work list (level/payer/status filters, deadline/amount sort, totals row); "Start
+  appeal" on the denial detail page opens `/appeals/new?denialId=<id>` (own create page, deadline
+  computed fresh from the rules engine, never guessed); `/appeals/[id]` records the submission
+  (method, date, tracking ref) and the decision (outcome, date, recovered amount, close reason),
+  syncing the linked denial's status. "Appeals" is now a live item in the Denials module switcher.
+  A practice-configurable appeal follow-up-day default lives in a new small `practice_settings`
+  key/value table (no admin UI yet to edit it in A1 — it always reads the built-in 30-day default
+  until one is set directly in the table). Next: A2 letter templates, A3 escalation/Medicare
+  5-level ladder, A4 overturn-rate analytics, A5 attachment storage. Open questions from the spec
+  (late-filing blocking, appeal version history, withdrawn/dismissed → denial status mapping,
+  amount-in-controversy source) are added to `docs/owner/OWNER_ACTION_ITEMS.xlsx`.
 - Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
   section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
   planned; Design system in pre-production). Administrators define custom fields on patients,
@@ -124,6 +138,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
+- Appeals A1 (`specs/appeals.md`): late-filing blocking (OA-021), withdrawn/dismissed → denial
+  status mapping (OA-022), appeal version history before A2 (OA-023), Medicare amount-in-controversy
+  thresholds source (OA-024), tracking/recovered-amount field masking (OA-025).
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
