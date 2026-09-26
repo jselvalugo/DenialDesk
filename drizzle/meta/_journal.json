@@ -141,6 +141,13 @@
       "when": 1790441401335,
       "tag": "0019_tenant_agreements",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790442256333,
+      "tag": "0020_tenant_agreements_corrections",
+      "breakpoints": true
     }
   ]
 }

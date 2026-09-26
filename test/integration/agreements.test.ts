@@ -13,6 +13,7 @@ import {
   listAgreements,
   openAgreementFile,
   recordAgreement as recordWithOptions,
+  voidAgreement,
   type AgreementInput,
 } from "@/domain/platform/agreements";
 import { createPractice, listPractices, PracticeError } from "@/domain/platform/practices";
@@ -44,7 +45,6 @@ const input = (tenantId: string, overrides: Partial<AgreementInput> = {}): Agree
   signedOn: "2026-08-28",
   practiceSigner: "Synthetic Signer, Practice Administrator",
   ourSigner: "Synthetic Officer, DenialDesk",
-  templateVersion: "BAA-2026.1",
   note: null,
   filename: "synthetic-baa.pdf",
   content: pdf("one"),
@@ -90,11 +90,7 @@ describe("recordAgreement", () => {
         and(eq(auditEvents.action, "operator.agreement_recorded"), eq(auditEvents.entityId, agreementId)),
       );
     expect(event).toMatchObject({ actorUserId: operator.userId, tenantId, entityType: "tenant_agreement" });
-    expect(event!.metadata).toEqual({
-      supersededId: null,
-      templateVersion: "BAA-2026.1",
-      sizeBytes: pdf("one").length,
-    });
+    expect(event!.metadata).toEqual({ outcome: "active", supersededId: null, sizeBytes: pdf("one").length });
   });
 
   it("a renewal supersedes the active agreement and keeps it on file", async () => {
@@ -141,6 +137,27 @@ describe("recordAgreement", () => {
     const demo = await ensureDemoPractice();
     await expect(recordAgreement(input(demo.tenantId), operator)).rejects.toThrow(/customer practice/);
     expect(await listAgreements(tenantId)).toEqual([]);
+  });
+
+  it("keeps an older agreement for the record without replacing the current one", async () => {
+    const { tenantId } = await createTestTenant("BAA back-fill");
+    const current = await recordAgreement(input(tenantId), operator); // effective 2026-09-01
+    const older = await recordAgreement(
+      input(tenantId, {
+        effectiveDate: "2025-09-01",
+        expiresOn: "2026-08-31",
+        signedOn: "2025-08-20",
+        content: pdf("older"),
+      }),
+      operator,
+    );
+    expect(older).toMatchObject({ outcome: "historical", supersededId: null });
+    const rows = await listAgreements(tenantId);
+    expect(rows.map((r) => [r.id, r.status])).toEqual([
+      [older.agreementId, "historical"],
+      [current.agreementId, "active"],
+    ]);
+    expect((await listPractices(operator)).find((p) => p.id === tenantId)?.baa).toBe("active");
   });
 
   it("accepts an agreement that expires on its effective date and one signed today", async () => {
@@ -224,6 +241,54 @@ describe("recordAgreement", () => {
   });
 });
 
+describe("voidAgreement", () => {
+  it("marks an agreement as recorded in error, keeps it on file, and audits the reason", async () => {
+    const { tenantId } = await createTestTenant("BAA void");
+    const { agreementId } = await recordAgreement(input(tenantId), operator);
+    await expect(voidAgreement({ tenantId, agreementId, reason: "oops" }, operator)).rejects.toThrow(/why/);
+    await voidAgreement(
+      { tenantId, agreementId, reason: "Wrong practice's agreement was uploaded." },
+      operator,
+    );
+
+    const [row] = await listAgreements(tenantId);
+    expect(row).toMatchObject({
+      id: agreementId,
+      status: "voided",
+      voidReason: "Wrong practice's agreement was uploaded.",
+    });
+    expect(row!.voidedAt).toBeInstanceOf(Date);
+    expect((await listPractices(operator)).find((p) => p.id === tenantId)?.baa).toBe("missing");
+    expect(await openAgreementFile(tenantId, agreementId, operator)).not.toBeNull(); // still downloadable
+
+    const [event] = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(and(eq(auditEvents.action, "operator.agreement_voided"), eq(auditEvents.entityId, agreementId)));
+    expect(event).toMatchObject({
+      actorUserId: operator.userId,
+      tenantId,
+      reason: "Wrong practice's agreement was uploaded.",
+    });
+
+    // Voiding is final, and the practice can record the correct agreement afterwards.
+    await expect(
+      voidAgreement({ tenantId, agreementId, reason: "Trying again, again." }, operator),
+    ).rejects.toThrow(/already/);
+    const replacement = await recordAgreement(input(tenantId, { content: pdf("correct") }), operator);
+    expect(replacement).toMatchObject({ outcome: "active", supersededId: null });
+  });
+
+  it("refuses an agreement from another practice", async () => {
+    const { tenantId } = await createTestTenant("BAA void other");
+    const { agreementId } = await recordAgreement(input(tenantId), operator);
+    await expect(
+      voidAgreement({ tenantId: practice.tenantId, agreementId, reason: "Not mine to void." }, operator),
+    ).rejects.toThrow(/isn't on file/);
+    expect((await listAgreements(tenantId))[0]?.status).toBe("active");
+  });
+});
+
 describe("openAgreementFile", () => {
   it("returns the signed copy for its own practice only, and audits the download", async () => {
     const { tenantId } = await createTestTenant("BAA download");
@@ -284,7 +349,30 @@ describe("database guarantees", () => {
     const renewal = await recordAgreement(input(tenantId, { content: pdf("renewal") }), operator);
     await expectDbError(
       systemDb().update(tenantAgreements).set({ status: "active", supersededById: null }).where(where),
-      /superseded agreement cannot change/,
+      /status may only move/,
+    );
+    // A voided row is frozen: no un-voiding, no edits to the void fields.
+    await voidAgreement({ tenantId, agreementId, reason: "Recorded against the wrong practice." }, operator);
+    await expectDbError(
+      systemDb().update(tenantAgreements).set({ status: "superseded" }).where(where),
+      /voided agreement cannot change/,
+    );
+    await expectDbError(
+      systemDb().update(tenantAgreements).set({ voidReason: "rewritten" }).where(where),
+      /voided agreement cannot change/,
+    );
+    // Void fields can't be set without the status, and a void needs a real reason.
+    const renewalWhere = eq(tenantAgreements.id, renewal.agreementId);
+    await expectDbError(
+      systemDb().update(tenantAgreements).set({ voidReason: "sneaky" }).where(renewalWhere),
+      /void fields belong to voided/,
+    );
+    await expectDbError(
+      systemDb()
+        .update(tenantAgreements)
+        .set({ status: "voided", voidedAt: new Date(), voidedBy: operator.userId, voidReason: "no" })
+        .where(renewalWhere),
+      /void_consistent/,
     );
     await expectDbError(
       systemDb()

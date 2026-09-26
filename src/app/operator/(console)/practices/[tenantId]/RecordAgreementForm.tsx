@@ -82,16 +82,7 @@ export function RecordAgreementForm({
             hint="Name and title."
           />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <TextField
-            label="BAA template version"
-            name="templateVersion"
-            required
-            maxLength={40}
-            hint="The counsel-reviewed template this agreement was signed on."
-          />
-          <TextField label="Note" name="note" maxLength={500} hint="Optional. No patient information." />
-        </div>
+        <TextField label="Note" name="note" maxLength={500} hint="Optional. No patient information." />
         {syntheticOnly && (
           <label className="flex items-start gap-2 text-body text-text">
             <input type="checkbox" name="syntheticAttestation" required className="mt-0.5 size-4" />

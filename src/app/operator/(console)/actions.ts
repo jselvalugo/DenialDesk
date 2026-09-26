@@ -7,7 +7,8 @@ import { requireOperator } from "@/auth/operator";
 import {
   checkAgreementFile,
   recordAgreement as record,
-  TEMPLATE_VERSION_PATTERN,
+  voidAgreement as markVoid,
+  type RecordOutcome,
 } from "@/domain/platform/agreements";
 import {
   createPractice as create,
@@ -83,7 +84,7 @@ export async function resetDemo(_: ActionState, formData: FormData): Promise<Act
 
 export interface RecordAgreementState {
   error?: string;
-  recorded?: { filename: string; supersededPrevious: boolean };
+  recorded?: { filename: string; outcome: RecordOutcome; supersededPrevious: boolean };
 }
 
 const optionalText = (max: number) =>
@@ -100,7 +101,6 @@ const agreementSchema = z.object({
   signedOn: z.iso.date(),
   practiceSigner: z.string().trim().min(2).max(160),
   ourSigner: z.string().trim().min(2).max(160),
-  templateVersion: z.string().trim().regex(TEMPLATE_VERSION_PATTERN),
   note: optionalText(500),
 });
 
@@ -117,14 +117,10 @@ export async function recordAgreement(
     signedOn: formData.get("signedOn"),
     practiceSigner: formData.get("practiceSigner"),
     ourSigner: formData.get("ourSigner"),
-    templateVersion: formData.get("templateVersion"),
     note: formData.get("note") ?? "",
   });
   if (!parsed.success) {
-    return {
-      error:
-        "Enter the effective and signed dates, both signers, and the template version (letters, digits, dots, dashes).",
-    };
+    return { error: "Enter the effective and signed dates and both signers." };
   }
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "Choose the signed agreement as a PDF file." };
@@ -140,7 +136,7 @@ export async function recordAgreement(
   });
   if (!check.ok) return { error: check.error };
   try {
-    const { supersededId } = await record(
+    const { supersededId, outcome } = await record(
       {
         ...parsed.data,
         filename: file.name,
@@ -152,9 +148,36 @@ export async function recordAgreement(
     );
     revalidatePath("/operator");
     revalidatePath(`/operator/practices/${parsed.data.tenantId}`);
-    return { recorded: { filename: file.name, supersededPrevious: supersededId !== null } };
+    return { recorded: { filename: file.name, outcome, supersededPrevious: supersededId !== null } };
   } catch (error) {
     if (error instanceof PracticeError) return { error: error.message };
     throw error;
   }
+}
+
+export interface VoidAgreementState {
+  error?: string;
+  voided?: true;
+}
+
+/** Marks an agreement as recorded in error (kept on file, no longer counted). */
+export async function voidAgreement(_: VoidAgreementState, formData: FormData): Promise<VoidAgreementState> {
+  const operator = await requireOperator();
+  const parsed = z
+    .object({ tenantId: z.uuid(), agreementId: z.uuid(), reason: z.string().trim().min(5).max(500) })
+    .safeParse({
+      tenantId: formData.get("tenantId"),
+      agreementId: formData.get("agreementId"),
+      reason: formData.get("reason"),
+    });
+  if (!parsed.success) return { error: "Choose the agreement and say why it was recorded in error." };
+  try {
+    await markVoid(parsed.data, operator);
+  } catch (error) {
+    if (error instanceof PracticeError) return { error: error.message };
+    throw error;
+  }
+  revalidatePath("/operator");
+  revalidatePath(`/operator/practices/${parsed.data.tenantId}`);
+  return { voided: true };
 }

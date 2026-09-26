@@ -52,6 +52,7 @@ export type AuditAction =
   | "operator.practice_viewed"
   | "operator.agreement_recorded"
   | "operator.agreement_downloaded"
+  | "operator.agreement_voided"
   | "rcm.defaults_loaded"
   | "rcm.file_imported"
   | "rcm.file_viewed"

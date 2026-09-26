@@ -1,10 +1,10 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { addCalendarDays, todayIn } from "@rules/calendar";
 import type { OperatorContext } from "@/auth/operator";
 import { systemDb } from "@/db/client";
-import { tenantAgreements, tenants } from "@/db/schema";
+import { tenantAgreements, tenants, type AgreementStatus as AgreementRecordStatus } from "@/db/schema";
 import { sanitizeDatabaseError } from "@/db/tenant";
 import { audit, auditSystem } from "@/lib/audit";
 import { PracticeError } from "./errors";
@@ -25,26 +25,26 @@ export const EXPIRING_SOON_DAYS = 60;
 /** Synthetic-only environments (ADR 0003) accept only files whose name carries this prefix. */
 export const SYNTHETIC_FILE_PREFIX = "SYN-";
 
-/** Template versions are audit metadata, so they're a token, not free text. */
-export const TEMPLATE_VERSION_PATTERN = /^[A-Za-z0-9._-]{1,40}$/;
+/** Shortest acceptable reason for marking an agreement as recorded in error. */
+export const MIN_VOID_REASON_LENGTH = 5;
 
 export type AgreementStatus = "missing" | "not_yet_effective" | "active" | "expiring" | "expired";
 
 export interface AgreementDates {
-  status: "active" | "superseded";
+  status: AgreementRecordStatus;
   effectiveDate: string;
   expiresOn: string | null;
 }
 
 const covers = (a: AgreementDates, day: string) =>
-  a.effectiveDate <= day && (a.expiresOn === null || day <= a.expiresOn);
+  a.status !== "voided" && a.effectiveDate <= day && (a.expiresOn === null || day <= a.expiresOn);
 
 /**
  * A practice's BAA status on `today` (YYYY-MM-DD) from every agreement on file. A renewal recorded
  * ahead of its start supersedes the current agreement at once, so coverage is judged by whichever
- * agreement covers today: the active one, or its superseded predecessor until the renewal starts.
- * "Expiring" means the coverage ends within EXPIRING_SOON_DAYS with no renewal on file that takes
- * over without a gap.
+ * agreement covers today: the active one, or its superseded (or historical) predecessor until the
+ * renewal starts. Agreements recorded in error don't count. "Expiring" means the coverage ends
+ * within EXPIRING_SOON_DAYS with no renewal on file that takes over without a gap.
  */
 export function agreementStatus(agreements: readonly AgreementDates[], today: string): AgreementStatus {
   const active = agreements.find((a) => a.status === "active");
@@ -104,7 +104,6 @@ export interface AgreementInput {
   signedOn: string;
   practiceSigner: string;
   ourSigner: string;
-  templateVersion: string;
   note: string | null;
   filename: string;
   content: Buffer;
@@ -117,12 +116,13 @@ export interface AgreementRow extends AgreementDates {
   signedOn: string;
   practiceSigner: string;
   ourSigner: string;
-  templateVersion: string;
   note: string | null;
   filename: string;
   sizeBytes: number;
   sha256: string;
   supersededById: string | null;
+  voidedAt: Date | null;
+  voidReason: string | null;
   createdAt: Date;
 }
 
@@ -134,25 +134,29 @@ const listColumns = {
   signedOn: tenantAgreements.signedOn,
   practiceSigner: tenantAgreements.practiceSigner,
   ourSigner: tenantAgreements.ourSigner,
-  templateVersion: tenantAgreements.templateVersion,
   note: tenantAgreements.note,
   filename: tenantAgreements.filename,
   sizeBytes: tenantAgreements.sizeBytes,
   sha256: tenantAgreements.sha256,
   supersededById: tenantAgreements.supersededById,
+  voidedAt: tenantAgreements.voidedAt,
+  voidReason: tenantAgreements.voidReason,
   createdAt: tenantAgreements.createdAt,
 };
 
+export type RecordOutcome = "active" | "historical";
+
 /**
- * Records a signed BAA for a customer practice. The previous active agreement, if any, becomes
- * superseded and points at the new one; both stay on file. The audit event commits with the
- * record. Returns the new agreement's ID.
+ * Records a signed BAA for a customer practice. Normally it becomes the active agreement and the
+ * previous active one, if any, becomes superseded and points at it; both stay on file. An
+ * agreement that starts before the current active one is a back-fill: it is kept for the record
+ * as "historical" and the current agreement is untouched. The audit event commits with the record.
  */
 export async function recordAgreement(
   input: AgreementInput,
   operator: OperatorContext,
   options: { syntheticOnly: boolean },
-): Promise<{ agreementId: string; supersededId: string | null }> {
+): Promise<{ agreementId: string; supersededId: string | null; outcome: RecordOutcome }> {
   const check = checkAgreementFile({
     name: input.filename,
     size: input.content.length,
@@ -161,11 +165,6 @@ export async function recordAgreement(
     attestedSynthetic: input.attestedSynthetic,
   });
   if (!check.ok) throw new PracticeError(check.error);
-  if (!TEMPLATE_VERSION_PATTERN.test(input.templateVersion)) {
-    throw new PracticeError(
-      "The template version can only contain letters, digits, dots, dashes, and underscores.",
-    );
-  }
   const today = todayIn();
   if (input.expiresOn !== null && input.expiresOn < input.effectiveDate) {
     throw new PracticeError("The expiration date can't be before the effective date.");
@@ -182,29 +181,37 @@ export async function recordAgreement(
       .limit(1);
     if (!tenant) throw new PracticeError("That practice no longer exists or isn't a customer practice.");
 
-    const supersededId = await systemDb().transaction(async (tx) => {
-      const previous = await tx
-        .update(tenantAgreements)
-        .set({ status: "superseded", supersededById: agreementId })
-        .where(
-          and(
-            eq(tenantAgreements.tenantId, input.tenantId),
-            eq(tenantAgreements.kind, "baa"),
-            eq(tenantAgreements.status, "active"),
-          ),
-        )
-        .returning({ id: tenantAgreements.id });
+    return await systemDb().transaction(async (tx) => {
+      const activeFilter = and(
+        eq(tenantAgreements.tenantId, input.tenantId),
+        eq(tenantAgreements.kind, "baa"),
+        eq(tenantAgreements.status, "active"),
+      );
+      const [current] = await tx
+        .select({ id: tenantAgreements.id, effectiveDate: tenantAgreements.effectiveDate })
+        .from(tenantAgreements)
+        .where(activeFilter)
+        .for("update");
+      const outcome: RecordOutcome =
+        current && current.effectiveDate > input.effectiveDate ? "historical" : "active";
+      let supersededId: string | null = null;
+      if (outcome === "active" && current) {
+        await tx
+          .update(tenantAgreements)
+          .set({ status: "superseded", supersededById: agreementId })
+          .where(eq(tenantAgreements.id, current.id));
+        supersededId = current.id;
+      }
       await tx.insert(tenantAgreements).values({
         id: agreementId,
         tenantId: input.tenantId,
         kind: "baa",
-        status: "active",
+        status: outcome,
         effectiveDate: input.effectiveDate,
         expiresOn: input.expiresOn,
         signedOn: input.signedOn,
         practiceSigner: input.practiceSigner,
         ourSigner: input.ourSigner,
-        templateVersion: input.templateVersion,
         note: input.note,
         filename: input.filename,
         contentType: "application/pdf",
@@ -213,18 +220,16 @@ export async function recordAgreement(
         content: input.content,
         recordedBy: operator.userId,
       });
-      const supersededId = previous[0]?.id ?? null;
       await audit(tx, {
         action: "operator.agreement_recorded",
         actorUserId: operator.userId,
         tenantId: input.tenantId,
         entityType: "tenant_agreement",
         entityId: agreementId,
-        metadata: { supersededId, templateVersion: input.templateVersion, sizeBytes: input.content.length },
+        metadata: { outcome, supersededId, sizeBytes: input.content.length },
       });
-      return supersededId;
+      return { agreementId, supersededId, outcome };
     });
-    return { agreementId, supersededId };
   } catch (error) {
     // Two recordings racing for the same practice: the loser hits the one-active index.
     if ((error as { cause?: { code?: string } })?.cause?.code === "23505") {
@@ -233,6 +238,51 @@ export async function recordAgreement(
       );
     }
     // Never rethrow raw: Drizzle's message would carry the query parameters (the PDF, signer names).
+    throw sanitizeDatabaseError(error);
+  }
+}
+
+/**
+ * Marks an agreement as recorded in error. It stays on file and downloadable (retention) but no
+ * longer counts: voiding the active agreement leaves the practice without one until the correct
+ * agreement is recorded. The reason goes into the record and the audit event.
+ */
+export async function voidAgreement(
+  input: { tenantId: string; agreementId: string; reason: string },
+  operator: OperatorContext,
+): Promise<void> {
+  const reason = input.reason.trim();
+  if (reason.length < MIN_VOID_REASON_LENGTH) {
+    throw new PracticeError("Say why the agreement was recorded in error (at least a few words).");
+  }
+  try {
+    await systemDb().transaction(async (tx) => {
+      const updated = await tx
+        .update(tenantAgreements)
+        .set({ status: "voided", voidedAt: new Date(), voidedBy: operator.userId, voidReason: reason })
+        .where(
+          and(
+            eq(tenantAgreements.id, input.agreementId),
+            eq(tenantAgreements.tenantId, input.tenantId),
+            ne(tenantAgreements.status, "voided"),
+          ),
+        )
+        .returning({ id: tenantAgreements.id });
+      if (updated.length === 0) {
+        throw new PracticeError(
+          "That agreement isn't on file for this practice, or is already marked as recorded in error.",
+        );
+      }
+      await audit(tx, {
+        action: "operator.agreement_voided",
+        actorUserId: operator.userId,
+        tenantId: input.tenantId,
+        entityType: "tenant_agreement",
+        entityId: input.agreementId,
+        reason,
+      });
+    });
+  } catch (error) {
     throw sanitizeDatabaseError(error);
   }
 }

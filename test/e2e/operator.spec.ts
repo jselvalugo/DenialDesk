@@ -171,14 +171,12 @@ test.describe("as the platform operator", () => {
     await page.getByLabel("Date signed").fill("2026-08-28");
     await page.getByLabel("Signed for the practice by").fill("Synthetic Signer, Practice Administrator");
     await page.getByLabel("Signed for DenialDesk by").fill("Synthetic Officer, DenialDesk");
-    await page.getByLabel("BAA template version").fill("BAA-2026.1");
     await page.getByLabel("This is a synthetic test document").check();
     await page.getByRole("button", { name: "Record agreement" }).click();
     await expect(page.getByRole("status")).toContainText("SYN-baa.pdf recorded as the active agreement");
 
     const agreements = page.getByRole("table", { name: "Agreements on file" });
     await expect(agreements.getByRole("row")).toHaveCount(2); // header + one agreement
-    await expect(agreements).toContainText("BAA-2026.1");
     await expect(agreements).toContainText("08/31/2027");
 
     const downloading = page.waitForEvent("download");
@@ -208,13 +206,23 @@ test.describe("as the platform operator", () => {
     await page.getByLabel("Date signed").fill("2026-09-10");
     await page.getByLabel("Signed for the practice by").fill("Synthetic Signer, Practice Administrator");
     await page.getByLabel("Signed for DenialDesk by").fill("Synthetic Officer, DenialDesk");
-    await page.getByLabel("BAA template version").fill("BAA-2026.2");
     await page.getByLabel("This is a synthetic test document").check();
     await page.getByRole("button", { name: "Record agreement" }).click();
     await expect(page.getByRole("status")).toContainText("previous agreement is kept as superseded");
     await expect(agreements.getByRole("row")).toHaveCount(3);
     await expect(agreements.getByRole("row").nth(1)).toContainText("Active");
     await expect(agreements.getByRole("row").nth(2)).toContainText("Superseded");
+
+    // The first upload was the wrong file: mark it as recorded in error. It stays listed.
+    await page
+      .getByLabel("Agreement", { exact: true })
+      .selectOption({ label: "SYN-baa.pdf · effective 09/01/2026 · Superseded" });
+    await page.getByLabel("Why it was recorded in error").fill("Wrong file was uploaded for this practice.");
+    await page.getByRole("button", { name: "Mark as recorded in error" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "recorded in error" })).toBeVisible();
+    await expect(agreements.getByRole("row")).toHaveCount(3);
+    await expect(agreements.getByRole("row").nth(2)).toContainText("Recorded in error");
+    await expect(agreements.getByRole("row").nth(2)).toContainText("Wrong file was uploaded");
 
     await page.goto("/operator");
     await expect(

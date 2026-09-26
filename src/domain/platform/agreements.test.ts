@@ -20,6 +20,16 @@ describe("agreementStatus", () => {
     effectiveDate,
     expiresOn,
   });
+  const voided = (effectiveDate: string, expiresOn: string | null): AgreementDates => ({
+    status: "voided",
+    effectiveDate,
+    expiresOn,
+  });
+  const historical = (effectiveDate: string, expiresOn: string | null): AgreementDates => ({
+    status: "historical",
+    effectiveDate,
+    expiresOn,
+  });
   const agreement = [active("2026-10-01", "2027-09-30")];
 
   it("is missing without an active agreement", () => {
@@ -47,6 +57,20 @@ describe("agreementStatus", () => {
     // 2027-09-30 minus 60 days is 2027-08-01.
     expect(agreementStatus(agreement, "2027-07-31")).toBe("active");
     expect(agreementStatus(agreement, "2027-08-01")).toBe("expiring");
+  });
+
+  it("ignores agreements recorded in error", () => {
+    expect(agreementStatus([voided("2020-01-01", null)], "2026-10-15")).toBe("missing");
+    // The renewal starts later; the voided predecessor no longer covers today.
+    expect(agreementStatus([active("2027-01-01", null), voided("2026-01-01", null)], "2026-10-15")).toBe(
+      "not_yet_effective",
+    );
+  });
+
+  it("lets a historical (back-filled) agreement cover today until the active one starts", () => {
+    expect(
+      agreementStatus([active("2027-01-01", null), historical("2026-01-01", "2026-12-31")], "2026-10-15"),
+    ).toBe("active");
   });
 
   it("stays active with no expiration date", () => {

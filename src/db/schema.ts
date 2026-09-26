@@ -766,14 +766,22 @@ export const rateLimits = pgTable(
 // practice. A platform record, not tenant data: no RLS and no grants to the app role; read and
 // written only by the platform operator through src/domain/platform/agreements.ts. RLS is enabled
 // with no policies (defense in depth: a stray GRANT would still show the app role nothing). Rows are
-// never deleted and their recorded fields never change (trigger in drizzle/0019_tenant_agreements.sql,
-// which also adds CHECK constraints and makes the self-referencing key DEFERRABLE INITIALLY DEFERRED;
-// renewals depend on that, so keep it if the table is ever regenerated). Retention per
-// REQUIREMENTS §9.2; classification Confidential (§9.1), never PHI.
+// never deleted and their recorded fields never change; the only changes are the status transitions
+// (trigger in drizzle/0020_tenant_agreements_corrections.sql, which also holds the CHECK constraints;
+// 0019 makes the self-referencing key DEFERRABLE INITIALLY DEFERRED, which renewals depend on, so
+// keep both if the table is ever regenerated). Retention per REQUIREMENTS §9.2; classification
+// Confidential (§9.1), never PHI.
 // ---------------------------------------------------------------------------------------------
 
 export const agreementKindEnum = pgEnum("agreement_kind", ["baa"]);
-export const agreementStatusEnum = pgEnum("agreement_status", ["active", "superseded"]);
+
+/**
+ * active: the agreement in force (one per practice and kind). superseded: replaced by a newer
+ * recording (`supersededById`). historical: recorded for the file after a newer agreement was
+ * already active (back-fill). voided: recorded in error, kept for the record with a reason.
+ * Text with a CHECK (drizzle/0020) rather than an enum, so values can be added in one migration.
+ */
+export type AgreementStatus = "active" | "superseded" | "historical" | "voided";
 
 export const tenantAgreements = pgTable(
   "tenant_agreements",
@@ -781,7 +789,7 @@ export const tenantAgreements = pgTable(
     id: id(),
     tenantId: tenantId(),
     kind: agreementKindEnum("kind").notNull().default("baa"),
-    status: agreementStatusEnum("status").notNull().default("active"),
+    status: text("status").$type<AgreementStatus>().notNull().default("active"),
     effectiveDate: date("effective_date").notNull(),
     /** Null: in force until terminated. */
     expiresOn: date("expires_on"),
@@ -790,8 +798,6 @@ export const tenantAgreements = pgTable(
     practiceSigner: text("practice_signer").notNull(),
     /** Name and title of DenialDesk's signer. */
     ourSigner: text("our_signer").notNull(),
-    /** Version of the counsel-reviewed BAA template (R-5.5.1). */
-    templateVersion: text("template_version").notNull(),
     note: text("note"),
     /** Original file name as uploaded (shown to the operator; never logged). */
     filename: text("filename").notNull(),
@@ -805,6 +811,10 @@ export const tenantAgreements = pgTable(
       .references(() => users.id),
     /** The agreement that replaced this one, once superseded. */
     supersededById: uuid("superseded_by_id"),
+    /** Set together when the operator marks the agreement as recorded in error. */
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by").references(() => users.id),
+    voidReason: text("void_reason"),
     createdAt: createdAt(),
   },
   (t) => [

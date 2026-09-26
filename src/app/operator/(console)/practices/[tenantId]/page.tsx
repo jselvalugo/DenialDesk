@@ -14,6 +14,7 @@ import { auditSystem } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
 import { AgreementStatusBadge } from "../../AgreementStatusBadge";
 import { RecordAgreementForm } from "./RecordAgreementForm";
+import { VoidAgreementForm } from "./VoidAgreementForm";
 
 export const metadata: Metadata = { title: "Practice" };
 
@@ -29,6 +30,13 @@ function calendarDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${m}/${d}/${y}`;
 }
+
+const recordStatus = {
+  active: { label: "Active", tone: "success" },
+  superseded: { label: "Superseded", tone: "neutral" },
+  historical: { label: "Historical", tone: "info" },
+  voided: { label: "Recorded in error", tone: "danger" },
+} as const;
 
 function fileSize(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
@@ -113,7 +121,6 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
                     <Th>Signed</Th>
                     <Th>Practice signer</Th>
                     <Th>DenialDesk signer</Th>
-                    <Th>Template</Th>
                     <Th>Recorded</Th>
                     <Th>File</Th>
                   </tr>
@@ -122,9 +129,7 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
                   {agreements.map((a) => (
                     <Tr key={a.id}>
                       <Td>
-                        <Badge tone={a.status === "active" ? "success" : "neutral"}>
-                          {a.status === "active" ? "Active" : "Superseded"}
-                        </Badge>
+                        <Badge tone={recordStatus[a.status].tone}>{recordStatus[a.status].label}</Badge>
                       </Td>
                       <Td className="tabular">{calendarDate(a.effectiveDate)}</Td>
                       <Td className="tabular">
@@ -133,7 +138,6 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
                       <Td className="tabular">{calendarDate(a.signedOn)}</Td>
                       <Td>{a.practiceSigner}</Td>
                       <Td>{a.ourSigner}</Td>
-                      <Td className="font-mono">{a.templateVersion}</Td>
                       <Td className="tabular text-muted">{dateFormat.format(a.createdAt)}</Td>
                       <Td>
                         <a
@@ -145,6 +149,11 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
                         </a>
                         <span className="ml-2 text-label text-muted">{fileSize(a.sizeBytes)}</span>
                         {a.note && <p className="mt-0.5 text-label text-muted">{a.note}</p>}
+                        {a.voidReason && (
+                          <p className="mt-0.5 text-label text-danger-fg">
+                            Recorded in error: {a.voidReason}
+                          </p>
+                        )}
                       </Td>
                     </Tr>
                   ))}
@@ -165,6 +174,25 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
               />
             </div>
           </Panel>
+
+          {agreements.some((a) => a.status !== "voided") && (
+            <Panel
+              title="Correct the record"
+              description="A wrong upload or a typo can't be edited. Mark the agreement as recorded in error, then record the correct one; both stay on file."
+            >
+              <div className="max-w-3xl">
+                <VoidAgreementForm
+                  tenantId={tenantId}
+                  agreements={agreements
+                    .filter((a) => a.status !== "voided")
+                    .map((a) => ({
+                      id: a.id,
+                      label: `${a.filename} · effective ${calendarDate(a.effectiveDate)} · ${recordStatus[a.status].label}`,
+                    }))}
+                />
+              </div>
+            </Panel>
+          )}
         </>
       )}
     </div>
