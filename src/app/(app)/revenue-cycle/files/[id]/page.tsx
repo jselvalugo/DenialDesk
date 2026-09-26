@@ -67,6 +67,9 @@ export default async function FilePage({
         entityType: "rcm_file",
         entityId: id,
         metadata: {
+          // The lines shown carry patient names (PHI): record which rows were viewed, IDs only
+          // (R-7.5.1), never the names or account numbers themselves.
+          lineIds: data.lines.map((l) => l.id).join(","),
           lines: data.lines.length,
           page: filters.page,
           rule: filters.ruleCode ?? null,

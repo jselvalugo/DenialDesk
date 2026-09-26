@@ -58,6 +58,7 @@ export type AuditAction =
   | "rcm.defaults_loaded"
   | "payer.catalog_loaded"
   | "rcm.file_imported"
+  | "rcm.file_list_viewed"
   | "rcm.file_viewed"
   | "rcm.file_rejected"
   | "rcm.voucher_prepared"
