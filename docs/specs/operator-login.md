@@ -63,8 +63,10 @@ Provisioning from infrastructure configuration (owner rebaseline, 2026-09-26)
       16-character minimum.
 - [x] A set but unusable `PLATFORM_OPERATOR_PASSWORD_HASH` (e.g. the password itself pasted instead
       of the hash, or the public e2e hash on Netlify) is reported once per value in the server log as
-      `operator.credential_unusable` with `status` `malformed` / `test_hash` and a fingerprint prefix,
-      never the value. Visitors still see only the generic sign-in error (no configuration leak).
+      `operator.credential_unusable` with `status` `malformed` / `test_hash` and nothing else: a
+      malformed value may be the password, so neither it nor any digest of it is logged. Visitors
+      still see only the generic sign-in error (no configuration leak). A password that was pasted
+      into the hosting configuration is exposed there; the runbook says to choose a new one.
 - [x] Production bootstrap and recovery are the same infrastructure step; production sign-in moves
       to Microsoft Entra ID with a hardware key (ROADMAP production gate).
 

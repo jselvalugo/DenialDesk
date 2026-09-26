@@ -67,13 +67,15 @@ const warnedUnusable = new Set<string>();
  * A configured value that can't be used switches the console off silently for visitors (sign-in
  * shows the generic error), so the operator learns why from the server log: `status` says whether
  * the value is malformed (e.g. the password itself instead of the hash `pnpm operator:credential`
- * prints) or the public e2e test hash. The value never reaches the log, only its fingerprint prefix.
+ * prints) or the public e2e test hash. Nothing derived from the value is logged: a malformed value
+ * may be the password itself, and even a short digest of it would help offline guessing. Its digest
+ * stays in memory only, to warn once per value.
  */
 function warnUnusable(hash: string, status: "malformed" | "test_hash"): void {
   const fingerprint = sha256(hash);
   if (warnedUnusable.has(fingerprint)) return;
   warnedUnusable.add(fingerprint);
-  log.warn("operator.credential_unusable", { status, credentialId: fingerprint.slice(0, 8) });
+  log.warn("operator.credential_unusable", { status });
 }
 
 /** The operator's password hash from infrastructure configuration, or null if unset or unusable. */
