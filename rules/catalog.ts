@@ -156,4 +156,71 @@ export const catalog: Rule[] = [
     effectiveTo: null,
     verify: true,
   },
+  // Medicare appeal levels 2–5 (REQUIREMENTS §4.2, R-4.2.1). Each window runs from *receipt* of the
+  // prior level's decision, and receipt is presumed 5 days after the notice date — the same
+  // convention appealDeadline() uses for redetermination. Windows below are from REQUIREMENTS §4.2;
+  // regulation subsections still need counsel's confirmation.
+  {
+    id: "medicare.appeals.receipt_presumption",
+    title: "Notice of a Medicare appeal decision presumed received after its date",
+    citation: '42 CFR § 405.901 (definition of "date of receipt")',
+    regimes: ["medicare"],
+    value: 5,
+    unit: "calendar_days",
+    effectiveFrom: null,
+    effectiveTo: null,
+    verify: true,
+    verifyNote: "Confirm the 5-day presumption applies to reconsideration, ALJ, and Council notices.",
+  },
+  {
+    id: "medicare.reconsideration.filing_window",
+    title: "Request QIC reconsideration after receipt of the redetermination decision",
+    citation: "42 CFR § 405.962(a)",
+    regimes: ["medicare"],
+    value: 180,
+    unit: "calendar_days",
+    effectiveFrom: null,
+    effectiveTo: null,
+    verify: true,
+  },
+  {
+    id: "medicare.alj_hearing.filing_window",
+    title: "Request an ALJ hearing after receipt of the QIC reconsideration",
+    citation: "42 CFR § 405.1002(a)",
+    regimes: ["medicare"],
+    value: 60,
+    unit: "calendar_days",
+    effectiveFrom: null,
+    effectiveTo: null,
+    verify: true,
+    verifyNote: "Amount-in-controversy threshold (§ 405.1006) not yet in the catalog — ⚠️ VERIFY.",
+  },
+  {
+    id: "medicare.council_review.filing_window",
+    title: "Request Medicare Appeals Council review after receipt of the ALJ decision",
+    citation: "42 CFR § 405.1102(a)",
+    regimes: ["medicare"],
+    value: 60,
+    unit: "calendar_days",
+    effectiveFrom: null,
+    effectiveTo: null,
+    verify: true,
+  },
+  {
+    id: "medicare.judicial_review.filing_window",
+    title: "File in federal district court after receipt of the Council decision",
+    citation: "42 CFR § 405.1132; § 405.1136 (judicial review)",
+    regimes: ["medicare"],
+    value: 60,
+    unit: "calendar_days",
+    effectiveFrom: null,
+    effectiveTo: null,
+    verify: true,
+    verifyNote:
+      "Confirm subsection: § 405.1132 covers escalation; the 60-day filing window may sit in § 405.1136. " +
+      "Amount-in-controversy threshold (§ 405.1006) not yet in the catalog — ⚠️ VERIFY.",
+  },
+  // TODO ⚠️ VERIFY: Medicare amount-in-controversy thresholds for ALJ and federal court
+  // (42 CFR § 405.1006; adjusted annually in the Federal Register). REQUIREMENTS §4.2 gives no
+  // values, so none are added here. Add one effective-dated version per calendar year once cited.
 ];

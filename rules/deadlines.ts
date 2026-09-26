@@ -110,3 +110,44 @@ export function payerResponseStatus(
   const daysLate = Math.max(0, daysBetween(milestoneDate, responseDate));
   return { met: daysLate === 0, daysLate };
 }
+
+/** Medicare appeal levels after redetermination (REQUIREMENTS §4.2, R-4.2.1). */
+export type MedicareAppealLevel = "reconsideration" | "alj_hearing" | "council_review" | "judicial_review";
+
+const MEDICARE_LEVEL_WINDOW: Record<MedicareAppealLevel, string> = {
+  reconsideration: "medicare.reconsideration.filing_window",
+  alj_hearing: "medicare.alj_hearing.filing_window",
+  council_review: "medicare.council_review.filing_window",
+  judicial_review: "medicare.judicial_review.filing_window",
+};
+
+/** The level a party may request after a decision at the given level. */
+export const MEDICARE_LEVEL_AFTER = {
+  redetermination: "reconsideration",
+  reconsideration: "alj_hearing",
+  alj_hearing: "council_review",
+  council_review: "judicial_review",
+} as const satisfies Record<string, MedicareAppealLevel>;
+
+/**
+ * Deadline to request `nextLevel` of a Medicare appeal, counted from the prior level's decision
+ * (notice) date: the 5-day receipt presumption plus the level's window, in calendar days — the same
+ * convention as `appealDeadline` for redetermination. Rules resolve as in force on the decision
+ * date. Returns null for any regime other than Medicare (MA and commercial appeals follow plan
+ * documents and contracts).
+ */
+export function medicareNextLevelDeadline(input: {
+  regime: Regime;
+  nextLevel: MedicareAppealLevel;
+  priorDecisionDate: string;
+}): Deadline | null {
+  const window = resolveRule(MEDICARE_LEVEL_WINDOW[input.nextLevel], input.priorDecisionDate);
+  if (!appliesTo(window, input.regime)) return null;
+  const presumption = resolveRule("medicare.appeals.receipt_presumption", input.priorDecisionDate);
+  return {
+    date: addCalendarDays(input.priorDecisionDate, presumption.value + window.value),
+    basis: `${presumption.id}+${window.id}`,
+    citation: window.citation,
+    verify: presumption.verify || window.verify,
+  };
+}
