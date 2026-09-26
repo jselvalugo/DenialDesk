@@ -14,6 +14,9 @@ _Last updated: 2026-09-26_
   synthetic remittances. External data sources to connect are tracked in `docs/data-sources.xlsx`.
   Next: R2 reversals + denial capture (needs cited CARC mapping), PP2 alerts/demand letter, R3 feed.
   Open (counsel): interest accrual start; paper provider-response window.
+- Welcome page (`specs/welcome-page.md`) now explains how the patient record feeds claims and
+  denials (4 steps; charge import and 837P/835 marked Planned) and lists more safeguards (MFA,
+  field encryption, BAA on file). Wording passed `compliance-checker`; owner sign-off on copy pending.
 - Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
   section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
   planned; Design system in pre-production). Administrators define custom fields on patients,
