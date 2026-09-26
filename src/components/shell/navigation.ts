@@ -81,8 +81,8 @@ export function navApps({
       tone: "blue",
       items: [
         { label: "Claims", href: "/claims", icon: FileText, available: true },
-        { label: "Remittances", href: "/remittances", icon: Receipt, available: false },
-        { label: "Prompt pay", href: "/prompt-pay", icon: Scale, available: false },
+        { label: "Remittances", href: "/remittances", icon: Receipt, available: true },
+        { label: "Prompt pay", href: "/prompt-pay", icon: Scale, available: true },
       ],
     },
   ];

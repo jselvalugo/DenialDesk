@@ -57,7 +57,7 @@ describe("locate", () => {
 
   it("does not match a path that only shares a prefix, and never a planned page", () => {
     expect(locate(apps, "/claimsx").item).toBeNull();
-    expect(locate(apps, "/remittances").item).toBeNull();
+    expect(locate(apps, "/reports").item).toBeNull();
   });
 
   it("matches the appeals page, now shipped, to the denials module", () => {

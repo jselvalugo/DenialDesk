@@ -1,4 +1,4 @@
--- Generated from drizzle/0027_appeals_review_fixes.sql by `pnpm netlify:migrations`. Do not edit.
+-- Generated from drizzle/0030_appeals_review_fixes.sql by `pnpm netlify:migrations`. Do not edit.
 CREATE UNIQUE INDEX "denials_tenant_id_key" ON "denials" USING btree ("tenant_id","id");--> statement-breakpoint
 ALTER TABLE "appeals" ADD CONSTRAINT "appeals_denial_fk" FOREIGN KEY ("tenant_id","denial_id") REFERENCES "public"."denials"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 

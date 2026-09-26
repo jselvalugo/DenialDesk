@@ -33,3 +33,18 @@ export function formatDate(isoDate: string): string {
   }
   return usDate.format(new Date(`${isoDate}T00:00:00Z`));
 }
+
+const dateTimeFormat = new Intl.DateTimeFormat("en-US", {
+  month: "2-digit",
+  day: "2-digit",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "America/New_York",
+  timeZoneName: "short",
+});
+
+/** Timestamp for history panels: `10/14/2026, 5:00 PM EDT` (DESIGN.md §10). */
+export function formatDateTime(at: Date): string {
+  return dateTimeFormat.format(at);
+}

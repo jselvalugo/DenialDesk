@@ -1,4 +1,4 @@
--- Generated from drizzle/0026_appeals.sql by `pnpm netlify:migrations`. Do not edit.
+-- Generated from drizzle/0029_appeals.sql by `pnpm netlify:migrations`. Do not edit.
 CREATE TYPE "public"."appeal_decision_outcome" AS ENUM('overturned_full', 'overturned_partial', 'upheld', 'withdrawn', 'dismissed');--> statement-breakpoint
 CREATE TYPE "public"."appeal_level" AS ENUM('first_level', 'second_level', 'external_review', 'medicare_redetermination', 'medicare_qic', 'medicare_alj', 'medicare_council', 'medicare_federal_court');--> statement-breakpoint
 CREATE TYPE "public"."appeal_status" AS ENUM('draft', 'in_review', 'ready', 'submitted', 'awaiting_decision', 'decided', 'withdrawn', 'dismissed');--> statement-breakpoint

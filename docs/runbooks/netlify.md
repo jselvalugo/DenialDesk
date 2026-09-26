@@ -136,6 +136,18 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   `PLATFORM_OPERATOR_PASSWORD_HASH` secret, and keep two-step (ideally a security key) on the Netlify
   account: whoever can edit these values controls the console.
 
+## Deploy preview fails with "migration … has been modified after being applied"
+
+Two causes, and code is not at risk in either:
+
+1. **Number collision (most likely).** The base branch already has a migration with the same
+   number, applied to the main preview database the branch database starts from. Merge the base
+   branch, move the PR's migration to the next free number (`pnpm db:generate`, then
+   `pnpm netlify:migrations`), and push.
+2. **Edited after being applied.** A migration changed after an earlier push applied it to this
+   PR's branch database. Delete that database branch in Netlify (Project → Database) and retry,
+   or push under a new branch name. Then never edit that migration again; add a new one.
+
 ## Checks after each deploy
 - `https://denialdesk.netlify.app/api/health` returns `{"status":"ok","appEnv":"preview","db":"up"}`.
 - The amber "Synthetic data only" banner is visible on every page.

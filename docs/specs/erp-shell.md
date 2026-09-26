@@ -24,10 +24,10 @@ expression is DenialDesk's own and does not reproduce any vendor's shell (ADR 00
       module's name, 2026-09-26) (accessible name
       "<Module>, switch module", `aria-haspopup="dialog"`, opens the switcher), the module's shipped pages
       as tabs in `nav` "Primary", the active tab marked `aria-current="page"`. No grid icon.
-- [x] Module switcher: modal dialog "Go to" with a search field (focused on open) and one grouped
-      list: each module row (an `h3`: tinted tile, name, description) links to the module's first
+- [x] Module switcher: modal dialog "Go to" with a search field (focused on open) and a two-column
+      Module | Pages table: each module row (an `h3`: tinted tile, name, description) links to the module's first
       page (link name "<Module> module"), its pages follow as links in a list labelled by the
-      module name; planned modules and pages are shown as "Planned" with a dashed border and never
+      module name; planned modules and pages are muted with a "Planned" tag and never
       links; the no-match message is a status region; Escape, the Close button, and the backdrop
       close it.
 - [x] Search: a query matching a module's name or description keeps all of its pages; otherwise

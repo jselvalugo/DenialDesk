@@ -26,12 +26,12 @@ test("unbuilt sections are not links", async ({ page }) => {
   await page.goto("/design");
   await page.getByRole("button", { name: /, switch module$/ }).click();
   const switcher = page.getByRole("dialog", { name: "Go to" });
-  await expect(switcher.getByText("Remittances").first()).toBeVisible();
-  await expect(page.getByRole("link", { name: /^Remittances/ })).toHaveCount(0);
   await expect(switcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
   // A planned module (Insight) is listed as a heading, never a link.
   await expect(switcher.getByRole("heading", { level: 3, name: /^Insight/ })).toBeVisible();
   await expect(switcher.getByRole("link", { name: /Insight/ })).toHaveCount(0);
+  await expect(switcher.getByText("Reports", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Reports/ })).toHaveCount(0);
 });
 
 test("the module switcher searches modules and pages and opens one", async ({ page }) => {
@@ -122,6 +122,18 @@ test("navigation icons are decorative and link names stay text-only", async ({ p
   await expect(switcher.getByRole("link", { name: "Denial queue", exact: true })).toBeVisible();
 });
 
+test("the switcher marks the current module and counts results", async ({ page }) => {
+  await page.goto("/design");
+  await page.getByRole("button", { name: "Settings, switch module", exact: true }).click();
+  const switcher = page.getByRole("dialog", { name: "Go to" });
+  await expect(
+    switcher.getByRole("heading", { level: 3, name: /^Settings/ }).getByText("Current", { exact: true }),
+  ).toBeVisible();
+  await expect(switcher.getByRole("list", { name: "Settings", exact: true })).toBeVisible();
+  await switcher.getByLabel("Search modules and pages").fill("claims");
+  await expect(switcher.getByText("1 module · 3 pages")).toBeVisible();
+});
+
 test("the module switcher opens from the header field and closes with its button or the backdrop", async ({
   page,
 }) => {
@@ -168,7 +180,12 @@ test.describe("signed in", () => {
     await page.getByRole("link", { name: "DenialDesk home" }).click();
     await expect.poll(() => new URL(page.url()).pathname).toBe("/");
     await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
-    for (const name of ["How DenialDesk works", "Your modules", "Safeguards"]) {
+    for (const name of [
+      "How DenialDesk works",
+      "From patient record to claim and denial",
+      "Your modules",
+      "Safeguards",
+    ]) {
       await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
     }
     // Shipped steps link to their page; planned steps are labelled, never linked.
@@ -179,6 +196,24 @@ test.describe("signed in", () => {
       const item = page.locator(`[data-step="${step}"]`);
       await expect(item.getByRole("link")).toHaveCount(0);
       await expect(item.getByText("Planned")).toBeVisible();
+    }
+    for (const step of [1, 4]) {
+      await expect(page.locator(`[data-record-step="${step}"]`).getByRole("link")).toHaveAttribute(
+        "href",
+        "/patients",
+      );
+    }
+    for (const step of [2, 3]) {
+      const item = page.locator(`[data-record-step="${step}"]`);
+      await expect(item.getByRole("link")).toHaveCount(0);
+      await expect(item.getByText("Planned", { exact: true })).toBeVisible();
+    }
+    for (const title of [
+      "Sign-in needs a second factor",
+      "Identifiers are encrypted",
+      "Business Associate Agreements on file",
+    ]) {
+      await expect(page.getByText(title, { exact: true })).toBeVisible();
     }
   });
 });

@@ -20,6 +20,18 @@ _Last updated: 2026-09-26_
   5-level ladder, A4 overturn-rate analytics, A5 attachment storage. Open questions from the spec
   (late-filing blocking, appeal version history, withdrawn/dismissed → denial status mapping,
   amount-in-controversy source) are added to `docs/owner/OWNER_ACTION_ITEMS.xlsx`.
+- Remittances and prompt pay R1/PP1 (`specs/remittances-and-prompt-pay.md`): 835 upload (parser in
+  `src/edi/x12/`), `/remittances` table and record page with balance check, post (claim version +
+  prompt-pay response per claim) and void with reason; `/prompt-pay` table and clock record page
+  (milestones, interest worksheet, contests with "recorded in error"); claim page Payments panel.
+  Migration 0026: append-only history enforced by triggers, RLS + isolation tests. Seed now posts
+  synthetic remittances. External data sources to connect are tracked in `docs/data-sources.xlsx`.
+  R2 (reversals, denial capture from posted adjustments, event-row guard; migration 0028) done;
+  CARC mapping is ⚠️ VERIFY (OA-021). Next: R2b line-level + deposit reassociation, PP2 alerts, R3 feed.
+  Open (counsel): interest accrual start; paper provider-response window.
+- Welcome page (`specs/welcome-page.md`) now explains how the patient record feeds claims and
+  denials (4 steps; charge import and 837P/835 marked Planned) and lists more safeguards (MFA,
+  field encryption, BAA on file). Wording passed `compliance-checker`; owner sign-off on copy pending.
 - Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
   section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
   planned; Design system in pre-production). Administrators define custom fields on patients,
@@ -132,18 +144,20 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
-6. Custom field values on records, settings S2 (MVP): threat model first (value encryption, masking), then `custom_field_values` with RLS + isolation test.
+6. Custom field values on records, settings S2 (MVP): ADR 0007 and threat model accepted; PR 1
+   (encrypted storage, value history, role-gated reveal) in review on branch
+   `claude/custom-field-values-storage`. Next: PR 2 patient form, PR 3 claims/denials, PR 4 payers.
 7. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
-- Appeals A1 (`specs/appeals.md`): late-filing blocking (OA-021), withdrawn/dismissed → denial
-  status mapping (OA-022), appeal version history before A2 (OA-023), Medicare amount-in-controversy
-  thresholds source (OA-024), tracking/recovered-amount field masking (OA-025), abandoning a draft
-  appeal (OA-026), compliance member-ID reveal on appeals (OA-027), counsel sign-off on the level
-  2–5 Medicare rules added in this review round (OA-028), sensitivity-tag masking timing (OA-029),
-  appeal record retention (OA-030).
+- Appeals A1 (`specs/appeals.md`): late-filing blocking (OA-023), withdrawn/dismissed → denial
+  status mapping (OA-024), appeal version history before A2 (OA-025), Medicare amount-in-controversy
+  thresholds source (OA-026), tracking/recovered-amount field masking (OA-027), abandoning a draft
+  appeal (OA-028), compliance member-ID reveal on appeals (OA-029), counsel sign-off on the level
+  2–5 Medicare rules added in this review round (OA-030), sensitivity-tag masking timing (OA-031),
+  appeal record retention (OA-032).
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
@@ -223,7 +237,10 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   C0's column drops were a one-time pre-production change on synthetic data.
 - Never edit, rename, or renumber a migration once pushed: Netlify deploy previews apply each
   branch's migrations to a branch database, track them by number, and refuse any change ("modified
-  after being applied"). Add a new migration instead.
+  after being applied"). Add a new migration instead. The same error appears when two
+  branches pick the same number: branch databases start from the main preview database, so a
+  base migration 0025 blocks a PR's own 0025. Before pushing a migration, merge the base branch
+  and take the next free number (custom field values hit this on 2026-09-26: #49, then #52).
 - Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
 - Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):

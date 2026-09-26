@@ -240,6 +240,7 @@ describe("migrations raise only listed, value-free trigger messages", () => {
     "NEW.id": "uuid",
     "NEW.claim_id": "uuid",
     "NEW.denial_id": "uuid",
+    "NEW.remittance_id": "uuid",
     "NEW.version": "int",
     "OLD.version + 1": "int",
     missing: "int",
@@ -248,7 +249,7 @@ describe("migrations raise only listed, value-free trigger messages", () => {
   };
   // "OLD.status"/"NEW.status" name a different enum in this migration's own trigger.
   const FILE_EXPRESSION_SLOTS: Record<string, Record<string, TriggerSlot>> = {
-    "0026_appeals.sql": { "OLD.status": "appealStatus", "NEW.status": "appealStatus" },
+    "0029_appeals.sql": { "OLD.status": "appealStatus", "NEW.status": "appealStatus" },
   };
 
   it("parses every RAISE strictly (no E'', quoted '' or USING forms slip past the checks)", () => {
