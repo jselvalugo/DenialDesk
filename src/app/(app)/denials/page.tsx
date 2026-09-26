@@ -162,8 +162,8 @@ export default async function DenialQueuePage({
         {rows.length === 0 ? (
           filtersToQuery(filters, { page: 1 }) === "" && summary.open === 0 ? (
             <EmptyState
-              title="No open denials yet"
-              description="Denials are captured from payer remittances (835 ERAs). Remittance import is next on the roadmap; until then only practices with sample data show denials."
+              title="No open denials"
+              description="Denials are captured from payer remittances (835 ERAs). Choose status “All” to see closed denials."
             />
           ) : (
             <EmptyState

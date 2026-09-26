@@ -135,7 +135,13 @@ export async function resetDemoPractice(operator: AuthContext, mode: DemoMode = 
     .update(tenants)
     .set({ suspendedAt: new Date() })
     .where(and(eq(tenants.kind, "demo"), isNull(tenants.suspendedAt)));
-  const { tenantId } = await createDemoPractice(mode);
+  const { tenantId } = await createDemoPractice(mode).catch((error: unknown) => {
+    // A guest's first click can create a demo practice between the archive and this create.
+    if ((error as { cause?: { code?: string } })?.cause?.code === "23505") {
+      throw new PracticeError("A demo practice was just created by a visitor. Try the reset again.");
+    }
+    throw error;
+  });
   await auditSystem({
     action: "operator.demo_reset",
     actorUserId: operator.userId,

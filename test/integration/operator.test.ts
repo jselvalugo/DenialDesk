@@ -18,6 +18,7 @@ import {
   users,
 } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
+import { DEFAULT_RULES } from "@/domain/revenue-cycle/defaults";
 import {
   createPractice,
   listPractices,
@@ -143,7 +144,13 @@ describe("demo practice", () => {
     const [emptyTenant] = await systemDb().select().from(tenants).where(eq(tenants.id, empty.tenantId));
     expect(emptyTenant!.name).toMatch(/demo, empty/);
     const emptyCounts = await count(empty);
-    expect(emptyCounts).toMatchObject({ patients: 0, claims: 0, denials: 0, files: 0, rules: 12 });
+    expect(emptyCounts).toMatchObject({
+      patients: 0,
+      claims: 0,
+      denials: 0,
+      files: 0,
+      rules: DEFAULT_RULES.length,
+    });
     expect(emptyCounts.payers).toBeGreaterThan(0);
     expect(emptyCounts.locations).toBeGreaterThan(0);
     const [event] = await systemDb()
