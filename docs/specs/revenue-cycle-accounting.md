@@ -213,17 +213,22 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       Known limitations: the overlap rule assumes one bank account (a second account's deposits
       on the same dates are refused); a reversed file can't be re-imported unchanged (import the
       corrected export); the reversal reason is free text with a "no patient information" hint.
+      Only `Amount` / `Deposit amount` headers are read: a Debit/Credit two-column export is
+      refused rather than read one-sided (the earlier `Credit` alias dropped for that reason).
 - [x] **B5** (2026-09-26): pure `statements.ts` (income statement by GL account per month,
       KPIs, denials by class) and `reporting.ts` (statements and dashboard over the last 12
       months from `periodFiles()`, totals computed in SQL). `payer_classes.regime` (migration
       0017, backfilled per practice from the linked payer or the starter class code) maps open
       DenialDesk denials to financial classes; a regime with no class shows as "No matching
-      class". Statements page (income statement, receivables by A/R account with credits
+      class"; when several classes share a regime, the first class by code takes its denials.
+      The starter code-to-regime backfill is a default: each practice confirms its classes'
+      regimes (editing arrives with the rule/GL editing UI). Refused reversals are audited with
+      a coded reason and the file ID. Statements page (income statement, receivables by A/R account with credits
       apart, payments/deposits/clearing by month; ⚠️ management view pending the accountant's
       review of the net-revenue presentation) and RCM dashboard (net revenue, payments, open
       A/R, days in A/R, net collection rate, over-90 share, monthly bars, open denials by class
       with a link to the queue). Both views audited as `rcm.report_viewed`; admin, manager and
-      compliance only. Refused deposit reversals are now audited (`rcm.deposits_rejected`).
+      compliance only. 
 
 ## Security notes
 - Uploads: CSV only, size-capped, parsed in memory, never written to disk or object storage;

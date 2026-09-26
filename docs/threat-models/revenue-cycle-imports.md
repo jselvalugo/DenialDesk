@@ -40,7 +40,7 @@ Data: Restricted PHI (patient name, practice account number, service date, CPT, 
 | Parser DoS | 1 MB, 5,000 rows, 50 columns, linear parser | Low |
 | PHI through aging | Aging is bucketed in SQL, so only totals by class and bucket leave the database; each report view is audited | Low |
 | PHI in a reversal reason | Free-text reason with a "no patient information" hint; stored only in the audit event | Medium: a coded reason list would remove it (follow-up) |
-| Unaudited refused reversals | Refusals (role, unknown file, already reversed) audited as `rcm.deposits_rejected` with `operation: "reverse"` | Low |
+| Unaudited refused reversals | Refusals audited as `rcm.deposits_rejected` with `operation: "reverse"`, the file ID, and a coded reason (`forbidden`, `reason_length`, `not_found`, `is_reversal`, `already_reversed`) | Low |
 
 ## Statements and dashboard (B5)
 

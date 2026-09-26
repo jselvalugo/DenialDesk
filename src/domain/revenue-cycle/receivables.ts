@@ -13,7 +13,15 @@ import type { Actor } from "./vouchers";
 // A/R aging, roll-forward, and deposits (docs/specs/revenue-cycle-accounting.md, B4). Reports
 // hold totals only; deposit imports are audited with counts.
 
-export class DepositError extends Error {}
+/** A refused deposit operation; `code` is safe to audit (the message is shown to the user). */
+export class DepositError extends Error {
+  constructor(
+    message: string,
+    readonly code = "refused",
+  ) {
+    super(message);
+  }
+}
 
 /** Stores a parsed deposit file in the caller's transaction and audits it (counts only). */
 export async function importDeposits(tx: TenantTx, actor: Actor, deposits: DepositLine[]): Promise<string> {
@@ -103,20 +111,20 @@ export async function importDeposits(tx: TenantTx, actor: Actor, deposits: Depos
  */
 export async function reverseDepositFile(tx: TenantTx, actor: Actor, fileId: string, reason: string) {
   if (!canConfigureRevenueCycle(actor.role))
-    throw new DepositError("Only administrators can reverse deposit files.");
+    throw new DepositError("Only administrators can reverse deposit files.", "forbidden");
   const trimmed = reason.trim();
   if (trimmed.length < 10 || trimmed.length > 500)
-    throw new DepositError("Give a reason of 10 to 500 characters.");
+    throw new DepositError("Give a reason of 10 to 500 characters.", "reason_length");
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`rcm_deposits:${actor.tenantId}`}))`);
   const [file] = await tx.select().from(rcmDepositFiles).where(eq(rcmDepositFiles.id, fileId)).limit(1);
-  if (!file) throw new DepositError("That deposit file doesn't exist.");
-  if (file.reversesFileId) throw new DepositError("A reversing file can't be reversed.");
+  if (!file) throw new DepositError("That deposit file doesn't exist.", "not_found");
+  if (file.reversesFileId) throw new DepositError("A reversing file can't be reversed.", "is_reversal");
   const [already] = await tx
     .select({ id: rcmDepositFiles.id })
     .from(rcmDepositFiles)
     .where(eq(rcmDepositFiles.reversesFileId, fileId))
     .limit(1);
-  if (already) throw new DepositError("This file was already reversed.");
+  if (already) throw new DepositError("This file was already reversed.", "already_reversed");
   const rows = await tx.select().from(rcmDeposits).where(eq(rcmDeposits.fileId, fileId));
   const [reversal] = await tx
     .insert(rcmDepositFiles)

@@ -67,7 +67,7 @@ export default async function RcmDashboardPage() {
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <PageHeader
         title="RCM dashboard"
-        description={`${periodLabel(kpis.latest.periodYear, kpis.latest.periodMonth)}, from the month-end activity files and DenialDesk denials. Totals only.`}
+        description={`${periodLabel(kpis.latest.periodYear, kpis.latest.periodMonth)}, from the month-end activity files and DenialDesk denials. Totals only. ⚠️ Management view: confirm the net-revenue presentation with the practice's accountant.`}
       />
 
       <section aria-label="Key figures" className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
@@ -141,7 +141,7 @@ export default async function RcmDashboardPage() {
 
       <Panel
         title="Open denials by financial class"
-        description="Denied dollars still being worked in DenialDesk, matched to classes through each payer's regulatory regime"
+        description="Denied dollars still being worked in DenialDesk, matched to classes through each payer's regulatory regime (the first class by code when several share one)"
         actions={
           <Link href="/denials?status=open" className="text-label font-medium text-link hover:underline">
             Denial queue

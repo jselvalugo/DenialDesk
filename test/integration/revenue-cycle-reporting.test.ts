@@ -20,7 +20,7 @@ async function practice(label: string, seed: number): Promise<Actor> {
     practiceName: `RCM reporting ${suffix} (synthetic)`,
     asOf: todayIn(),
     users: [{ email: `rep-mgr-${suffix}@synthetic.test`, displayName: "RCM Manager", role: "manager" }],
-    dataset: generateDataset({ asOf: todayIn(), seed, patients: 4, claims: 10 }),
+    dataset: generateDataset({ asOf: todayIn(), seed, patients: 4, claims: 20 }),
   });
   return { tenantId, userId: userIds[0]!, role: "manager" };
 }
@@ -111,5 +111,15 @@ describe("dashboardReport", () => {
     const theirIds = new Set(theirFiles.map((f) => f.id));
     expect(mine!.months.every((m) => !theirIds.has(m.id))).toBe(true);
     expect(theirs!.months.every((m) => theirIds.has(m.id))).toBe(true);
+    // Denials too: each practice counts only its own open denials.
+    const theirOpen = await withTenant(b, (tx) =>
+      tx.select({ id: denials.id }).from(denials).where(inArray(denials.status, OPEN_STATUSES)),
+    );
+    expect(theirOpen.length).toBeGreaterThan(0);
+    expect(theirs!.denials.count).toBe(theirOpen.length);
+    const myOpen = await withTenant(a, (tx) =>
+      tx.select({ id: denials.id }).from(denials).where(inArray(denials.status, OPEN_STATUSES)),
+    );
+    expect(mine!.denials.count).toBe(myOpen.length);
   });
 });

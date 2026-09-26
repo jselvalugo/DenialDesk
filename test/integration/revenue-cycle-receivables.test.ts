@@ -137,7 +137,7 @@ describe("importDeposits", () => {
       withTenant(a.manager, (tx) =>
         reverseDepositFile(tx, a.manager, earlier!.id, "Imported the wrong export"),
       ),
-    ).rejects.toThrow(/Only administrators/);
+    ).rejects.toMatchObject({ message: /Only administrators/, code: "forbidden" });
     const reversalId = await withTenant(a.admin, (tx) =>
       reverseDepositFile(tx, a.admin, earlier!.id, "Imported the wrong export"),
     );
@@ -147,7 +147,7 @@ describe("importDeposits", () => {
     expect(rows.map((r) => r.amountCents).sort((x, y) => x - y)).toEqual([-12_500, 500]);
     await expect(
       withTenant(a.admin, (tx) => reverseDepositFile(tx, a.admin, earlier!.id, "Imported the wrong export")),
-    ).rejects.toThrow(/already reversed/);
+    ).rejects.toMatchObject({ message: /already reversed/, code: "already_reversed" });
     const [event] = await withTenant(a.admin, (tx) =>
       tx
         .select()
