@@ -122,6 +122,18 @@ test("navigation icons are decorative and link names stay text-only", async ({ p
   await expect(switcher.getByRole("link", { name: "Denial queue", exact: true })).toBeVisible();
 });
 
+test("the switcher marks the current module and counts results", async ({ page }) => {
+  await page.goto("/design");
+  await page.getByRole("button", { name: "Settings, switch module", exact: true }).click();
+  const switcher = page.getByRole("dialog", { name: "Go to" });
+  await expect(
+    switcher.getByRole("heading", { level: 3, name: /^Settings/ }).getByText("Current", { exact: true }),
+  ).toBeVisible();
+  await expect(switcher.getByRole("list", { name: "Settings", exact: true })).toBeVisible();
+  await switcher.getByLabel("Search modules and pages").fill("claims");
+  await expect(switcher.getByText("1 module · 3 pages")).toBeVisible();
+});
+
 test("the module switcher opens from the header field and closes with its button or the backdrop", async ({
   page,
 }) => {

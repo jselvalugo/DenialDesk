@@ -103,7 +103,7 @@ export function ModuleSwitcher({
       className="fixed inset-x-0 top-16 mx-auto max-h-[calc(100dvh-6rem)] w-[min(780px,calc(100vw-2rem))] overflow-hidden rounded-panel border border-border bg-surface p-0 text-text shadow-lg backdrop:bg-navy/40"
     >
       <div className="flex max-h-[calc(100dvh-6rem)] flex-col">
-        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border pr-3 pl-5">
+        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border pr-3 pl-5 focus-within:shadow-[inset_0_-2px_0_var(--color-focus)]">
           <Search aria-hidden="true" className="size-5 shrink-0 text-subtle" />
           <h2 id={titleId} className="sr-only">
             Go to
@@ -155,13 +155,12 @@ export function ModuleSwitcher({
                     </span>
                     <span className="min-w-0">
                       <span
-                        id={`${titleId}-${app.id}-name`}
                         className={cn(
                           "flex items-center gap-2 text-heading font-semibold",
                           home ? "text-text" : "text-muted",
                         )}
                       >
-                        <span>
+                        <span id={`${titleId}-${app.id}-name`}>
                           <Highlight text={app.label} query={query} />
                         </span>
                         {!home && plannedTag}
@@ -253,7 +252,7 @@ export function ModuleSwitcher({
         </div>
 
         <div className="flex h-9 shrink-0 items-center justify-between gap-4 border-t border-border bg-surface-muted px-5 text-label text-subtle">
-          <span role="status">
+          <span>
             {groups.length} {groups.length === 1 ? "module" : "modules"} · {pageCount}{" "}
             {pageCount === 1 ? "page" : "pages"}
           </span>
