@@ -27,7 +27,7 @@ export default async function SignInPage({
 
   return (
     <>
-      <h1 className="text-title font-semibold text-text">Sign in</h1>
+      <h1 className="font-serif text-[1.375rem] leading-8 font-bold text-primary">Sign in</h1>
       <p className="mt-1 mb-6 text-body text-muted">
         Use your practice account. You&apos;ll confirm with your authenticator app next.
       </p>

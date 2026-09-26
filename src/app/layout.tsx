@@ -1,21 +1,28 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Inter, Playfair_Display, Space_Mono } from "next/font/google";
 import { connection } from "next/server";
 import { PreviewBanner } from "@/components/shell/PreviewBanner";
 import { appEnv, isProduction } from "@/lib/env";
 import "./globals.css";
 
-const plexSans = IBM_Plex_Sans({
+const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-plex-sans",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter",
   display: "swap",
 });
 
-const plexMono = IBM_Plex_Mono({
+const playfair = Playfair_Display({
   subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-plex-mono",
+  weight: ["600", "700"],
+  variable: "--font-playfair",
+  display: "swap",
+});
+
+const spaceMono = Space_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-space-mono",
   display: "swap",
 });
 
@@ -31,7 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // image must behave correctly when promoted from preview to production.
   await connection();
   return (
-    <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
+    <html lang="en" className={`${inter.variable} ${playfair.variable} ${spaceMono.variable}`}>
       <body className="flex h-dvh flex-col">
         {!isProduction() && <PreviewBanner appEnv={appEnv()} />}
         <div className="flex min-h-0 flex-1 flex-col">{children}</div>

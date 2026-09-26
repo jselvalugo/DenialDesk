@@ -11,7 +11,10 @@ export default async function OperatorLayout({ children }: { children: React.Rea
   const operator = await requireOperator();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-ink px-6 text-white">
+      <header
+        data-chrome="dark"
+        className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-navy px-6 text-white"
+      >
         <div className="flex items-center gap-4">
           <span className="rounded-control bg-white px-2 py-1">
             <Image src="/brand/denialdesk-logo.png" alt="DenialDesk" width={110} height={26} />

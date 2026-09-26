@@ -11,7 +11,7 @@ export default async function ChoosePasswordPage() {
   if (!session.mustChangePassword) redirect(session.mfaEnrolled ? "/login/mfa" : "/login/mfa/setup");
   return (
     <>
-      <h1 className="text-title font-semibold text-text">Choose your password</h1>
+      <h1 className="font-serif text-[1.375rem] leading-8 font-bold text-primary">Choose your password</h1>
       <p className="mt-1 mb-6 text-body text-muted">
         You signed in with a temporary password. Choose your own before setting up two-step verification.
       </p>

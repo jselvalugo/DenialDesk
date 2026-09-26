@@ -16,12 +16,22 @@ consistent across hundreds of agent-built screens. Requirements: WCAG 2.1 AA (§
   tooltip, select, tabs) built on Radix UI when first needed, for keyboard and screen-reader
   behavior we shouldn't hand-roll. No pre-styled kit (e.g. copied shadcn defaults) — that
   default look is exactly what we're avoiding.
-- **Fonts:** IBM Plex Sans + IBM Plex Mono via `next/font`, self-hosted at build time.
-- **Icons:** one set only, chosen when the first icon is needed; 16px, 1.5px stroke, always
-  paired with text or an accessible label.
+- **Fonts:** self-hosted via `next/font` at build time (current set: see amendment below).
+- **Icons:** one set only (`lucide-react`, see amendment); always paired with text or an accessible label.
 - **Tables:** TanStack Table (headless) when sorting/pagination arrives; styled by `DataTable`.
 - **Living style guide:** `/design` route, disabled in production, shows every token and component.
 
 ## Consequences
 - New UI dependencies still go through the dependency check (R-15.7).
 - `reviewer` checks UI PRs against `docs/DESIGN.md` §3 (banned patterns) and §11 (accessibility).
+
+## Amendment (2026-09-26): RevCycle IQ look and feel
+The owner asked DenialDesk to share the look of their RevCycle IQ product while keeping the
+DenialDesk logo. Changes:
+- **Palette:** navy `#1A2C4E` chrome and primary, teal `#1F6B75` accent, blue `#2E75B6` focus;
+  status colors from the RevCycle brief, each re-checked for WCAG AA (DESIGN.md §4–5).
+- **Fonts:** Inter (UI), Playfair Display (page titles), Space Mono (codes and headline figures),
+  replacing IBM Plex. Still self-hosted via `next/font`.
+- **Icons:** `lucide-react` (ISC, actively maintained), 16px, 1.75 stroke, always `aria-hidden`
+  next to a text label.
+- The logo is never recolored; it sits on a white header in the sidebar and on the sign-in page.

@@ -15,12 +15,12 @@ export default async function MfaPage() {
 
   return (
     <>
-      <h1 className="text-title font-semibold text-text">Two-step verification</h1>
+      <h1 className="font-serif text-[1.375rem] leading-8 font-bold text-primary">Two-step verification</h1>
       <p className="mt-1 mb-6 text-body text-muted">Enter the code shown in your authenticator app.</p>
       <CodeForm mode="verify" />
       <p className="mt-6 text-label text-muted">
         Lost access to your authenticator? Ask your practice administrator to reset it.{" "}
-        <Link href="/login" className="font-medium text-brand-600 hover:underline">
+        <Link href="/login" className="font-medium text-link hover:underline">
           Use a different account
         </Link>
       </p>

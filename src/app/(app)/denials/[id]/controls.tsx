@@ -6,7 +6,7 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { addNote, assignDenial, changeStatus, revealMemberId, type ActionState } from "./actions";
 
 const fieldClass =
-  "h-8 rounded-control border border-border-strong bg-surface pr-8 pl-2.5 text-body text-text focus:border-brand-600 focus:outline-2 focus:outline-offset-0 focus:outline-brand-600";
+  "h-8 rounded-control border border-border-strong bg-surface pr-8 pl-2.5 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus";
 
 function InlineError({ state }: { state: ActionState }) {
   if (!state.error) return null;
@@ -107,7 +107,7 @@ export function NoteForm({ denialId, disabled }: { denialId: string; disabled: b
         maxLength={4000}
         disabled={disabled}
         placeholder="What you did, what's next, who you spoke with."
-        className="rounded-control border border-border-strong bg-surface px-3 py-2 text-body text-text placeholder:text-subtle focus:border-brand-600 focus:outline-2 focus:outline-offset-0 focus:outline-brand-600"
+        className="rounded-control border border-border-strong bg-surface px-3 py-2 text-body text-text placeholder:text-subtle focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus"
       />
       <InlineError state={state} />
       <div>

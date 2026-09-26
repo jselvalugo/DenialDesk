@@ -20,7 +20,7 @@ export function Panel({
       {title && (
         <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3">
           <div>
-            <h2 className="text-heading font-semibold text-text">{title}</h2>
+            <h2 className="text-heading font-semibold text-primary">{title}</h2>
             {description && <p className="text-label font-normal text-muted">{description}</p>}
           </div>
           {actions}

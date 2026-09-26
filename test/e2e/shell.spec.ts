@@ -56,3 +56,12 @@ test("the preview seed endpoint rejects requests without the secret token", asyn
   });
   expect([404, 429]).toContain(wrong.status());
 });
+
+test("navigation icons are decorative and link names stay text-only", async ({ page }) => {
+  await page.goto("/design");
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  const icons = nav.locator("svg");
+  expect(await icons.count()).toBeGreaterThan(0);
+  for (const icon of await icons.all()) await expect(icon).toHaveAttribute("aria-hidden", "true");
+  await expect(nav.getByRole("link", { name: "Denial queue", exact: true })).toBeVisible();
+});

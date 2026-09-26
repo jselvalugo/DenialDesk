@@ -60,7 +60,7 @@ export function SessionTimeout() {
   const seconds = String(secondsLeft % 60).padStart(2, "0");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40">
       <div
         role="alertdialog"
         aria-modal="true"

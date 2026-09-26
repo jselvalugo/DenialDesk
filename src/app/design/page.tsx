@@ -18,23 +18,34 @@ const swatches: Array<{ group: string; tokens: Array<[string, string]> }> = [
   {
     group: "Brand",
     tokens: [
-      ["ink", "#0B1A33"],
-      ["brand-700", "#0A3FA8"],
-      ["brand-600", "#0B5CD5"],
-      ["brand-500", "#1E7BF0"],
-      ["brand-50", "#EEF4FE"],
-      ["care-500", "#12B8A2"],
+      ["navy (primary)", "#1A2C4E"],
+      ["navy-700 (hover)", "#13213B"],
+      ["blue (focus, charts)", "#2E75B6"],
+      ["blue-700 (links, info)", "#245D93"],
+      ["teal (accent)", "#1F6B75"],
+      ["selected", "#EAF0F7"],
     ],
   },
   {
     group: "Neutrals",
     tokens: [
-      ["canvas", "#F6F8FB"],
+      ["canvas", "#F7F9FB"],
       ["surface", "#FFFFFF"],
-      ["surface-muted", "#F1F4F8"],
-      ["border", "#DDE3EB"],
-      ["border-strong", "#8592A6"],
-      ["text-muted", "#4A5A73"],
+      ["surface-muted", "#F1F5F9"],
+      ["border", "#E2E8F0"],
+      ["border-strong", "#768599"],
+      ["text-muted", "#475569"],
+    ],
+  },
+  {
+    group: "Charts",
+    tokens: [
+      ["chart-1 teal", "#1F6B75"],
+      ["chart-2 navy", "#1A2C4E"],
+      ["chart-3 blue", "#2E75B6"],
+      ["chart-4 amber", "#B7791F"],
+      ["chart-5 orange", "#C05621"],
+      ["chart-danger", "#A32D2D"],
     ],
   },
 ];
@@ -48,7 +59,7 @@ const tones: Array<[Tone, string, string]> = [
 ];
 
 const typeScale: Array<[string, string, string]> = [
-  ["text-display font-semibold", "Display · 24/32 · 600", "Denial queue"],
+  ["font-serif text-display font-bold text-primary", "Display · serif 28/36 · 700", "Denial queue"],
   ["text-title font-semibold", "Title · 18/26 · 600", "Appeals due this week"],
   ["text-heading font-semibold", "Heading · 15/22 · 600", "Remittance detail"],
   ["text-body", "Body · 14/20 · 400", "Payer acknowledged receipt of the claim and returned a 277CA."],
@@ -198,7 +209,7 @@ export default function DesignSystemPage() {
 
         <Section
           title="Typography"
-          description="IBM Plex Sans for UI, IBM Plex Mono for codes and identifiers."
+          description="Playfair Display for page titles, Inter for UI, Space Mono for codes, identifiers, and headline figures."
         >
           <div className="flex flex-col gap-4">
             {typeScale.map(([className, spec, sample]) => (
