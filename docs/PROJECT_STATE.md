@@ -34,7 +34,11 @@ _Last updated: 2026-09-26_
   The operator account exists only from hosting configuration (`PLATFORM_OPERATOR_PASSWORD_HASH`,
   made with `pnpm operator:credential`); no page can create or reset it (owner rebaseline 2026-09-26).
   An unusable value (e.g. the password pasted instead of its hash) switches the console off and is
-  reported once in the function log as `operator.credential_unusable` (runbook has the fix).
+  reported once in the function log as `operator.credential_unusable` (runbook has the fix). Since
+  2026-09-26 every refused operator sign-in also logs a fixed-word reason
+  (`operator.sign_in_refused`) and `GET /api/preview/operator-status` (`SEED_TOKEN`, pre-production
+  only) reports the configuration and account state in one request; the runbook's
+  "Operator sign-in shows the generic error" section maps each word to its fix.
 - Next (owner rebaseline): tenancy lifecycle in the console: Pause for non-payment (read-only +
   export), Suspend for security, Terminate → offboarding (export, legal hold, certified destruction),
   BAA-on-file gate in production (later the same day the owner chose

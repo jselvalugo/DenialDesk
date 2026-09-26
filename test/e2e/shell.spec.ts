@@ -90,6 +90,16 @@ test("the preview seed endpoint rejects requests without the secret token", asyn
   expect([404, 429]).toContain(wrong.status());
 });
 
+test("the preview operator status endpoint rejects requests without the secret token", async ({
+  request,
+}) => {
+  expect([404, 429]).toContain((await request.get("/api/preview/operator-status")).status());
+  const wrong = await request.get("/api/preview/operator-status", {
+    headers: { authorization: `Bearer ${"w".repeat(40)}` },
+  });
+  expect([404, 429]).toContain(wrong.status());
+});
+
 test("navigation icons are decorative and link names stay text-only", async ({ page }) => {
   await page.goto("/design");
   const nav = page.getByRole("navigation", { name: "Primary" });

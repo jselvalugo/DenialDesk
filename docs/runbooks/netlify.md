@@ -18,7 +18,7 @@ Site: https://denialdesk.netlify.app
   |---|---|
   | `APP_ENV` | `preview` — shows the synthetic-data banner, enables the seed endpoint |
   | `FIELD_ENCRYPTION_KEY` | AES-256 key for member IDs and MFA secrets (secret; pre-prod only) |
-  | `SEED_TOKEN` | Bearer token for the sample-practice seed endpoint (secret); no operator power |
+  | `SEED_TOKEN` | Bearer token for the sample-practice seed endpoint and the operator status endpoint (secret); it can trigger the same configuration sync a sign-in does, nothing more |
   | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Admin of the seeded synthetic practice (password secret); not the operator |
   | `PLATFORM_OPERATOR_EMAIL` | The operator account for the platform console; an address used only for the console, never a practice user |
   | `PLATFORM_OPERATOR_PASSWORD_HASH` | The operator's password hash from `pnpm operator:credential` (secret); the only way the operator account is created or reset |
@@ -83,6 +83,41 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   under 16 characters for the operator account. If the password itself was pasted, treat it as
   exposed (it sits in Netlify's configuration and history): choose a new password when you re-run
   `pnpm operator:credential`.
+- **Operator sign-in shows the generic error ("Email or password is incorrect, or the account is
+  temporarily locked"):** the page never says why (no account enumeration), but two places do.
+  1. One request, from your own machine (`SEED_TOKEN` is the seed endpoint's token in Netlify):
+     ```bash
+     curl -H "Authorization: Bearer $SEED_TOKEN" https://denialdesk.netlify.app/api/preview/operator-status
+     # {"email":"set","passwordHash":"usable","account":"current","locked":false}
+     ```
+     | Field | Value | Meaning / fix |
+     |---|---|---|
+     | `email` | `missing` | `PLATFORM_OPERATOR_EMAIL` isn't reaching the running function: set it for the deploy context that is live (Production), scope *Functions*, and redeploy. |
+     | `passwordHash` | `missing` | Same for `PLATFORM_OPERATOR_PASSWORD_HASH`. With "different value per deploy context", check the **Production** value: the live site uses that one. |
+     | `passwordHash` | `malformed` | The value isn't the hash `pnpm operator:credential` prints (it must start with `scrypt$131072$8$1$`, about 127 characters, no spaces). Usually the password itself or a truncated paste; see above, choose a new password. |
+     | `passwordHash` | `test_hash` | The public e2e test hash; make a real one. |
+     | `account` | `unconfigured` | See the `email` and `passwordHash` rows: one of them isn't usable. |
+     | `account` | `refused` | The configured email already belongs to a practice user or a disabled account (e.g. a retired demo admin, or `SEED_ADMIN_EMAIL`). Use an address that has never been a practice user. |
+     | `account` | `retired` | This deployment carries a hash that was already replaced (old deploy link or rollback). Open the current deploy, or set the current hash here. |
+     | `account` | `current` / `provisioned` / `rotated` | Configuration is fine. Then it is the password typed, the email typed (must equal `PLATFORM_OPERATOR_EMAIL`, case doesn't matter), or the lockout below. |
+     | `locked` | `true` | Too many wrong attempts: wait 15 minutes, or replace the hash (a rotation clears the lockout). |
+
+     The endpoint is 404 in production, without the token or with a wrong one. It shares the seed
+     endpoint's budget of 5 calls per hour per network, so a few status checks can delay a seed
+     call by up to an hour. It syncs the account from configuration exactly like a sign-in does.
+  2. The function log (_Logs → Functions → Next.js Server Handler_) shows one
+     `operator.sign_in_refused` line per refused attempt with a `status` and nothing else:
+     `email_missing`, `hash_missing`, `hash_malformed`, `hash_test`, `retired` and `refused` mean
+     the same as the table above; `unknown_email` (no account has the email typed) and
+     `other_email` (an account has it, but it isn't the operator's email) mean the email typed
+     isn't `PLATFORM_OPERATOR_EMAIL`; `disabled` (the account with the email typed is disabled) and
+     `practice_account` (the operator's account gained a practice membership) mean the account no
+     longer qualifies: use an address that has never been a practice user; `locked` and
+     `wrong_password` are what they say (the lockout clears after 15 minutes or with a rotation).
+  Netlify notes: a value marked *secret* must include the **Functions** scope (the UI's default
+  "All scopes" does); a value or scope change reaches running functions only after a redeploy
+  (*Deploys → Trigger deploy*); the Netlify UI never alters `$` characters, but a shell would, so
+  paste the hash in the UI rather than through `netlify env:set` inside double quotes.
 - **Forgotten password or lost authenticator:** run `pnpm operator:credential` again and replace
   `PLATFORM_OPERATOR_PASSWORD_HASH`. The next request applies it: new password, two-step reset, every
   operator session ended (audited as `operator.credential_rotated`). There is no in-app recovery.
