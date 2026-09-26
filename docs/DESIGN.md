@@ -2,7 +2,7 @@
 
 The UI contract for every screen. Agents building UI read this first; `reviewer` checks PRs
 against it. Tokens live in `src/app/globals.css`; components in `src/components/`.
-The living style guide is `/design` (non-production only).
+There is no in-app style guide page; this document is the reference (the `/design` page was removed 2026-09-26).
 
 ## 1. Who we design for
 Billers, denial specialists, and RCM managers who sit in this app **all day**, working queues of

@@ -20,7 +20,7 @@ _Last updated: 2026-09-26_
   field encryption, BAA on file). Wording passed `compliance-checker`; owner sign-off on copy pending.
 - Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
   section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
-  planned; Design system in pre-production). Administrators define custom fields on patients,
+  planned). The `/design` style-guide page was removed 2026-09-26 (owner request). Administrators define custom fields on patients,
   claims, denials, and payers (`custom_fields`, migration 0023, RLS + isolation test, audited).
   Next: S2 render and store field values on record forms.
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
