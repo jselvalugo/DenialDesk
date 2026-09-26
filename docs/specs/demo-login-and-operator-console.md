@@ -1,6 +1,8 @@
 # Spec: Demo login and platform operator console
 
-Status: done (2026-09-26) — requested by the product owner
+Status: demo login **removed** (2026-09-26, owner request: "remove the demo practice entirely").
+The operator console parts continue in `operator-login.md`; this spec is kept for history.
+Originally: done (2026-09-26) — requested by the product owner
 Roadmap item: Phase 0 → pre-production demo; platform operations (new)
 Requirement IDs: R-7.1.3, R-15.1, R-7.2.3, R-7.2.5, R-7.5.1, R-5.1.2
 

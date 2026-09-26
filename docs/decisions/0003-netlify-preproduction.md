@@ -12,7 +12,8 @@ not restricted to U.S. regions the way our Azure landing zone will be. ⚠️ VE
 offers a BAA; the answer doesn't change this decision.
 
 ## Decision
-- **Netlify hosts pre-production only**: deploy previews per PR and one shared demo site.
+- **Netlify hosts pre-production only**: deploy previews per PR and one shared pre-production site
+  (its one-click demo practice was removed 2026-09-26).
 - **Synthetic data only on Netlify, no exceptions** (R-7.1.3, R-15.1). No real patients, claims,
   X12 files, payer credentials, or customer users. This is the same rule as every non-prod
   environment, and the reason Netlify is acceptable at all.

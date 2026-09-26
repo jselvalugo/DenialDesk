@@ -7,7 +7,6 @@ import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import { systemDb } from "@/db/client";
 import { memberships, sessions, tenants, users } from "@/db/schema";
 import { auditSystem } from "@/lib/audit";
-import { demoLoginEnabled } from "@/lib/env";
 import { requestContext } from "@/lib/request-context";
 import {
   OPERATOR_SESSION_COOKIE,
@@ -18,10 +17,11 @@ import {
 } from "./policy";
 
 export type Role = (typeof memberships.$inferSelect)["role"];
+/** "demo" remains only for sessions created before the demo was removed; none are created now. */
 export type AuthMethod = "password_mfa" | "demo" | "operator";
 
 /**
- * Practice sessions (password + MFA, or demo) and platform operator sessions live in separate
+ * Practice sessions (password + MFA) and platform operator sessions live in separate
  * cookies and are never accepted in place of each other (docs/specs/operator-login.md).
  */
 export type Realm = "practice" | "operator";
@@ -70,7 +70,6 @@ async function setCookie(token: string, realm: Realm) {
 
 /**
  * Starts a session. After a correct password, MFA is still required (`mfaVerified` false).
- * Demo sessions are created already verified and pinned to the demo practice (see src/auth/demo.ts).
  * Operator sessions have no practice and use the operator cookie. Suspended practices are skipped
  * when choosing the session's practice.
  */
@@ -90,8 +89,7 @@ export async function createSession(
           .where(and(eq(memberships.userId, userId), isNull(tenants.suspendedAt)))
           .orderBy(asc(memberships.createdAt))
           .limit(1);
-  const demo = options.authMethod === "demo";
-  if (demo && !demoLoginEnabled()) throw new Error("Demo sessions are disabled in this environment");
+  if (options.authMethod === "demo") throw new Error("Demo sessions no longer exist");
   const token = randomBytes(32).toString("base64url");
   await systemDb()
     .insert(sessions)
@@ -99,7 +97,7 @@ export async function createSession(
       tokenHash: hashToken(token),
       userId,
       tenantId: membership?.tenantId ?? null,
-      mfaVerified: demo,
+      mfaVerified: false,
       authMethod: options.authMethod ?? "password_mfa",
       expiresAt: new Date(Date.now() + SESSION_ABSOLUTE_MS),
     });
@@ -126,10 +124,10 @@ export async function endSession(sessionId: string, realm: Realm = "practice"): 
   (await cookies()).delete(COOKIE[realm]);
 }
 
-/** The practice (or demo) session, once per request. Never returns an operator session. */
+/** The practice session, once per request. Never returns an operator session. */
 export const getSession = cache(async (): Promise<SessionInfo | null> => readSession("practice"));
 
-/** The platform operator session, once per request. Never returns a practice or demo session. */
+/** The platform operator session, once per request. Never returns a practice session. */
 export const getOperatorSession = cache(async (): Promise<SessionInfo | null> => readSession("operator"));
 
 /** Reads and validates a realm's session cookie; enforces idle and absolute timeouts. */
@@ -215,12 +213,20 @@ export const requireAuth = cache(async (): Promise<AuthContext> => {
     .where(and(eq(memberships.userId, session.userId), eq(memberships.tenantId, session.tenantId)))
     .limit(1);
   if (!membership) redirect("/login?error=no-practice");
-  // Demo sessions may only ever use a demo practice, and only while the demo is enabled here.
-  if (session.authMethod === "demo" && (membership.tenantKind !== "demo" || !demoLoginEnabled())) {
+  // The one-click demo was removed (2026-09-26): any leftover demo session ends here, audited.
+  if (session.authMethod === "demo") {
     await systemDb()
       .update(sessions)
       .set({ revokedAt: new Date() })
       .where(eq(sessions.id, session.sessionId));
+    await auditSystem({
+      action: "auth.session_revoked",
+      actorUserId: session.userId,
+      tenantId: session.tenantId,
+      entityType: "session",
+      entityId: session.sessionId,
+      metadata: { reason: "demo_retired" },
+    });
     redirect("/login");
   }
   if (membership.suspendedAt) {

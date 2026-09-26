@@ -11,7 +11,8 @@ test.describe("patients", () => {
     await openFromSwitcher(page, "Patients");
     await expect(page.getByRole("heading", { level: 1, name: "Patients" })).toBeVisible();
     await page.getByRole("link", { name: "Register patient" }).click();
-    await expect(page.getByText("Synthetic data only.")).toBeVisible();
+    // Scoped to the page: the environment banner outside <main> says "Synthetic data only." too.
+    await expect(page.getByRole("main").getByText("Synthetic data only.")).toBeVisible();
 
     const form = page.getByRole("form", { name: "Register patient" });
     await form.getByLabel("Last name").fill("Quillfeather");

@@ -24,7 +24,7 @@ test("the preview seed endpoint does not exist in production", async ({ request 
   expect(response.status()).toBe(404);
 });
 
-test("production never offers the demo login, even with DEMO_LOGIN_ENABLED set", async ({ page }) => {
+test("production has no demo login", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByRole("button", { name: "Explore the demo practice" })).toHaveCount(0);
 });

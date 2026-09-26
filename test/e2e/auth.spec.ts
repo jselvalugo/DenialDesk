@@ -45,7 +45,14 @@ test("a correct password does not reset the count of wrong MFA codes", async ({ 
   await signInWithPassword(page, user); // attempt 1
   for (let i = 0; i < 3; i++) {
     await page.getByLabel("6-digit code").fill("000000"); // attempts 2–4
-    await page.getByRole("button", { name: "Verify" }).click();
+    // Wait for this attempt's own response: the alert text is the same every time, so checking it
+    // alone can pass before the request lands, and navigating away could then drop the attempt.
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/login/mfa",
+      ),
+      page.getByRole("button", { name: "Verify" }).click(),
+    ]);
     await expect(page.getByRole("main").getByRole("alert")).toContainText("didn't match");
   }
   await signInWithPassword(page, user); // attempt 5: allowed, and now locked

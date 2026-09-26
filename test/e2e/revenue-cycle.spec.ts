@@ -1,12 +1,10 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { DEFAULT_RULES } from "@/domain/revenue-cycle/defaults";
 import { openFromSwitcher } from "./support";
 
-async function openDemo(page: Page) {
-  await page.goto("/login");
-  await page.getByRole("button", { name: "Explore the demo practice" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
-}
+// Manager workflows run in the E2E manager practice (test/e2e/global-setup.ts): synthetic, seeded
+// with sample activity, and a colleague who prepared last month's voucher.
+const asManager = { storageState: "test/e2e/.auth/manager.json" };
 
 test.describe("revenue cycle as compliance (read-only)", () => {
   test.use({ storageState: "test/e2e/.auth/viewer.json" });
@@ -53,53 +51,56 @@ test.describe("monthly files", () => {
     });
   });
 
-  test("a manager imports a synthetic file and real-looking files are rejected", async ({ page }) => {
-    await openDemo(page);
-    await page.goto("/revenue-cycle/files");
-    const sample = await page.request.get("/api/revenue-cycle/sample-file");
-    expect(sample.headers()["content-type"]).toContain("text/csv");
-    const csv = await sample.text();
+  test.describe("as a manager", () => {
+    test.use(asManager);
 
-    // A file without SYN- account numbers is refused, naming rows but never echoing values.
-    const real = csv.replaceAll("SYN-", "");
-    await page.getByLabel("Monthly file (CSV, up to 5 MB)").setInputFiles({
-      name: "march.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(real),
-    });
-    await page.getByLabel(/synthetic data only/).check();
-    await page.getByRole("button", { name: "Import file" }).click();
-    const problems = page.getByRole("list", { name: "Problems in the file" });
-    await expect(problems).toContainText("Row 2: Account number must start with SYN-");
+    test("a manager imports a synthetic file and real-looking files are rejected", async ({ page }) => {
+      await page.goto("/revenue-cycle/files");
+      const sample = await page.request.get("/api/revenue-cycle/sample-file");
+      expect(sample.headers()["content-type"]).toContain("text/csv");
+      const csv = await sample.text();
 
-    await page.getByLabel("Monthly file (CSV, up to 5 MB)").setInputFiles({
-      name: "synthetic-sample.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(csv),
+      // A file without SYN- account numbers is refused, naming rows but never echoing values.
+      const real = csv.replaceAll("SYN-", "");
+      await page.getByLabel("Monthly file (CSV, up to 5 MB)").setInputFiles({
+        name: "march.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(real),
+      });
+      await page.getByLabel(/synthetic data only/).check();
+      await page.getByRole("button", { name: "Import file" }).click();
+      const problems = page.getByRole("list", { name: "Problems in the file" });
+      await expect(problems).toContainText("Row 2: Account number must start with SYN-");
+
+      await page.getByLabel("Monthly file (CSV, up to 5 MB)").setInputFiles({
+        name: "synthetic-sample.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(csv),
+      });
+      await page.getByLabel(/synthetic data only/).check();
+      await page.getByRole("button", { name: "Import file" }).click();
+      await expect(page).toHaveURL(/\/revenue-cycle\/files\/[0-9a-f-]{36}$/);
+      const lineCount = csv.trim().split("\r\n").length - 1;
+      await expect(page.getByRole("region", { name: "File control totals" })).toContainText(
+        lineCount.toLocaleString("en-US"),
+      );
+      await expect(page.getByText(/^monthly-file-\d{4}-\d{2}\.csv/)).toBeVisible();
+      // Managers work accounts, so they see identifiers unmasked.
+      await expect(
+        page.getByRole("table", { name: "Classified lines" }).getByRole("row").nth(1),
+      ).toContainText("SYN-");
+      // Paging past the end lands on the last page.
+      await page.goto(`${page.url()}?page=99`);
+      await expect(page).toHaveURL(new RegExp(`page=${Math.ceil(lineCount / 50)}$`));
     });
-    await page.getByLabel(/synthetic data only/).check();
-    await page.getByRole("button", { name: "Import file" }).click();
-    await expect(page).toHaveURL(/\/revenue-cycle\/files\/[0-9a-f-]{36}$/);
-    const lineCount = csv.trim().split("\r\n").length - 1;
-    await expect(page.getByRole("region", { name: "File control totals" })).toContainText(
-      lineCount.toLocaleString("en-US"),
-    );
-    await expect(page.getByText(/^monthly-file-\d{4}-\d{2}\.csv/)).toBeVisible();
-    // Managers work accounts, so they see identifiers unmasked.
-    await expect(page.getByRole("table", { name: "Classified lines" }).getByRole("row").nth(1)).toContainText(
-      "SYN-",
-    );
-    // Paging past the end lands on the last page.
-    await page.goto(`${page.url()}?page=99`);
-    await expect(page).toHaveURL(new RegExp(`page=${Math.ceil(lineCount / 50)}$`));
   });
 });
 
 test.describe("journal vouchers", () => {
-  test("the demo manager approves a voucher prepared by a colleague and exports the GL file", async ({
-    page,
-  }) => {
-    await openDemo(page);
+  test.use(asManager);
+
+  test("the manager approves a voucher prepared by a colleague and exports the GL file", async ({ page }) => {
+    await page.goto("/");
     await openFromSwitcher(page, "Revenue cycle module");
     await expect(page.getByRole("heading", { level: 1, name: "Monthly files" })).toBeVisible();
     // Inside the Revenue cycle module its pages are tabs.
@@ -138,8 +139,10 @@ test.describe("journal vouchers", () => {
 });
 
 test.describe("receivables and deposits", () => {
-  test("the demo shows aging, a tying roll-forward, and reconciles imported deposits", async ({ page }) => {
-    await openDemo(page);
+  test.use(asManager);
+
+  test("aging, a tying roll-forward, and imported deposits reconcile", async ({ page }) => {
+    await page.goto("/");
     await openFromSwitcher(page, "A/R aging");
     await expect(page.getByRole("heading", { level: 1, name: "A/R aging" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Receivables summary" })).toContainText("Open A/R");
@@ -181,7 +184,7 @@ test.describe("receivables and deposits", () => {
     await expect(problems).toContainText("Row 2: Date isn't a valid date");
     await expect(problems).not.toContainText("12x");
 
-    // Every demo month already has deposits, so there's no sample to download.
+    // Every seeded month already has deposits, so there's no sample to download.
     await expect(page.getByText(/Every imported month already has deposits/)).toBeVisible();
   });
 
@@ -198,8 +201,10 @@ test.describe("receivables and deposits", () => {
 });
 
 test.describe("statements and dashboard", () => {
-  test("the demo dashboard shows key figures and the statements net revenue by account", async ({ page }) => {
-    await openDemo(page);
+  test.use(asManager);
+
+  test("the dashboard shows key figures and the statements net revenue by account", async ({ page }) => {
+    await page.goto("/");
     await openFromSwitcher(page, "RCM dashboard");
     // Inside the Revenue cycle module its pages are tabs.
     const nav = page.getByRole("navigation", { name: "Primary" });
