@@ -13,12 +13,12 @@ Compliance and legal (human):
 - [ ] Risk analysis and core policies drafted; compliance automation tool chosen [§6.4]
 
 Engineering:
-- [ ] ADR 0001 tech stack and ADR 0002 Azure hosting accepted
+- [ ] ADR 0001 tech stack accepted (ADR 0003 Netlify pre-prod accepted; ADR 0002 Azure confirmed at cutover)
 - [ ] Project skeleton: app, DB, test runner, lint, CI on every PR [R-7.4.2, R-7.4.4]
-- [ ] Azure landing zone as IaC: prod/staging/dev subscriptions, U.S.-only Azure Policy [R-3.3.2, R-7.1]
+- [ ] Netlify deploy previews + demo site with pre-prod guards: synthetic banner, synthetic-only uploads, restricted access (ADR 0003) [R-7.1.3]
 - [ ] Synthetic data generator: practices, providers, payers, patients, claims, denials [R-15.1]
 - [ ] Tenancy + RBAC skeleton with row-level security and isolation tests [R-7.2.3, R-7.2.4]
-- [ ] Auth: SSO (Entra ID / OIDC), MFA, session timeouts [R-7.2.1, R-7.2.2, R-7.2.7]
+- [ ] Auth: OIDC SSO behind an interface (Entra ID at cutover), MFA, session timeouts [R-7.2.1, R-7.2.2, R-7.2.7]
 - [ ] Immutable audit log skeleton [R-7.5.1]
 - [ ] Rules-engine skeleton: versioned, effective-dated rules with citations; business-day
       and holiday calendars in America/New_York [R-15.6, §11]
@@ -56,6 +56,13 @@ Appeals:
 Evidence and security:
 - [ ] OIR complaint evidence package export [R-3.1.7]
 - [ ] Customer-facing audit log viewer and export [R-7.5.4]
+
+## Production cutover to Azure — gate before the first real practice
+- [ ] Confirm regions (East US 2 likely) and accept ADR 0002 (human)
+- [ ] Azure landing zone as IaC: prod/staging/dev subscriptions, U.S.-only Azure Policy [R-3.3.2, R-7.1]
+- [ ] Key Vault, Entra ID, private networking, WORM audit storage, backups + DR region [R-7.3, R-7.5.1, R-7.9]
+- [ ] Live clearinghouse connection under subcontractor BAA [R-2.2, R-5.5.2]
+- [ ] Penetration test and restore test on the Azure environment [R-7.6.1, R-7.9.3]
 - [ ] SOC 2 Type I audit (human)
 
 ## Phase 2 — Expansion

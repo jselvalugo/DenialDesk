@@ -14,7 +14,8 @@ the effort.
 ## Product
 A secure, multi-tenant SaaS platform for Florida physician practices to submit, track, and
 manage insurance claims and denials, enforce Florida prompt-pay and appeal deadlines, and
-recover revenue lawfully. Hosted on Microsoft Azure in U.S. regions only (ADR 0002).
+recover revenue lawfully. Built and previewed on Netlify with synthetic data only (ADR 0003);
+production runs on Microsoft Azure in U.S. regions only (ADR 0002).
 
 ## Users
 - **Biller / denial specialist** — submits claims, works denial and follow-up queues day to day.

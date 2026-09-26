@@ -69,4 +69,5 @@ TBD — see `docs/decisions/0001-tech-stack.md`. Once decided, list here:
 - Test command:
 - Lint / typecheck command:
 - Run locally:
-- Hosting: Microsoft Azure, U.S. regions only — `docs/decisions/0002-azure-hosting.md`
+- Hosting: pre-production on Netlify, **synthetic data only** (`docs/decisions/0003-netlify-preproduction.md`);
+  production on Microsoft Azure, U.S. regions only (`docs/decisions/0002-azure-hosting.md`). Keep platform code in adapters.

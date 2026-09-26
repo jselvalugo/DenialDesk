@@ -29,6 +29,7 @@ complies; we default to U.S.-only.
 - Service choices for compute, database, and queues are decided with the tech stack (ADR 0001).
 
 ## Consequences
+- Azure is the production host only; pre-production runs on Netlify with synthetic data (ADR 0003).
 - The rules engine must still compute all legal clocks in America/New_York (§11), independent of region.
 - Any AI/LLM service used on PHI must run in a U.S. region under a BAA (R-3.3.7, R-15.2).
   Candidates: Anthropic API under an Anthropic BAA, or Claude via Microsoft Foundry.
