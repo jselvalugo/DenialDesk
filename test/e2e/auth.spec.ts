@@ -79,5 +79,10 @@ test.describe("signed in", () => {
     await page.goto("/");
     await expect(page.getByText("Riley Worker")).toBeVisible();
     await expect(page.getByText(/E2E practice .* \(synthetic\)/)).toBeVisible();
+    await page.getByRole("button", { name: /Riley Worker/ }).click();
+    // Not clicked: signing out would end the stored session later tests reuse.
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
   });
 });

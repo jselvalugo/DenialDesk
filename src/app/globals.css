@@ -14,7 +14,7 @@
   --dd-teal-50: #e6f2f3;
   --dd-selected: #eaf0f7;
 
-  --dd-canvas: #f7f9fb;
+  --dd-canvas: #f3f6f9;
   --dd-surface: #ffffff;
   --dd-surface-muted: #f1f5f9;
   --dd-border: #e2e8f0;
@@ -23,7 +23,7 @@
   --dd-text-muted: #475569;
   --dd-text-subtle: #5b6b82;
 
-  /* Sidebar (navy chrome) */
+  /* Navy chrome: the app bar (token names predate it; they were the sidebar) */
   --dd-sidebar: #1a2c4e;
   --dd-sidebar-fg: #e2e8f0;
   --dd-sidebar-muted: #8a9bb5;
@@ -124,8 +124,8 @@
   --text-label--line-height: 1rem;
 
   /* Shape (DESIGN.md §7) */
-  --radius-control: 4px;
-  --radius-panel: 5px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
 }
 
 @layer base {
@@ -144,7 +144,7 @@
     outline: 2px solid var(--dd-blue);
     outline-offset: 2px;
   }
-  /* Navy chrome (sidebar, operator header): the blue ring is < 3:1 on navy, so use light teal. */
+  /* Navy chrome (app bar, operator header): the blue ring is < 3:1 on navy, so use light teal. */
   [data-chrome="dark"] :focus-visible {
     outline-color: var(--dd-sidebar-accent);
   }
