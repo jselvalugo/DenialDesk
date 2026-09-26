@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase } from "@/db/client";
-import { denials, payerClasses, rcmClaimLines, rcmFiles } from "@/db/schema";
+import { auditEvents, denials, payerClasses, rcmClaimLines, rcmFiles } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { withTenant } from "@/db/tenant";
 import { OPEN_STATUSES } from "@/domain/denial-status";
@@ -38,7 +38,7 @@ describe("statementsReport", () => {
       const periods = await periodFiles(tx);
       const ids = periods.map((p) => p.fileId);
       return {
-        report: (await statementsReport(tx))!,
+        report: (await statementsReport(tx, a))!,
         periods,
         files: await tx
           .select({ id: rcmFiles.id, net: rcmFiles.netCents })
@@ -74,7 +74,7 @@ describe("statementsReport", () => {
 describe("dashboardReport", () => {
   it("reports the latest month and every open denial, matched to a class by regime", async () => {
     const { report, periods, open, classes } = await withTenant(a, async (tx) => ({
-      report: (await dashboardReport(tx))!,
+      report: (await dashboardReport(tx, a))!,
       periods: await periodFiles(tx),
       open: await tx
         .select({
@@ -104,8 +104,8 @@ describe("dashboardReport", () => {
 
   it("only sees the practice's own figures", async () => {
     const [mine, theirs, theirFiles] = await Promise.all([
-      withTenant(a, (tx) => dashboardReport(tx)),
-      withTenant(b, (tx) => dashboardReport(tx)),
+      withTenant(a, (tx) => dashboardReport(tx, a)),
+      withTenant(b, (tx) => dashboardReport(tx, b)),
       withTenant(b, (tx) => tx.select({ net: rcmFiles.netCents, id: rcmFiles.id }).from(rcmFiles)),
     ]);
     const theirIds = new Set(theirFiles.map((f) => f.id));
@@ -121,5 +121,30 @@ describe("dashboardReport", () => {
       tx.select({ id: denials.id }).from(denials).where(inArray(denials.status, OPEN_STATUSES)),
     );
     expect(mine!.denials.count).toBe(myOpen.length);
+  });
+});
+
+describe("report views", () => {
+  it("are audited with the report and month count, never figures", async () => {
+    const views = () =>
+      withTenant(a, (tx) =>
+        tx
+          .select({ metadata: auditEvents.metadata, actor: auditEvents.actorUserId })
+          .from(auditEvents)
+          .where(and(eq(auditEvents.action, "rcm.report_viewed"), eq(auditEvents.actorUserId, a.userId)))
+          .orderBy(auditEvents.id),
+      );
+    const before = (await views()).length;
+    const months = (await withTenant(a, (tx) => periodFiles(tx))).length;
+    await withTenant(a, (tx) => statementsReport(tx, a));
+    await withTenant(a, (tx) => dashboardReport(tx, a));
+    const after = await views();
+    expect(after).toHaveLength(before + 2);
+    expect(after.slice(-2).map((v) => v.metadata)).toEqual(
+      expect.arrayContaining([
+        { report: "statements", months },
+        { report: "rcm_dashboard", months },
+      ]),
+    );
   });
 });

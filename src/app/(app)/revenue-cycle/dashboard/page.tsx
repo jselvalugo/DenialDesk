@@ -14,30 +14,20 @@ import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
 import { periodLabel } from "@/domain/revenue-cycle/imports";
 import { dashboardReport } from "@/domain/revenue-cycle/reporting";
-import { audit } from "@/lib/audit";
 import { formatCents } from "@/lib/format";
 
 export const metadata: Metadata = { title: "RCM dashboard" };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const percent = (bps: number) => `${(bps / 100).toFixed(1)}%`;
+/** Product default, not a legal threshold: warn when more than a quarter of A/R is over 90 days. */
+const OVER_90_WARNING_SHARE_BPS = 2_500;
 
 export default async function RcmDashboardPage() {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
-  const report = await withTenant(auth, async (tx) => {
-    const result = await dashboardReport(tx);
-    // Totals only, but built from PHI lines: record the view (R-7.5.1).
-    if (result) {
-      await audit(tx, {
-        action: "rcm.report_viewed",
-        actorUserId: auth.userId,
-        tenantId: auth.tenantId,
-        metadata: { report: "rcm_dashboard", months: result.months.length },
-      });
-    }
-    return result;
-  });
+  // The report records the view (R-7.5.1).
+  const report = await withTenant(auth, (tx) => dashboardReport(tx, auth));
 
   if (!report) {
     return (
@@ -58,7 +48,7 @@ export default async function RcmDashboardPage() {
 
   const { kpis, aging, denials } = report;
   const over90 = aging.totals.buckets["91_120"] + aging.totals.buckets.over_120;
-  const openAr = aging.totals.totalCents;
+  const openAr = kpis.openArCents;
   const trailing = `last ${kpis.trailingMonths} month${kpis.trailingMonths === 1 ? "" : "s"}`;
   const maxRevenue = Math.max(1, ...report.months.map((m) => m.netRevenueCents));
   const clearing = report.reconciliation.at(-1);
@@ -92,7 +82,9 @@ export default async function RcmDashboardPage() {
           label="Over 90 days"
           value={openAr > 0 ? percent(Math.round((over90 * 10_000) / openAr)) : "—"}
           detail={formatCents(over90)}
-          emphasis={openAr > 0 && over90 * 4 > openAr ? "warning" : undefined}
+          emphasis={
+            openAr > 0 && over90 * 10_000 > openAr * OVER_90_WARNING_SHARE_BPS ? "warning" : undefined
+          }
         />
       </section>
 

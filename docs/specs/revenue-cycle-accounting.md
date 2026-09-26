@@ -227,7 +227,11 @@ else the most recent current-format import (`periodFiles()`); every report uses 
       apart, payments/deposits/clearing by month; ⚠️ management view pending the accountant's
       review of the net-revenue presentation) and RCM dashboard (net revenue, payments, open
       A/R, days in A/R, net collection rate, over-90 share, monthly bars, open denials by class
-      with a link to the queue). Both views audited as `rcm.report_viewed`; admin, manager and
+      with a link to the queue). Days in A/R uses the same open A/R as the tile (credits excluded);
+      trailing ratios cover the latest and the two calendar months before it, skipping missing
+      months; charts show the 12 most recent months with files. The spec's by-class income and
+      receivables bullets became by-account (each class routes to its own accounts). Both views
+      audited as `rcm.report_viewed` by the report functions; admin, manager and
       compliance only. 
 
 ## Security notes

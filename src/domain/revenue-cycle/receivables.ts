@@ -1,9 +1,10 @@
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { canConfigureRevenueCycle, canRunRevenueCycle } from "@/auth/permissions";
-import type { TenantTx } from "@/db/tenant";
+import { withTenant, type TenantTx } from "@/db/tenant";
 import { rcmClaimLines, rcmDepositFiles, rcmDeposits, rcmFiles, users } from "@/db/schema";
-import { audit } from "@/lib/audit";
+import { audit, auditSystem } from "@/lib/audit";
+import { z } from "zod";
 import { createHash } from "node:crypto";
 import { ageReceivables, reconcileDeposits, rollForward, type BucketKey, type DepositLine } from "./aging";
 import { periodEnd } from "./monthly-file";
@@ -279,4 +280,34 @@ export async function monthsWithoutDeposits(tx: TenantTx) {
       periodMonth: p.periodMonth,
       paymentsCents: payments.get(p.fileId)!,
     }));
+}
+
+/**
+ * Reverses a deposit file in its own transaction for a signed-in user. A refusal rolls that
+ * transaction back, so it is audited separately with a coded reason and the file ID (R-7.5.1).
+ */
+export async function reverseDepositsFor(
+  actor: Actor,
+  fileId: unknown,
+  reason: string,
+): Promise<{ ok: true; reversalId: string } | { ok: false; error: string }> {
+  const id = z.uuid().safeParse(fileId);
+  const refused = async (code: string, error: string) => {
+    await auditSystem({
+      action: "rcm.deposits_rejected",
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      ...(id.success ? { entityType: "rcm_deposit_file" as const, entityId: id.data } : {}),
+      metadata: { reason: code, operation: "reverse" },
+    });
+    return { ok: false as const, error };
+  };
+  if (!id.success) return refused("bad_id", "That deposit file doesn't exist.");
+  try {
+    const reversalId = await withTenant(actor, (tx) => reverseDepositFile(tx, actor, id.data, reason));
+    return { ok: true, reversalId };
+  } catch (error) {
+    if (!(error instanceof DepositError)) throw error;
+    return refused(error.code, error.message);
+  }
 }

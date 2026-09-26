@@ -12,7 +12,6 @@ import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { statementsReport } from "@/domain/revenue-cycle/reporting";
 import type { StatementRow } from "@/domain/revenue-cycle/statements";
-import { audit } from "@/lib/audit";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Statements" };
@@ -24,19 +23,8 @@ const short = (m: { periodYear: number; periodMonth: number }) =>
 export default async function StatementsPage() {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
-  const report = await withTenant(auth, async (tx) => {
-    const result = await statementsReport(tx);
-    // Totals only, but built from PHI lines: record the view (R-7.5.1).
-    if (result) {
-      await audit(tx, {
-        action: "rcm.report_viewed",
-        actorUserId: auth.userId,
-        tenantId: auth.tenantId,
-        metadata: { report: "statements", months: result.income.months.length },
-      });
-    }
-    return result;
-  });
+  // The report records the view (R-7.5.1).
+  const report = await withTenant(auth, (tx) => statementsReport(tx, auth));
 
   if (!report) {
     return (
@@ -111,11 +99,11 @@ export default async function StatementsPage() {
             <tbody>
               <Tr>
                 <Td className="font-semibold" colSpan={income.months.length + 2}>
-                  Charges
+                  Revenue
                 </Td>
               </Tr>
               {income.revenue.map((row) => accountRow(row, 1))}
-              {totalRow("Total charges", income.grossCents)}
+              {totalRow("Total revenue", income.grossCents)}
               <Tr>
                 <Td className="font-semibold" colSpan={income.months.length + 2}>
                   Less adjustments and write-offs

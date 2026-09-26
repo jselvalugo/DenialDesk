@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase } from "@/db/client";
 import { auditEvents, rcmClaimLines, rcmDepositFiles, rcmDeposits } from "@/db/schema";
@@ -12,6 +12,7 @@ import {
   monthsWithoutDeposits,
   receivablesReport,
   reverseDepositFile,
+  reverseDepositsFor,
 } from "@/domain/revenue-cycle/receivables";
 import type { Actor } from "@/domain/revenue-cycle/vouchers";
 import { generateDataset } from "@/domain/synthetic/generator";
@@ -177,6 +178,36 @@ describe("importDeposits", () => {
     await expect(
       withTenant(a.manager, (tx) => importDeposits(tx, a.manager, [{ ...one[0]!, amountCents: 1.5 }])),
     ).rejects.toThrow(/whole/);
+  });
+});
+
+describe("reverseDepositsFor", () => {
+  it("audits every refusal with a coded reason and the file ID", async () => {
+    const refusals = () =>
+      withTenant(a.admin, (tx) =>
+        tx
+          .select({ entityId: auditEvents.entityId, metadata: auditEvents.metadata })
+          .from(auditEvents)
+          .where(eq(auditEvents.action, "rcm.deposits_rejected"))
+          .orderBy(auditEvents.id),
+      );
+    const before = (await refusals()).length;
+    const [file] = await withTenant(a.admin, (tx) =>
+      tx.select().from(rcmDepositFiles).where(isNull(rcmDepositFiles.reversesFileId)).limit(1),
+    );
+    const reason = "Imported the wrong export";
+    const unknown = "00000000-0000-4000-8000-000000000000";
+    expect(await reverseDepositsFor(a.manager, file!.id, reason)).toMatchObject({ ok: false });
+    expect(await reverseDepositsFor(a.admin, file!.id, "short")).toMatchObject({ ok: false });
+    expect(await reverseDepositsFor(a.admin, unknown, reason)).toMatchObject({ ok: false });
+    expect(await reverseDepositsFor(a.admin, "not-a-uuid", reason)).toMatchObject({ ok: false });
+    const rows = (await refusals()).slice(before);
+    expect(rows.map((r) => [r.entityId, r.metadata])).toEqual([
+      [file!.id, { reason: "forbidden", operation: "reverse" }],
+      [file!.id, { reason: "reason_length", operation: "reverse" }],
+      [unknown, { reason: "not_found", operation: "reverse" }],
+      [null, { reason: "bad_id", operation: "reverse" }],
+    ]);
   });
 });
 

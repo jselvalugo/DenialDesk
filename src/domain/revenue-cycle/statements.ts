@@ -79,10 +79,13 @@ export function incomeStatement(
 export interface MonthActivity extends MonthKey {
   netRevenueCents: number;
   paymentsCents: number;
-  balanceCents: number;
 }
 
 const daysIn = (m: MonthKey) => new Date(Date.UTC(m.periodYear, m.periodMonth, 0)).getUTCDate();
+const monthIndex = (m: MonthKey) => m.periodYear * 12 + m.periodMonth - 1;
+
+/** Months the trailing ratios cover: the latest and the two calendar months before it. */
+export const TRAILING_MONTHS = 3;
 
 export interface Kpis {
   latest: MonthKey;
@@ -93,16 +96,20 @@ export interface Kpis {
   daysInAr: number | null;
   /** Payments ÷ net revenue over the trailing months, in basis points; null without revenue. */
   netCollectionBps: number | null;
-  /** How many months the trailing figures cover (up to 3). */
+  /** How many months with files the trailing figures cover (up to 3; fewer after a gap). */
   trailingMonths: number;
 }
 
-/** Headline figures for the latest month, with trailing ratios over up to three months. */
-export function kpis(months: MonthActivity[]): Kpis | null {
+/**
+ * Headline figures for the latest month. `openArCents` is the latest month's open A/R (credit
+ * balances excluded, as on the aging page). Trailing ratios cover the months with files among the
+ * latest and the two calendar months before it; a missing month is left out, not bridged.
+ */
+export function kpis(months: MonthActivity[], openArCents: number): Kpis | null {
   if (months.length === 0) return null;
-  const sorted = [...months].sort((a, b) => (monthKey(a) < monthKey(b) ? -1 : 1));
+  const sorted = [...months].sort((a, b) => monthIndex(a) - monthIndex(b));
   const latest = sorted.at(-1)!;
-  const trailing = sorted.slice(-3);
+  const trailing = sorted.filter((m) => monthIndex(latest) - monthIndex(m) < TRAILING_MONTHS);
   const revenue = trailing.reduce((t, m) => t + m.netRevenueCents, 0);
   const payments = trailing.reduce((t, m) => t + m.paymentsCents, 0);
   const days = trailing.reduce((t, m) => t + daysIn(m), 0);
@@ -110,8 +117,8 @@ export function kpis(months: MonthActivity[]): Kpis | null {
     latest: { periodYear: latest.periodYear, periodMonth: latest.periodMonth },
     netRevenueCents: latest.netRevenueCents,
     paymentsCents: latest.paymentsCents,
-    openArCents: latest.balanceCents,
-    daysInAr: revenue > 0 ? Math.round(((latest.balanceCents * days) / revenue) * 10) / 10 : null,
+    openArCents,
+    daysInAr: revenue > 0 ? Math.round(((openArCents * days) / revenue) * 10) / 10 : null,
     netCollectionBps: revenue > 0 ? Math.round((payments * 10_000) / revenue) : null,
     trailingMonths: trailing.length,
   };

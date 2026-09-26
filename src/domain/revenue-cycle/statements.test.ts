@@ -42,22 +42,24 @@ describe("incomeStatement", () => {
 });
 
 describe("kpis", () => {
-  const month = (m: number, net: number, payments: number, balance: number): MonthActivity => ({
-    periodYear: 2026,
+  const month = (m: number, net: number, payments: number, year = 2026): MonthActivity => ({
+    periodYear: year,
     periodMonth: m,
     netRevenueCents: net,
     paymentsCents: payments,
-    balanceCents: balance,
   });
 
-  it("uses the latest month and trails ratios over up to three months", () => {
+  it("uses the latest month and trails ratios over three calendar months", () => {
     // Feb 28 + Mar 31 + Apr 30 = 89 days; revenue 8,900.00 → 100.00 a day; A/R 4,500.00 → 45 days.
-    const result = kpis([
-      month(1, 999_999, 1, 1),
-      month(3, 300_000, 250_000, 400_000),
-      month(4, 290_000, 270_000, 450_000),
-      month(2, 300_000, 280_000, 350_000),
-    ])!;
+    const result = kpis(
+      [
+        month(1, 999_999, 1),
+        month(3, 300_000, 250_000),
+        month(4, 290_000, 270_000),
+        month(2, 300_000, 280_000),
+      ],
+      450_000,
+    )!;
     expect(result.latest).toEqual({ periodYear: 2026, periodMonth: 4 });
     expect(result).toMatchObject({ netRevenueCents: 290_000, paymentsCents: 270_000, openArCents: 450_000 });
     expect(result.daysInAr).toBe(45);
@@ -65,9 +67,25 @@ describe("kpis", () => {
     expect(result.trailingMonths).toBe(3);
   });
 
+  it("uses the open A/R it is given, so credit balances don't shorten days in A/R", () => {
+    // Open balances 3,100.00 with a 100.00 credit elsewhere: days use 3,100.00, not the net 3,000.00.
+    const result = kpis([month(1, 310_000, 0)], 310_000)!;
+    expect(result.daysInAr).toBe(31);
+  });
+
+  it("leaves out months beyond three calendar months after a gap, across a year end", () => {
+    // Nov 2025 is four months before Feb 2026, so only Dec (31) + Feb (28) count.
+    const result = kpis(
+      [month(11, 900_000, 900_000, 2025), month(12, 310_000, 0, 2025), month(2, 280_000, 0)],
+      0,
+    )!;
+    expect(result.trailingMonths).toBe(2);
+    expect(result.netCollectionBps).toBe(0);
+  });
+
   it("returns no ratios without revenue, and nothing without months", () => {
-    expect(kpis([month(1, 0, 0, 500)])).toMatchObject({ daysInAr: null, netCollectionBps: null });
-    expect(kpis([])).toBeNull();
+    expect(kpis([month(1, 0, 0)], 500)).toMatchObject({ daysInAr: null, netCollectionBps: null });
+    expect(kpis([], 0)).toBeNull();
   });
 });
 

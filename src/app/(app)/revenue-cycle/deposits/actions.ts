@@ -6,9 +6,8 @@ import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
 import { DEPOSIT_MAX_BYTES, parseDepositFile } from "@/domain/revenue-cycle/aging";
 import { decodeUpload } from "@/domain/revenue-cycle/monthly-file";
-import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { DepositError, importDeposits, reverseDepositFile } from "@/domain/revenue-cycle/receivables";
+import { DepositError, importDeposits, reverseDepositsFor } from "@/domain/revenue-cycle/receivables";
 import { auditSystem } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
 
@@ -78,28 +77,8 @@ export async function reverseDeposits(
   formData: FormData,
 ): Promise<DepositUploadState> {
   const auth = await requireAuth();
-  const id = z.uuid().safeParse(formData.get("fileId"));
-  const refused = (reason: string) =>
-    auditSystem({
-      action: "rcm.deposits_rejected",
-      actorUserId: auth.userId,
-      tenantId: auth.tenantId,
-      ...(id.success ? { entityType: "rcm_deposit_file" as const, entityId: id.data } : {}),
-      metadata: { reason, operation: "reverse" },
-    });
-  if (!id.success) {
-    await refused("bad_id");
-    return { error: "That deposit file doesn't exist." };
-  }
-  try {
-    await withTenant(auth, (tx) =>
-      reverseDepositFile(tx, auth, id.data, String(formData.get("reason") ?? "")),
-    );
-  } catch (error) {
-    if (!(error instanceof DepositError)) throw error;
-    await refused(error.code);
-    return { error: error.message };
-  }
+  const result = await reverseDepositsFor(auth, formData.get("fileId"), String(formData.get("reason") ?? ""));
+  if (!result.ok) return { error: result.error };
   revalidatePath("/revenue-cycle/deposits");
   return {};
 }
