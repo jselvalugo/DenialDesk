@@ -11,6 +11,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Monthly revenue cycle files upload through a server action (5 MB cap enforced in code).
+  experimental: { serverActions: { bodySizeLimit: "6mb" } },
   reactStrictMode: true,
   // Container builds for Azure set BUILD_STANDALONE=1; Netlify builds use its own adapter (ADR 0003).
   output: process.env.BUILD_STANDALONE === "1" ? "standalone" : undefined,

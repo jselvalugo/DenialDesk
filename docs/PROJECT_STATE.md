@@ -32,9 +32,9 @@ The product owner delegated technical decisions to the implementing agent ("make
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
-0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger done; next B2
-   monthly file import and processed claims, then B3 journal vouchers, B4 deposits and A/R aging,
-   B5 statements and dashboard.
+0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger and B2 monthly file
+   import done; next B3 journal vouchers (MIP export), B4 deposits and A/R aging, B5 statements
+   and dashboard.
 1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
@@ -49,6 +49,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.
 
+- Revenue cycle imports (before real data, `docs/threat-models/revenue-cycle-imports.md`):
+  sensitivity tags for lines (Part 2/HIV/behavioral CPTs); encrypt account numbers or confirm
+  PM exports never put member IDs there; accept the synthetic-only guard as attestation-level.
 - Revenue cycle: confirm the Capitation rule is meant to be shadowed by the Medicare/Medicaid wrap
   rule, and the GL account / payer-class names (seeded names are descriptive placeholders).
 

@@ -49,3 +49,18 @@ export function isProduction(): boolean {
 export function demoLoginEnabled(): boolean {
   return !isProduction() && process.env.DEMO_LOGIN_ENABLED === "true";
 }
+
+/**
+ * True when running on Netlify (pre-production only, ADR 0003). Checked from several variables the
+ * platform sets, so a mistaken APP_ENV=production on Netlify can't unlock real-PHI features.
+ */
+export function onNetlify(): boolean {
+  return Boolean(
+    process.env.NETLIFY || process.env.NETLIFY_DB_URL || process.env.DEPLOY_ID || process.env.SITE_ID,
+  );
+}
+
+/** Only production outside Netlify may accept real patient files; everywhere else is synthetic-only. */
+export function syntheticDataOnly(): boolean {
+  return !isProduction() || onNetlify();
+}

@@ -61,7 +61,29 @@ per-tenant tables, not in `rules/`. Each seeded default is labeled with that sou
       5,000 generated lines; defaults seeded (audited) with every synthetic practice and loadable
       (audited, admin only) for practices without rules; read-only Rules and ledger page (admin, manager,
       compliance; hidden from specialists).
-- [ ] B2 · [ ] B3 · [ ] B4 · [ ] B5
+- [x] **B2** (2026-09-26): `rcm_files` + `rcm_claim_lines` (FORCE RLS, insert/select only:
+      imports are immutable records; corrections are new imports). CSV import via a server action:
+      5 MB / 50,000-row cap, UTF-8 only, parsed in memory by our own RFC 4180 parser (no new
+      dependency), strict header/value validation that rejects the whole file and names rows and
+      columns but never echoes values. **Synthetic-only guard outside production:** every Account #
+      must start with `SYN-` plus an attestation checkbox. Lines classified by the practice's rules;
+      site detected from the facility name, else a chosen default site (validated in-tenant);
+      control totals stored on the file and proven equal to the lines. Import (admin, manager) and
+      view (admin, manager, compliance) audited with IDs and counts only. Synthetic sample file
+      download (pre-production only) and last month's synthetic file seeded with every demo
+      practice. Note: the original RevCycle IQ never parsed uploads (it generated random rows), so
+      the importer is new code, not a port.
+      Review follow-ups (done): strict money (grouping, signs, $10M/line cap), unambiguous headers,
+      physical line numbers, blank/all-comma rows skipped, 100-column cap; synthetic-only guard also
+      forced on Netlify regardless of APP_ENV; generic stored file name (uploaded names can hold
+      PHI); service dates after the period flagged for review; compliance sees masked names and
+      accounts; rejected uploads and view filters audited; out-of-range pages redirect.
+      Threat model: `docs/threat-models/revenue-cycle-imports.md`.
+      **Account # must be the practice account number, never an insurance member ID** (member IDs
+      require field-level encryption, CLAUDE.md #6).
+      Before B3: a period can be imported more than once (flagged on the list); journal vouchers
+      must pick one file per period and record which file they came from.
+- [ ] B3 · [ ] B4 · [ ] B5
 
 Finding from the port (⚠️ VERIFY with the owner): in the original order, rule 9 (Medicare/Medicaid
 PPS wrap) matches every class rule 11 (Capitation) lists, so Capitation never fires. Ported as is;

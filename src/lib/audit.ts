@@ -30,13 +30,16 @@ export type AuditAction =
   | "operator.practice_suspended"
   | "operator.practice_reactivated"
   | "operator.demo_reset"
-  | "rcm.defaults_loaded";
+  | "rcm.defaults_loaded"
+  | "rcm.file_imported"
+  | "rcm.file_viewed"
+  | "rcm.file_rejected";
 
 export interface AuditEvent {
   action: AuditAction;
   actorUserId?: string | null;
   tenantId?: string | null;
-  entityType?: "denial" | "claim" | "patient" | "user" | "session" | "tenant";
+  entityType?: "denial" | "claim" | "patient" | "user" | "session" | "tenant" | "rcm_file";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;

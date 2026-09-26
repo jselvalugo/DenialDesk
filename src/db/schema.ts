@@ -431,6 +431,75 @@ export const businessRules = pgTable(
   ],
 );
 
+/**
+ * One imported monthly practice-management file. Control totals are computed at import and kept
+ * so later phases (journal vouchers) can prove they balance to the source (REQUIREMENTS §11).
+ */
+export const rcmFiles = pgTable(
+  "rcm_files",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    uploadedBy: uuid("uploaded_by")
+      .notNull()
+      .references(() => users.id),
+    /** Original file name as uploaded (may be shown to the practice; never logged). */
+    filename: text("filename").notNull(),
+    periodYear: integer("period_year").notNull(),
+    periodMonth: integer("period_month").notNull(),
+    rowCount: integer("row_count").notNull(),
+    billedCents: cents("billed_cents").notNull(),
+    paymentCents: cents("payment_cents").notNull(),
+    balanceCents: cents("balance_cents").notNull(),
+    contraCents: cents("contra_cents").notNull(),
+    netCents: cents("net_cents").notNull(),
+    excludedCount: integer("excluded_count").notNull(),
+    flaggedCount: integer("flagged_count").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("rcm_files_tenant_period_idx").on(t.tenantId, t.periodYear, t.periodMonth)],
+);
+
+/** A classified line of an imported file (Restricted PHI: patient name and account number). */
+export const rcmClaimLines = pgTable(
+  "rcm_claim_lines",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    fileId: uuid("file_id")
+      .notNull()
+      .references(() => rcmFiles.id),
+    rowNumber: integer("row_number").notNull(),
+    patientName: text("patient_name").notNull(),
+    accountNumber: text("account_number").notNull(),
+    serviceDate: date("service_date").notNull(),
+    cpt: text("cpt").notNull(),
+    description: text("description").notNull(),
+    facility: text("facility").notNull(),
+    payerName: text("payer_name").notNull(),
+    payerClass: text("payer_class").notNull(),
+    status: text("status").notNull(),
+    billedCents: cents("billed_cents").notNull(),
+    paymentCents: cents("payment_cents").notNull(),
+    balanceCents: cents("balance_cents").notNull(),
+    siteId: uuid("site_id").references(() => rcmSites.id),
+    ruleCode: text("rule_code").notNull(),
+    contraBps: integer("contra_bps").notNull(),
+    contraCents: cents("contra_cents").notNull(),
+    netCents: cents("net_cents").notNull(),
+    arGl: text("ar_gl").notNull(),
+    revenueGl: text("revenue_gl").notNull(),
+    adjustmentGl: text("adjustment_gl").notNull(),
+    excluded: boolean("excluded").notNull(),
+    /** Needs review: zero charge or blank CPT/HCPCS (RevCycle IQ "flagged"). */
+    flagged: boolean("flagged").notNull(),
+  },
+  (t) => [
+    uniqueIndex("rcm_claim_lines_file_row_key").on(t.fileId, t.rowNumber),
+    index("rcm_claim_lines_tenant_dos_idx").on(t.tenantId, t.serviceDate),
+  ],
+);
+
 // ---------------------------------------------------------------------------------------------
 // Audit log (R-7.5.1): append-only, enforced by trigger and grants in drizzle/0002_security.sql
 // ---------------------------------------------------------------------------------------------

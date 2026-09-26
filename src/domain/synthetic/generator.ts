@@ -52,7 +52,7 @@ export function isValidNpi(npi: string): boolean {
   return /^\d{10}$/.test(npi) && npiCheckDigit(npi.slice(0, 9)) === Number(npi[9]);
 }
 
-const FIRST = [
+export const FIRST_NAMES = [
   "Avery",
   "Jordan",
   "Riley",
@@ -70,7 +70,7 @@ const FIRST = [
   "Kendall",
   "Marlow",
 ] as const;
-const LAST = [
+export const LAST_NAMES = [
   "Castellan",
   "Brightwater",
   "Fenwick",
@@ -240,8 +240,8 @@ export function generateDataset(options: {
   const patients = Array.from({ length: options.patients ?? 80 }, (_, i) => ({
     key: `pt${i}`,
     mrn: `${SYNTHETIC_MARKER}-${String(1000 + i).padStart(6, "0")}`,
-    firstName: random.pick(FIRST),
-    lastName: random.pick(LAST),
+    firstName: random.pick(FIRST_NAMES),
+    lastName: random.pick(LAST_NAMES),
     birthDate: addCalendarDays("1950-01-01", random.int(0, 365 * 55)),
     memberId: `${SYNTHETIC_MARKER}${String(random.int(100_000_000, 999_999_999))}`,
   }));
