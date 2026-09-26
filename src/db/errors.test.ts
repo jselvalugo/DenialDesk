@@ -245,6 +245,10 @@ describe("migrations raise only listed, value-free trigger messages", () => {
     "OLD.status": "voucherStatus",
     "NEW.status": "voucherStatus",
   };
+  // "OLD.status"/"NEW.status" name a different enum in this migration's own trigger.
+  const FILE_EXPRESSION_SLOTS: Record<string, Record<string, TriggerSlot>> = {
+    "0026_appeals.sql": { "OLD.status": "appealStatus", "NEW.status": "appealStatus" },
+  };
 
   it("parses every RAISE strictly (no E'', quoted '' or USING forms slip past the checks)", () => {
     for (const { file, sql } of sources) {
@@ -260,9 +264,8 @@ describe("migrations raise only listed, value-free trigger messages", () => {
     (_, format, raise) => {
       const listed = TRIGGER_MESSAGES.find((entry) => entry.format === format);
       expect(listed, `add "${format}" to TRIGGER_MESSAGES`).toBeDefined();
-      expect(raise.args.map((arg) => EXPRESSION_SLOTS[arg] ?? `unlisted expression: ${arg}`)).toEqual(
-        listed!.args,
-      );
+      const slots = { ...EXPRESSION_SLOTS, ...FILE_EXPRESSION_SLOTS[raise.file] };
+      expect(raise.args.map((arg) => slots[arg] ?? `unlisted expression: ${arg}`)).toEqual(listed!.args);
     },
   );
 

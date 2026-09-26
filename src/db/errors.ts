@@ -1,7 +1,7 @@
 import { DrizzleQueryError } from "drizzle-orm";
 import { PgPreparedQuery } from "drizzle-orm/pg-core";
 import { LOG_VALUE_PATTERNS, log } from "@/lib/log";
-import { voucherStatusEnum } from "./schema";
+import { appealStatusEnum, voucherStatusEnum } from "./schema";
 
 /** A database failure with the query parameters (which can hold PHI) stripped out. */
 export class DatabaseError extends Error {
@@ -49,12 +49,13 @@ const OBJECT_ONLY_MESSAGE_CODES = new Set([
 ]);
 
 /** What a trigger may interpolate into a `%`: an ID, a small integer, or a voucher status. */
-export type TriggerSlot = "uuid" | "int" | "voucherStatus";
+export type TriggerSlot = "uuid" | "int" | "voucherStatus" | "appealStatus";
 const SLOT_PATTERNS: Record<TriggerSlot, string> = {
   uuid: "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
   // Versions and counts; at most 6 digits so an SSN, member ID, or numeric MRN never matches.
   int: "\\d{1,6}",
   voucherStatus: `(?:${voucherStatusEnum.enumValues.join("|")})`,
+  appealStatus: `(?:${appealStatusEnum.enumValues.join("|")})`,
 };
 
 /**
@@ -83,6 +84,7 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
   { format: "voiding may only set the void fields", args: [] },
   { format: "void fields belong to voided agreements only", args: [] },
   { format: "tenant_agreements status may only move to superseded or voided", args: [] },
+  { format: "appeal % cannot move from % to %", args: ["uuid", "appealStatus", "appealStatus"] },
 ];
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
