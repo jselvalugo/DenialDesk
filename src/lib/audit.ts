@@ -71,7 +71,13 @@ export type AuditAction =
   | "settings.custom_field_created"
   | "settings.custom_field_updated"
   | "settings.custom_field_deactivated"
-  | "settings.custom_field_reactivated";
+  | "settings.custom_field_reactivated"
+  | "appeal.list_viewed"
+  | "appeal.viewed"
+  | "appeal.created"
+  | "appeal.submission_recorded"
+  | "appeal.decision_recorded"
+  | "appeal.note_added";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
@@ -99,7 +105,8 @@ export interface AuditEvent {
     | "rcm_file"
     | "rcm_voucher"
     | "rcm_deposit_file"
-    | "custom_field";
+    | "custom_field"
+    | "appeal";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;
