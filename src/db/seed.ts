@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { addCalendarDays } from "@rules/calendar";
 import { appealDeadline } from "@rules/deadlines";
 import { hashPassword } from "@/auth/password";
@@ -20,6 +20,11 @@ import {
 import { withTenant } from "./tenant";
 
 const minDate = (a: string, b: string) => (a < b ? a : b);
+
+/** Keeps each INSERT well under PostgreSQL's 65,535-parameter limit. */
+async function insertInChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>, size = 500) {
+  for (let i = 0; i < rows.length; i += size) await insert(rows.slice(i, i + size));
+}
 
 export interface SeedUser {
   email: string;
@@ -60,117 +65,117 @@ export async function seedPractice(options: {
     userIds.push(row!.id);
   }
 
-  await withTenant({ tenantId, userId: userIds[0]! }, async (tx) => {
-    const ids = new Map<string, string>();
-    const put = (key: string, id: string) => ids.set(key, id);
-    const get = (key: string) => ids.get(key)!;
+  // IDs are generated here so every table is written in one batched insert: fast enough to run
+  // inside a serverless function (the Netlify preview seed endpoint), not just from a laptop.
+  const ids = new Map<string, string>();
+  const idFor = (key: string) => {
+    if (!ids.has(key)) ids.set(key, randomUUID());
+    return ids.get(key)!;
+  };
+  const payerByKey = new Map(dataset.payers.map((p) => [p.key, p]));
+  // Only people who can work denials get assignments (compliance and admins don't in the demo).
+  const specialists = userIds.filter((_, i) => ["specialist", "manager"].includes(options.users[i]!.role));
 
-    for (const l of dataset.locations) {
-      const [row] = await tx.insert(locations).values({ tenantId, name: l.name, city: l.city }).returning();
-      put(l.key, row!.id);
-    }
-    for (const p of dataset.providers) {
-      const [row] = await tx
-        .insert(providers)
-        .values({ tenantId, name: p.name, npi: p.npi, taxonomy: p.taxonomy, flLicense: p.flLicense })
-        .returning();
-      put(p.key, row!.id);
-    }
-    const payerRegime = new Map<string, (typeof dataset.payers)[number]>();
-    for (const p of dataset.payers) {
-      const [row] = await tx
-        .insert(payers)
-        .values({
-          tenantId,
-          name: p.name,
-          ediPayerId: p.ediPayerId,
-          regime: p.regime,
-          appealWindowDays: p.appealWindowDays,
-          appealWindowSource: p.appealWindowSource,
-        })
-        .returning();
-      put(p.key, row!.id);
-      payerRegime.set(p.key, p);
-    }
-    for (const p of dataset.patients) {
-      const [row] = await tx
-        .insert(patients)
-        .values({
-          tenantId,
-          mrn: p.mrn,
-          firstName: p.firstName,
-          lastName: p.lastName,
-          birthDate: p.birthDate,
-          memberIdEnc: encryptField(p.memberId),
-          memberIdLast4: p.memberId.slice(-4),
-        })
-        .returning();
-      put(p.key, row!.id);
-    }
-
-    // Only people who can work denials get assignments (compliance and admins don't in the demo).
-    const specialists = userIds.filter((_, i) => ["specialist", "manager"].includes(options.users[i]!.role));
-    for (const [index, c] of dataset.claims.entries()) {
-      const billed = c.lines.reduce((sum, line) => sum + line.chargeCents, 0);
-      const denied = c.denial?.deniedCents ?? 0;
-      const [claim] = await tx
-        .insert(claims)
-        .values({
-          tenantId,
-          claimNumber: c.claimNumber,
-          patientId: get(c.patientKey),
-          providerId: get(c.providerKey),
-          locationId: get(c.locationKey),
-          payerId: get(c.payerKey),
-          serviceDate: c.serviceDate,
-          diagnosisCodes: c.diagnosisCodes,
-          billedCents: billed,
-          paidCents: billed - denied,
-          status: !c.denial ? "paid" : denied < billed ? "partially_paid" : "denied",
-          electronic: c.electronic,
-          submittedAt: new Date(`${c.serviceDate}T14:00:00Z`),
-          payerReceivedDate: c.payerReceivedDate,
-        })
-        .returning();
-      const lineIds: string[] = [];
-      for (const [lineIndex, line] of c.lines.entries()) {
-        const [row] = await tx
-          .insert(claimLines)
-          .values({ tenantId, claimId: claim!.id, lineNumber: lineIndex + 1, ...line })
-          .returning();
-        lineIds.push(row!.id);
-      }
-      if (c.denial) {
-        const payer = payerRegime.get(c.payerKey)!;
-        const deadline = appealDeadline({
-          regime: payer.regime,
-          noticeDate: c.denial.noticeDate,
-          payerAppealWindowDays: payer.appealWindowDays,
-        });
-        const assignee =
+  const claimRows: (typeof claims.$inferInsert)[] = [];
+  const lineRows: (typeof claimLines.$inferInsert)[] = [];
+  const denialRows: (typeof denials.$inferInsert)[] = [];
+  for (const [index, c] of dataset.claims.entries()) {
+    const billed = c.lines.reduce((sum, line) => sum + line.chargeCents, 0);
+    const denied = c.denial?.deniedCents ?? 0;
+    const claimId = idFor(c.key);
+    claimRows.push({
+      id: claimId,
+      tenantId,
+      claimNumber: c.claimNumber,
+      patientId: idFor(c.patientKey),
+      providerId: idFor(c.providerKey),
+      locationId: idFor(c.locationKey),
+      payerId: idFor(c.payerKey),
+      serviceDate: c.serviceDate,
+      diagnosisCodes: c.diagnosisCodes,
+      billedCents: billed,
+      paidCents: billed - denied,
+      status: !c.denial ? "paid" : denied < billed ? "partially_paid" : "denied",
+      electronic: c.electronic,
+      submittedAt: new Date(`${c.serviceDate}T14:00:00Z`),
+      payerReceivedDate: c.payerReceivedDate,
+    });
+    const lineIds = c.lines.map((line, lineIndex) => {
+      const id = randomUUID();
+      lineRows.push({ id, tenantId, claimId, lineNumber: lineIndex + 1, ...line });
+      return id;
+    });
+    if (c.denial) {
+      const payer = payerByKey.get(c.payerKey)!;
+      const deadline = appealDeadline({
+        regime: payer.regime,
+        noticeDate: c.denial.noticeDate,
+        payerAppealWindowDays: payer.appealWindowDays,
+      });
+      denialRows.push({
+        tenantId,
+        claimId,
+        claimLineId: c.denial.lineIndex === null ? null : lineIds[c.denial.lineIndex]!,
+        groupCode: c.denial.groupCode,
+        carc: c.denial.carc,
+        rarcs: c.denial.rarcs,
+        category: c.denial.category,
+        deniedCents: c.denial.deniedCents,
+        noticeDate: c.denial.noticeDate,
+        appealDeadline: deadline?.date ?? null,
+        appealDeadlineBasis: deadline?.basis ?? null,
+        status: c.denial.status,
+        appealSubmittedOn: ["appeal_submitted", "overturned", "upheld"].includes(c.denial.status)
+          ? minDate(addCalendarDays(c.denial.noticeDate, 21), dataset.asOf)
+          : null,
+        assigneeId:
           c.denial.status === "new" || specialists.length === 0
             ? null
-            : specialists[index % specialists.length]!;
-        await tx.insert(denials).values({
-          tenantId,
-          claimId: claim!.id,
-          claimLineId: c.denial.lineIndex === null ? null : lineIds[c.denial.lineIndex]!,
-          groupCode: c.denial.groupCode,
-          carc: c.denial.carc,
-          rarcs: c.denial.rarcs,
-          category: c.denial.category,
-          deniedCents: c.denial.deniedCents,
-          noticeDate: c.denial.noticeDate,
-          appealDeadline: deadline?.date ?? null,
-          appealDeadlineBasis: deadline?.basis ?? null,
-          status: c.denial.status,
-          appealSubmittedOn: ["appeal_submitted", "overturned", "upheld"].includes(c.denial.status)
-            ? minDate(addCalendarDays(c.denial.noticeDate, 21), dataset.asOf)
-            : null,
-          assigneeId: assignee,
-        });
-      }
+            : specialists[index % specialists.length]!,
+      });
     }
+  }
+
+  await withTenant({ tenantId, userId: userIds[0]! }, async (tx) => {
+    await tx
+      .insert(locations)
+      .values(dataset.locations.map((l) => ({ id: idFor(l.key), tenantId, name: l.name, city: l.city })));
+    await tx.insert(providers).values(
+      dataset.providers.map((p) => ({
+        id: idFor(p.key),
+        tenantId,
+        name: p.name,
+        npi: p.npi,
+        taxonomy: p.taxonomy,
+        flLicense: p.flLicense,
+      })),
+    );
+    await tx.insert(payers).values(
+      dataset.payers.map((p) => ({
+        id: idFor(p.key),
+        tenantId,
+        name: p.name,
+        ediPayerId: p.ediPayerId,
+        regime: p.regime,
+        appealWindowDays: p.appealWindowDays,
+        appealWindowSource: p.appealWindowSource,
+      })),
+    );
+    await tx.insert(patients).values(
+      dataset.patients.map((p) => ({
+        id: idFor(p.key),
+        tenantId,
+        mrn: p.mrn,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        birthDate: p.birthDate,
+        memberIdEnc: encryptField(p.memberId),
+        memberIdLast4: p.memberId.slice(-4),
+      })),
+    );
+    await insertInChunks(claimRows, (chunk) => tx.insert(claims).values(chunk));
+    await insertInChunks(lineRows, (chunk) => tx.insert(claimLines).values(chunk));
+    await insertInChunks(denialRows, (chunk) => tx.insert(denials).values(chunk));
   });
 
   return { tenantId, userIds };

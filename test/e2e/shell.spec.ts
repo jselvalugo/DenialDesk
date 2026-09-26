@@ -47,3 +47,11 @@ test("pages send a nonce-based Content-Security-Policy and load without violatio
   await page.getByLabel("Work email").fill("csp-check@e2e.denialdesk.test");
   expect(violations).toEqual([]);
 });
+
+test("the preview seed endpoint rejects requests without the secret token", async ({ request }) => {
+  expect((await request.post("/api/preview/seed")).status()).toBe(404);
+  const wrong = await request.post("/api/preview/seed", {
+    headers: { authorization: `Bearer ${"w".repeat(40)}` },
+  });
+  expect(wrong.status()).toBe(404);
+});

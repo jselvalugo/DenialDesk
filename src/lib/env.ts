@@ -2,7 +2,8 @@ import { z } from "zod";
 
 const schema = z.object({
   APP_ENV: z.enum(["development", "preview", "production"]),
-  DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  /** Optional on Netlify, where the platform supplies the database (src/platform/netlify). */
+  DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }).optional(),
   /** Base64 of 32 random bytes (AES-256). Pre-prod only; Azure Key Vault in production (ADR 0002). */
   FIELD_ENCRYPTION_KEY: z
     .string()

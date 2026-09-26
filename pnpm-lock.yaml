@@ -8,9 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@netlify/database':
+        specifier: 2.0.1
+        version: 2.0.1
       drizzle-orm:
         specifier: 0.45.3
-        version: 0.45.3(@types/pg@8.23.1)(pg@8.23.0)
+        version: 0.45.3(@neondatabase/serverless@1.1.0)(@types/pg@8.23.1)(pg@8.23.0)
       next:
         specifier: 16.3.6
         version: 16.3.6(@babel/core@7.29.7)(@playwright/test@1.63.0)(@types/node@24.19.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -870,6 +873,18 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
+
+  '@neondatabase/serverless@1.1.0':
+    resolution: {integrity: sha512-r3ZZhRjEcfEdKIZnoB1RusNgvHuaBRqfCzV4Gi+5A9yUX0S4HTws/ASWqt13wL4y4I+0rqsWGdA2w7EQXHi3+Q==}
+    engines: {node: '>=19.0.0'}
+
+  '@netlify/database@2.0.1':
+    resolution: {integrity: sha512-ikz0NcVgeOe62Sic5MEFMyv/yMWtzhMLcynXTDftTL3rVEMoJL16mjnU9gNZ6G80lBngjjPjZrDOyAS1j+Kt3A==}
+    engines: {node: '>=22.12.0'}
+
+  '@netlify/runtime-utils@3.0.0':
+    resolution: {integrity: sha512-OHo40+V3QZkR+UrDjqhN+LekrAby/dSSJxsvyYs9i88E/mSl3goB/ysoL+VYROm190egxmQyRYlHK7vL4GeHBQ==}
+    engines: {node: '>=22.12.0'}
 
   '@next/env@16.3.6':
     resolution: {integrity: sha512-x9Vblze1EbtltQYnNH38xCPWU3TVfBd1eXqA3+w9+BTpedkkdNpAaltXlGQ/nsc1+E0mVTNrtcbX3GoO09zeLQ==}
@@ -3075,6 +3090,71 @@ packages:
       jsdom:
         optional: true
 
+  waddler@0.1.1:
+    resolution: {integrity: sha512-lBJXYFBLEpYe+scAeCJmLj6Iqweuq1whM6Am3I9WfopOCFxvKz8Nq5hXoy8/b3zwJqHIQMglFIvM4skRydSpZg==}
+    peerDependencies:
+      '@clickhouse/client': ^1.11.2
+      '@cloudflare/workers-types': '*'
+      '@duckdb/node-api': ^1.1.2-alpha.4
+      '@electric-sql/pglite': ^0.2.17
+      '@libsql/client': ^0.15.4
+      '@libsql/client-wasm': ^0.15.4
+      '@neondatabase/serverless': ^1.0.0
+      '@op-engineering/op-sqlite': '*'
+      '@planetscale/database': ^1.19.0
+      '@tidbcloud/serverless': ^0.2.0
+      '@vercel/postgres': ^0.10.0
+      '@xata.io/client': ^0.30.1
+      better-sqlite3: ^11.9.1
+      bun-types: '*'
+      duckdb: ^1.2.1
+      gel: ^2.0.2
+      mysql2: ^3.14.0
+      pg: ^8.14.0
+      pg-query-stream: ^4.8.0
+      postgres: ^3.4.5
+    peerDependenciesMeta:
+      '@clickhouse/client':
+        optional: true
+      '@cloudflare/workers-types':
+        optional: true
+      '@duckdb/node-api':
+        optional: true
+      '@electric-sql/pglite':
+        optional: true
+      '@libsql/client':
+        optional: true
+      '@libsql/client-wasm':
+        optional: true
+      '@neondatabase/serverless':
+        optional: true
+      '@op-engineering/op-sqlite':
+        optional: true
+      '@planetscale/database':
+        optional: true
+      '@tidbcloud/serverless':
+        optional: true
+      '@vercel/postgres':
+        optional: true
+      '@xata.io/client':
+        optional: true
+      better-sqlite3:
+        optional: true
+      bun-types:
+        optional: true
+      duckdb:
+        optional: true
+      gel:
+        optional: true
+      mysql2:
+        optional: true
+      pg:
+        optional: true
+      pg-query-stream:
+        optional: true
+      postgres:
+        optional: true
+
   which-boxed-primitive@1.1.1:
     resolution: {integrity: sha512-TbX3mj8n0odCBFVlY8AxkqcHASw3L60jIuF8jFP78az3C2YhmGvqbHBpAjTRH2/xqYunrJ9g1jSyjCjpoWzIAA==}
     engines: {node: '>= 0.4'}
@@ -3111,6 +3191,18 @@ packages:
   wrap-ansi@6.2.0:
     resolution: {integrity: sha512-r6lPcBGxZXlIcymEu7InxDMhdW0KDxpLgoFLcguasxCaJ/SOIZwINatK9KY/tf+ZrlywOKU0UDj3ATXUBfxJXA==}
     engines: {node: '>=8'}
+
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -3701,6 +3793,40 @@ snapshots:
       '@emnapi/runtime': 1.10.0
       '@tybys/wasm-util': 0.10.4
     optional: true
+
+  '@neondatabase/serverless@1.1.0': {}
+
+  '@netlify/database@2.0.1':
+    dependencies:
+      '@neondatabase/serverless': 1.1.0
+      '@netlify/runtime-utils': 3.0.0
+      pg: 8.23.0
+      waddler: 0.1.1(@neondatabase/serverless@1.1.0)(pg@8.23.0)
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - '@clickhouse/client'
+      - '@cloudflare/workers-types'
+      - '@duckdb/node-api'
+      - '@electric-sql/pglite'
+      - '@libsql/client'
+      - '@libsql/client-wasm'
+      - '@op-engineering/op-sqlite'
+      - '@planetscale/database'
+      - '@tidbcloud/serverless'
+      - '@vercel/postgres'
+      - '@xata.io/client'
+      - better-sqlite3
+      - bufferutil
+      - bun-types
+      - duckdb
+      - gel
+      - mysql2
+      - pg-native
+      - pg-query-stream
+      - postgres
+      - utf-8-validate
+
+  '@netlify/runtime-utils@3.0.0': {}
 
   '@next/env@16.3.6': {}
 
@@ -4337,8 +4463,9 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.15
 
-  drizzle-orm@0.45.3(@types/pg@8.23.1)(pg@8.23.0):
+  drizzle-orm@0.45.3(@neondatabase/serverless@1.1.0)(@types/pg@8.23.1)(pg@8.23.0):
     optionalDependencies:
+      '@neondatabase/serverless': 1.1.0
       '@types/pg': 8.23.1
       pg: 8.23.0
 
@@ -5938,6 +6065,11 @@ snapshots:
     transitivePeerDependencies:
       - msw
 
+  waddler@0.1.1(@neondatabase/serverless@1.1.0)(pg@8.23.0):
+    optionalDependencies:
+      '@neondatabase/serverless': 1.1.0
+      pg: 8.23.0
+
   which-boxed-primitive@1.1.1:
     dependencies:
       is-bigint: 1.1.0
@@ -5994,6 +6126,8 @@ snapshots:
       ansi-styles: 4.3.0
       string-width: 4.2.3
       strip-ansi: 6.0.1
+
+  ws@8.21.3: {}
 
   xtend@4.0.2: {}
 

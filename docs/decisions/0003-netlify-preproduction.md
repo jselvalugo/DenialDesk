@@ -26,8 +26,9 @@ offers a BAA; the answer doesn't change this decision.
   bindings) lives in one adapter folder. Domain logic, rules engine, EDI, and DB access know
   nothing about Netlify. The app also builds as a container so the Azure cutover is a deploy,
   not a rewrite.
-- **Database for pre-prod:** a managed PostgreSQL with row-level security (e.g. Netlify DB /
-  Neon), U.S. region, holding synthetic data only. Migrations are the same ones production runs.
+- **Database for pre-prod:** Netlify Database (Postgres; confirm its region is U.S.), synthetic data only. It
+  is provisioned by the platform and gives each deploy preview an isolated branch. Migrations
+  are the same SQL production runs, mirrored into `netlify/database/migrations/` (2026-09-26).
 - **Secrets:** Netlify environment variables for pre-prod-only secrets. Production secrets never
   touch Netlify (R-7.3.5).
 
