@@ -386,7 +386,7 @@ Information Security Policy · Acceptable Use · Access Control · Encryption & 
 
 ### 7.1 Hosting
 - **R-7.1.1** HIPAA-eligible cloud (AWS, Azure, or GCP) under a signed BAA; only HIPAA-eligible services used for PHI.
-- **R-7.1.2** U.S.-only regions enforced by org policy (primary + secondary U.S. region for DR, e.g., us-east-1 / us-west-2).
+- **R-7.1.2** U.S.-only regions enforced by org policy (primary + secondary U.S. region for DR; Azure East US 2 / Central US proposed in ADR 0002).
 - **R-7.1.3** Separate accounts/projects for prod, staging, dev; **no PHI outside production** (synthetic data in lower environments).
 - **R-7.1.4** Infrastructure as Code (Terraform/CDK) with policy-as-code checks.
 
@@ -664,6 +664,10 @@ Agent definitions live in the repository at `.claude/agents/*.md`, and project-w
 | `hipaa-compliance-reviewer` | Read-only review against HIPAA, § 408.051, FIPA, and Florida law | No | opus |
 | `soc2-evidence-auditor` | Maps changes to SOC 2 controls; maintains evidence index and policies | Docs only | sonnet |
 | `technical-writer` | API docs, runbooks, trust-center content, release notes | Docs only | haiku |
+
+> **Implementation note (2026-09-26):** the roles above are covered by 8 agents in `.claude/agents/`:
+> `spec-writer`, `architect`, `builder`, `florida-rules-engine`, `edi-x12-specialist`, `reviewer`,
+> `security-reviewer`, `compliance-checker`. The mapping is in `docs/AGENT_WORKFLOW.md`.
 
 ### 15.2 Standard Workflow per Feature
 1. **Plan:** `solution-architect` writes or updates the ADR and threat model and lists the requirement IDs (R-x.x) involved.
