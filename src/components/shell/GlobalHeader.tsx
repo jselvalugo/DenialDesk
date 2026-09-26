@@ -23,6 +23,9 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
   // Ctrl+K / ⌘K opens the launcher from anywhere.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Leave the shortcut to text fields and editors that have focus.
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setLauncherOpen(true);
@@ -59,11 +62,11 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
         </button>
 
         <div className="flex shrink-0 items-center gap-4">
-          <div className="hidden min-w-0 flex-col items-end leading-tight xl:flex">
+          <div className="hidden min-w-0 flex-col items-end leading-tight lg:flex">
             <span className="text-[0.6875rem] font-semibold tracking-wider text-subtle uppercase">
               Practice
             </span>
-            <span className="max-w-56 truncate text-body font-medium text-text">
+            <span className="max-w-36 truncate text-body font-medium text-text xl:max-w-56">
               {user?.tenantName ?? "Style guide"}
             </span>
           </div>
@@ -101,7 +104,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
                     href={item.href}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "flex items-center gap-2 px-4 text-body font-medium whitespace-nowrap transition-colors duration-100",
+                      "flex items-center gap-2 px-4 text-body font-medium whitespace-nowrap transition-colors duration-100 focus-visible:-outline-offset-2",
                       active
                         ? "bg-sidebar-active text-white shadow-[inset_0_-3px_0_var(--dd-sidebar-accent)]"
                         : "text-sidebar-fg hover:bg-sidebar-active/60 hover:text-white",

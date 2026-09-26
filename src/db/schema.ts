@@ -638,6 +638,44 @@ export const rcmJournalLines = pgTable(
   (t) => [uniqueIndex("rcm_journal_lines_voucher_line_key").on(t.voucherId, t.lineNumber)],
 );
 
+/** One imported bank deposit file (B4). Insert-only: corrections are reversing entries. */
+export const rcmDepositFiles = pgTable("rcm_deposit_files", {
+  id: id(),
+  tenantId: tenantId(),
+  uploadedBy: uuid("uploaded_by")
+    .notNull()
+    .references(() => users.id),
+  rowCount: integer("row_count").notNull(),
+  totalCents: cents("total_cents").notNull(),
+  /** SHA-256 of the file's (date, amount) rows; the same file can't be imported twice. */
+  contentHash: text("content_hash"),
+  /** First and last deposit date; files may not overlap (reversals excepted). */
+  dateFrom: date("date_from", { mode: "string" }),
+  dateTo: date("date_to", { mode: "string" }),
+  /** Set on a reversing file: the file whose deposits it cancels (one reversal per file). */
+  reversesFileId: uuid("reverses_file_id"),
+  createdAt: createdAt(),
+});
+
+/** A bank deposit: date and amount only (no account numbers or descriptions, CLAUDE.md #6). */
+export const rcmDeposits = pgTable(
+  "rcm_deposits",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    fileId: uuid("file_id")
+      .notNull()
+      .references(() => rcmDepositFiles.id),
+    rowNumber: integer("row_number").notNull(),
+    depositDate: date("deposit_date", { mode: "string" }).notNull(),
+    amountCents: cents("amount_cents").notNull(),
+  },
+  (t) => [
+    uniqueIndex("rcm_deposits_file_row_key").on(t.fileId, t.rowNumber),
+    index("rcm_deposits_tenant_date_idx").on(t.tenantId, t.depositDate),
+  ],
+);
+
 // ---------------------------------------------------------------------------------------------
 // Audit log (R-7.5.1): append-only, enforced by trigger and grants in drizzle/0002_security.sql
 // ---------------------------------------------------------------------------------------------

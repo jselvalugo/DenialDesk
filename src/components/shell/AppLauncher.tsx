@@ -159,9 +159,7 @@ export function AppLauncher({ apps, open, onClose }: { apps: NavApp[]; open: boo
                           {body}
                         </Link>
                       ) : (
-                        <div aria-disabled="true" className={cn(tile, "bg-surface-muted")}>
-                          {body}
-                        </div>
+                        <div className={cn(tile, "bg-surface-muted")}>{body}</div>
                       )}
                     </li>
                   );
@@ -213,7 +211,7 @@ export function AppLauncher({ apps, open, onClose }: { apps: NavApp[]; open: boo
                                 {item.label}
                               </Link>
                             ) : (
-                              <span aria-disabled="true" className={cn(row, "text-muted")}>
+                              <span className={cn(row, "text-muted")}>
                                 {icon}
                                 <span className="flex-1">{item.label}</span>
                                 <span className="text-label text-subtle">Planned</span>

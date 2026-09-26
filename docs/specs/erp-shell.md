@@ -26,7 +26,8 @@ brand (navy, teal, Playfair/Inter/Space Mono, unaltered logo).
 - [x] Apps respect permissions: Revenue cycle only for roles that can view it; Setup only when the
       operator console or style guide is available.
 - [x] Detail pages resolve to their list page's app and tab (e.g. `/denials/:id` → Denials › Denial queue).
-- [x] Page headers show the app tile and an "App · Page" eyebrow above the serif title.
+- [x] `PageHeader` pages show the app tile and an "App · Page" eyebrow above the serif title; record
+      detail pages (claim, denial) keep their breadcrumb and the active tab instead.
 - [x] Usable at 1024px without horizontal page scroll in the header.
 - [x] Decorative icons are `aria-hidden`; link names stay text-only.
 
@@ -42,6 +43,6 @@ dark theme.
 
 ## Test evidence
 - Unit: `src/components/shell/navigation.test.ts` (app visibility, path → app/page resolution).
-- E2E: `shell.spec.ts` (launcher search, keyboard shortcut, Escape, app switch, planned pages not
-  links, decorative icons), `revenue-cycle.spec.ts` (app hidden from specialists in bar and launcher),
+- E2E: `shell.spec.ts` (launcher search, keyboard shortcut, Escape, close button, backdrop, header
+  search button, app switch, planned pages not links, decorative icons, no horizontal scroll at 1024px), `revenue-cycle.spec.ts` (app hidden from specialists in bar and launcher),
   `auth.spec.ts` (user menu), and navigation in `claims`, `operator` specs through the launcher.

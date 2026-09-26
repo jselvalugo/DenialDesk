@@ -45,6 +45,7 @@ export interface NavVisibility {
   showDesignSystem: boolean;
 }
 
+/** What the menus show. Not access control: every page still enforces its own permission on the server. */
 export function navApps({
   showRevenueCycle,
   showOperatorConsole,
@@ -80,16 +81,16 @@ export function navApps({
     apps.push({
       id: "revenue-cycle",
       label: "Revenue cycle",
-      description: "Monthly files, journal vouchers, and the practice ledger.",
+      description: "Monthly files, journal vouchers, A/R aging, deposits, and the ledger.",
       icon: Landmark,
       tone: "navy",
       items: [
         { label: "Monthly files", href: "/revenue-cycle/files", icon: FileSpreadsheet, available: true },
         { label: "Journal vouchers", href: "/revenue-cycle/journal", icon: NotebookPen, available: true },
+        { label: "A/R aging", href: "/revenue-cycle/ar-aging", icon: Hourglass, available: true },
+        { label: "Deposits", href: "/revenue-cycle/deposits", icon: Landmark, available: true },
         { label: "Rules and ledger", href: "/revenue-cycle/rules", icon: BookOpenCheck, available: true },
         { label: "RCM dashboard", href: "/revenue-cycle/dashboard", icon: LineChart, available: false },
-        { label: "A/R aging", href: "/revenue-cycle/ar-aging", icon: Hourglass, available: false },
-        { label: "Deposits", href: "/revenue-cycle/deposits", icon: Landmark, available: false },
         { label: "Statements", href: "/revenue-cycle/statements", icon: PieChart, available: false },
       ],
     });

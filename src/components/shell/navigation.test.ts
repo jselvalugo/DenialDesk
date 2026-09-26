@@ -36,6 +36,8 @@ describe("locate", () => {
       app: { id: "revenue-cycle" },
       item: { label: "Journal vouchers" },
     });
+    expect(locate(apps, "/revenue-cycle/deposits")).toMatchObject({ item: { label: "Deposits" } });
+    expect(locate(apps, "/revenue-cycle/ar-aging")).toMatchObject({ item: { label: "A/R aging" } });
     expect(locate(apps, "/design")).toMatchObject({ app: { id: "setup" }, item: { label: "Design system" } });
   });
 

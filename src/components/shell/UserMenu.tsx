@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, LogOut } from "lucide-react";
 import { signOut } from "@/auth/actions";
 
+/** Workforce display fields only; this reaches the browser, so never add patient or contact data. */
 export interface ShellUser {
   displayName: string;
   tenantName: string;
@@ -51,7 +52,14 @@ export function UserMenu({ user }: { user: ShellUser }) {
   }, [open]);
 
   return (
-    <div ref={root} className="relative">
+    <div
+      ref={root}
+      className="relative"
+      onBlur={(event) => {
+        // Tabbing away, or the app launcher taking focus, closes the menu.
+        if (!root.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
       <button
         ref={button}
         type="button"

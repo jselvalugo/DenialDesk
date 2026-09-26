@@ -33,11 +33,17 @@ test("unbuilt sections are not links", async ({ page }) => {
 
 test("the app launcher searches apps and pages and opens one", async ({ page }) => {
   await page.goto("/design");
-  await page.keyboard.press("Control+k");
+  // The shortcut listener attaches after hydration; wait for client-rendered chrome first.
+  await expect(page.getByRole("button", { name: "App launcher" })).toBeEnabled();
+  await expect(async () => {
+    await page.keyboard.press("Control+k");
+    await expect(page.getByRole("dialog", { name: "App launcher" })).toBeVisible({ timeout: 500 });
+  }).toPass();
   const launcher = page.getByRole("dialog", { name: "App launcher" });
   await expect(launcher.getByLabel("Search apps and pages")).toBeFocused();
   await launcher.getByLabel("Search apps and pages").fill("queue");
   await expect(launcher.getByRole("link", { name: "Design system" })).toHaveCount(0);
+  await expect(launcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(launcher).toBeHidden();
   await page.getByRole("button", { name: "App launcher" }).click();
@@ -88,4 +94,26 @@ test("navigation icons are decorative and link names stay text-only", async ({ p
   }
   await expect(nav.getByRole("link", { name: "Design system", exact: true })).toBeVisible();
   await expect(launcher.getByRole("link", { name: "Denial queue", exact: true })).toBeVisible();
+});
+
+test("the launcher opens from the header search and closes with its button or the backdrop", async ({
+  page,
+}) => {
+  await page.goto("/design");
+  const launcher = page.getByRole("dialog", { name: "App launcher" });
+  await page.getByRole("button", { name: "Search apps and pages" }).click();
+  await expect(launcher).toBeVisible();
+  await launcher.getByRole("button", { name: "Close app launcher" }).click();
+  await expect(launcher).toBeHidden();
+  await page.getByRole("button", { name: "App launcher" }).click();
+  await expect(launcher).toBeVisible();
+  await page.mouse.click(8, 890); // the backdrop, outside the dialog box
+  await expect(launcher).toBeHidden();
+});
+
+test("the header fits a 1024px window without horizontal scroll", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await page.goto("/design");
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1024);
 });

@@ -43,8 +43,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
 0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger, B2 monthly file
-   import, C0 (own design: month-end activity file, routing-only rules), and B3 journal vouchers
-   done; next B4 aging/deposits/reconciliation, B5 statements and dashboard.
+   import, C0 (own design: month-end activity file, routing-only rules), B3 journal vouchers, and
+   B4 aging/deposits/reconciliation done; next B5 statements and dashboard (denial tie-ins).
 1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
