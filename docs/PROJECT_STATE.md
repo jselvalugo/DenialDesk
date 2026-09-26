@@ -37,7 +37,7 @@ _Last updated: 2026-09-26_
   decision 2026-09-26: no self-service sign-up; a BAA must be signed before a practice exists).
 - The one-click demo practice was removed entirely (owner request, 2026-09-26); migration 0021
   archived any live demo practice and ended demo sessions; 0022 disabled demo-only accounts and
-  audited each retired demo practice (`system.demo_retired`).
+  audited each retired demo practice (`system.demo_retired`). Practices are created from the console.
 - Open item (owner decision): retention of the archived demo practices (synthetic). Proposed: keep
   them until the Terminate → offboarding flow exists, then terminate them through it.
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins

@@ -9,5 +9,9 @@ WHERE "disabled_at" IS NULL
   );--> statement-breakpoint
 -- One audit record per retired demo practice, so the bulk archive in 0021 has a trail (IDs only).
 INSERT INTO "audit_events" ("action", "tenant_id", "entity_type", "entity_id", "metadata")
-SELECT 'system.demo_retired', "id", 'tenant', "id", '{"source": "migration_0021_0022"}'::jsonb
-FROM "tenants" WHERE "kind" = 'demo';
+SELECT 'system.demo_retired', t."id", 'tenant', t."id", '{"source": "migration_0021_0022"}'::jsonb
+FROM "tenants" t WHERE t."kind" = 'demo'
+  -- Idempotent: never a second record for a practice already recorded as retired.
+  AND NOT EXISTS (
+    SELECT 1 FROM "audit_events" a WHERE a."action" = 'system.demo_retired' AND a."tenant_id" = t."id"
+  );
