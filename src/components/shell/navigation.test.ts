@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appHome, locate, navApps } from "./navigation";
+import { appHome, filterModules, locate, navApps } from "./navigation";
 
 const all = { showRevenueCycle: true, showDesignSystem: true };
 const none = { showRevenueCycle: false, showDesignSystem: false };
@@ -50,5 +50,31 @@ describe("locate", () => {
     expect(locate(apps, "/claimsx").item).toBeNull();
     expect(locate(apps, "/appeals").item).toBeNull();
     expect(locate(apps, "/appeals").app.id).toBe("denials");
+  });
+});
+
+describe("filterModules", () => {
+  const apps = navApps(all);
+
+  it("lists every module and page when the query is blank", () => {
+    const groups = filterModules(apps, "  ");
+    expect(groups.map((group) => group.app.id)).toEqual(apps.map((app) => app.id));
+    expect(groups[0]!.items).toHaveLength(apps[0]!.items.length);
+  });
+
+  it("keeps all pages of a matching module and only matching pages elsewhere", () => {
+    const groups = filterModules(apps, "Claims");
+    expect(groups.map((group) => group.app.id)).toEqual(["claims"]);
+    expect(groups[0]!.items.map((item) => item.label)).toEqual(["Claims", "Remittances", "Prompt pay"]);
+
+    const overview = filterModules(apps, "overview");
+    expect(overview.map((group) => group.app.id)).toEqual(["denials"]);
+    expect(overview[0]!.items.map((item) => item.label)).toEqual(["Overview"]);
+  });
+
+  it("matches the module description and is case-insensitive", () => {
+    const groups = filterModules(apps, "APPEAL DEADLINES");
+    expect(groups.map((group) => group.app.id)).toEqual(["denials"]);
+    expect(filterModules(apps, "zzz")).toEqual([]);
   });
 });

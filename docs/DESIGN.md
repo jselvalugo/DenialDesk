@@ -30,6 +30,8 @@ Bloomberg-terminal discipline with modern typography, not a consumer app.
 - Big rounded "cards with heavy shadows" as the main layout device. Panels are 1px borders with at
   most a hairline `shadow-xs`.
 - Pill-shaped everything, radius > 8px, oversized hero headings inside the app.
+- Borrowing another product's shell: a nine-dot grid icon, "app launcher" wording, solid-color
+  object tiles with white glyphs, or any vendor's palette, glyphs, or copy (ADR 0005).
 - Centered layouts for working screens; fixed-width narrow columns for tables.
 - Fake dashboards: invented metrics, placeholder charts, lorem ipsum, stock avatars.
 - Generic empty states ("Nothing here!"). Say what's missing and the next action.
@@ -41,7 +43,8 @@ Bloomberg-terminal discipline with modern typography, not a consumer app.
 DenialDesk's visual identity is navy chrome, a teal accent, serif page titles, and mono figures,
 around its own logo (`docs/assets/denialdesk-logo.png`),
 always shown unaltered on a white background (sign-in page, global header). Adopted 2026-09-26,
-ADR 0004 amendment; ERP shell (global header, app bar, app launcher) 2026-09-26, `specs/erp-shell.md`.
+ADR 0004 amendment; ERP shell (global header, tab bar, module switcher) 2026-09-26,
+`specs/erp-shell.md`, differentiated from any vendor's shell in ADR 0005.
 The practice sign-in pages (`/login` and its MFA and password steps) also carry the reception image
 (`public/brand/denialdesk-reception.jpg`, provenance in `public/brand/README.md`) in a matted frame
 beside the card (above it under 1024px): hairline, canvas gap, navy line, white mat, hairline. It is
@@ -62,9 +65,10 @@ App bar (navy chrome; tokens keep their `sidebar-*` names): background `#1A2C4E`
 `sidebar-active` `#243A63` with a 3px `sidebar-accent` `#5EC4CC` underline; `sidebar-accent` is also
 the focus ring inside navy chrome.
 
-App tiles (launcher, app bar, page headers) are a white icon on a chart-series color: Denials teal
-`chart-1`, Claims blue `chart-3`, Revenue cycle navy `chart-2`, Insight amber `chart-4` (3.6:1),
-Setup slate `neutral-fg`. Tiles identify the app; they never carry status.
+Module tiles (module switcher, page headers) are a colored glyph on the module's own light tint with
+a 1px border (`tile-<tone>-fg/-bg/-border`), like our badges, never a solid colored square with a
+white glyph (ADR 0005): Denials teal, Claims blue, Revenue cycle navy, Insight amber, Patients and
+Setup slate. Every glyph is ≥ 5:1 on its tint. Tiles identify the module; they never carry status.
 
 ## 5. Color tokens
 Neutrals are cool slate.
@@ -126,17 +130,21 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
   (mark the container `data-chrome="dark"`) the ring is `sidebar-accent` (≥ 5.5:1 on navy).
 
 ## 8. Layout
-- **App shell (ERP layout, `specs/erp-shell.md`):**
-  - *Global header*, 56px white: logo, "Search apps and pages" (opens the launcher; Ctrl/⌘ K),
-    practice name, demo badge, and the user menu (name, role, practice, sign out).
-  - *App bar*, 44px navy: app launcher button (grid icon), the current app's tile and name, then the
-    app's shipped pages as tabs (`nav` "Primary"). Planned pages are not tabs.
-  - *App launcher*: modal dialog with a search field, app tiles (name + one-line description), and
-    every page grouped by app; planned pages are listed as "Planned", never links.
-  - Apps: Denials, Claims, Revenue cycle (roles that can view it), Insight, Setup (operator console,
-    style guide; only when available). Defined once in `src/components/shell/navigation.ts`.
-- **Page header:** white band (panel style) with the app tile, an uppercase "App · Page" eyebrow,
-  the serif title, a one-line description, and actions on the right.
+- **App shell (ERP layout, `specs/erp-shell.md`, ADR 0005):**
+  - *Global header*, 56px white: logo, then the "Go to a module or page" field beside it (opens the
+    module switcher; Ctrl/⌘ K); practice name, demo badge, and the user menu (name, role, practice,
+    sign out) on the right.
+  - *Tab bar*, 44px navy: the current module's name with a chevron as the first control (accessible
+    name "<Module>, switch module"; opens the switcher), then the module's shipped pages as tabs (`nav`
+    "Primary"). Planned pages are not tabs. No grid or "waffle" icon.
+  - *Module switcher* ("Go to"): modal dialog with a search field and one grouped list: each module
+    row (tinted tile, name, one-line description) links to its home, and its pages follow as compact
+    links; planned modules and pages are shown as "Planned" with a dashed border, never links.
+  - Modules ("apps" in code): Denials, Patients, Claims, Revenue cycle (roles that can view it),
+    Insight, Setup (style guide; only when available). Defined once in
+    `src/components/shell/navigation.ts`.
+- **Page header:** white band (panel style) with the module tile, an uppercase "Module · Page"
+  eyebrow, the serif title, a one-line description, and actions on the right.
 - **Preview banner:** 32px strip above everything in non-production (ADR 0003).
 - **Page:** page header, then filters toolbar, then content. Page padding 24px (16px under 1024px).
 - Tables use the full content width. Forms max 720px wide, labels above fields.

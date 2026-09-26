@@ -3,24 +3,25 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Grip, Search } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
-import { AppIcon, AppLauncher } from "./AppLauncher";
+import { ModuleSwitcher } from "./ModuleSwitcher";
 import { useShellLocation } from "./ShellContext";
 import { UserMenu, type ShellUser } from "./UserMenu";
 
 export type { ShellUser };
 
 /**
- * ERP-style chrome (DESIGN.md §8): a white global header (logo, search, practice, user) over a navy
- * app bar (launcher, current app, and its pages as tabs).
+ * DenialDesk chrome (DESIGN.md §8): a white global header (logo, "Go to" field, practice, user) over
+ * a navy tab bar whose first control is the current module's name (accessible name
+ * "<Module>, switch module"); it opens the module switcher.
  */
 export function GlobalHeader({ user }: { user: ShellUser | null }) {
   const location = useShellLocation();
-  const [launcherOpen, setLauncherOpen] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
-  // Ctrl+K / ⌘K opens the launcher from anywhere.
+  // Ctrl+K / ⌘K opens "Go to" from anywhere.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       // Leave the shortcut to text fields and editors that have focus.
@@ -28,7 +29,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setLauncherOpen(true);
+        setSwitcherOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -48,11 +49,12 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
 
         <button
           type="button"
-          onClick={() => setLauncherOpen(true)}
-          className="group mx-auto flex h-9 w-full min-w-40 max-w-md items-center gap-2.5 rounded-control border border-border bg-surface-muted px-3 text-left text-body text-subtle transition-colors duration-100 hover:border-border-strong hover:bg-surface"
+          onClick={() => setSwitcherOpen(true)}
+          aria-haspopup="dialog"
+          className="group flex h-9 w-full min-w-40 max-w-xs items-center gap-2.5 rounded-control border border-border bg-surface-muted px-3 text-left text-body text-subtle transition-colors duration-100 hover:border-border-strong hover:bg-surface"
         >
           <Search aria-hidden="true" className="size-4 shrink-0" />
-          <span className="flex-1 truncate">Search apps and pages</span>
+          <span className="flex-1 truncate">Go to a module or page</span>
           <kbd
             aria-hidden="true"
             className="rounded-[3px] border border-border bg-surface px-1.5 font-mono text-[0.6875rem] leading-4 text-muted"
@@ -61,7 +63,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
           </kbd>
         </button>
 
-        <div className="flex shrink-0 items-center gap-4">
+        <div className="ml-auto flex shrink-0 items-center gap-4">
           <div className="hidden min-w-0 flex-col items-end leading-tight lg:flex">
             <span className="text-[0.6875rem] font-semibold tracking-wider text-subtle uppercase">
               Practice
@@ -82,17 +84,14 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
       <div data-chrome="dark" className="flex h-11 items-stretch bg-navy pr-4 text-sidebar-fg">
         <button
           type="button"
-          onClick={() => setLauncherOpen(true)}
-          aria-label="App launcher"
+          onClick={() => setSwitcherOpen(true)}
           aria-haspopup="dialog"
-          className="flex w-14 shrink-0 items-center justify-center border-r border-sidebar-border text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-active hover:text-white"
+          aria-label={`${app.label}, switch module`}
+          className="flex shrink-0 items-center gap-2 border-r border-sidebar-border px-4 text-body font-semibold text-white transition-colors duration-100 hover:bg-sidebar-active focus-visible:-outline-offset-2"
         >
-          <Grip aria-hidden="true" className="size-5" strokeWidth={2} />
+          {app.label}
+          <ChevronDown aria-hidden="true" className="size-4 text-sidebar-muted" strokeWidth={2} />
         </button>
-        <div className="flex shrink-0 items-center gap-2.5 border-r border-sidebar-border px-4">
-          <AppIcon app={app} size="sm" />
-          <span className="text-body font-semibold text-white">{app.label}</span>
-        </div>
         <nav aria-label="Primary" className="flex min-w-0 flex-1 overflow-x-auto">
           <ul className="flex items-stretch">
             {tabs.map((item) => {
@@ -120,7 +119,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
         </nav>
       </div>
 
-      <AppLauncher apps={apps} open={launcherOpen} onClose={() => setLauncherOpen(false)} />
+      <ModuleSwitcher apps={apps} open={switcherOpen} onClose={() => setSwitcherOpen(false)} />
     </header>
   );
 }
