@@ -1,6 +1,6 @@
 # Spec: Welcome page
 
-Status: in progress
+Status: done
 Roadmap item: ERP shell follow-up (`specs/erp-shell.md`)
 Requirement IDs: §11 (usability), R-7.11.5 (trust shown)
 
@@ -21,7 +21,10 @@ works and where to start.
 - [x] "Your modules": the modules visible to this user (same list as the module switcher), each
       linking to its first shipped page; planned modules marked "Planned".
 - [x] "Safeguards": factual platform commitments only (tenant isolation, audit trail, versioned
-      deadline rules, U.S.-only residency, human approval for coding changes). No invented metrics.
+      deadline rules, human approval for coding changes). No invented metrics. The safeguards text is
+      a customer-facing compliance representation: any change needs `compliance-checker` review.
+      Data-residency wording is left off until counsel approves it and production is live
+      (Fla. Stat. § 408.051(3) allows U.S., territories, or Canada; U.S.-only is our policy, R-3.3.1).
 - [x] Follows DESIGN.md §3: no gradients, imagery, emoji, or hero heading; panels with hairlines.
 - [x] E2E: the logo opens `/welcome` and the page shows the three sections.
 

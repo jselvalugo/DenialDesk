@@ -169,7 +169,14 @@ test.describe("signed in", () => {
     for (const name of ["How DenialDesk works", "Your modules", "Safeguards"]) {
       await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
     }
-    // Unshipped steps are labelled, never linked.
-    await expect(page.getByRole("link", { name: "Appeal with approval" })).toHaveCount(0);
+    // Shipped steps link to their page; planned steps are labelled, never linked.
+    for (const step of [1, 2, 3]) {
+      await expect(page.locator(`[data-step="${step}"]`).getByRole("link")).toHaveCount(1);
+    }
+    for (const step of [4, 5]) {
+      const item = page.locator(`[data-step="${step}"]`);
+      await expect(item.getByRole("link")).toHaveCount(0);
+      await expect(item.getByText("Planned")).toBeVisible();
+    }
   });
 });

@@ -1,14 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Building2,
-  CalendarClock,
-  FileCheck2,
-  MapPin,
-  ScrollText,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, Building2, CalendarClock, FileCheck2, ScrollText, type LucideIcon } from "lucide-react";
 import { todayIn } from "@rules/calendar";
 import { canViewRevenueCycle } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
@@ -42,13 +34,13 @@ const STEPS: Step[] = [
     title: "Classify the denial",
     body: "Each denial is read by its CARC and RARC reason codes and grouped into a category that points to the likely fix.",
     href: "/denials",
-    linkLabel: "Denial queue",
+    linkLabel: "Denials",
   },
   {
     title: "Work what matters first",
-    body: "The queue ranks open denials by dollars at stake and days left to appeal, computed from versioned Florida and payer rules.",
-    href: "/",
-    linkLabel: "Overview",
+    body: "The queue sorts open denials by appeal deadline or amount at stake, with deadlines computed from versioned Florida and payer rules.",
+    href: "/denials",
+    linkLabel: "Denial queue",
   },
   {
     title: "Appeal with approval",
@@ -71,7 +63,7 @@ const SAFEGUARDS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: ScrollText,
     title: "Every access is recorded",
-    body: "Reads and changes to patient data are written to an audit trail: who, what, when, and why.",
+    body: "Reads and changes to patient data are written to an audit trail: who, what, and when.",
   },
   {
     icon: CalendarClock,
@@ -81,19 +73,14 @@ const SAFEGUARDS: { icon: LucideIcon; title: string; body: string }[] = [
   {
     icon: FileCheck2,
     title: "People approve coding changes",
-    body: "Suggested code or appeal changes are applied only after a named user reviews and attests.",
-  },
-  {
-    icon: MapPin,
-    title: "U.S.-only data residency",
-    body: "Patient data is stored and processed in U.S. regions only, as Fla. Stat. § 408.051(3) requires.",
+    body: "No procedure or diagnosis code will be changed without a recorded human approval.",
   },
 ];
 
 /** Where the logo goes: a plain-language map of the platform and a way into each module. */
 export default async function WelcomePage() {
   const auth = await requireAuth();
-  const firstName = auth.displayName.split(" ")[0] ?? auth.displayName;
+  const firstName = auth.displayName.trim().split(/\s+/)[0] || auth.displayName;
   const apps = navApps({
     showDesignSystem: !isProduction(),
     showRevenueCycle: canViewRevenueCycle(auth.role),
@@ -121,7 +108,7 @@ export default async function WelcomePage() {
       <Panel title="How DenialDesk works" description="The path a claim takes through the platform" flush>
         <ol className="grid grid-cols-1 divide-y divide-border md:grid-cols-5 md:divide-x md:divide-y-0">
           {STEPS.map((step, index) => (
-            <li key={step.title} className="flex flex-col gap-2 px-4 py-4">
+            <li key={step.title} data-step={index + 1} className="flex flex-col gap-2 px-4 py-4">
               <span className="font-mono text-label text-subtle tabular-nums">
                 {String(index + 1).padStart(2, "0")}
               </span>
