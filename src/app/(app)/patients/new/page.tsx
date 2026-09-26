@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { todayIn } from "@rules/calendar";
-import { canEditPatients, canTagSensitivity } from "@/auth/permissions";
+import { canEditPatients } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
@@ -42,12 +42,7 @@ export default async function NewPatientPage() {
         description="Demographics and primary insurance. Claims for this patient will link to this record."
       />
       <Panel>
-        <PatientForm
-          payers={payers}
-          canTag={canTagSensitivity(auth.role)}
-          syntheticOnly={syntheticDataOnly()}
-          today={todayIn()}
-        />
+        <PatientForm payers={payers} syntheticOnly={syntheticDataOnly()} today={todayIn()} />
       </Panel>
     </div>
   );

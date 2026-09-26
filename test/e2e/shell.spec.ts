@@ -160,4 +160,23 @@ test.describe("signed in", () => {
       page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Claims" }),
     ).toHaveAttribute("aria-current", "page");
   });
+
+  test("the logo opens the welcome page", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("link", { name: "DenialDesk home" }).click();
+    await expect(page).toHaveURL(/\/welcome$/);
+    await expect(page.getByRole("heading", { level: 1, name: /^Welcome, / })).toBeVisible();
+    for (const name of ["How DenialDesk works", "Your modules", "Safeguards"]) {
+      await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+    }
+    // Shipped steps link to their page; planned steps are labelled, never linked.
+    for (const step of [1, 2, 3]) {
+      await expect(page.locator(`[data-step="${step}"]`).getByRole("link")).toHaveCount(1);
+    }
+    for (const step of [4, 5]) {
+      const item = page.locator(`[data-step="${step}"]`);
+      await expect(item.getByRole("link")).toHaveCount(0);
+      await expect(item.getByText("Planned")).toBeVisible();
+    }
+  });
 });
