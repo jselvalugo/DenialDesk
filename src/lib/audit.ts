@@ -50,6 +50,10 @@ export type AuditAction =
   | "operator.practice_created"
   | "operator.practice_suspended"
   | "operator.practice_reactivated"
+  | "operator.practice_viewed"
+  | "operator.agreement_recorded"
+  | "operator.agreement_downloaded"
+  | "operator.agreement_voided"
   | "rcm.defaults_loaded"
   | "rcm.file_imported"
   | "rcm.file_viewed"
@@ -86,6 +90,7 @@ export interface AuditEvent {
     | "user"
     | "session"
     | "tenant"
+    | "tenant_agreement"
     | "rcm_file"
     | "rcm_voucher"
     | "rcm_deposit_file";

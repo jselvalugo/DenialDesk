@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { todayIn } from "@rules/calendar";
 import { hashPassword } from "@/auth/password";
 import type { OperatorContext } from "@/auth/operator";
 import { systemDb } from "@/db/client";
@@ -8,6 +9,8 @@ import { denials, memberships, tenants, users } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { auditSystem } from "@/lib/audit";
+import { agreementDatesByTenant, agreementStatus, type AgreementStatus } from "./agreements";
+import { PracticeError } from "./errors";
 
 // Platform operator actions (specs: docs/specs/operator-login.md, demo-login-and-operator-console.md).
 // Practice-level metadata and counts only; never patient or claim data.
@@ -20,6 +23,8 @@ export interface PracticeSummary {
   createdAt: Date;
   teamSize: number;
   openDenials: number;
+  /** Business Associate Agreement status (customer practices; legacy demo practices have none). */
+  baa: AgreementStatus | null;
 }
 
 export async function listPractices(operator: OperatorContext): Promise<PracticeSummary[]> {
@@ -38,6 +43,8 @@ export async function listPractices(operator: OperatorContext): Promise<Practice
     .from(memberships)
     .groupBy(memberships.tenantId);
   const teamSize = new Map(teams.map((t) => [t.tenantId, t.size]));
+  const agreements = await agreementDatesByTenant();
+  const today = todayIn();
 
   // Denial counts run inside each practice's own tenant context, so row-level security still applies.
   return Promise.all(
@@ -45,12 +52,47 @@ export async function listPractices(operator: OperatorContext): Promise<Practice
       const [result] = await withTenant({ tenantId: row.id, userId: operator.userId }, (tx) =>
         tx.select({ open: count() }).from(denials).where(inArray(denials.status, OPEN_STATUSES)),
       );
-      return { ...row, teamSize: teamSize.get(row.id) ?? 0, openDenials: result?.open ?? 0 };
+      return {
+        ...row,
+        teamSize: teamSize.get(row.id) ?? 0,
+        openDenials: result?.open ?? 0,
+        baa: row.kind === "customer" ? agreementStatus(agreements.get(row.id) ?? [], today) : null,
+      };
     }),
   );
 }
 
-export class PracticeError extends Error {}
+export interface PracticeDetail {
+  id: string;
+  name: string;
+  kind: "customer" | "demo";
+  suspendedAt: Date | null;
+  createdAt: Date;
+  teamSize: number;
+}
+
+/** Practice-level metadata for the operator's practice page; null when the ID is unknown. */
+export async function getPractice(tenantId: string): Promise<PracticeDetail | null> {
+  const [row] = await systemDb()
+    .select({
+      id: tenants.id,
+      name: tenants.name,
+      kind: tenants.kind,
+      suspendedAt: tenants.suspendedAt,
+      createdAt: tenants.createdAt,
+    })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  if (!row) return null;
+  const [team] = await systemDb()
+    .select({ size: count() })
+    .from(memberships)
+    .where(eq(memberships.tenantId, tenantId));
+  return { ...row, teamSize: team?.size ?? 0 };
+}
+
+export { PracticeError } from "./errors";
 
 /** Creates a customer practice and its first admin. Returns a one-time temporary password. */
 export async function createPractice(

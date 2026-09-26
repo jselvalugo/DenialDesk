@@ -58,6 +58,9 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   Remove `DEMO_LOGIN_ENABLED` and `RATE_LIMIT_DEMO` from Netlify; they do nothing now.
 - Migrations run with the deploy; never deploy app code ahead of its migrations or run a
   column-dropping migration while an older build is still serving.
+- Each customer practice's signed BAA is recorded from its practice page (`/operator` → practice
+  name → *Record the signed agreement*; spec: `docs/specs/practice-agreements.md`). Pre-production
+  holds synthetic practices only, so upload test PDFs there, never a real customer's agreement.
 - After a release that changes the revenue cycle starter configuration or file layout (e.g. C0,
   2026-09-26), practices keep their stored rules; an admin can review them on the Rules page.
 - The platform console has its own sign-in at `/operator/login` (spec: `docs/specs/operator-login.md`).

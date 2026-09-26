@@ -145,15 +145,22 @@
     {
       "idx": 20,
       "version": "7",
-      "when": 1790442941005,
-      "tag": "0020_remove_demo",
+      "when": 1790443307958,
+      "tag": "0020_practice_agreements",
       "breakpoints": true
     },
     {
       "idx": 21,
       "version": "7",
-      "when": 1790443487976,
-      "tag": "0021_retire_demo_accounts",
+      "when": 1790444036588,
+      "tag": "0021_remove_demo",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790444037486,
+      "tag": "0022_retire_demo_accounts",
       "breakpoints": true
     }
   ]
