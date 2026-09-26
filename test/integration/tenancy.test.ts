@@ -3,6 +3,8 @@ import { eq, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
 import {
+  appealNotes,
+  appeals,
   auditEvents,
   businessRules,
   claimLines,
@@ -41,10 +43,23 @@ async function practice(label: string, seed: number): Promise<Ctx> {
   });
   const ctx = { tenantId, userId: userIds[0]! };
   await withTenant(ctx, async (tx) => {
-    const [denial] = await tx.select({ id: denials.id }).from(denials).limit(1);
+    const [denial] = await tx.select({ id: denials.id, claimId: denials.claimId }).from(denials).limit(1);
     await tx
       .insert(denialNotes)
       .values({ tenantId, denialId: denial!.id, authorId: ctx.userId, body: "Synthetic note" });
+    const [appeal] = await tx
+      .insert(appeals)
+      .values({
+        tenantId,
+        denialId: denial!.id,
+        claimId: denial!.claimId,
+        level: "first_level",
+        filedBy: ctx.userId,
+      })
+      .returning({ id: appeals.id });
+    await tx
+      .insert(appealNotes)
+      .values({ tenantId, appealId: appeal!.id, authorId: ctx.userId, body: "Synthetic appeal note" });
   });
   return ctx;
 }
@@ -65,6 +80,8 @@ const tenantTables = {
   claimLines,
   denials,
   denialNotes,
+  appeals,
+  appealNotes,
   rcmSites,
   glAccounts,
   payerClasses,
@@ -132,6 +149,36 @@ describe("cross-tenant inserts", () => {
           .values({ tenantId: b.tenantId, denialId: bDenial!.id, authorId: a.userId, body: "x" }),
       ),
       /row-level security/,
+    );
+  });
+
+  it("rejects a note on another tenant's appeal", async () => {
+    const [bAppeal] = await withTenant(b, (tx) => tx.select({ id: appeals.id }).from(appeals).limit(1));
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx
+          .insert(appealNotes)
+          .values({ tenantId: b.tenantId, appealId: bAppeal!.id, authorId: a.userId, body: "x" }),
+      ),
+      /row-level security/,
+    );
+  });
+
+  it("rejects an appeal on another tenant's denial or claim", async () => {
+    const [bDenial] = await withTenant(b, (tx) =>
+      tx.select({ id: denials.id, claimId: denials.claimId }).from(denials).limit(1),
+    );
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(appeals).values({
+          tenantId: a.tenantId,
+          denialId: bDenial!.id,
+          claimId: bDenial!.claimId,
+          level: "first_level",
+          filedBy: a.userId,
+        }),
+      ),
+      /row-level security|Integrity constraint violation/,
     );
   });
 });
