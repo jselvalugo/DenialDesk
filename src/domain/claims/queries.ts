@@ -26,6 +26,7 @@ const listColumns = {
   billedCents: claims.billedCents,
   paidCents: claims.paidCents,
   status: claims.status,
+  patientId: claims.patientId,
   patientFirst: patients.firstName,
   patientLast: patients.lastName,
   mrn: patients.mrn,

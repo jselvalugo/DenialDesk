@@ -3,6 +3,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  customType,
   date,
   foreignKey,
   index,
@@ -31,6 +32,8 @@ const tenantId = () =>
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
 const cents = (name: string) => bigint(name, { mode: "number" });
+/** Raw bytes (PostgreSQL bytea); Drizzle has no built-in binary column type. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 // ---------------------------------------------------------------------------------------------
 // Identity and tenancy (no RLS: read before a tenant is chosen; never exposed to tenant queries)
@@ -157,17 +160,22 @@ export const providers = pgTable(
   (t) => [uniqueIndex("providers_tenant_npi_key").on(t.tenantId, t.npi)],
 );
 
-export const payers = pgTable("payers", {
-  id: id(),
-  tenantId: tenantId(),
-  name: text("name").notNull(),
-  ediPayerId: text("edi_payer_id").notNull(),
-  regime: regimeEnum("regime").notNull(),
-  /** Appeal window from the payer contract (not statute). Null = not configured. */
-  appealWindowDays: integer("appeal_window_days"),
-  appealWindowSource: text("appeal_window_source"),
-  createdAt: createdAt(),
-});
+export const payers = pgTable(
+  "payers",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    name: text("name").notNull(),
+    ediPayerId: text("edi_payer_id").notNull(),
+    regime: regimeEnum("regime").notNull(),
+    /** Appeal window from the payer contract (not statute). Null = not configured. */
+    appealWindowDays: integer("appeal_window_days"),
+    appealWindowSource: text("appeal_window_source"),
+    createdAt: createdAt(),
+  },
+  // Target of tenant-scoped foreign keys (FKs bypass RLS, so the tenant is part of the key).
+  (t) => [uniqueIndex("payers_tenant_id_key").on(t.tenantId, t.id)],
+);
 
 // ---------------------------------------------------------------------------------------------
 // Patients and claims (Restricted PHI, REQUIREMENTS §9.1)
@@ -189,9 +197,32 @@ export const patients = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    /** Administrative sex as on the 837P (DMG03): F, M, or U (unknown). */
+    sex: text("sex", { enum: ["F", "M", "U"] })
+      .notNull()
+      .default("U"),
+    addressLine1: text("address_line1"),
+    city: text("city"),
+    /** Two-letter state of residence (breach notification by state, R-3.4.3). */
+    state: text("state"),
+    postalCode: text("postal_code"),
+    phone: text("phone"),
+    /** Primary coverage; the member ID above belongs to this payer. */
+    primaryPayerId: uuid("primary_payer_id"),
     createdAt: createdAt(),
+    /** Stale-edit check for the patient form: every update must set it (updatePatient does). */
+    updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex("patients_tenant_mrn_key").on(t.tenantId, t.mrn)],
+  (t) => [
+    uniqueIndex("patients_tenant_mrn_key").on(t.tenantId, t.mrn),
+    index("patients_tenant_name_idx").on(t.tenantId, t.lastName, t.firstName),
+    // Coverage can only point at a payer of the same practice.
+    foreignKey({
+      name: "patients_primary_payer_fk",
+      columns: [t.tenantId, t.primaryPayerId],
+      foreignColumns: [payers.tenantId, payers.id],
+    }),
+  ],
 );
 
 export const claimStatusEnum = pgEnum("claim_status", [
@@ -242,6 +273,7 @@ export const claims = pgTable(
     // Target of tenant-scoped foreign keys (FKs bypass RLS, so the tenant is part of the key).
     uniqueIndex("claims_tenant_id_key").on(t.tenantId, t.id),
     index("claims_tenant_payer_idx").on(t.tenantId, t.payerId),
+    index("claims_tenant_patient_idx").on(t.tenantId, t.patientId),
   ],
 );
 
@@ -728,3 +760,87 @@ export const rateLimits = pgTable(
     index("rate_limits_window_idx").on(t.windowStart),
   ],
 );
+
+// ---------------------------------------------------------------------------------------------
+// Platform agreements (docs/specs/practice-agreements.md): the signed BAA for each customer
+// practice. A platform record, not tenant data: no RLS and no grants to the app role; read and
+// written only by the platform operator through src/domain/platform/agreements.ts. RLS is enabled
+// with no policies (defense in depth: a stray GRANT would still show the app role nothing). Rows are
+// never deleted and their recorded fields never change; the only changes are the status transitions
+// (trigger and CHECK constraints in drizzle/0020_practice_agreements.sql, which also makes the
+// self-referencing key DEFERRABLE INITIALLY DEFERRED; renewals depend on that, so keep it if the
+// table is ever regenerated). Retention per REQUIREMENTS §9.2; classification
+// Confidential (§9.1), never PHI.
+// ---------------------------------------------------------------------------------------------
+
+export const agreementKindEnum = pgEnum("agreement_kind", ["baa"]);
+
+/**
+ * active: the agreement in force (one per practice and kind). superseded: replaced by a newer
+ * recording (`supersededById`). historical: recorded for the file after a newer agreement was
+ * already active (back-fill). voided: recorded in error, kept for the record with a reason.
+ * Text with a CHECK (drizzle/0020_practice_agreements.sql) rather than an enum, so values can be
+ * added in one migration.
+ */
+export type AgreementStatus = "active" | "superseded" | "historical" | "voided";
+
+export const tenantAgreements = pgTable(
+  "tenant_agreements",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    kind: agreementKindEnum("kind").notNull().default("baa"),
+    status: text("status").$type<AgreementStatus>().notNull().default("active"),
+    effectiveDate: date("effective_date").notNull(),
+    /** Null: in force until terminated. */
+    expiresOn: date("expires_on"),
+    signedOn: date("signed_on").notNull(),
+    /** Name and title of the practice's signer. */
+    practiceSigner: text("practice_signer").notNull(),
+    /** Name and title of DenialDesk's signer. */
+    ourSigner: text("our_signer").notNull(),
+    note: text("note"),
+    /** Original file name as uploaded (shown to the operator; never logged). */
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    /** Hex SHA-256 of `content`, so a downloaded copy can be verified against the record. */
+    sha256: text("sha256").notNull(),
+    content: bytea("content").notNull(),
+    recordedBy: uuid("recorded_by")
+      .notNull()
+      .references(() => users.id),
+    /** The agreement that replaced this one, once superseded. */
+    supersededById: uuid("superseded_by_id"),
+    /** Set together when the operator marks the agreement as recorded in error. */
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by").references(() => users.id),
+    voidReason: text("void_reason"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("tenant_agreements_tenant_idx").on(t.tenantId, t.createdAt),
+    // One active agreement of each kind per practice.
+    uniqueIndex("tenant_agreements_one_active")
+      .on(t.tenantId, t.kind)
+      .where(sql`status = 'active'`),
+    foreignKey({
+      columns: [t.supersededById],
+      foreignColumns: [t.id],
+      name: "tenant_agreements_superseded_by_fk",
+    }),
+  ],
+).enableRLS();
+
+// ---------------------------------------------------------------------------------------------
+// Operator credentials (docs/specs/operator-login.md): fingerprints (SHA-256 of email + hash) of
+// every operator credential ever applied from hosting configuration, so a rotation only moves forward: a
+// deployment still configured with a retired hash can never re-apply it. Not tenant data; no grants
+// to the app role; accessed through the connection owner in src/auth/operator-account.ts.
+// ---------------------------------------------------------------------------------------------
+
+export const operatorCredentials = pgTable("operator_credentials", {
+  fingerprint: text("fingerprint").primaryKey(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+});

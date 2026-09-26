@@ -12,15 +12,46 @@ _Last updated: 2026-09-26_
 - Claims module C1 (`specs/claims.md`): claims list with timely-filing warnings, claim detail,
   corrections of draft/rejected claims with a required reason, and append-only version history
   enforced by database triggers. Next: C2 CSV charge import, C3 837P + filing block, C4 999/277CA.
-- UI shell is ERP-style (Salesforce-like): global header with search/launcher shortcut, navy app bar
-  with the current app's tabs, and an app launcher (`specs/erp-shell.md`).
+- UI shell is ERP-style: global header with a "Go to" field (Ctrl/⌘ K), navy tab bar whose first
+  control is the current module's name, and a grouped module switcher (`specs/erp-shell.md`).
+  Deliberately not a copy of any vendor's shell: no grid icon, no "app launcher", tinted module
+  tiles, "modules/pages" vocabulary (ADR 0005).
+- Patient records P1 (`specs/patients.md`): `/patients` list, POST search (no names in URLs),
+  register/edit with primary coverage (encrypted member ID), admin-only sensitivity tags, and a
+  patient chart linking claims and denials; claim and denial pages link back. "Patients" is in the
+  module switcher as its own module. Next: P2 secondary coverage/eligibility, P3 accounting of disclosures.
 - Operator console can reset the demo with sample data or empty (setup only) to test features
   from a clean slate.
+- Practice sign-in page shows the owner's DenialDesk reception image in a matted frame beside the
+  card (`specs/sign-in-and-sessions.md`); the operator sign-in has no image.
+- Whole-product review (2026-09-26, `docs/reviews/2026-09-26-billing-structure-review.md`): the
+  billing lifecycle is implemented only from "denial exists" onward plus claim corrections and the
+  PM-file accounting module; claim status, paid amounts and denials are seed-only. Seven confirmed
+  calculation/display bugs (comma charges, `-$0.00`, "filed on time" with no deadline, prompt-pay
+  "Met" on any notice), missing catalog rules, and a page-by-page record-model gap list with a
+  prioritized order of work (P0–P4). Next session should start with its P0 list.
 - Live preview: https://denialdesk.netlify.app (Netlify Database, us-east-2). One-click demo
   login and a platform operator console (`/operator`) for the owner, with its own sign-in at
   `/operator/login` and an operator account that belongs to no practice (`specs/operator-login.md`).
+  The operator account exists only from hosting configuration (`PLATFORM_OPERATOR_PASSWORD_HASH`,
+  made with `pnpm operator:credential`); no page can create or reset it (owner rebaseline 2026-09-26).
+  An unusable value (e.g. the password pasted instead of its hash) switches the console off and is
+  reported once in the function log as `operator.credential_unusable` (runbook has the fix).
+- Next (owner rebaseline): tenancy lifecycle in the console: Pause for non-payment (read-only +
+  export), Suspend for security, Terminate → offboarding (export, legal hold, certified destruction),
+  BAA-on-file gate in production (later the same day the owner chose
+  to keep that manual for now: the console flags a missing BAA and the owner decides;
+  `specs/practice-agreements.md`). Demo stays on pre-production only.
+- Operator console: each customer practice has a page (`/operator/practices/<id>`) where the
+  operator records the signed Business Associate Agreement (PDF, dates, signers) and downloads
+  it; renewals supersede, older ones can be back-filled as historical, mistakes are marked
+  "recorded in error" with a reason; nothing is deleted; the practices list shows BAA status
+  (`specs/practice-agreements.md`). Practices are still created by the operator only (owner
+  decision 2026-09-26: no self-service sign-up; a BAA must be signed before a practice exists).
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
+- Open item (human decision): single-administrator risk acceptance with compensating controls
+  (independent log review, sealed break-glass holder) and R-7.2.6 alerting, before production.
 - Production branch on Netlify: `claude/quirky-feynman-ufql5a` (default). Each session works on its
   own branch and merges through a PR.
 
@@ -39,8 +70,11 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Secrets scanning: gitleaks in CI | `specs/project-skeleton.md` |
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
-| 2026-09-26 | ERP shell: global header, navy app bar with tabs, app launcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
-| 2026-09-26 | Every DB error sanitized where Drizzle creates it (system and tenant); kept messages opt-in (owner: fix both in PR #28) | ADR 0005 |
+| 2026-09-26 | ERP shell: global header, navy tab bar, module switcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
+| 2026-09-26 | No self-service sign-up; the operator creates practices after the BAA is signed, and records the BAA on the practice page | `specs/practice-agreements.md` |
+| 2026-09-26 | BAA handling is manual by design: no sign-in blocking without a BAA, no template version, corrections via "recorded in error", nothing automatic at termination | `specs/practice-agreements.md` (Decisions) |
+| 2026-09-26 | Shell differentiated from any vendor's product; no third-party design IP; competitor names out of product copy and public docs | ADR 0005 |
+| 2026-09-26 | Every DB error sanitized where Drizzle creates it (system and tenant); kept messages opt-in (owner: fix both in PR #28) | ADR 0006 |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -57,12 +91,22 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
+6. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
+   disclosures export (R-5.1.1), sensitivity-tag enforcement. Reset the demo after P1 deploys so
+   seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
+- Counsel review of the overall look and feel (trade dress) before public launch, including the
+  elements ADR 0005 kept (navy/teal chrome, white header, tab bar with teal underline, serif
+  titles); ADR 0005 records the engineering checks and the changes made, and is not legal advice.
+  Related: git history still carries a competitor's name in earlier doc wording, and no
+  requirement ID covers third-party IP / brand compliance yet (R-15.7 covers licensing).
 - A vector (SVG) version of the logo from a designer; the app currently uses the PNG.
+- Confirm and record the license and generating tool for the sign-in reception image
+  (`public/brand/README.md`); it is owner-supplied and described as a synthetic render.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.
 
@@ -79,6 +123,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   (force-push of the default branch), or leave it? Owner decision.
 - Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must
   honor; Medicare Advantage filing windows assumed to come from payer contracts (`specs/claims.md`).
+- Patients before real data (`specs/patients.md`, P1 reviews): enforce sensitivity tags in access
+  and masking (R-3.5.1, R-3.5.2) and a Part 2 consent decision before SUD-tagged data; demographic
+  version history for HIPAA amendments (§164.526), P3; confirm compliance needs address and phone.
+  Pre-prod entry relies on the SYN prefixes plus a synthetic attestation checkbox (ADR 0003).
+- Patients: should front-desk registration be its own role? Guarantor now or with statements (§8.6)?
+
 - Claims before real data: sensitivity masking of diagnosis codes in `claim_versions` snapshots and
   history; retention/legal-hold path for append-only history; PIP/workers' comp/Medicaid filing
   rules and the HMO citation for timely filing (`specs/claims.md`).
@@ -99,6 +149,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
+- Member-ID reveal on a denial decrypts the patient's primary-payer member ID even when the claim was
+  billed to another payer (R-5.1.2); fix with coverage records (review §6.1), and until then reveal
+  only when the claim's payer is the patient's primary payer (2026-09-26 review, security).
+- `claims.status` / `paid_cents` are not covered by the version trigger, and no DB CHECK enforces
+  0 ≤ paid ≤ billed, 0 < denied ≤ billed, charges ≥ 0; must land with C3 / 835 posting, before the
+  Azure cutover (2026-09-26 review, security; owner decision §8.4).
 - Azure deploy gate, logging (owner decision 2026-09-26: hold until the Azure deployment; PR #28 reviews):
   - Log-sink residency and BAA (R-7.5.5): the Azure log destination is U.S.-only and under a BAA.
   - Tracing: Drizzle puts every query's params in the `drizzle.query.params` span attribute when
@@ -126,7 +182,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   tenant tables FORCE RLS, so a non-superuser migration owner (Netlify, Azure) sees no rows
   otherwise. Local and CI databases use a superuser and hide this.
 - Server-side validation must reject impossible dates (`z.iso.date()`).
-- Every Drizzle query error (system and tenant) is sanitized where Drizzle creates it (ADR 0005,
+- Every Drizzle query error (system and tenant) is sanitized where Drizzle creates it (ADR 0006,
   `src/db/errors.ts`): SQLSTATE + constraint for class 23, messages only for allow-listed codes and
   listed trigger formats. Match DB errors on `.code` / `.constraint` (`isUniqueViolation`), never on
   message text. A new trigger `RAISE` must be added to `TRIGGER_MESSAGE_FORMATS`.

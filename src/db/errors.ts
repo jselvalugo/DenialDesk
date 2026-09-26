@@ -76,6 +76,12 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
   { format: "rcm_voucher_workflow: actor is not a member of this practice", args: [] },
   { format: "rcm_journal_lines_draft_only: lines can only be added to a draft voucher", args: [] },
   { format: "rcm_deposit_files_uploader: uploader is not a member of this practice", args: [] },
+  { format: "tenant_agreements rows are retained, never deleted", args: [] },
+  { format: "a voided agreement cannot change", args: [] },
+  { format: "tenant_agreements recorded fields are immutable", args: [] },
+  { format: "voiding may only set the void fields", args: [] },
+  { format: "void fields belong to voided agreements only", args: [] },
+  { format: "tenant_agreements status may only move to superseded or voided", args: [] },
 ];
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -174,7 +180,7 @@ const SANITIZED = Symbol.for("denialdesk.queryErrorSanitizer");
  * Sanitizes every Drizzle query error where Drizzle creates it: `PgPreparedQuery.queryWithCache`,
  * which every select/insert/update/delete/execute, relational query, and transaction or savepoint
  * statement goes through. This covers `systemDb()` (auth, operator, audit, rate-limit) as well as
- * `withTenant`. The method is Drizzle-internal (ADR 0005): `register()` installs this at server
+ * `withTenant`. The method is Drizzle-internal (ADR 0006): `register()` installs this at server
  * start, so a Drizzle version without it fails to boot rather than silently leaking.
  */
 export function installQueryErrorSanitizer(): void {

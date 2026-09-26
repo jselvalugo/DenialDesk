@@ -18,10 +18,11 @@ Site: https://denialdesk.netlify.app
   |---|---|
   | `APP_ENV` | `preview` — shows the synthetic-data banner, enables the seed endpoint |
   | `FIELD_ENCRYPTION_KEY` | AES-256 key for member IDs and MFA secrets (secret; pre-prod only) |
-  | `SEED_TOKEN` | Bearer token for the seed endpoint, and the setup code at `/operator/setup` (secret) |
+  | `SEED_TOKEN` | Bearer token for the demo seed endpoint (secret); no operator power |
   | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | Admin of the seeded synthetic practice (password secret); not the operator |
   | `DEMO_LOGIN_ENABLED` | `true` shows "Explore the demo practice" on sign-in (ignored in production) |
   | `PLATFORM_OPERATOR_EMAIL` | The operator account for the platform console; an address used only for the console, never a practice user |
+  | `PLATFORM_OPERATOR_PASSWORD_HASH` | The operator's password hash from `pnpm operator:credential` (secret); the only way the operator account is created or reset |
   | `RATE_LIMIT_DEMO` / `RATE_LIMIT_SIGNIN` / `RATE_LIMIT_MFA` | Optional overrides for per-network limits (defaults 10/10 min, 30/15 min, 30/15 min) |
 
   If `APP_ENV` is missing the app still treats itself as non-production — safe by default.
@@ -57,6 +58,9 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   first use. Reset it any time from `/operator` → *Reset demo with sample data* or *Reset demo empty* (setup only, no claims/denials/files); the old one is archived.
 - Migrations run with the deploy; never deploy app code ahead of its migrations or run a
   column-dropping migration while an older build is still serving.
+- Each customer practice's signed BAA is recorded from its practice page (`/operator` → practice
+  name → *Record the signed agreement*; spec: `docs/specs/practice-agreements.md`). Pre-production
+  holds synthetic practices only, so upload test PDFs there, never a real customer's agreement.
 - After a release that changes the revenue cycle starter configuration or file layout (e.g. C0,
   2026-09-26), reset the demo so it carries the new configuration and sample files. Other
   pre-production practices keep their stored rules; an admin can review them on the Rules page.
@@ -64,13 +68,34 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
   Only the `PLATFORM_OPERATOR_EMAIL` account can use it, with password + two-step verification. That
   account belongs to no practice and can't sign in at `/login`; practice users can't sign in to the console.
   Operator and practice/demo sessions are separate, so one browser can hold both.
-- **Upgrading from before 2026-09-26:** `PLATFORM_OPERATOR_EMAIL` used to equal `SEED_ADMIN_EMAIL`
-  (the demo admin). Change it to a new, console-only address before deploying (the seed endpoint now
-  refuses when the two match), then run `/operator/setup`. The demo admin keeps signing in at `/login`.
-- First time, forgotten password, lockout, or lost authenticator: open `/operator/setup`, enter the
-  operator email and the setup code (`SEED_TOKEN`), and choose a password. This signs the account out
-  everywhere and restarts two-step setup. Pre-production only (404 in production); production
-  access recovery follows the approved access-management procedure.
+- **Operator account (sole administrator):** it exists only from configuration. On your own machine run
+  `pnpm operator:credential`, then set `PLATFORM_OPERATOR_EMAIL` (an address used only for the console,
+  never a practice user and not `SEED_ADMIN_EMAIL`) and `PLATFORM_OPERATOR_PASSWORD_HASH` (secret) in
+  Netlify, and redeploy. Sign in at `/operator/login`; two-step is set up on first sign-in.
+- **`PLATFORM_OPERATOR_PASSWORD_HASH` is the hash the script prints, never the password itself.** The
+  value starts with `scrypt$131072$8$1$` and is about 130 characters. If it holds anything else (the
+  password, a hash with other parameters, a truncated paste), the console is simply off: sign-in
+  shows the generic "sign-in failed" error and nothing is created. The reason is in the function log
+  (*Logs → Functions*) as an `operator.credential_unusable` line with `status: malformed` (or
+  `test_hash` when the public e2e hash is used), once per function instance and nothing else: the
+  value itself never reaches the log. Fix the value in Netlify, redeploy (a value change
+  alone doesn't reach running functions), and sign in again. Use the same value in every deploy
+  context ("All" in the Netlify UI), or at least in Production. The script also refuses passwords
+  under 16 characters for the operator account. If the password itself was pasted, treat it as
+  exposed (it sits in Netlify's configuration and history): choose a new password when you re-run
+  `pnpm operator:credential`.
+- **Forgotten password or lost authenticator:** run `pnpm operator:credential` again and replace
+  `PLATFORM_OPERATOR_PASSWORD_HASH`. The next request applies it: new password, two-step reset, every
+  operator session ended (audited as `operator.credential_rotated`). There is no in-app recovery.
+  Changes only move forward: an old deploy link or a rollback still carrying the previous hash (or a
+  previous operator email) can't apply it again (sign-in there is refused). Only one operator
+  credential is ever active. Clear the terminal after copying the hash.
+- **Once, after deploying this change:** deploys built before it still serve the old `/operator/setup`
+  page with their own copy of `SEED_TOKEN`. In Netlify, delete (or lock) older production and preview
+  deploys, or rotate `SEED_TOKEN` and redeploy each branch you keep.
+- `PLATFORM_OPERATOR_EMAIL` must never equal `SEED_ADMIN_EMAIL` (the seed refuses it). Mark
+  `PLATFORM_OPERATOR_PASSWORD_HASH` secret, and keep two-step (ideally a security key) on the Netlify
+  account: whoever can edit these values controls the console.
 
 ## Checks after each deploy
 - `https://denialdesk.netlify.app/api/health` returns `{"status":"ok","appEnv":"preview","db":"up"}`.

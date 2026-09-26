@@ -1,4 +1,4 @@
-# ADR 0005: Sanitize every database error where Drizzle creates it
+# ADR 0006: Sanitize every database error where Drizzle creates it
 
 Status: accepted (2026-09-26)
 

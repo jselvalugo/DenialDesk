@@ -250,7 +250,7 @@ describe("database errors from tenant queries", () => {
     await systemDb().delete(users).where(eq(users.email, email));
   });
 
-  // Every Drizzle query path reaches the sanitizer (ADR 0005). 22P02 quotes the bad value.
+  // Every Drizzle query path reaches the sanitizer (ADR 0006). 22P02 quotes the bad value.
   const bad = "SYN-not-a-uuid-Synthia";
   it.each([
     ["select", () => systemDb().select().from(users).where(eq(users.id, bad))],

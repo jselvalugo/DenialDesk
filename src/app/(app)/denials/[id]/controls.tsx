@@ -1,9 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { useActionState, useEffect, useRef } from "react";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { addNote, assignDenial, changeStatus, revealMemberId, type ActionState } from "./actions";
+import { addNote, assignDenial, changeStatus, type ActionState } from "./actions";
 
 const fieldClass =
   "h-8 rounded-control border border-border-strong bg-surface pr-8 pl-2.5 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus";
@@ -120,58 +119,3 @@ export function NoteForm({ denialId, disabled }: { denialId: string; disabled: b
 }
 
 /** Member ID masked by default; revealing it requires a reason and is audited (DESIGN.md §9). */
-export function MaskedMemberId({ denialId, last4 }: { denialId: string; last4: string }) {
-  const [value, setValue] = useState<string | null>(null);
-  const [choosing, setChoosing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  if (value) {
-    return (
-      <span className="inline-flex items-center gap-2">
-        <span className="font-mono text-body text-text">{value}</span>
-        <Button size="sm" variant="ghost" onClick={() => setValue(null)}>
-          Hide
-        </Button>
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex flex-wrap items-center gap-2">
-      <span className="font-mono text-body text-text" aria-label={`Member ID ending in ${last4}`}>
-        •••• {last4}
-      </span>
-      {choosing ? (
-        <form
-          className="inline-flex items-center gap-2"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const reason = String(new FormData(event.currentTarget).get("reason"));
-            const result = await revealMemberId(denialId, reason);
-            if (result.value) {
-              setValue(result.value);
-              setChoosing(false);
-            } else setError(result.error ?? "Couldn't reveal.");
-          }}
-        >
-          <label className="sr-only" htmlFor="reveal-reason">
-            Reason for viewing
-          </label>
-          <select id="reveal-reason" name="reason" className={fieldClass} defaultValue="appeal">
-            <option value="appeal">Preparing appeal</option>
-            <option value="eligibility">Checking eligibility</option>
-            <option value="payer_call">Payer phone call</option>
-            <option value="other">Other</option>
-          </select>
-          <Button size="sm" type="submit">
-            Reveal
-          </Button>
-        </form>
-      ) : (
-        <Button size="sm" variant="ghost" onClick={() => setChoosing(true)}>
-          Reveal
-        </Button>
-      )}
-      {error && <span className="text-label text-danger-fg">{error}</span>}
-    </span>
-  );
-}

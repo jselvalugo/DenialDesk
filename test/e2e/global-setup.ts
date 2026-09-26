@@ -4,17 +4,18 @@ import { eq } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { generateTotpSecret } from "@/auth/totp";
 import { closeDatabase, systemDb } from "@/db/client";
-import { users } from "@/db/schema";
-import { hashPassword } from "@/auth/password";
+import { operatorCredentials, users } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { encryptField } from "@/lib/crypto/field";
 
 // Seeds a fresh synthetic practice per run with known test credentials. Test-only.
-/**
- * Fixed so the test servers can name it in PLATFORM_OPERATOR_EMAIL (playwright.config.ts). The
- * operator belongs to no practice (docs/specs/operator-login.md).
- */
-export const E2E_OPERATOR_EMAIL = "platform-operator@e2e.denialdesk.test";
+import {
+  E2E_OPERATOR_EMAIL,
+  E2E_OPERATOR_PASSWORD,
+  E2E_OPERATOR_PASSWORD_HASH,
+} from "./operator-credentials";
+
+export { E2E_OPERATOR_EMAIL };
 
 export interface E2EUser {
   email: string;
@@ -51,7 +52,10 @@ export default async function globalSetup() {
     }
     enrolled[key] = { email: make(key), password, totpSecret: secret };
   }
-  // The platform operator: one fixed account, reused across runs with fresh credentials.
+  // The platform operator: one fixed account, reused across runs with fresh credentials. Its row is
+  // written directly, so the server adopts it as the one active credential: clear earlier records
+  // (test database only).
+  await systemDb().delete(operatorCredentials);
   const operatorSecret = generateTotpSecret();
   const [operator] = await systemDb().select().from(users).where(eq(users.email, E2E_OPERATOR_EMAIL));
   const operatorId = operator
@@ -59,13 +63,18 @@ export default async function globalSetup() {
     : (
         await systemDb()
           .insert(users)
-          .values({ email: E2E_OPERATOR_EMAIL, displayName: "Olive Operator", passwordHash: "unset" })
+          .values({
+            email: E2E_OPERATOR_EMAIL,
+            displayName: "Olive Operator",
+            passwordHash: E2E_OPERATOR_PASSWORD_HASH,
+          })
           .returning({ id: users.id })
       )[0]!.id;
   await systemDb()
     .update(users)
     .set({
-      passwordHash: await hashPassword(password),
+      // Same hash the server is configured with, so its sync sees no rotation and keeps this enrollment.
+      passwordHash: E2E_OPERATOR_PASSWORD_HASH,
       totpSecretEnc: encryptField(operatorSecret),
       mfaEnrolledAt: new Date(),
       totpLastStep: null,
@@ -73,7 +82,11 @@ export default async function globalSetup() {
       lockedUntil: null,
     })
     .where(eq(users.id, operatorId));
-  enrolled.operator = { email: E2E_OPERATOR_EMAIL, password, totpSecret: operatorSecret };
+  enrolled.operator = {
+    email: E2E_OPERATOR_EMAIL,
+    password: E2E_OPERATOR_PASSWORD,
+    totpSecret: operatorSecret,
+  };
   await closeDatabase();
 
   mkdirSync("test/e2e/.auth", { recursive: true });

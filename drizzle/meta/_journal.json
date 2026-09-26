@@ -127,6 +127,27 @@
       "when": 1790432984563,
       "tag": "0017_revenue_cycle_class_regime",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790437723344,
+      "tag": "0018_patients_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790441484867,
+      "tag": "0019_operator_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790443307958,
+      "tag": "0020_practice_agreements",
+      "breakpoints": true
     }
   ]
 }
