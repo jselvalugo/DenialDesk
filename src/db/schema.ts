@@ -3,6 +3,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  customType,
   date,
   foreignKey,
   index,
@@ -31,6 +32,8 @@ const tenantId = () =>
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
 const cents = (name: string) => bigint(name, { mode: "number" });
+/** Raw bytes (PostgreSQL bytea); Drizzle has no built-in binary column type. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 // ---------------------------------------------------------------------------------------------
 // Identity and tenancy (no RLS: read before a tenant is chosen; never exposed to tenant queries)
@@ -757,3 +760,87 @@ export const rateLimits = pgTable(
     index("rate_limits_window_idx").on(t.windowStart),
   ],
 );
+
+// ---------------------------------------------------------------------------------------------
+// Platform agreements (docs/specs/practice-agreements.md): the signed BAA for each customer
+// practice. A platform record, not tenant data: no RLS and no grants to the app role; read and
+// written only by the platform operator through src/domain/platform/agreements.ts. RLS is enabled
+// with no policies (defense in depth: a stray GRANT would still show the app role nothing). Rows are
+// never deleted and their recorded fields never change; the only changes are the status transitions
+// (trigger and CHECK constraints in drizzle/0020_practice_agreements.sql, which also makes the
+// self-referencing key DEFERRABLE INITIALLY DEFERRED; renewals depend on that, so keep it if the
+// table is ever regenerated). Retention per REQUIREMENTS §9.2; classification
+// Confidential (§9.1), never PHI.
+// ---------------------------------------------------------------------------------------------
+
+export const agreementKindEnum = pgEnum("agreement_kind", ["baa"]);
+
+/**
+ * active: the agreement in force (one per practice and kind). superseded: replaced by a newer
+ * recording (`supersededById`). historical: recorded for the file after a newer agreement was
+ * already active (back-fill). voided: recorded in error, kept for the record with a reason.
+ * Text with a CHECK (drizzle/0020_practice_agreements.sql) rather than an enum, so values can be
+ * added in one migration.
+ */
+export type AgreementStatus = "active" | "superseded" | "historical" | "voided";
+
+export const tenantAgreements = pgTable(
+  "tenant_agreements",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    kind: agreementKindEnum("kind").notNull().default("baa"),
+    status: text("status").$type<AgreementStatus>().notNull().default("active"),
+    effectiveDate: date("effective_date").notNull(),
+    /** Null: in force until terminated. */
+    expiresOn: date("expires_on"),
+    signedOn: date("signed_on").notNull(),
+    /** Name and title of the practice's signer. */
+    practiceSigner: text("practice_signer").notNull(),
+    /** Name and title of DenialDesk's signer. */
+    ourSigner: text("our_signer").notNull(),
+    note: text("note"),
+    /** Original file name as uploaded (shown to the operator; never logged). */
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    /** Hex SHA-256 of `content`, so a downloaded copy can be verified against the record. */
+    sha256: text("sha256").notNull(),
+    content: bytea("content").notNull(),
+    recordedBy: uuid("recorded_by")
+      .notNull()
+      .references(() => users.id),
+    /** The agreement that replaced this one, once superseded. */
+    supersededById: uuid("superseded_by_id"),
+    /** Set together when the operator marks the agreement as recorded in error. */
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by").references(() => users.id),
+    voidReason: text("void_reason"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("tenant_agreements_tenant_idx").on(t.tenantId, t.createdAt),
+    // One active agreement of each kind per practice.
+    uniqueIndex("tenant_agreements_one_active")
+      .on(t.tenantId, t.kind)
+      .where(sql`status = 'active'`),
+    foreignKey({
+      columns: [t.supersededById],
+      foreignColumns: [t.id],
+      name: "tenant_agreements_superseded_by_fk",
+    }),
+  ],
+).enableRLS();
+
+// ---------------------------------------------------------------------------------------------
+// Operator credentials (docs/specs/operator-login.md): fingerprints (SHA-256 of email + hash) of
+// every operator credential ever applied from hosting configuration, so a rotation only moves forward: a
+// deployment still configured with a retired hash can never re-apply it. Not tenant data; no grants
+// to the app role; accessed through the connection owner in src/auth/operator-account.ts.
+// ---------------------------------------------------------------------------------------------
+
+export const operatorCredentials = pgTable("operator_credentials", {
+  fingerprint: text("fingerprint").primaryKey(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+});

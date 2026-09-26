@@ -3,7 +3,6 @@ import { and, eq, isNull } from "drizzle-orm";
 import { createDemoPractice as ensureDemoPracticeFresh, ensureDemoPractice } from "@/auth/demo";
 import { verifyPassword } from "@/auth/password";
 import type { OperatorContext } from "@/auth/operator";
-import { setUpOperatorAccount } from "@/auth/operator-account";
 import { closeDatabase, systemDb } from "@/db/client";
 import {
   auditEvents,
@@ -35,10 +34,13 @@ let listedPractice: { tenantId: string };
 
 beforeAll(async () => {
   const email = `operator-${Date.now()}@synthetic.test`;
-  const { userId } = await setUpOperatorAccount({ email, password: "a synthetic operator passphrase" });
+  const [user] = await systemDb()
+    .insert(users)
+    .values({ email, displayName: "Platform operator", passwordHash: "unused" })
+    .returning({ id: users.id });
   operator = {
     sessionId: "00000000-0000-4000-8000-000000000000",
-    userId,
+    userId: user!.id,
     displayName: "Platform operator",
     email,
   };

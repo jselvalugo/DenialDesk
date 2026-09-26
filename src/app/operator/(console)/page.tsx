@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireOperator } from "@/auth/operator";
 import { Badge } from "@/components/ui/Badge";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
@@ -8,6 +9,7 @@ import { StatTile } from "@/components/ui/StatTile";
 import { listPractices } from "@/domain/platform/practices";
 import { auditSystem } from "@/lib/audit";
 import { demoLoginEnabled } from "@/lib/env";
+import { AgreementStatusBadge } from "./AgreementStatusBadge";
 import { CreatePracticeForm, ResetDemoButton, SuspendToggle } from "./controls";
 
 export const metadata: Metadata = { title: "Platform console" };
@@ -30,6 +32,7 @@ export default async function OperatorPage() {
 
   const customers = practices.filter((p) => p.kind === "customer");
   const active = customers.filter((p) => !p.suspendedAt);
+  const withoutBaa = customers.filter((p) => p.baa !== "active" && p.baa !== "expiring");
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
@@ -39,13 +42,18 @@ export default async function OperatorPage() {
         actions={demoLoginEnabled() ? <ResetDemoButton /> : undefined}
       />
 
-      <section aria-label="Platform totals" className="grid grid-cols-4 gap-4">
+      <section aria-label="Platform totals" className="grid grid-cols-5 gap-4">
         <StatTile label="Customer practices" value={customers.length} />
         <StatTile label="Active" value={active.length} />
         <StatTile
           label="Suspended"
           value={customers.length - active.length}
           emphasis={customers.length - active.length > 0 ? "warning" : undefined}
+        />
+        <StatTile
+          label="Without a current BAA"
+          value={withoutBaa.length}
+          emphasis={withoutBaa.length > 0 ? "warning" : undefined}
         />
         <StatTile
           label="Open denials (all practices)"
@@ -60,6 +68,7 @@ export default async function OperatorPage() {
               <Th>Practice</Th>
               <Th>Type</Th>
               <Th>Status</Th>
+              <Th>BAA</Th>
               <Th numeric>Team</Th>
               <Th numeric>Open denials</Th>
               <Th>Created</Th>
@@ -69,7 +78,11 @@ export default async function OperatorPage() {
           <tbody>
             {practices.map((practice) => (
               <Tr key={practice.id}>
-                <Td className="font-medium">{practice.name}</Td>
+                <Td className="font-medium">
+                  <Link href={`/operator/practices/${practice.id}`} className="text-link hover:underline">
+                    {practice.name}
+                  </Link>
+                </Td>
                 <Td>
                   <Badge tone={practice.kind === "demo" ? "info" : "neutral"} dot={false}>
                     {practice.kind === "demo" ? "Demo" : "Customer"}
@@ -82,6 +95,13 @@ export default async function OperatorPage() {
                     </Badge>
                   ) : (
                     <Badge tone="success">Active</Badge>
+                  )}
+                </Td>
+                <Td>
+                  {practice.baa ? (
+                    <AgreementStatusBadge status={practice.baa} />
+                  ) : (
+                    <span className="text-muted">—</span>
                   )}
                 </Td>
                 <Td numeric>{practice.teamSize}</Td>
