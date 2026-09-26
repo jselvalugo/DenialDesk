@@ -10,7 +10,7 @@ export function canViewRevenueCycle(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "compliance";
 }
 
-/** Loading or changing accounting configuration. */
-export function canManageRevenueCycle(role: Role): boolean {
-  return role === "admin" || role === "manager";
+/** Loading or changing accounting configuration (rules, GL accounts): administrators only. */
+export function canConfigureRevenueCycle(role: Role): boolean {
+  return role === "admin";
 }

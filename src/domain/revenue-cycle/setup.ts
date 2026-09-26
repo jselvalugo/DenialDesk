@@ -1,15 +1,24 @@
-import { asc, count, eq } from "drizzle-orm";
-import type { TenantTx } from "@/db/tenant";
+import { asc, count, eq, sql } from "drizzle-orm";
+import { canConfigureRevenueCycle } from "@/auth/permissions";
+import type { Role } from "@/auth/session";
+import { withTenant, type TenantTx } from "@/db/tenant";
+import { audit } from "@/lib/audit";
 import { businessRules, glAccounts, locations, payerClasses, payers, rcmSites } from "@/db/schema";
 import { DEFAULT_GL_ACCOUNTS, DEFAULT_PAYER_CLASSES, DEFAULTS_SOURCE, DEFAULT_RULES } from "./defaults";
 import { EngineConfigError, ruleMatchSchema, type EngineConfig } from "./engine";
 
 /**
- * Seeds the RevCycle IQ default ledger configuration for the current tenant. Does nothing when the
- * practice already has business rules, so it never overwrites a practice's own configuration.
- * Returns whether anything was created.
+ * Seeds the RevCycle IQ default ledger configuration for the current tenant and audits it. Does
+ * nothing when the practice already has business rules, so it never overwrites a practice's own
+ * configuration. Serialized per tenant, so concurrent calls load the defaults once. Returns whether
+ * anything was created.
  */
-export async function seedRevenueCycleDefaults(tx: TenantTx, tenantId: string): Promise<boolean> {
+export async function seedRevenueCycleDefaults(
+  tx: TenantTx,
+  tenantId: string,
+  actorUserId: string,
+): Promise<boolean> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`rcm_defaults:${tenantId}`}))`);
   const [{ rules } = { rules: 0 }] = await tx.select({ rules: count() }).from(businessRules);
   if (rules > 0) return false;
 
@@ -83,7 +92,31 @@ export async function seedRevenueCycleDefaults(tx: TenantTx, tenantId: string): 
       source: DEFAULTS_SOURCE,
     })),
   );
+  await audit(tx, {
+    action: "rcm.defaults_loaded",
+    actorUserId,
+    tenantId,
+    entityType: "tenant",
+    entityId: tenantId,
+    reason: "Default accounting configuration",
+    metadata: { rules: DEFAULT_RULES.length, source: DEFAULTS_SOURCE },
+  });
   return true;
+}
+
+export type LoadDefaultsResult = { ok: true } | { ok: false; error: string };
+
+/** The "Load the default rule set" action: administrators only, practices without rules only. */
+export async function loadDefaultRuleSet(auth: {
+  tenantId: string;
+  userId: string;
+  role: Role;
+}): Promise<LoadDefaultsResult> {
+  if (!canConfigureRevenueCycle(auth.role)) {
+    return { ok: false, error: "Only administrators can set up accounting rules." };
+  }
+  const created = await withTenant(auth, (tx) => seedRevenueCycleDefaults(tx, auth.tenantId, auth.userId));
+  return created ? { ok: true } : { ok: false, error: "This practice already has accounting rules." };
 }
 
 /** Reads and validates the tenant's configuration for the rules engine. */
@@ -102,6 +135,7 @@ export async function loadEngineConfig(tx: TenantTx): Promise<EngineConfig> {
       return { ...r, match: match.data };
     }),
     payerClasses: classes,
+    // Non-null: the gl_accounts_ar_routing check constraint requires both on AR accounts.
     arAccounts: accounts.map((a) => ({
       number: a.number,
       revenueGl: a.revenueGl!,

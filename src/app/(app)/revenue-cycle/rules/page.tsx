@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { canManageRevenueCycle, canViewRevenueCycle } from "@/auth/permissions";
+import { canConfigureRevenueCycle, canViewRevenueCycle } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Code } from "@/components/ui/Code";
@@ -48,10 +48,10 @@ export default async function RulesPage() {
             title="No accounting rules yet"
             description="Load the default rule set (12 rules, GL accounts, payer classes, and one site per location) to start processing monthly files. You can review every rule before the first import."
             action={
-              canManageRevenueCycle(auth.role) ? (
+              canConfigureRevenueCycle(auth.role) ? (
                 <LoadDefaults />
               ) : (
-                <p className="text-body text-muted">Ask an administrator or RCM manager to load it.</p>
+                <p className="text-body text-muted">Ask an administrator to load it.</p>
               )
             }
           />

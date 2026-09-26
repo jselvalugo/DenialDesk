@@ -142,7 +142,7 @@ export const DEFAULT_RULES: DefaultRule[] = [
   rule({
     code: "EXCL_FCODE",
     name: "F-codes",
-    description: "CPT/HCPCS starting or ending with F (performance-measure codes); fully adjusted.",
+    description: "CPT/HCPCS starting or ending with F; fully adjusted (RevCycle IQ policy).",
     priority: 4,
     match: {
       any: [

@@ -135,8 +135,8 @@ describe("revenue cycle rules engine with the RevCycle IQ defaults", () => {
     ];
     for (let i = 0; i < 5_000; i++) {
       const input = line({
-        status: pick(["PAID", "INTEC", "51CR", "DENIED", ""]),
-        payerClass: pick(classes),
+        status: pick(["PAID", "INTEC", "51CR", "DENIED", "", "INTEC "]),
+        payerClass: pick([...classes, "MCR ", " SPY"]),
         cpt: pick(cpts),
         description: pick(["Office visit", "Interest adj", "Flu shot"]),
         facility: pick(["Main clinic", "Sala Comunitaria", "Annex"]),
@@ -176,8 +176,10 @@ describe("engine configuration", () => {
       prepareEngine({ ...config, rules: config.rules.map((r) => ({ ...r, contraBps: 10_001 })) }),
     ).toThrow(EngineConfigError);
     expect(() => prepareEngine({ ...config, defaultArGl: "9999" })).toThrow(EngineConfigError);
-    const broken = prepareEngine({ ...config, payerClasses: [{ code: "COM", arGl: "1399" }] });
-    expect(() => broken(line())).toThrow(/1399/);
+    expect(() => prepareEngine({ ...config, payerClasses: [{ code: "COM", arGl: "1399" }] })).toThrow(/1399/);
+    expect(() =>
+      prepareEngine({ ...config, rules: config.rules.map((r) => ({ ...r, arGl: r.arGl && "5210" })) }),
+    ).toThrow(/5210/);
   });
 
   it("rejects non-integer money", () => {

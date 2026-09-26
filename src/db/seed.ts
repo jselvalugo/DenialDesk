@@ -181,7 +181,7 @@ export async function seedPractice(options: {
     await insertInChunks(claimRows, (chunk) => tx.insert(claims).values(chunk));
     await insertInChunks(lineRows, (chunk) => tx.insert(claimLines).values(chunk));
     await insertInChunks(denialRows, (chunk) => tx.insert(denials).values(chunk));
-    await seedRevenueCycleDefaults(tx, tenantId);
+    await seedRevenueCycleDefaults(tx, tenantId, userIds[0]!);
   });
 
   return { tenantId, userIds };

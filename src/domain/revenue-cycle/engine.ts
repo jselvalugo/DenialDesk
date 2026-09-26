@@ -15,7 +15,7 @@ export type RuleField = (typeof RULE_FIELDS)[number];
 
 /**
  * The fixed condition vocabulary. Users pick from these; no free-form code or regular expressions.
- * - equals / in: exact match after trimming (codes are case-sensitive, as in the source export)
+ * - equals / in: exact, case-sensitive match (as in the source engine; the importer trims cells)
  * - contains: case-insensitive substring
  * - starts_with / ends_with: exact prefix/suffix
  * - invalid_cpt: the CPT/HCPCS value isn't exactly 5 letters or digits
@@ -102,11 +102,11 @@ const CPT_FORMAT = /^[A-Za-z0-9]{5}$/;
 function fieldValue(line: LineInput, field: RuleField): string {
   switch (field) {
     case "status":
-      return line.status.trim();
+      return line.status;
     case "payer_class":
-      return line.payerClass.trim();
+      return line.payerClass;
     case "cpt":
-      return line.cpt.trim();
+      return line.cpt;
     case "description":
       return line.description;
     case "facility":
@@ -115,7 +115,7 @@ function fieldValue(line: LineInput, field: RuleField): string {
 }
 
 export function conditionMatches(condition: RuleCondition, line: LineInput): boolean {
-  if (condition.op === "invalid_cpt") return !CPT_FORMAT.test(line.cpt.trim());
+  if (condition.op === "invalid_cpt") return !CPT_FORMAT.test(line.cpt);
   const value = fieldValue(line, condition.field);
   switch (condition.op) {
     case "equals":
@@ -135,7 +135,10 @@ export function ruleMatches(match: RuleMatch, line: LineInput): boolean {
   return "always" in match || match.any.some((condition) => conditionMatches(condition, line));
 }
 
-/** Contra amount for a charge: basis points, rounded half away from zero to the cent. */
+/**
+ * Contra amount for a charge: basis points, rounded half away from zero to the cent (so credits
+ * mirror charges exactly). The source engine only used 0% and 100%, where rounding never applies.
+ */
 export function contraCents(grossCents: number, bps: number): number {
   const exact = (Math.abs(grossCents) * bps) / 10_000;
   return Math.sign(grossCents) * Math.round(exact);
@@ -145,7 +148,7 @@ export function contraCents(grossCents: number, bps: number): number {
 export function prepareEngine(config: EngineConfig) {
   const rules = config.rules
     .filter((rule) => rule.active)
-    .sort((a, b) => a.priority - b.priority || a.code.localeCompare(b.code));
+    .sort((a, b) => a.priority - b.priority || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
   if (!rules.some((rule) => "always" in rule.match)) {
     throw new EngineConfigError("The active rule set needs a fallback rule that matches every line.");
   }
@@ -159,11 +162,22 @@ export function prepareEngine(config: EngineConfig) {
   if (!arAccounts.has(config.defaultArGl)) {
     throw new EngineConfigError("The default AR account isn't set up.");
   }
+  // Fail before any line is classified, never partway through a file.
+  for (const [owner, arGl] of [
+    ...rules.map((rule) => [`Rule ${rule.code}`, rule.arGl] as const),
+    ...config.payerClasses.map((pc) => [`Payer class ${pc.code}`, pc.arGl] as const),
+  ]) {
+    if (arGl !== null && !arAccounts.has(arGl)) {
+      throw new EngineConfigError(
+        `${owner} posts to AR account ${arGl}, which isn't set up as an AR account.`,
+      );
+    }
+  }
 
   return function classify(line: LineInput): Classification {
     if (!Number.isInteger(line.billedCents)) throw new EngineConfigError("Charges must be integer cents.");
     const rule = rules.find((candidate) => ruleMatches(candidate.match, line))!;
-    const arGl = rule.arGl ?? payerClassAr.get(line.payerClass.trim()) ?? config.defaultArGl;
+    const arGl = rule.arGl ?? payerClassAr.get(line.payerClass) ?? config.defaultArGl;
     const account = arAccounts.get(arGl);
     if (!account) throw new EngineConfigError(`AR account ${arGl} isn't set up.`);
     const contra = contraCents(line.billedCents, rule.contraBps);
