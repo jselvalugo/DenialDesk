@@ -1,27 +1,30 @@
 import type { Metadata } from "next";
-import { Inter, Playfair_Display, Space_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { connection } from "next/server";
 import { PreviewBanner } from "@/components/shell/PreviewBanner";
 import { appEnv, isProduction } from "@/lib/env";
 import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+// Fonts are bundled in ./fonts (SIL OFL 1.1) so builds need no network access (fonts/README.md).
+const inter = localFont({
+  src: "./fonts/inter-latin-wght.woff2",
+  weight: "100 900",
   variable: "--font-inter",
   display: "swap",
 });
 
-const playfair = Playfair_Display({
-  subsets: ["latin"],
-  weight: ["600", "700"],
+const playfair = localFont({
+  src: "./fonts/playfair-display-latin-wght.woff2",
+  weight: "400 900",
   variable: "--font-playfair",
   display: "swap",
 });
 
-const spaceMono = Space_Mono({
-  subsets: ["latin"],
-  weight: ["400", "700"],
+const spaceMono = localFont({
+  src: [
+    { path: "./fonts/space-mono-latin-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/space-mono-latin-700.woff2", weight: "700", style: "normal" },
+  ],
   variable: "--font-space-mono",
   display: "swap",
 });

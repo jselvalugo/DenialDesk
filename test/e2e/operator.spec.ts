@@ -24,8 +24,9 @@ test.describe("demo login", () => {
 });
 
 test.describe("operator console access", () => {
-  test("is a 404 when signed out", async ({ page }) => {
-    expect((await page.goto("/operator"))?.status()).toBe(404);
+  test("sends signed-out visitors to sign-in", async ({ page }) => {
+    await page.goto("/operator");
+    await expect(page).toHaveURL(/\/login$/);
   });
 
   test.describe("as a regular practice user", () => {
