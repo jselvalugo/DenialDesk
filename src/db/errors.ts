@@ -85,6 +85,7 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
   { format: "void fields belong to voided agreements only", args: [] },
   { format: "tenant_agreements status may only move to superseded or voided", args: [] },
   { format: "appeal % cannot move from % to %", args: ["uuid", "appealStatus", "appealStatus"] },
+  { format: "appeal %: claim % does not match the claim of denial %", args: ["uuid", "uuid", "uuid"] },
 ];
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -410,6 +410,8 @@ export const denials = pgTable(
     index("denials_queue_deadline_idx").on(t.tenantId, t.status, t.appealDeadline),
     index("denials_queue_amount_idx").on(t.tenantId, t.status, t.deniedCents),
     index("denials_claim_idx").on(t.claimId),
+    // Target of the tenant-scoped FK from appeals (FKs bypass RLS, so the tenant is part of the key).
+    uniqueIndex("denials_tenant_id_key").on(t.tenantId, t.id),
   ],
 );
 
@@ -523,6 +525,12 @@ export const appeals = pgTable(
       name: "appeals_claim_fk",
       columns: [t.tenantId, t.claimId],
       foreignColumns: [claims.tenantId, claims.id],
+    }),
+    // A denial can only be appealed by the same practice it belongs to.
+    foreignKey({
+      name: "appeals_denial_fk",
+      columns: [t.tenantId, t.denialId],
+      foreignColumns: [denials.tenantId, denials.id],
     }),
   ],
 );
