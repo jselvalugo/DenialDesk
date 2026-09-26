@@ -53,7 +53,7 @@ CREATE UNIQUE INDEX "gl_accounts_one_payments_clearing" ON "gl_accounts" USING b
 ALTER TABLE "gl_accounts" ADD CONSTRAINT "gl_accounts_clearing_is_cash" CHECK (NOT "is_payments_clearing" OR "kind" = 'cash');--> statement-breakpoint
 ALTER TABLE "rcm_journal_lines" ADD CONSTRAINT "rcm_journal_lines_one_side" CHECK ("debit_cents" >= 0 AND "credit_cents" >= 0 AND ("debit_cents" = 0) <> ("credit_cents" = 0));--> statement-breakpoint
 ALTER TABLE "rcm_journal_vouchers" ADD CONSTRAINT "rcm_vouchers_period_valid" CHECK ("period_month" BETWEEN 1 AND 12 AND "period_year" BETWEEN 2000 AND 2100);--> statement-breakpoint
-ALTER TABLE "rcm_journal_vouchers" ADD CONSTRAINT "rcm_vouchers_void_reason" CHECK ("status" <> 'void' OR ("voided_by" IS NOT NULL AND length(trim("void_reason")) >= 10));--> statement-breakpoint
+ALTER TABLE "rcm_journal_vouchers" ADD CONSTRAINT "rcm_vouchers_void_reason" CHECK ("status" <> 'void' OR ("voided_by" IS NOT NULL AND "void_reason" IS NOT NULL AND length(trim("void_reason")) BETWEEN 10 AND 500));--> statement-breakpoint
 ALTER TABLE "rcm_journal_vouchers" ADD CONSTRAINT "rcm_vouchers_approver_not_preparer" CHECK ("approved_by" IS NULL OR "approved_by" <> "prepared_by");--> statement-breakpoint
 
 -- Tenant isolation (R-7.2.4, CLAUDE.md #5), no DELETE (R-9.2.1). Voucher amounts and lines are
@@ -76,3 +76,79 @@ BEGIN
 END
 $$;--> statement-breakpoint
 GRANT UPDATE ("status", "approved_by", "approved_at", "exported_by", "exported_at", "voided_by", "voided_at", "void_reason") ON "rcm_journal_vouchers" TO denialdesk_app;
+--> statement-breakpoint
+
+-- Foreign keys skip row-level security, so references carry the tenant: a voucher can only point
+-- at its own practice's file, and a line only at its own practice's voucher.
+CREATE UNIQUE INDEX "rcm_files_tenant_id_key" ON "rcm_files" ("tenant_id", "id");--> statement-breakpoint
+CREATE UNIQUE INDEX "rcm_vouchers_tenant_id_key" ON "rcm_journal_vouchers" ("tenant_id", "id");--> statement-breakpoint
+ALTER TABLE "rcm_journal_vouchers" ADD CONSTRAINT "rcm_vouchers_tenant_file_fk" FOREIGN KEY ("tenant_id", "file_id") REFERENCES "rcm_files" ("tenant_id", "id");--> statement-breakpoint
+ALTER TABLE "rcm_journal_lines" ADD CONSTRAINT "rcm_lines_tenant_voucher_fk" FOREIGN KEY ("tenant_id", "voucher_id") REFERENCES "rcm_journal_vouchers" ("tenant_id", "id");--> statement-breakpoint
+ALTER TABLE "rcm_journal_vouchers" ADD CONSTRAINT "rcm_vouchers_approval_recorded" CHECK ("status" NOT IN ('approved', 'exported') OR ("approved_by" IS NOT NULL AND "approved_at" IS NOT NULL));--> statement-breakpoint
+ALTER TABLE "rcm_journal_vouchers" ADD CONSTRAINT "rcm_vouchers_export_recorded" CHECK ("status" <> 'exported' OR ("exported_by" IS NOT NULL AND "exported_at" IS NOT NULL));--> statement-breakpoint
+ALTER TABLE "rcm_journal_vouchers" ADD CONSTRAINT "rcm_vouchers_void_recorded" CHECK ("status" <> 'void' OR "voided_at" IS NOT NULL);--> statement-breakpoint
+
+-- Workflow moves forward only (draft -> approved -> exported; draft -> superseded; approved or
+-- exported -> void), and who/when columns are written once. Actors must belong to the practice.
+CREATE FUNCTION rcm_voucher_workflow() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.status <> OLD.status AND NOT (
+    (OLD.status = 'draft' AND NEW.status IN ('approved', 'superseded'))
+    OR (OLD.status = 'approved' AND NEW.status IN ('exported', 'void'))
+    OR (OLD.status = 'exported' AND NEW.status = 'void')
+  ) THEN
+    RAISE EXCEPTION 'rcm_voucher_workflow: % -> % is not allowed', OLD.status, NEW.status;
+  END IF;
+  IF (OLD.approved_by IS NOT NULL AND NEW.approved_by IS DISTINCT FROM OLD.approved_by)
+    OR (OLD.approved_at IS NOT NULL AND NEW.approved_at IS DISTINCT FROM OLD.approved_at)
+    OR (OLD.exported_by IS NOT NULL AND NEW.exported_by IS DISTINCT FROM OLD.exported_by)
+    OR (OLD.exported_at IS NOT NULL AND NEW.exported_at IS DISTINCT FROM OLD.exported_at)
+    OR (OLD.voided_by IS NOT NULL AND NEW.voided_by IS DISTINCT FROM OLD.voided_by)
+    OR (OLD.voided_at IS NOT NULL AND NEW.voided_at IS DISTINCT FROM OLD.voided_at)
+    OR (OLD.void_reason IS NOT NULL AND NEW.void_reason IS DISTINCT FROM OLD.void_reason) THEN
+    RAISE EXCEPTION 'rcm_voucher_workflow: approval, export, and void records are write-once';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM unnest(ARRAY[NEW.approved_by, NEW.exported_by, NEW.voided_by]) AS actor(id)
+    WHERE actor.id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = actor.id AND m.tenant_id = NEW.tenant_id)
+  ) THEN
+    RAISE EXCEPTION 'rcm_voucher_workflow: actor is not a member of this practice';
+  END IF;
+  RETURN NEW;
+END
+$$;--> statement-breakpoint
+CREATE TRIGGER rcm_voucher_workflow BEFORE UPDATE ON "rcm_journal_vouchers"
+  FOR EACH ROW EXECUTE FUNCTION rcm_voucher_workflow();
+--> statement-breakpoint
+
+-- Lines are written only while their voucher is a draft (prepareVoucher inserts them right after
+-- the voucher); an approved or exported voucher can't gain lines.
+CREATE FUNCTION rcm_journal_lines_draft_only() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM rcm_journal_vouchers v WHERE v.id = NEW.voucher_id AND v.status = 'draft'
+  ) THEN
+    RAISE EXCEPTION 'rcm_journal_lines_draft_only: lines can only be added to a draft voucher';
+  END IF;
+  RETURN NEW;
+END
+$$;--> statement-breakpoint
+CREATE TRIGGER rcm_journal_lines_draft_only BEFORE INSERT ON "rcm_journal_lines"
+  FOR EACH ROW EXECUTE FUNCTION rcm_journal_lines_draft_only();--> statement-breakpoint
+
+-- Practices set up before this migration: flag the starter chart's payments-clearing account.
+-- Tenant by tenant, because FORCE row-level security hides rows from a non-superuser owner.
+DO $$
+DECLARE
+  t uuid;
+BEGIN
+  FOR t IN SELECT id FROM tenants LOOP
+    PERFORM set_config('app.tenant_id', t::text, true);
+    UPDATE gl_accounts SET is_payments_clearing = true
+      WHERE tenant_id = t AND number = '1050' AND kind = 'cash'
+        AND NOT EXISTS (SELECT 1 FROM gl_accounts g WHERE g.tenant_id = t AND g.is_payments_clearing);
+  END LOOP;
+  PERFORM set_config('app.tenant_id', '', true);
+END
+$$;

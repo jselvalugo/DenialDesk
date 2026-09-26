@@ -5,7 +5,7 @@ import { closeDatabase } from "@/db/client";
 import { auditEvents, rcmFiles, rcmJournalLines, rcmJournalVouchers } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { withTenant } from "@/db/tenant";
-import { listFiles } from "@/domain/revenue-cycle/imports";
+import { importMonthlyFile, listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
 import { allPassed } from "@/domain/revenue-cycle/journal";
 import { periodFiles } from "@/domain/revenue-cycle/periods";
 import {
@@ -17,6 +17,7 @@ import {
   VoucherError,
   type Actor,
 } from "@/domain/revenue-cycle/vouchers";
+import { generateMonthlyLines } from "@/domain/revenue-cycle/synthetic-file";
 import { generateDataset } from "@/domain/synthetic/generator";
 import { parseCsv } from "@/lib/csv/parse";
 import { expectDbError } from "./helpers";
@@ -116,6 +117,10 @@ describe("preparing a voucher", () => {
       ["draft", 2],
     ]);
     expect(vouchers[1]!.id).toBe(id);
+    const [superseded] = await withTenant(a.manager, (tx) =>
+      tx.select().from(auditEvents).where(eq(auditEvents.entityId, vouchers[0]!.id)).orderBy(auditEvents.id),
+    ).then((events) => events.filter((e) => e.action === "rcm.voucher_superseded"));
+    expect(superseded!.metadata).toMatchObject({ replacedBy: id });
   });
 
   it("refuses roles that don't run month-end and files in the earlier layout", async () => {
@@ -153,6 +158,39 @@ describe("preparing a voucher", () => {
     await expect(
       withTenant(a.manager, (tx) => prepareVoucher(tx, a.manager, bLatest!.fileId)),
     ).rejects.toThrow(/doesn't exist/);
+  });
+});
+
+describe("a month after a gap", () => {
+  it("fails the receivables check until the missing month is imported", async () => {
+    const [, , latest] = await files(b);
+    const gapIndex = latest!.periodYear * 12 + latest!.periodMonth - 1 + 2; // skip one month
+    const period = { year: Math.floor(gapIndex / 12), month: (gapIndex % 12) + 1 };
+    const missing = gapIndex - 1;
+    const fileId = await withTenant(b.manager, (tx) =>
+      importMonthlyFile(tx, {
+        tenantId: b.tenantId,
+        userId: b.manager.userId,
+        periodYear: period.year,
+        periodMonth: period.month,
+        defaultSiteId: null,
+        lines: generateMonthlyLines({
+          seed: 5,
+          periodYear: period.year,
+          periodMonth: period.month,
+          facilities: [],
+        }),
+      }),
+    );
+    const id = await withTenant(b.manager, (tx) => prepareVoucher(tx, b.manager, fileId));
+    const detail = (await withTenant(b.manager, (tx) => getVoucher(tx, id)))!;
+    expect(detail.checks.find((c) => c.id === "receivables_tie")).toMatchObject({
+      passed: false,
+      detail: expect.stringContaining(periodLabel(Math.floor(missing / 12), (missing % 12) + 1)),
+    });
+    await expect(withTenant(b.admin, (tx) => approveVoucher(tx, b.admin, id))).rejects.toThrow(
+      /checks must pass/,
+    );
   });
 });
 
@@ -223,7 +261,19 @@ describe("approval, export, and void", () => {
     await expect(withTenant(a.admin, (tx) => voidVoucher(tx, a.admin, voucherId, "short"))).rejects.toThrow(
       /10 to 500/,
     );
-    await withTenant(a.admin, (tx) => voidVoucher(tx, a.admin, voucherId, "Imported the wrong month's file"));
+    await expect(
+      withTenant(a.admin, (tx) => voidVoucher(tx, a.admin, voucherId, "Imported the wrong month's file")),
+    ).rejects.toThrow(/reversed in the general ledger/);
+    await withTenant(a.admin, (tx) =>
+      voidVoucher(tx, a.admin, voucherId, "Imported the wrong month's file", { reversedInGl: true }),
+    );
+    const [voided] = await withTenant(a.admin, (tx) =>
+      tx
+        .select()
+        .from(auditEvents)
+        .where(and(eq(auditEvents.entityId, voucherId), eq(auditEvents.action, "rcm.voucher_voided"))),
+    );
+    expect(voided!.metadata).toMatchObject({ previousStatus: "exported", reversedInGl: true });
     const again = await withTenant(a.manager, (tx) => prepareVoucher(tx, a.manager, detail.voucher.fileId));
     const redo = (await withTenant(a.manager, (tx) => getVoucher(tx, again)))!;
     expect(redo.voucher.version).toBe(detail.voucher.version + 1);
@@ -240,6 +290,99 @@ describe("approval, export, and void", () => {
 });
 
 describe("voucher records", () => {
+  it("move forward only, with write-once approval records, by members of the practice", async () => {
+    const [draft] = await withTenant(a.admin, (tx) =>
+      tx.select().from(rcmJournalVouchers).where(eq(rcmJournalVouchers.status, "superseded")).limit(1),
+    );
+    await expectDbError(
+      withTenant(a.admin, (tx) =>
+        tx.update(rcmJournalVouchers).set({ status: "draft" }).where(eq(rcmJournalVouchers.id, draft!.id)),
+      ),
+      /rcm_voucher_workflow/,
+    );
+    const [posted] = await withTenant(a.admin, (tx) =>
+      tx.select().from(rcmJournalVouchers).where(eq(rcmJournalVouchers.status, "approved")).limit(1),
+    );
+    await expectDbError(
+      withTenant(a.admin, (tx) =>
+        tx
+          .update(rcmJournalVouchers)
+          .set({ approvedBy: a.compliance.userId })
+          .where(eq(rcmJournalVouchers.id, posted!.id)),
+      ),
+      /write-once/,
+    );
+    await expectDbError(
+      withTenant(a.admin, (tx) =>
+        tx
+          .update(rcmJournalVouchers)
+          .set({ status: "exported", exportedBy: b.admin.userId, exportedAt: new Date() })
+          .where(eq(rcmJournalVouchers.id, posted!.id)),
+      ),
+      /not a member/,
+    );
+    await expectDbError(
+      withTenant(a.admin, (tx) =>
+        tx
+          .update(rcmJournalVouchers)
+          .set({ status: "exported" })
+          .where(eq(rcmJournalVouchers.id, posted!.id)),
+      ),
+      /export_recorded/,
+    );
+  });
+
+  it("need a void reason and can't gain lines once approved", async () => {
+    const [posted] = await withTenant(a.admin, (tx) =>
+      tx.select().from(rcmJournalVouchers).where(eq(rcmJournalVouchers.status, "approved")).limit(1),
+    );
+    await expectDbError(
+      withTenant(a.admin, (tx) =>
+        tx
+          .update(rcmJournalVouchers)
+          .set({ status: "void", voidedBy: a.admin.userId, voidedAt: new Date() })
+          .where(eq(rcmJournalVouchers.id, posted!.id)),
+      ),
+      /void_reason/,
+    );
+    await expectDbError(
+      withTenant(a.admin, (tx) =>
+        tx.insert(rcmJournalLines).values({
+          tenantId: a.tenantId,
+          voucherId: posted!.id,
+          lineNumber: 9_999,
+          role: "charges",
+          account: "1200",
+          siteCode: "00",
+          debitCents: 1,
+          creditCents: 0,
+          memo: "x",
+        }),
+      ),
+      /draft_only/,
+    );
+  });
+
+  it("only reference their own practice's file", async () => {
+    const [bFile] = await withTenant(b.admin, (tx) => listFiles(tx));
+    await expectDbError(
+      withTenant(a.admin, (tx) =>
+        tx.insert(rcmJournalVouchers).values({
+          tenantId: a.tenantId,
+          fileId: bFile!.id,
+          periodYear: 2026,
+          periodMonth: 1,
+          version: 98,
+          number: "RCM-2026-01-v98",
+          debitCents: 0,
+          creditCents: 0,
+          preparedBy: a.admin.userId,
+        }),
+      ),
+      /tenant_file_fk/,
+    );
+  });
+
   it("never change amounts or lines, and are never deleted", async () => {
     const [voucher] = await withTenant(a.admin, (tx) => tx.select().from(rcmJournalVouchers).limit(1));
     await expectDbError(

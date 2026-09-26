@@ -73,7 +73,7 @@ export function ExportVoucherButton({ voucherId, label }: { voucherId: string; l
   );
 }
 
-export function VoidVoucherForm({ voucherId }: { voucherId: string }) {
+export function VoidVoucherForm({ voucherId, exported }: { voucherId: string; exported: boolean }) {
   const [state, action] = useActionState<VoucherActionState, FormData>(voidVoucherAction, {});
   return (
     <form action={action} className="flex flex-col items-start gap-3">
@@ -88,6 +88,12 @@ export function VoidVoucherForm({ voucherId }: { voucherId: string }) {
         hint="Recorded in the audit trail. No patient information."
         className="w-96 max-w-full"
       />
+      {exported && (
+        <label className="flex items-start gap-2 text-body text-text">
+          <input type="checkbox" name="reversedInGl" required className="mt-1" />
+          <span>This voucher was exported, and I reversed its entry in the general ledger.</span>
+        </label>
+      )}
       <SubmitButton variant="danger" pendingLabel="Voiding…">
         Void voucher
       </SubmitButton>

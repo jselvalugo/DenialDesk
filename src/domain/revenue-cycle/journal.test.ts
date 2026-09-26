@@ -149,6 +149,21 @@ describe("checkVoucher", () => {
     expect(noSite[0]!.memo).toBe("Patient charges Mar 2026, site none");
   });
 
+  it("fails a pair that touches receivables twice even if another touches them never", () => {
+    const [a1, a2, b1, b2] = lines;
+    const skewed = [
+      { ...a1!, account: "1200" },
+      { ...a2!, account: "1200" }, // both sides on AR
+      { ...b1!, account: "4050" },
+      { ...b2!, account: "4050" }, // neither side on AR
+      ...lines.slice(4),
+    ];
+    expect(check({ lines: skewed }).find((c) => c.id === "accounts_valid")).toMatchObject({
+      passed: false,
+      detail: expect.stringContaining("exactly one receivable"),
+    });
+  });
+
   it("fails when another voucher already posts the period", () => {
     expect(
       check({ otherPostedVoucher: "RCM-2026-03-v1" }).find((c) => c.id === "not_posted_twice"),
@@ -234,6 +249,18 @@ describe("receivable reclassification", () => {
       passed: false,
       detail: expect.stringContaining("00 / 1200"),
     });
+  });
+
+  it("fails a month after a gap instead of treating it as the first month", () => {
+    const checks = check({ balances: { opening: null, closing: new Map(), missingPrior: "February 2026" } });
+    expect(checks.find((c) => c.id === "receivables_tie")).toMatchObject({
+      passed: false,
+      detail: expect.stringContaining("February 2026"),
+    });
+  });
+
+  it("keeps site codes with separators apart", () => {
+    expect(balanceKey("0|1", "2")).not.toBe(balanceKey("0", "1|2"));
   });
 
   it("explains the first month", () => {

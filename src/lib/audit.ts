@@ -42,7 +42,8 @@ export type AuditAction =
   | "rcm.voucher_prepared"
   | "rcm.voucher_approved"
   | "rcm.voucher_exported"
-  | "rcm.voucher_voided";
+  | "rcm.voucher_voided"
+  | "rcm.voucher_superseded";
 
 export interface AuditEvent {
   action: AuditAction;

@@ -569,7 +569,7 @@ export const voucherStatusEnum = pgEnum("rcm_voucher_status", [
 
 /**
  * Revenue-recognition journal voucher for one monthly file (B3). Amounts and lines never change
- * after insert; the app role may update only the workflow columns (drizzle/0012). At most one
+ * after insert; the app role may update only the workflow columns, forward only (drizzle/0014). At most one
  * draft and one approved-or-exported voucher per period.
  */
 export const rcmJournalVouchers = pgTable(

@@ -62,7 +62,10 @@ export async function voidVoucherAction(
   const id = uuid.safeParse(formData.get("voucherId"));
   if (!id.success) return { error: "That voucher doesn't exist." };
   const reason = String(formData.get("reason") ?? "");
-  const result = await run(() => withTenant(auth, (tx) => voidVoucher(tx, auth, id.data, reason)));
+  const reversedInGl = formData.get("reversedInGl") === "on";
+  const result = await run(() =>
+    withTenant(auth, (tx) => voidVoucher(tx, auth, id.data, reason, { reversedInGl })),
+  );
   if (!result.ok) return { error: result.error };
   revalidatePath(`/revenue-cycle/journal/${id.data}`);
   return {};

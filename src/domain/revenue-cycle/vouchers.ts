@@ -23,7 +23,7 @@ import {
   type AccountKind,
   type Balances,
 } from "./journal";
-import { CURRENT_FORMAT_VERSION } from "./imports";
+import { CURRENT_FORMAT_VERSION, periodLabel } from "./imports";
 import { periodFiles, postedVoucherFor } from "./periods";
 
 // Journal voucher workflow (docs/specs/revenue-cycle-accounting.md, B3). Every function runs in
@@ -70,15 +70,20 @@ async function fileBalances(tx: TenantTx, fileId: string): Promise<Balances> {
   return new Map(rows.map((r) => [balanceKey(r.siteCode, r.arGl), r.balanceCents]));
 }
 
-/** Opening (the prior month's file, if any) and closing receivables for a month's file. */
+/**
+ * Opening (the prior month's file) and closing receivables for a month's file. The practice's
+ * first imported month has no opening (its opening balances are in the GL); any later month whose
+ * prior month has no current-format file is a gap that must be filled first.
+ */
 async function voucherBalances(tx: TenantTx, fileId: string, year: number, month: number) {
   const prior = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
-  const priorFile = (await periodFiles(tx)).find(
-    (p) => p.periodYear === prior.year && p.periodMonth === prior.month,
-  );
+  const periods = await periodFiles(tx);
+  const priorFile = periods.find((p) => p.periodYear === prior.year && p.periodMonth === prior.month);
+  const hasEarlier = periods.some((p) => p.periodYear * 12 + p.periodMonth < year * 12 + month);
   return {
     opening: priorFile ? await fileBalances(tx, priorFile.fileId) : null,
     closing: await fileBalances(tx, fileId),
+    missingPrior: !priorFile && hasEarlier ? periodLabel(prior.year, prior.month) : null,
   };
 }
 
@@ -171,6 +176,16 @@ export async function prepareVoucher(tx: TenantTx, actor: Actor, fileId: string)
     .returning({ id: rcmJournalVouchers.id });
   const voucherId = voucher!.id;
   await tx.insert(rcmJournalLines).values(lines.map((l) => ({ ...l, tenantId: actor.tenantId, voucherId })));
+  for (const old of superseded) {
+    await audit(tx, {
+      action: "rcm.voucher_superseded",
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      entityType: "rcm_voucher",
+      entityId: old.id,
+      metadata: { replacedBy: voucherId },
+    });
+  }
   await audit(tx, {
     action: "rcm.voucher_prepared",
     actorUserId: actor.userId,
@@ -209,8 +224,19 @@ export async function listVouchers(tx: TenantTx) {
     );
 }
 
-/** A voucher with its lines and the five checks, recomputed now. */
-export async function getVoucher(tx: TenantTx, voucherId: string) {
+/**
+ * A voucher with its lines and the five checks, recomputed now. `lock` takes a row lock first so
+ * approval, export, and void can't interleave on the same voucher.
+ */
+export async function getVoucher(tx: TenantTx, voucherId: string, options: { lock?: boolean } = {}) {
+  if (options.lock) {
+    const [locked] = await tx
+      .select({ id: rcmJournalVouchers.id })
+      .from(rcmJournalVouchers)
+      .where(eq(rcmJournalVouchers.id, voucherId))
+      .for("update");
+    if (!locked) return null;
+  }
   const [row] = await tx
     .select({
       voucher: rcmJournalVouchers,
@@ -248,7 +274,7 @@ export async function getVoucher(tx: TenantTx, voucherId: string) {
 export async function approveVoucher(tx: TenantTx, actor: Actor, voucherId: string) {
   if (!canRunRevenueCycle(actor.role))
     throw new VoucherError("Only administrators and RCM managers can approve vouchers.");
-  const detail = await getVoucher(tx, voucherId);
+  const detail = await getVoucher(tx, voucherId, { lock: true });
   if (!detail) throw new VoucherError("That voucher doesn't exist.");
   if (detail.voucher.status !== "draft") throw new VoucherError("Only draft vouchers can be approved.");
   if (detail.voucher.preparedBy === actor.userId) {
@@ -278,7 +304,7 @@ export async function approveVoucher(tx: TenantTx, actor: Actor, voucherId: stri
 export async function exportVoucher(tx: TenantTx, actor: Actor, voucherId: string) {
   if (!canRunRevenueCycle(actor.role))
     throw new VoucherError("Only administrators and RCM managers can export vouchers.");
-  const detail = await getVoucher(tx, voucherId);
+  const detail = await getVoucher(tx, voucherId, { lock: true });
   if (!detail) throw new VoucherError("That voucher doesn't exist.");
   const { voucher } = detail;
   if (voucher.status !== "approved" && voucher.status !== "exported") {
@@ -286,11 +312,15 @@ export async function exportVoucher(tx: TenantTx, actor: Actor, voucherId: strin
   }
   if (!allPassed(detail.checks))
     throw new VoucherError("A check no longer passes. Void the voucher and prepare it again.");
+  let firstExport = false;
   if (voucher.status === "approved") {
-    await tx
+    const updated = await tx
       .update(rcmJournalVouchers)
       .set({ status: "exported", exportedBy: actor.userId, exportedAt: new Date() })
-      .where(and(eq(rcmJournalVouchers.id, voucherId), eq(rcmJournalVouchers.status, "approved")));
+      .where(and(eq(rcmJournalVouchers.id, voucherId), eq(rcmJournalVouchers.status, "approved")))
+      .returning({ id: rcmJournalVouchers.id });
+    if (updated.length === 0) throw new VoucherError("The voucher changed. Reload and try again.");
+    firstExport = true;
   }
   await audit(tx, {
     action: "rcm.voucher_exported",
@@ -298,13 +328,23 @@ export async function exportVoucher(tx: TenantTx, actor: Actor, voucherId: strin
     tenantId: actor.tenantId,
     entityType: "rcm_voucher",
     entityId: voucherId,
-    metadata: { lines: detail.lines.length, firstExport: voucher.status === "approved" },
+    metadata: { lines: detail.lines.length, firstExport },
   });
   return { filename: `${voucher.number}.csv`, csv: voucherCsv(voucher, detail.lines) };
 }
 
-/** Voids a voucher (administrators, with a reason) so the period can be prepared again. */
-export async function voidVoucher(tx: TenantTx, actor: Actor, voucherId: string, reason: string) {
+/**
+ * Voids an approved or exported voucher (administrators, with a reason) so the month can be
+ * prepared again. An exported voucher is already in the general ledger, so the administrator must
+ * confirm it was reversed there first, or the month would be posted twice.
+ */
+export async function voidVoucher(
+  tx: TenantTx,
+  actor: Actor,
+  voucherId: string,
+  reason: string,
+  options: { reversedInGl?: boolean } = {},
+) {
   if (!canConfigureRevenueCycle(actor.role)) throw new VoucherError("Only administrators can void vouchers.");
   const trimmed = reason.trim();
   if (trimmed.length < 10 || trimmed.length > 500)
@@ -313,15 +353,22 @@ export async function voidVoucher(tx: TenantTx, actor: Actor, voucherId: string,
     .select({ status: rcmJournalVouchers.status })
     .from(rcmJournalVouchers)
     .where(eq(rcmJournalVouchers.id, voucherId))
-    .limit(1);
+    .for("update");
   if (!voucher) throw new VoucherError("That voucher doesn't exist.");
-  if (voucher.status === "void" || voucher.status === "superseded") {
-    throw new VoucherError("This voucher is no longer active.");
+  if (voucher.status !== "approved" && voucher.status !== "exported") {
+    throw new VoucherError(
+      "Only approved or exported vouchers can be voided. Drafts are replaced by preparing again.",
+    );
   }
-  await tx
+  if (voucher.status === "exported" && !options.reversedInGl) {
+    throw new VoucherError("Confirm that this voucher was reversed in the general ledger before voiding it.");
+  }
+  const updated = await tx
     .update(rcmJournalVouchers)
     .set({ status: "void", voidedBy: actor.userId, voidedAt: new Date(), voidReason: trimmed })
-    .where(and(eq(rcmJournalVouchers.id, voucherId), eq(rcmJournalVouchers.status, voucher.status)));
+    .where(and(eq(rcmJournalVouchers.id, voucherId), eq(rcmJournalVouchers.status, voucher.status)))
+    .returning({ id: rcmJournalVouchers.id });
+  if (updated.length === 0) throw new VoucherError("The voucher changed. Reload and try again.");
   await audit(tx, {
     action: "rcm.voucher_voided",
     actorUserId: actor.userId,
@@ -329,6 +376,6 @@ export async function voidVoucher(tx: TenantTx, actor: Actor, voucherId: string,
     entityType: "rcm_voucher",
     entityId: voucherId,
     reason: trimmed,
-    metadata: { previousStatus: voucher.status },
+    metadata: { previousStatus: voucher.status, reversedInGl: voucher.status === "exported" },
   });
 }

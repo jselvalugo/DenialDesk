@@ -22,8 +22,9 @@ Data: Restricted PHI (patient name, practice account number, service date, CPT, 
 | Threat | Control | Residual risk / owner |
 |---|---|---|
 | One person posts revenue alone | Approver ≠ preparer (app check + DB CHECK); approval requires all five checks | Two colluding users; audit trail shows both |
-| Altering a posted voucher | Lines insert-only; voucher update limited by column grant to workflow fields; no DELETE | Owner DB role (separate roles: open decision) |
-| Posting a month twice | Partial unique index: one approved/exported voucher per month; check 5 | Low |
+| Altering a posted voucher | Lines insert-only and only into drafts (trigger); voucher updates limited to workflow columns (column grant), forward-only and write-once (trigger); tenant-scoped FKs; no DELETE | Owner DB role can bypass (separate roles: open decision, owner: product owner, before Azure cutover) |
+| Posting a month twice | Partial unique index: one approved/exported voucher per month; check 5; voiding an exported voucher requires confirming its GL reversal (audited) | The confirmation is attestation-level: nothing checks the external GL |
+| Export/void racing | Row lock (`FOR UPDATE`) and checked updates before audit or CSV | Low |
 | Export triggered by a link (CSRF) | Export is a server action (origin-checked), not a GET route | Low |
 | PHI in the GL file or audit | Lines carry accounts, sites, amounts, period memos only; audit holds IDs/counts; test asserts no account numbers in the CSV | Low |
 | Formula injection in the GL file | `csvCell` neutralizes `= + - @` | Low |

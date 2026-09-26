@@ -134,7 +134,9 @@ export default async function VoucherPage({ params }: { params: Promise<{ id: st
               />
             )}
             {(voucher.status === "approved" || voucher.status === "exported") &&
-              canConfigureRevenueCycle(auth.role) && <VoidVoucherForm voucherId={voucher.id} />}
+              canConfigureRevenueCycle(auth.role) && (
+                <VoidVoucherForm voucherId={voucher.id} exported={voucher.status === "exported"} />
+              )}
             {voucher.status === "superseded" && (
               <p className="text-body text-muted">A newer draft for {period} replaced this voucher.</p>
             )}

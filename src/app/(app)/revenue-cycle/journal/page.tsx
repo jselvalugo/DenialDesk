@@ -9,7 +9,7 @@ import { Money } from "@/components/ui/Money";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
-import { listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
+import { CURRENT_FORMAT_VERSION, listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
 import { listVouchers } from "@/domain/revenue-cycle/vouchers";
 import { VoucherStatusBadge } from "./VoucherStatusBadge";
 import { PrepareVoucherForm } from "./VoucherForms";
@@ -23,16 +23,18 @@ export default async function JournalPage() {
     vouchers: await listVouchers(tx),
     files: await listFiles(tx),
   }));
-  const fileOptions = files.map((f) => ({
-    value: f.id,
-    label: `${periodLabel(f.periodYear, f.periodMonth)} · imported ${f.createdAt.toLocaleDateString("en-US", { timeZone: "America/New_York" })}`,
-  }));
+  const fileOptions = files
+    .filter((f) => f.formatVersion === CURRENT_FORMAT_VERSION)
+    .map((f) => ({
+      value: f.id,
+      label: `${periodLabel(f.periodYear, f.periodMonth)} · imported ${f.createdAt.toLocaleDateString("en-US", { timeZone: "America/New_York" })}`,
+    }));
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <PageHeader
         title="Journal vouchers"
-        description="Each month's charges, contractual adjustments, and payments, posted to the general ledger in balanced lines. A voucher is approved by someone other than its preparer, then exported for the GL."
+        description="Each month's charges, adjustments and write-offs, and payments, posted to the general ledger in balanced lines. A voucher is approved by someone other than its preparer, then exported for the GL."
       />
 
       {canRunRevenueCycle(auth.role) && (

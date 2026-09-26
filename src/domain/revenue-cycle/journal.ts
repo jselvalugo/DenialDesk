@@ -1,4 +1,5 @@
 import { csvCell } from "@/lib/csv/parse";
+import { formatCents } from "@/lib/format";
 import { periodEnd } from "./monthly-file";
 
 /**
@@ -22,7 +23,8 @@ export type LineRole = "charges" | "adjustments" | "payments" | "reclass";
 
 /** Open receivable by site and AR account, keyed by `balanceKey`. */
 export type Balances = Map<string, number>;
-export const balanceKey = (siteCode: string, arGl: string) => `${siteCode}|${arGl}`;
+export const balanceKey = (siteCode: string, arGl: string) => JSON.stringify([siteCode, arGl]);
+const parseKey = (key: string) => JSON.parse(key) as [string, string];
 
 export interface VoucherLine {
   lineNumber: number;
@@ -99,7 +101,7 @@ export function buildVoucherLines(
       const difference =
         (balances.closing.get(key) ?? 0) - (balances.opening.get(key) ?? 0) - (movements.get(key) ?? 0);
       if (difference === 0) continue;
-      const [site, account] = key.split("|") as [string, string];
+      const [site, account] = parseKey(key);
       lines.push({
         role: "reclass",
         lineNumber: lines.length + 1,
@@ -124,8 +126,12 @@ export interface CheckInput {
   accounts: Map<string, AccountKind>;
   /** Another approved or exported voucher for the same period. */
   otherPostedVoucher: string | null;
-  /** Open receivables by site and AR account: the prior month's file (null if none) and this one's. */
-  balances: { opening: Balances | null; closing: Balances };
+  /**
+   * Open receivables by site and AR account: the prior month's file and this one's. `opening` is
+   * null for the practice's first imported month; `missingPrior` names a prior month that has no
+   * current-format file although earlier months do (a gap).
+   */
+  balances: { opening: Balances | null; closing: Balances; missingPrior?: string | null };
 }
 
 export interface VoucherCheck {
@@ -135,8 +141,7 @@ export interface VoucherCheck {
   detail: string;
 }
 
-const money = (cents: number) =>
-  (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+const money = formatCents;
 
 export function checkVoucher(input: CheckInput): VoucherCheck[] {
   const { lines, source, accounts } = input;
@@ -165,7 +170,7 @@ export function checkVoucher(input: CheckInput): VoucherCheck[] {
       after.set(key, (after.get(key) ?? 0) + l.debitCents - l.creditCents);
     }
     for (const key of new Set([...after.keys(), ...closing.keys()])) {
-      if ((after.get(key) ?? 0) !== (closing.get(key) ?? 0)) untied.push(key.replace("|", " / "));
+      if ((after.get(key) ?? 0) !== (closing.get(key) ?? 0)) untied.push(parseKey(key).join(" / "));
     }
   }
 
@@ -179,9 +184,14 @@ export function checkVoucher(input: CheckInput): VoucherCheck[] {
     }[l.role];
     return !kind || !allowed.includes(kind);
   });
-  // Each movement pair must touch AR exactly once, or charges could bypass receivables.
+  // Each movement pair (two consecutive lines of one role) must touch AR exactly once, or
+  // charges could bypass receivables.
   const paired = lines.filter((l) => l.role !== "reclass");
-  const arLines = paired.filter(isAr).length;
+  let badPairs = paired.length % 2;
+  for (let i = 0; i + 1 < paired.length; i += 2) {
+    const [x, y] = [paired[i]!, paired[i + 1]!];
+    if (x.role !== y.role || Number(isAr(x)) + Number(isAr(y)) !== 1) badPairs += 1;
+  }
   const missingSite = lines.filter((l) => l.siteCode.trim() === "").length;
 
   return [
@@ -208,23 +218,25 @@ export function checkVoucher(input: CheckInput): VoucherCheck[] {
     {
       id: "receivables_tie",
       label: "Receivables tie to the file by account and site",
-      passed: untied.length === 0,
-      detail: !opening
-        ? "First imported month: opening receivables come from your general ledger."
-        : untied.length > 0
-          ? `Don't match the file's open balances: ${untied.slice(0, 5).join(", ")}${untied.length > 5 ? ", …" : ""}.`
-          : "Opening balances plus this month's movements equal the file's open balances.",
+      passed: untied.length === 0 && !input.balances.missingPrior,
+      detail: input.balances.missingPrior
+        ? `No current activity file for ${input.balances.missingPrior}. Import it first, so this month's receivables can be tied.`
+        : !opening
+          ? "First imported month: opening receivables come from your general ledger."
+          : untied.length > 0
+            ? `Don't match the file's open balances: ${untied.slice(0, 5).join(", ")}${untied.length > 5 ? ", …" : ""}.`
+            : "Opening balances plus this month's movements equal the file's open balances.",
     },
     {
       id: "accounts_valid",
       label: "Accounts and sites are valid",
-      passed: wrongAccounts.length === 0 && missingSite === 0 && arLines * 2 === paired.length,
+      passed: wrongAccounts.length === 0 && missingSite === 0 && badPairs === 0,
       detail:
         wrongAccounts.length > 0
           ? `Not in the chart or the wrong type: ${[...new Set(wrongAccounts.map((l) => l.account))].join(", ")}.`
           : missingSite > 0
             ? `${missingSite} lines have no site. Set a default site and re-import the file.`
-            : arLines * 2 !== paired.length
+            : badPairs > 0
               ? "Every movement must post to exactly one receivable account."
               : "Every account is in the chart with the right type, and every line has a site.",
     },
@@ -243,7 +255,9 @@ export const allPassed = (checks: VoucherCheck[]) => checks.every((c) => c.passe
 
 export const GL_CSV_HEADER = ["Journal", "Date", "Account", "Site", "Debit", "Credit", "Memo"];
 
-const amount = (cents: number) => (cents === 0 ? "" : (cents / 100).toFixed(2));
+/** Non-negative cents as "1234.56" with integer arithmetic only. */
+const amount = (cents: number) =>
+  cents === 0 ? "" : `${Math.trunc(cents / 100)}.${String(cents % 100).padStart(2, "0")}`;
 
 /** General-ledger import CSV, dated the last day of the period. Formula-safe cells. */
 export function voucherCsv(
