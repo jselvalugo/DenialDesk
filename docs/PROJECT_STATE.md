@@ -119,7 +119,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   tenant tables FORCE RLS, so a non-superuser migration owner (Netlify, Azure) sees no rows
   otherwise. Local and CI databases use a superuser and hide this.
 - Server-side validation must reject impossible dates (`z.iso.date()`); `sanitizeDatabaseError`
-  drops messages for SQLSTATE class 22 because they quote values.
+  drops messages for SQLSTATE class 22 because they quote values, and for class 23 (unique/check/FK/
+  not-null) keeps only `code` + `constraint` (Postgres puts row values in `detail`). Match integrity
+  errors on `.code` / `.constraint`, never on message text.
+- `onRequestError` (src/instrumentation.ts) logs route template, digest, error name and SQLSTATE
+  only; Next.js still logs the error itself, so error messages must be PHI-free at the source.
 - Local test DB without Docker: `initdb`/`pg_ctl` from `/usr/lib/postgresql/16/bin` as the
   `postgres` user, with the data dir somewhere that user can reach.
 - Playwright in this cloud env: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.

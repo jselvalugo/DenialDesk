@@ -385,7 +385,8 @@ describe("claim_versions tenant isolation (R-7.2.4)", () => {
           reason: "Cross-tenant attempt",
         }),
       ),
-      /foreign key/,
+      // Integrity violations keep only SQLSTATE 23503 (foreign key) and the constraint name.
+      /SQLSTATE 23503\) on "claim_versions_claim_fk"/,
     );
   });
 

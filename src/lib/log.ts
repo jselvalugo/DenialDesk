@@ -7,7 +7,20 @@ type LogValue = string | number | boolean;
 export type LogFields = Record<string, LogValue>;
 type Level = "debug" | "info" | "warn" | "error";
 
-const ALLOWED_EXTRA_KEYS = new Set(["durationMs", "count", "status", "attempt"]);
+// route/routeType/digest/errorName/constraint carry code-defined values (route templates, error
+// class names, schema identifiers); callers validate them first (src/lib/request-error.ts,
+// src/db/tenant.ts).
+const ALLOWED_EXTRA_KEYS = new Set([
+  "durationMs",
+  "count",
+  "status",
+  "attempt",
+  "route",
+  "routeType",
+  "digest",
+  "errorName",
+  "constraint",
+]);
 const EVENT_NAME = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)+$/;
 
 export function isAllowedKey(key: string): boolean {
