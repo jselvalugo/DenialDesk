@@ -22,6 +22,7 @@ export type AuditAction =
   | "denial.note_added"
   | "patient.member_id_revealed"
   | "system.demo_seeded"
+  | "system.admin_repaired"
   | "auth.demo_login"
   | "auth.password_changed"
   | "security.rate_limited"

@@ -7,6 +7,7 @@ import { limitCurrentRequest } from "@/lib/rate-limit";
 // Pre-production only (ADR 0003): seeds the synthetic demo practice where the database is only
 // reachable from inside the platform (Netlify Database). Locked three ways: 404 in production,
 // a secret bearer token (SEED_TOKEN, ≥ 32 chars), and it only ever creates the demo practice once.
+// Calling it again repairs the seeded admin (password from env, lockout cleared, optional MFA reset).
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -35,7 +36,11 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  const status = await seedDemoPractice({ email, password });
-  if (status === "seeded") await auditSystem({ action: "system.demo_seeded" });
+  const body = (await request.json().catch(() => ({}))) as { resetMfa?: unknown };
+  const status = await seedDemoPractice({ email, password }, { resetMfa: body.resetMfa === true });
+  await auditSystem({
+    action: status === "seeded" ? "system.demo_seeded" : "system.admin_repaired",
+    metadata: { resetMfa: body.resetMfa === true },
+  });
   return Response.json({ status }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -1,25 +1,32 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
+import { hashPassword } from "@/auth/password";
 import { systemDb } from "./client";
-import { tenants } from "./schema";
+import { memberships, sessions, tenants, users } from "./schema";
 import { seedPractice } from "./seed";
 
 export const DEMO_PRACTICE = "Coral Bay Physicians (synthetic)";
 
 /**
- * Creates the synthetic demo practice once. Returns "exists" if it's already there, so repeated
- * calls are harmless. Used by `pnpm db:seed` and the pre-production seed endpoint.
+ * Creates the synthetic demo practice once. If it already exists, repairs its admin account
+ * instead ("repaired"): creates the admin if missing, otherwise resets the password to the
+ * configured one and clears any lockout, and with `resetMfa` clears two-step enrollment so it can
+ * be set up again. This is how the owner regains operator access in pre-production. Used by
+ * `pnpm db:seed` and the pre-production seed endpoint (token-protected, never in production).
  */
-export async function seedDemoPractice(admin: {
-  email: string;
-  password: string;
-}): Promise<"seeded" | "exists"> {
-  const existing = await systemDb()
+export async function seedDemoPractice(
+  admin: { email: string; password: string },
+  options: { resetMfa?: boolean } = {},
+): Promise<"seeded" | "repaired"> {
+  const [existing] = await systemDb()
     .select({ id: tenants.id })
     .from(tenants)
     .where(eq(tenants.name, DEMO_PRACTICE))
     .limit(1);
-  if (existing.length > 0) return "exists";
+  if (existing) {
+    await repairAdmin(existing.id, admin, options.resetMfa ?? false);
+    return "repaired";
+  }
   await seedPractice({
     practiceName: DEMO_PRACTICE,
     asOf: todayIn(),
@@ -31,4 +38,46 @@ export async function seedDemoPractice(admin: {
     ],
   });
   return "seeded";
+}
+
+async function repairAdmin(
+  tenantId: string,
+  admin: { email: string; password: string },
+  resetMfa: boolean,
+): Promise<void> {
+  const passwordHash = await hashPassword(admin.password);
+  await systemDb().transaction(async (tx) => {
+    const [user] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(sql`lower(${users.email}) = lower(${admin.email})`)
+      .limit(1);
+    const userId =
+      user?.id ??
+      (
+        await tx
+          .insert(users)
+          .values({ email: admin.email, displayName: "Morgan Delacroix", passwordHash })
+          .returning({ id: users.id })
+      )[0]!.id;
+    await tx
+      .update(users)
+      .set({
+        passwordHash,
+        mustChangePassword: false,
+        failedLoginCount: 0,
+        lockedUntil: null,
+        disabledAt: null,
+        ...(resetMfa ? { totpSecretEnc: null, mfaEnrolledAt: null, totpLastStep: null } : {}),
+      })
+      .where(eq(users.id, userId));
+    const [membership] = await tx
+      .select({ id: memberships.id })
+      .from(memberships)
+      .where(and(eq(memberships.tenantId, tenantId), eq(memberships.userId, userId)))
+      .limit(1);
+    if (!membership) await tx.insert(memberships).values({ tenantId, userId, role: "admin" });
+    // Any session opened with the old credentials ends.
+    await tx.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.userId, userId));
+  });
 }

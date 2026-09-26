@@ -9,13 +9,11 @@ async function main() {
   const email = process.env.SEED_ADMIN_EMAIL ?? "demo.admin@denialdesk.test";
   const password = process.env.SEED_ADMIN_PASSWORD ?? randomBytes(12).toString("base64url");
   const result = await seedDemoPractice({ email, password });
-  if (result === "exists") {
-    process.stdout.write(`"${DEMO_PRACTICE}" already exists; nothing to do.\n`);
-    return;
-  }
   process.stdout.write(
     [
-      `Seeded "${DEMO_PRACTICE}".`,
+      result === "seeded"
+        ? `Seeded "${DEMO_PRACTICE}".`
+        : `"${DEMO_PRACTICE}" already exists; its admin password was reset and any lockout cleared.`,
       `Sign in as ${email}`,
       process.env.SEED_ADMIN_PASSWORD
         ? "Password: from SEED_ADMIN_PASSWORD"
