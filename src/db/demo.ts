@@ -60,7 +60,10 @@ async function repairAdmin(
       .select({ id: users.id })
       .from(users)
       .where(sql`lower(${users.email}) = lower(${admin.email})`)
-      .limit(1);
+      .limit(1)
+      // Locks the user row so a concurrent membership insert (which needs a key-share lock on it)
+      // waits until this repair commits, keeping the "no other practice" check true.
+      .for("update");
     if (user) {
       // Only ever touch an account that belongs to the seeded practice alone: never another
       // practice's user who happens to share the configured email.
