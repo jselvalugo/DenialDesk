@@ -14,7 +14,12 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
-import { AGING_BUCKETS } from "@/domain/revenue-cycle/aging";
+import {
+  AGING_BUCKETS,
+  over90Cents,
+  over90ShareBps,
+  OVER_90_WARNING_SHARE_BPS,
+} from "@/domain/revenue-cycle/aging";
 import { periodLabel } from "@/domain/revenue-cycle/imports";
 import { receivablesReport } from "@/domain/revenue-cycle/receivables";
 import { audit } from "@/lib/audit";
@@ -74,9 +79,14 @@ export default async function AgingPage({
 
   const { aging, selected } = report;
   const label = periodLabel(selected.periodYear, selected.periodMonth);
-  const over90 = aging.totals.buckets["91_120"] + aging.totals.buckets.over_120;
+  const over90 = over90Cents(aging.totals.buckets);
+  const over90Bps = over90ShareBps(over90, aging.totals.totalCents);
   const credits = aging.credits.reduce((t, c) => t + c.totalCents, 0);
-  const latestRecon = report.reconciliation.at(-1);
+  // The tile is for "this month" (the header says "at the end of {selected month}"), so it must
+  // read the reconciliation row for the selected period, not always the most recent one (F6).
+  const latestRecon = report.reconciliation.find(
+    (r) => r.periodYear === selected.periodYear && r.periodMonth === selected.periodMonth,
+  );
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
@@ -115,14 +125,8 @@ export default async function AgingPage({
         <StatTile
           label="Over 90 days"
           value={formatCents(over90)}
-          detail={
-            aging.totals.totalCents > 0
-              ? `${((over90 / aging.totals.totalCents) * 100).toFixed(1)}% of open A/R`
-              : "No open A/R"
-          }
-          emphasis={
-            aging.totals.totalCents > 0 && over90 / aging.totals.totalCents > 0.25 ? "warning" : undefined
-          }
+          detail={over90Bps === null ? "No open A/R" : `${(over90Bps / 100).toFixed(1)}% of open A/R`}
+          emphasis={over90Bps !== null && over90Bps > OVER_90_WARNING_SHARE_BPS ? "warning" : undefined}
         />
         <StatTile
           label="Credit balances"
