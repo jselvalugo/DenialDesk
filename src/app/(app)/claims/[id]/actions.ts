@@ -18,7 +18,8 @@ const MAX_LINES = 50;
 
 /** Reads the correction form; field names are `line-<n>-<field>` for each line number. */
 function readForm(formData: FormData) {
-  const text = (name: string) => String(formData.get(name) ?? "");
+  // Bounded before parsing: every field here is short (codes, amounts, a 500-character reason).
+  const text = (name: string) => String(formData.get(name) ?? "").slice(0, 1_000);
   const lineNumbers = formData
     .getAll("lineNumber")
     .slice(0, MAX_LINES)

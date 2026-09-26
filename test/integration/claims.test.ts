@@ -4,8 +4,8 @@ import { todayIn } from "@rules/calendar";
 import { closeDatabase } from "@/db/client";
 import { auditEvents, claimLines, claims, claimVersions } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
-import { withTenant } from "@/db/tenant";
-import { filingSummary, getClaim, listClaims } from "@/domain/claims/queries";
+import { DatabaseError, withTenant } from "@/db/tenant";
+import { claimsOverview, getClaim } from "@/domain/claims/queries";
 import { ClaimCorrectionError, correctClaim } from "@/domain/claims/versions";
 import { generateDataset } from "@/domain/synthetic/generator";
 import { expectDbError } from "./helpers";
@@ -99,11 +99,15 @@ describe("claim version history (R-3.10.3)", () => {
         .from(auditEvents)
         .where(and(eq(auditEvents.action, "claim.corrected"), eq(auditEvents.entityId, claim.id))),
     );
+    // The typed reason stays in claim_versions; the audit row points at that version.
+    expect(event!.reason).toBe("claim_correction");
     expect(event!.metadata).toEqual({
       version: 2,
+      versionId: detail!.history[0]!.id,
       changedFields: "diagnosisCodes,line 1 units,line 1 chargeCents",
     });
-    expect(JSON.stringify(event!.metadata)).not.toContain("E11.65");
+    expect(JSON.stringify(event)).not.toContain("E11.65");
+    expect(JSON.stringify(event)).not.toContain("Coder review");
   });
 
   it("rejects a stale version, no-op edits, added lines, and future dates", async () => {
@@ -180,11 +184,141 @@ describe("claim version history (R-3.10.3)", () => {
     );
   });
 
+  it("the database refuses moving a claim to another patient or payer without a version", async () => {
+    const { claim } = await draftClaim(a);
+    const [other] = await withTenant(a, (tx) =>
+      tx
+        .select()
+        .from(claims)
+        .where(sql`${claims.patientId} <> ${claim.patientId}`)
+        .limit(1),
+    );
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.update(claims).set({ patientId: other!.patientId }).where(eq(claims.id, claim.id)),
+      ),
+      /must move to version/,
+    );
+  });
+
+  it("claims.created_at can't be changed (it marks claims created in a transaction)", async () => {
+    const { claim, lines } = await draftClaim(a);
+    await expectDbError(
+      withTenant(a, async (tx) => {
+        await tx
+          .update(claims)
+          .set({ createdAt: sql`now()` })
+          .where(eq(claims.id, claim.id));
+        await tx.update(claimLines).set({ units: 9 }).where(eq(claimLines.id, lines[0]!.id));
+      }),
+      /created_at cannot change/,
+    );
+  });
+
+  it("an impossible calendar date never reaches the database", async () => {
+    const { claim, lines } = await draftClaim(a);
+    await expect(
+      withTenant(a, (tx) =>
+        correctClaim(tx, {
+          ...a,
+          claimId: claim.id,
+          expectedVersion: claim.version,
+          today,
+          correction: {
+            serviceDate: "2026-02-30",
+            diagnosisCodes: claim.diagnosisCodes,
+            lines: lines.map((l) => ({ ...l })),
+            reason: "Bad date",
+          },
+        }),
+      ),
+    ).rejects.toThrow();
+    // A data exception's message quotes the value; the sanitized error keeps only its code.
+    const error = await withTenant(a, (tx) => tx.execute(sql`select '2026-02-30'::date`)).catch(
+      (e: Error) => e,
+    );
+    expect(error).toBeInstanceOf(DatabaseError);
+    expect((error as DatabaseError).code).toBe("22008");
+    expect((error as Error).message).not.toContain("2026-02-30");
+  });
+
   it("allows non-billed updates (payment posting) without a version", async () => {
     const { claim } = await draftClaim(a);
     await withTenant(a, (tx) =>
       tx.update(claims).set({ updatedAt: new Date() }).where(eq(claims.id, claim.id)),
     );
+  });
+
+  it("the database refuses adding a line to an existing claim without a version", async () => {
+    const { claim, lines } = await draftClaim(a);
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(claimLines).values({ ...lines[0]!, id: undefined, lineNumber: 90, claimId: claim.id }),
+      ),
+      /without a new claim version/,
+    );
+  });
+
+  it("the database stamps who and when on a version", async () => {
+    const { claim } = await draftClaim(a);
+    const snapshot = {
+      serviceDate: claim.serviceDate,
+      diagnosisCodes: [],
+      billedCents: 0,
+      status: "draft",
+      lines: [],
+    };
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(claimVersions).values({
+          tenantId: a.tenantId,
+          claimId: claim.id,
+          version: 80,
+          snapshot,
+          reason: "Impersonation attempt",
+          changedBy: b.userId,
+        }),
+      ),
+      /must be the current user/,
+    );
+    const [row] = await withTenant(a, (tx) =>
+      tx
+        .insert(claimVersions)
+        .values({
+          tenantId: a.tenantId,
+          claimId: claim.id,
+          version: 81,
+          snapshot,
+          reason: "Backdating attempt",
+          createdAt: new Date("2001-01-01T00:00:00Z"),
+        })
+        .returning({ createdAt: claimVersions.createdAt }),
+    );
+    expect(row!.createdAt.getUTCFullYear()).toBeGreaterThan(2001);
+  });
+
+  it("two corrections from the same page: one wins, the other is told to reload", async () => {
+    const { claim, lines } = await draftClaim(a);
+    const run = (units: number) =>
+      withTenant(a, (tx) =>
+        correctClaim(tx, {
+          ...a,
+          claimId: claim.id,
+          expectedVersion: claim.version,
+          today,
+          correction: {
+            serviceDate: claim.serviceDate,
+            diagnosisCodes: claim.diagnosisCodes,
+            lines: lines.map((l) => ({ ...l, units })),
+            reason: "Concurrent edit",
+          },
+        }),
+      );
+    const results = await Promise.allSettled([run(7), run(8)]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const failed = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+    expect(failed.reason).toBeInstanceOf(ClaimCorrectionError);
+    expect(String(failed.reason)).toMatch(/changed since you opened it/);
   });
 
   it("history is append-only", async () => {
@@ -233,6 +367,28 @@ describe("claim_versions tenant isolation (R-7.2.4)", () => {
     );
   });
 
+  it("rejects a version in its own tenant that points at another tenant's claim", async () => {
+    const { claim } = await draftClaim(b);
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(claimVersions).values({
+          tenantId: a.tenantId,
+          claimId: claim.id,
+          version: claim.version + 1,
+          snapshot: {
+            serviceDate: claim.serviceDate,
+            diagnosisCodes: [],
+            billedCents: 0,
+            status: "draft",
+            lines: [],
+          },
+          reason: "Cross-tenant attempt",
+        }),
+      ),
+      /foreign key/,
+    );
+  });
+
   it("can't correct another tenant's claim", async () => {
     const { claim, lines } = await draftClaim(b);
     await expect(
@@ -257,7 +413,7 @@ describe("claim_versions tenant isolation (R-7.2.4)", () => {
 describe("claims list and timely-filing summary (R-3.1.5)", () => {
   it("lists unsubmitted claims most urgent first, with rule-based deadlines", async () => {
     const { rows, total } = await withTenant(a, (tx) =>
-      listClaims(tx, { group: "unsubmitted", page: 1 }, today),
+      claimsOverview(tx, { group: "unsubmitted", page: 1 }, today),
     );
     expect(total).toBeGreaterThan(0);
     expect(rows.every((r) => r.status === "draft" || r.status === "rejected")).toBe(true);
@@ -266,17 +422,45 @@ describe("claims list and timely-filing summary (R-3.1.5)", () => {
     expect(rows.some((r) => r.filing?.state === "past_deadline")).toBe(true);
   });
 
+  it("filters unsubmitted claims by payer", async () => {
+    const all = await withTenant(a, (tx) => claimsOverview(tx, { group: "unsubmitted", page: 1 }, today));
+    const payerId = await withTenant(a, async (tx) => {
+      const [row] = await tx
+        .select({ payerId: claims.payerId })
+        .from(claims)
+        .where(eq(claims.id, all.rows[0]!.id));
+      return row!.payerId;
+    });
+    const filtered = await withTenant(a, (tx) =>
+      claimsOverview(tx, { group: "unsubmitted", payerId, page: 1 }, today),
+    );
+    expect(filtered.total).toBeGreaterThan(0);
+    expect(filtered.total).toBeLessThan(all.total);
+    expect(new Set(filtered.rows.map((r) => r.payerName))).toEqual(new Set([all.rows[0]!.payerName]));
+  });
+
   it("filters by filing state and keeps totals consistent", async () => {
-    const summary = await withTenant(a, (tx) => filingSummary(tx, today));
+    const { summary } = await withTenant(a, (tx) => claimsOverview(tx, { group: "all", page: 1 }, today));
     const past = await withTenant(a, (tx) =>
-      listClaims(tx, { group: "unsubmitted", filing: "past_deadline", page: 1 }, today),
+      claimsOverview(tx, { group: "unsubmitted", filing: "past_deadline", page: 1 }, today),
     );
     expect(past.total).toBe(summary.pastDeadline);
     expect(past.rows.every((r) => r.filing?.state === "past_deadline")).toBe(true);
+    for (const [filing, expected] of [
+      ["due_soon", summary.dueSoon],
+      ["not_configured", summary.notConfigured],
+    ] as const) {
+      const list = await withTenant(a, (tx) =>
+        claimsOverview(tx, { group: "unsubmitted", filing, page: 1 }, today),
+      );
+      expect(list.total).toBe(expected);
+      expect(expected).toBeGreaterThan(0);
+      expect(list.rows.every((r) => r.filing?.state === filing)).toBe(true);
+    }
   });
 
   it("shows no filing status for claims already with the payer", async () => {
-    const { rows } = await withTenant(a, (tx) => listClaims(tx, { group: "in_process", page: 1 }, today));
+    const { rows } = await withTenant(a, (tx) => claimsOverview(tx, { group: "in_process", page: 1 }, today));
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.filing === null)).toBe(true);
     const ids = rows.map((r) => r.id);

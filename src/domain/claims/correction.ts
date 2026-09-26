@@ -6,7 +6,10 @@ import type { ClaimSnapshot } from "@/db/schema";
 const CPT_HCPCS = /^[A-Z0-9]{5}$/;
 const MODIFIER = /^[A-Z0-9]{2}$/;
 const ICD10CM = /^[A-Z][0-9][0-9A-Z](\.?[0-9A-Z]{1,4})?$/;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** Earliest date of service accepted; anything older is a typo, not a claim to correct. */
+export const MIN_SERVICE_DATE = "2000-01-01";
+/** Longest code-list text read from the form, so a huge field can't be split into millions of items. */
+const MAX_CODE_TEXT = 200;
 
 export const MAX_DIAGNOSES = 12;
 export const MAX_MODIFIERS = 4;
@@ -15,6 +18,7 @@ export const MAX_REASON_LENGTH = 500;
 /** Splits a comma/space separated code list, upper-cased, blanks dropped. */
 export function splitCodes(text: string): string[] {
   return text
+    .slice(0, MAX_CODE_TEXT)
     .split(/[\s,]+/)
     .map((code) => code.trim().toUpperCase())
     .filter(Boolean);
@@ -43,7 +47,10 @@ const lineSchema = z.object({
 });
 
 export const correctionSchema = z.object({
-  serviceDate: z.string().regex(ISO_DATE, "Enter the date of service."),
+  // A real calendar date (rejects 2026-02-30), so invalid values never reach the database.
+  serviceDate: z.iso
+    .date("Enter a valid date of service.")
+    .refine((date) => date >= MIN_SERVICE_DATE, "Enter a valid date of service."),
   diagnosisCodes: z
     .array(z.string().regex(ICD10CM, "Diagnosis codes must be ICD-10-CM format (e.g. E11.9)."))
     .min(1, "Enter at least one diagnosis code.")

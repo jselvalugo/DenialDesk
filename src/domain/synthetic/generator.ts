@@ -330,12 +330,28 @@ export function generateDataset(options: {
     });
   }
 
-  // Unsubmitted claims at ages that straddle the 6- and 12-month filing windows, so the claims list
-  // shows every filing state. Generated after the adjudicated claims to keep their sequence stable.
-  const ages = [12, 45, 90, 140, 160, 172, 178, 183, 195, 240, 330, 380];
-  const unsubmittedCount = options.unsubmittedClaims ?? ages.length;
+  // Unsubmitted claims at ages (days since service) chosen per regime so the claims list shows every
+  // filing state: Florida (6 months) and Medicare (12 months) open, due soon, and past deadline, plus
+  // regimes with no filing rule. Generated after the adjudicated claims to keep their sequence stable.
+  const byRegime = (regime: Regime) => SYNTHETIC_PAYERS.find((p) => p.regime === regime)!;
+  const unsubmittedPlan: Array<[Regime, number]> = [
+    ["fl_insurer", 12],
+    ["fl_hmo", 45],
+    ["fl_insurer", 160],
+    ["fl_hmo", 172],
+    ["fl_insurer", 178],
+    ["fl_insurer", 200],
+    ["fl_hmo", 240],
+    ["medicare", 90],
+    ["medicare", 350],
+    ["medicare", 380],
+    ["medicare_advantage", 140],
+    ["erisa_self_funded", 195],
+  ];
+  const unsubmittedCount = options.unsubmittedClaims ?? unsubmittedPlan.length;
   for (let i = 0; i < unsubmittedCount; i++) {
-    const payer = SYNTHETIC_PAYERS[i % SYNTHETIC_PAYERS.length]!;
+    const [regime, age] = unsubmittedPlan[i % unsubmittedPlan.length]!;
+    const payer = byRegime(regime);
     const [procedureCode, charge] = random.pick(PROCEDURES);
     claims.push({
       key: `unsub${i}`,
@@ -344,7 +360,7 @@ export function generateDataset(options: {
       providerKey: random.pick(providers).key,
       locationKey: random.pick(locations).key,
       payerKey: payer.key,
-      serviceDate: addCalendarDays(asOf, -ages[i % ages.length]!),
+      serviceDate: addCalendarDays(asOf, -age),
       diagnosisCodes: [random.pick(DIAGNOSES)],
       electronic: true,
       payerReceivedDate: null,

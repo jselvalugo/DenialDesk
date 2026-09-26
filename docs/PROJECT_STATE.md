@@ -60,6 +60,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   PM exports never put member IDs there; accept the synthetic-only guard as attestation-level.
 - Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must
   honor; Medicare Advantage filing windows assumed to come from payer contracts (`specs/claims.md`).
+- Claims before real data: sensitivity masking of diagnosis codes in `claim_versions` snapshots and
+  history; retention/legal-hold path for append-only history; PIP/workers' comp/Medicaid filing
+  rules and the HMO citation for timely filing (`specs/claims.md`).
 - Revenue cycle: confirm the Capitation rule is meant to be shadowed by the Medicare/Medicaid wrap
   rule, and the GL account / payer-class names (seeded names are descriptive placeholders).
 
@@ -92,6 +95,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Next.js renders a hidden `role="alert"` route announcer; scope e2e alert queries to `main`.
 - Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
+- Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):
+  tenant tables FORCE RLS, so a non-superuser migration owner (Netlify, Azure) sees no rows
+  otherwise. Local and CI databases use a superuser and hide this.
+- Server-side validation must reject impossible dates (`z.iso.date()`); `sanitizeDatabaseError`
+  drops messages for SQLSTATE class 22 because they quote values.
 - Local test DB without Docker: `initdb`/`pg_ctl` from `/usr/lib/postgresql/16/bin` as the
   `postgres` user, with the data dir somewhere that user can reach.
 - Playwright in this cloud env: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`.

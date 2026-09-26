@@ -14,7 +14,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Select } from "@/components/ui/Select";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
-import { CLAIMS_PAGE_SIZE, filingSummary, listClaims } from "@/domain/claims/queries";
+import { CLAIMS_PAGE_SIZE, claimsOverview } from "@/domain/claims/queries";
 import { CLAIM_STATUSES, FILING_WARNING_DAYS } from "@/domain/claims/status";
 import { REGIME_LABELS } from "@/domain/denial-status";
 import { payerOptions } from "@/domain/denials/queries";
@@ -36,8 +36,7 @@ export default async function ClaimsPage({
   const today = todayIn();
 
   const { rows, total, truncated, summary, payers } = await withTenant(auth, async (tx) => {
-    const list = await listClaims(tx, filters, today);
-    const summary = await filingSummary(tx, today);
+    const list = await claimsOverview(tx, filters, today);
     const payers = await payerOptions(tx);
     await audit(tx, {
       action: "claim.list_viewed",
@@ -51,7 +50,7 @@ export default async function ClaimsPage({
         filters: claimFiltersToQuery(filters, { page: 1 }) || "default",
       },
     });
-    return { ...list, summary, payers };
+    return { ...list, payers };
   });
 
   const pages = Math.max(1, Math.ceil(total / CLAIMS_PAGE_SIZE));
@@ -85,7 +84,7 @@ export default async function ClaimsPage({
           emphasis={summary.pastDeadline > 0 ? "danger" : undefined}
           detail={
             summary.notConfigured > 0
-              ? `${summary.notConfigured} with no filing rule (payer contract)`
+              ? `${summary.notConfigured} with no filing rule configured`
               : "Likely denied as untimely"
           }
         />

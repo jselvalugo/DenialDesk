@@ -84,3 +84,13 @@ describe("claim version differences", () => {
     ]);
   });
 });
+
+describe("correction input bounds", () => {
+  it.each(["2026-02-30", "2026-13-01", "1999-12-31"])("rejects the date of service %s", (serviceDate) => {
+    expect(correctionSchema.safeParse({ ...valid, serviceDate }).success).toBe(false);
+  });
+
+  it("reads at most 200 characters of a code list", () => {
+    expect(splitCodes("A,".repeat(1_000_000)).length).toBeLessThanOrEqual(100);
+  });
+});

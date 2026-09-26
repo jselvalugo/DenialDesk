@@ -4,6 +4,7 @@ import {
   bigserial,
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -235,6 +236,8 @@ export const claims = pgTable(
   },
   (t) => [
     uniqueIndex("claims_tenant_number_key").on(t.tenantId, t.claimNumber),
+    // Target of tenant-scoped foreign keys (FKs bypass RLS, so the tenant is part of the key).
+    uniqueIndex("claims_tenant_id_key").on(t.tenantId, t.id),
     index("claims_tenant_payer_idx").on(t.tenantId, t.payerId),
   ],
 );
@@ -280,9 +283,7 @@ export const claimVersions = pgTable(
   {
     id: id(),
     tenantId: tenantId(),
-    claimId: uuid("claim_id")
-      .notNull()
-      .references(() => claims.id),
+    claimId: uuid("claim_id").notNull(),
     version: integer("version").notNull(),
     snapshot: jsonb("snapshot").$type<ClaimSnapshot>().notNull(),
     changedFields: text("changed_fields")
@@ -294,7 +295,15 @@ export const claimVersions = pgTable(
     changedBy: uuid("changed_by").references(() => users.id),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("claim_versions_claim_version_key").on(t.claimId, t.version)],
+  (t) => [
+    uniqueIndex("claim_versions_claim_version_key").on(t.tenantId, t.claimId, t.version),
+    // A version can only point at a claim of the same practice.
+    foreignKey({
+      name: "claim_versions_claim_fk",
+      columns: [t.tenantId, t.claimId],
+      foreignColumns: [claims.tenantId, claims.id],
+    }),
+  ],
 );
 
 // ---------------------------------------------------------------------------------------------

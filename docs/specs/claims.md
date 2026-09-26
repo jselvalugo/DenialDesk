@@ -54,8 +54,10 @@ submission.
 - [x] Code format checks: CPT/HCPCS `^[A-Z0-9]{5}$`, modifiers `^[A-Z0-9]{2}$` (max 4),
       ICD-10-CM `^[A-Z][0-9][0-9A-Z](\.?[0-9A-Z]{1,4})?$` (1–12 codes), units 1–999,
       charge $0.01–$99,999.99 per line; billed amount is the sum of line charges.
-- [x] Audit: list view (`claim.list_viewed`, claim IDs), detail view (`claim.viewed`), correction
-      (`claim.corrected`, version number and changed field names only — no values).
+- [x] Audit: list view (`claim.list_viewed`, claim IDs), detail view (`claim.viewed`, patient ID),
+      correction (`claim.corrected`: version number, version row ID, and changed field names only).
+      The typed reason can hold PHI, so it stays in `claim_versions` (Restricted PHI); the audit
+      row's `reason` is the fixed value `claim_correction`.
 - [x] Navigation "Claims" item is live; e2e covers list → detail → correction → history.
 
 ## Data / API changes
@@ -64,9 +66,15 @@ submission.
   `snapshot jsonb` (service date, diagnosis codes, lines, billed amount, status), `changed_fields
   text[]`, `reason text`, `changed_by`, `created_at`. RLS tenant isolation; `SELECT, INSERT`
   only for `denialdesk_app`; unique `(claim_id, version)`.
-- Trigger `claims_require_version` (BEFORE UPDATE): if service date, diagnosis codes, or billed
-  amount change, `NEW.version` must equal `OLD.version + 1` and a `claim_versions` row for that
-  version must exist.
+- Trigger `claims_require_version` (BEFORE UPDATE): if service date, diagnosis codes, billed
+  amount, patient, payer, provider, or location change, `NEW.version` must equal `OLD.version + 1`
+  and that version's row must exist from this transaction. `created_at` can't change.
+- Trigger `claim_lines_require_version`: lines of an existing claim change only after the claim
+  moved to a version written in this transaction. `claim_versions_stamp`: the database sets
+  `created_at`, and `changed_by` must be the signed-in user (or NULL for system versions).
+- `claim_versions (tenant_id, claim_id)` references `claims (tenant_id, id)`, so a version can't
+  point at another practice's claim (FKs bypass RLS). The version-1 backfill runs tenant by tenant
+  so it works for a non-superuser migration owner, and fails the migration if any claim is missed.
 - Server action `correctClaim` (claim ID, fields, reason). No new API routes.
 - Snapshots hold codes and amounts, not patient demographics or member IDs.
 
@@ -82,6 +90,18 @@ submission.
 - Corrected/void claims to the payer (frequency 7/8) — Appeals phase.
 - Code validity against licensed code sets (AMA CPT license, CMS ICD-10 files) — format only today.
 
+## Before real data (from the C1 compliance review)
+- `claim_versions` snapshots copy diagnosis and procedure codes that can be sensitive (HIV, SUD,
+  behavioral health); sensitivity tagging and masking must cover snapshots and the history diff
+  (R-3.5.1, R-4.5.1).
+- Retention / legal-hold path for the append-only history (R-9.2.1).
+- Whether a date-of-service correction that clears a past-deadline warning needs manager review.
+
 ## Open questions
 - Which Florida timely-filing exceptions (§ 627.6131(2)) must the C3 block honor? (counsel)
 - Should Medicare Advantage use the plan contract's filing window (payer setup) — assumed yes.
+- PIP (Fla. Stat. § 627.736(5)(c)), workers' comp, and Medicaid filing limits are not in `rules/`
+  yet; the UI says "no filing rule configured", never that none exists. (florida-rules-engine + counsel)
+- `fl.timely_filing.initial` cites § 627.6131(2) for HMO claims too; confirm § 641.3155. (counsel)
+- Is timely filing met when the claim is sent or when the payer receives it? Submitted claims
+  without a receipt date keep showing the deadline until C4. (counsel)

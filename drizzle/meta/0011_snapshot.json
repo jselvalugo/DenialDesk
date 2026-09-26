@@ -1,5 +1,5 @@
 {
-  "id": "44653b88-e408-438b-9a20-dedc8afca544",
+  "id": "062abb07-8f59-4279-b666-4cdb69b86b95",
   "prevId": "47a75206-c9f9-40a6-9847-f5d0d0ef8de2",
   "version": "7",
   "dialect": "postgresql",
@@ -504,6 +504,12 @@
           "name": "claim_versions_claim_version_key",
           "columns": [
             {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
               "expression": "claim_id",
               "isExpression": false,
               "asc": true,
@@ -536,19 +542,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "claim_versions_claim_id_claims_id_fk": {
-          "name": "claim_versions_claim_id_claims_id_fk",
-          "tableFrom": "claim_versions",
-          "tableTo": "claims",
-          "columnsFrom": [
-            "claim_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "claim_versions_changed_by_users_id_fk": {
           "name": "claim_versions_changed_by_users_id_fk",
           "tableFrom": "claim_versions",
@@ -557,6 +550,21 @@
             "changed_by"
           ],
           "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "claim_versions_claim_fk": {
+          "name": "claim_versions_claim_fk",
+          "tableFrom": "claim_versions",
+          "tableTo": "claims",
+          "columnsFrom": [
+            "tenant_id",
+            "claim_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
             "id"
           ],
           "onDelete": "no action",
@@ -701,6 +709,27 @@
             },
             {
               "expression": "claim_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "claims_tenant_id_key": {
+          "name": "claims_tenant_id_key",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

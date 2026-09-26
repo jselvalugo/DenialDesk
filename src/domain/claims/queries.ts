@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, inArray, notInArray, type SQL } from "drizzle-orm";
 import type { TenantTx } from "@/db/tenant";
 import { claimLines, claims, denials, locations, patients, payers, providers } from "@/db/schema";
-import { filingStatus, UNSUBMITTED_STATUSES, type FilingState } from "./status";
+import { filingStatus, UNSUBMITTED_STATUSES, type FilingState, type FilingStatus } from "./status";
 import { claimHistory } from "./versions";
 
 export const CLAIMS_PAGE_SIZE = 25;
@@ -44,41 +44,86 @@ function baseQuery(tx: TenantTx) {
 }
 
 /**
- * Unsubmitted claims with their filing status, most urgent first: past deadline, then soonest
- * deadline, then not configured (no statutory rule for the regime).
+ * Every unsubmitted claim's filing status, most urgent first: past deadline, then soonest deadline,
+ * then not configured (no filing rule for the regime). Loads only the columns needed to sort; the
+ * patient columns are read for the one page shown.
  */
-async function unsubmittedWithFiling(tx: TenantTx, today: string, payerId?: string) {
-  const conditions: SQL[] = [inArray(claims.status, UNSUBMITTED_STATUSES)];
-  if (payerId) conditions.push(eq(claims.payerId, payerId));
-  const rows: ListRow[] = await baseQuery(tx)
-    .where(and(...conditions))
+async function unsubmittedIndex(tx: TenantTx, today: string) {
+  const rows = await tx
+    .select({
+      id: claims.id,
+      payerId: claims.payerId,
+      regime: payers.regime,
+      serviceDate: claims.serviceDate,
+      billedCents: claims.billedCents,
+    })
+    .from(claims)
+    .innerJoin(payers, eq(payers.id, claims.payerId))
+    .where(inArray(claims.status, UNSUBMITTED_STATUSES))
     .orderBy(asc(claims.serviceDate), asc(claims.id))
     .limit(UNSUBMITTED_LIMIT);
-  return rows
+  const index = rows
     .map((row) => ({ ...row, filing: filingStatus(row.regime, row.serviceDate, today) }))
     .sort((a, b) => {
       const ad = a.filing.daysRemaining ?? Number.POSITIVE_INFINITY;
       const bd = b.filing.daysRemaining ?? Number.POSITIVE_INFINITY;
       return ad - bd || b.billedCents - a.billedCents;
     });
+  return { index, truncated: rows.length >= UNSUBMITTED_LIMIT };
 }
 
-export type ClaimListRow = ListRow & { filing: ReturnType<typeof filingStatus> | null };
+export type ClaimListRow = ListRow & { filing: FilingStatus | null };
 
-export async function listClaims(
+export interface FilingSummary {
+  unsubmitted: number;
+  unsubmittedCents: number;
+  dueSoon: number;
+  pastDeadline: number;
+  notConfigured: number;
+}
+
+/**
+ * One page of claims plus the unsubmitted-claim totals (R-3.1.5), from a single scan of the
+ * unsubmitted set. Totals ignore the list filters. `truncated` = more than UNSUBMITTED_LIMIT
+ * unsubmitted claims, so totals and ordering cover the oldest ones only.
+ */
+export async function claimsOverview(
   tx: TenantTx,
   filters: ClaimFilters,
   today: string,
-): Promise<{ rows: ClaimListRow[]; total: number; truncated: boolean }> {
+): Promise<{ rows: ClaimListRow[]; total: number; truncated: boolean; summary: FilingSummary }> {
+  const { index, truncated } = await unsubmittedIndex(tx, today);
+  const summary: FilingSummary = {
+    unsubmitted: index.length,
+    unsubmittedCents: index.reduce((sum, row) => sum + row.billedCents, 0),
+    dueSoon: index.filter((row) => row.filing.state === "due_soon").length,
+    pastDeadline: index.filter((row) => row.filing.state === "past_deadline").length,
+    notConfigured: index.filter((row) => row.filing.state === "not_configured").length,
+  };
   const offset = (filters.page - 1) * CLAIMS_PAGE_SIZE;
+
   if (filters.group === "unsubmitted") {
-    const all = await unsubmittedWithFiling(tx, today, filters.payerId);
-    const matching = filters.filing ? all.filter((row) => row.filing.state === filters.filing) : all;
-    return {
-      rows: matching.slice(offset, offset + CLAIMS_PAGE_SIZE),
-      total: matching.length,
-      truncated: all.length >= UNSUBMITTED_LIMIT,
-    };
+    const matching = index.filter(
+      (row) =>
+        (!filters.payerId || row.payerId === filters.payerId) &&
+        (!filters.filing || row.filing.state === filters.filing),
+    );
+    const page = matching.slice(offset, offset + CLAIMS_PAGE_SIZE);
+    const details =
+      page.length === 0
+        ? []
+        : await baseQuery(tx).where(
+            inArray(
+              claims.id,
+              page.map((row) => row.id),
+            ),
+          );
+    const byId = new Map(details.map((row) => [row.id, row]));
+    const rows = page.flatMap((row) => {
+      const detail = byId.get(row.id);
+      return detail ? [{ ...detail, filing: row.filing }] : [];
+    });
+    return { rows, total: matching.length, truncated, summary };
   }
 
   const conditions: SQL[] = [];
@@ -100,18 +145,7 @@ export async function listClaims(
     })),
     total,
     truncated: false,
-  };
-}
-
-/** Totals for unsubmitted claims, independent of list filters (R-3.1.5). */
-export async function filingSummary(tx: TenantTx, today: string) {
-  const rows = await unsubmittedWithFiling(tx, today);
-  return {
-    unsubmitted: rows.length,
-    unsubmittedCents: rows.reduce((sum, row) => sum + row.billedCents, 0),
-    dueSoon: rows.filter((row) => row.filing.state === "due_soon").length,
-    pastDeadline: rows.filter((row) => row.filing.state === "past_deadline").length,
-    notConfigured: rows.filter((row) => row.filing.state === "not_configured").length,
+    summary,
   };
 }
 

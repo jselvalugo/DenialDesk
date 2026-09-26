@@ -58,6 +58,8 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
       tenantId: auth.tenantId,
       entityType: "claim",
       entityId: id,
+      // Whose record was shown, for accounting of disclosures (IDs only).
+      metadata: { patientId: detail.patient.id },
     });
     return detail;
   });
@@ -67,6 +69,9 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   const status = CLAIM_STATUSES[claim.status];
   const unsubmitted = isUnsubmitted(claim.status);
   const filing = filingStatus(payer.regime, claim.serviceDate, today);
+  // Sent but not yet confirmed received (999/277CA capture is phase C4): the window still matters.
+  const awaitingReceipt = claim.status === "submitted" && !claim.payerReceivedDate;
+  const showDeadline = unsubmitted || awaitingReceipt;
   const canCorrect = canCorrectClaims(auth.role) && unsubmitted;
   const snapshots = new Map(detail.history.map((v) => [v.version, v.snapshot]));
 
@@ -161,7 +166,13 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                   version={claim.version}
                   serviceDate={claim.serviceDate}
                   diagnosisCodes={claim.diagnosisCodes}
-                  lines={detail.lines}
+                  lines={detail.lines.map((l) => ({
+                    lineNumber: l.lineNumber,
+                    procedureCode: l.procedureCode,
+                    modifiers: l.modifiers,
+                    units: l.units,
+                    chargeCents: l.chargeCents,
+                  }))}
                 />
               </div>
             )}
@@ -184,7 +195,8 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                   <li key={entry.id} className="py-3 first:pt-0 last:pb-0">
                     <p className="text-label text-muted">
                       <span className="font-medium text-text">Version {entry.version}</span> ·{" "}
-                      {entry.author ?? "System"} · {dateTime.format(entry.createdAt)}
+                      {entry.author ?? (entry.changedBy ? "Former team member" : "System")} ·{" "}
+                      {dateTime.format(entry.createdAt)}
                     </p>
                     <p className="mt-1 text-body whitespace-pre-wrap text-text">{entry.reason}</p>
                     {changes.length > 0 && (
@@ -209,15 +221,20 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
 
         <div className="flex flex-col gap-6">
           <Panel title="Timely filing">
-            {!unsubmitted ? (
+            {!showDeadline ? (
               <p className="text-body text-muted">
                 {claim.payerReceivedDate
                   ? `Received by the payer ${formatDate(claim.payerReceivedDate)}.`
-                  : "Sent to the payer."}{" "}
+                  : "Accepted by the payer."}{" "}
                 Timely filing no longer applies.
               </p>
             ) : filing.deadline && filing.daysRemaining !== null ? (
               <div className="flex flex-col gap-3">
+                {awaitingReceipt && (
+                  <p className="text-body text-text">
+                    Sent; the filing window is met once the payer confirms receipt.
+                  </p>
+                )}
                 <DeadlineIndicator
                   dueDate={filing.deadline.date}
                   daysRemaining={filing.daysRemaining}
@@ -236,8 +253,8 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
               </div>
             ) : (
               <p className="text-body text-warning-fg">
-                No statutory filing rule for {REGIME_LABELS[payer.regime]} claims. Check the payer contract
-                for the filing window.
+                DenialDesk has no filing rule configured for {REGIME_LABELS[payer.regime]} claims. Confirm the
+                filing window with the payer contract or applicable law before it lapses.
               </p>
             )}
           </Panel>

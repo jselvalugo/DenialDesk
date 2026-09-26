@@ -235,7 +235,8 @@ export async function seedPractice(options: {
         periodMonth: period.month,
         defaultSiteId: firstSite?.id ?? null,
         lines: generateMonthlyLines({
-          seed: dataset.claims.length,
+          // Adjudicated claims only, so adding unsubmitted claims didn't change the demo file.
+          seed: dataset.claims.filter((c) => !c.unsubmitted).length,
           periodYear: period.year,
           periodMonth: period.month,
           facilities: dataset.locations.map((l) => l.name),

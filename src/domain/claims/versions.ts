@@ -70,15 +70,18 @@ export async function correctClaim(
   if (changes.length === 0) throw new ClaimCorrectionError("Nothing changed.");
 
   const version = claim.version + 1;
-  await tx.insert(claimVersions).values({
-    tenantId: input.tenantId,
-    claimId: claim.id,
-    version,
-    snapshot: after,
-    changedFields: changes,
-    reason: correction.reason,
-    changedBy: input.userId,
-  });
+  const [row] = await tx
+    .insert(claimVersions)
+    .values({
+      tenantId: input.tenantId,
+      claimId: claim.id,
+      version,
+      snapshot: after,
+      changedFields: changes,
+      reason: correction.reason,
+      changedBy: input.userId,
+    })
+    .returning({ id: claimVersions.id });
   await tx
     .update(claims)
     .set({
@@ -114,9 +117,10 @@ export async function correctClaim(
     tenantId: input.tenantId,
     entityType: "claim",
     entityId: claim.id,
-    reason: correction.reason,
-    // Field names and the version number only; no codes, dates, or amounts.
-    metadata: { version, changedFields: changes.join(",") },
+    // The typed reason can hold PHI: it stays in claim_versions (Restricted PHI). The audit row
+    // points at that version and names the changed fields only; no codes, dates, or amounts.
+    reason: "claim_correction",
+    metadata: { version, versionId: row!.id, changedFields: changes.join(",") },
   });
   return { version, changedFields: changes };
 }
@@ -131,6 +135,7 @@ export async function claimHistory(tx: TenantTx, claimId: string) {
       reason: claimVersions.reason,
       createdAt: claimVersions.createdAt,
       author: users.displayName,
+      changedBy: claimVersions.changedBy,
     })
     .from(claimVersions)
     .leftJoin(users, eq(users.id, claimVersions.changedBy))
