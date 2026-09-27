@@ -7,8 +7,9 @@ _Last updated: 2026-09-27_
 
 ## Where we are
 - DenialDesk University U1 (`specs/denialdesk-university.md`, owner request 2026-09-27): in-app
-  courses at `/university`, reached from a "University" link in the global header and a "DenialDesk
-  University" item in the user menu (not a module in the switcher). Five courses (getting started,
+  courses at `/university`, reached from the "University of DenialDesk" logo button in the global
+  header and on the welcome page, and a "DenialDesk University" item in the user menu (not a module
+  in the switcher). Five courses (getting started,
   reading a denial, Florida prompt pay, appeals and deadlines, protecting patient data) authored in
   `src/domain/university/catalog.ts` as typed blocks; every legal value is a `rules` block resolved
   from `rules/catalog.ts` at render time with its citation and "Pending counsel verification" badge

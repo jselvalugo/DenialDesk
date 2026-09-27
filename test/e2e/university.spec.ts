@@ -9,7 +9,7 @@ test.describe("university", () => {
 
   test("the header link opens the course catalog", async ({ page }) => {
     await page.goto("/overview");
-    await page.getByRole("link", { name: "University of DenialDesk" }).click();
+    await page.getByRole("banner").getByRole("link", { name: "University of DenialDesk" }).click();
     await expect(page).toHaveURL(/\/university$/);
     await expect(page.getByRole("heading", { level: 1, name: "Courses" })).toBeVisible();
     await expect(
