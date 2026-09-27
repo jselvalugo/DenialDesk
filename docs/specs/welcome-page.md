@@ -34,6 +34,8 @@ platform works and where to start. Sign-in and the logo both land there.
       Data-residency wording is left off until counsel approves it and production is live
       (Fla. Stat. § 408.051(3) allows U.S., territories, or Canada; U.S.-only is our policy, R-3.3.1).
 - [x] A "New here? Start with DenialDesk University" link beside the primary action opens `/university`
+- [x] The "DenialDesk Wiki" wordmark button beside it opens `/university/wiki` (2026-09-27,
+      `specs/university-wiki.md`)
       (`specs/denialdesk-university.md`, 2026-09-27). Per-user progress stays out of this page.
 - [x] Follows DESIGN.md §3: no gradients, imagery, emoji, or hero heading; panels with hairlines.
 - [x] E2E: the logo opens `/`, `/welcome` redirects there, and the page shows the four sections; record-flow steps 1 and 4 link, 2 and 3 are Planned.

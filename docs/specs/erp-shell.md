@@ -18,8 +18,10 @@ expression is DenialDesk's own and does not reproduce any vendor's shell (ADR 00
 
 ## Acceptance criteria
 - [x] Global header: logo (home link), "Go to a module or page" button beside it that opens the
-      switcher, practice name, user menu (name, role, practice, Sign out). (The demo badge was
-      removed with the demo, 2026-09-26.)
+      switcher, "University" link and the "DenialDesk Wiki" wordmark button (2026-09-27,
+      `specs/university-wiki.md`), practice name, user menu (name truncated to keep the header
+      inside 1024px, role, practice, Sign out). (The demo badge was removed with the demo,
+      2026-09-26.)
 - [x] Navy tab bar: the white DenialDesk mark with a chevron as its first control (changed from the
       module's name, 2026-09-26) (accessible name
       "<Module>, switch module", `aria-haspopup="dialog"`, opens the switcher), the module's shipped pages

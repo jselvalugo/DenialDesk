@@ -10,7 +10,8 @@ articles about how denials, claims, appeals, and Florida payment rules work in D
 legal value pulled live from the rules engine and every statement sourced.
 
 The Wiki is a page of DenialDesk University (`specs/denialdesk-university.md`), beside the U1 courses:
-same header, same entry points (header link, user menu), linked from the course catalog and linking
+same header, same entry points (header link, user menu) plus the "DenialDesk Wiki" wordmark button in
+the global header and on the welcome page (owner, 2026-09-27), linked from the course catalog and linking
 back, and, like the courses, not a module in the switcher. The owner will structure the rest of the
 University separately (2026-09-27); this spec deliberately defines only the Wiki.
 
@@ -46,6 +47,11 @@ University separately (2026-09-27); this spec deliberately defines only the Wiki
 - [x] Articles contain no PHI and no names, identifiers, or amounts that could be mistaken for a real
       patient or claim; the fixture check in the unit tests scans for SSN-, MBI-, and phone-shaped
       strings.
+- [x] The owner-supplied "DenialDesk Wiki" wordmark (`public/brand/denialdesk-wiki.png`, background
+      removed) is a link to `/university/wiki` in the global header (beside "University") and on the
+      welcome page (beside "Start with DenialDesk University"); accessible name "DenialDesk Wiki";
+      `aria-current` marks the Wiki index ("page") and its articles ("true") without also marking
+      "University"; the header still fits 1024px with a 30-character user name (e2e).
 - [x] The course catalog (`/university`) has an "Open the Wiki" action and the Wiki index links back
       to Courses; both use the University header (not the shell's module tile); every role can view.
 - [x] Accessible: real headings in order, a labelled search form, `aria-current` on the active

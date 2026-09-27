@@ -28,7 +28,10 @@ _Last updated: 2026-09-27_
   an "unconfirmed" marker while `verify` is set; unit tests fail on a typed "N days/months/%", an
   unknown rule ID, a dead internal link, or an SSN/MBI/phone/e-mail-shaped string. Search is a POST
   action (no query in URLs). Every role can read it; nothing is audited (public product
-  documentation, no PHI). Further University structure is the owner's (OA-036).
+  documentation, no PHI). Further University structure is the owner's (OA-036). The owner's
+  "DenialDesk Wiki" wordmark (background removed, `public/brand/denialdesk-wiki.png`; license and
+  generating tool ⚠️ VERIFY, OA-037) is the Wiki button in the global header and on the welcome
+  page; the user-menu name is truncated so the header still fits 1024px.
 - Appeals A1 (`specs/appeals.md`): `appeals` + `appeal_notes` tables (tenant RLS, isolation test,
   a DB trigger enforcing the status lifecycle draft → in_review → ready → submitted →
   awaiting_decision → decided, with withdrawn/dismissed reachable from submitted/awaiting_decision).

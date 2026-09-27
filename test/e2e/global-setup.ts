@@ -34,7 +34,8 @@ export default async function globalSetup() {
     asOf: todayIn(),
     users: [
       { email: make("worker"), displayName: "Riley Worker", role: "specialist", password },
-      { email: make("viewer"), displayName: "Quinn Viewer", role: "compliance", password },
+      // A long display name: the header must still fit 1024px with it (shell.spec.ts).
+      { email: make("viewer"), displayName: "Quinn Montgomery-Whitfield", role: "compliance", password },
       { email: make("newbie"), displayName: "Sage Newbie", role: "specialist", password },
       { email: make("locked"), displayName: "Casey Locked", role: "specialist", password },
       { email: make("guesser"), displayName: "Parker Guesser", role: "specialist", password },
