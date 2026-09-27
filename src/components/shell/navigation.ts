@@ -104,7 +104,7 @@ export function navApps({ showRevenueCycle, showSettings = false }: NavVisibilit
     description: "Reports on denial trends, recovery, and payer performance.",
     icon: BarChart3,
     tone: "amber",
-    items: [{ label: "Reports", href: "/reports", icon: BarChart3, available: false }],
+    items: [{ label: "Reports", href: "/insight", icon: BarChart3, available: true }],
   });
   const settings: NavItem[] = [];
   // The platform console isn't linked from practices: it has its own sign-in (/operator/login).

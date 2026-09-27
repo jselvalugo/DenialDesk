@@ -62,15 +62,25 @@ test.describe("shell chrome", () => {
   });
 
   test("unbuilt sections are not links", async ({ page }) => {
+    // Every module and page in the switcher has shipped (Design system removed, Appeals shipped
+    // in A1, Insight standard reports shipped) — there is currently no NavItem left with
+    // `available: false` to check in the switcher itself (src/components/shell/navigation.ts).
+    // The switcher's own "Planned" rendering still exists in ModuleSwitcher.tsx and will be
+    // exercised again the next time a module or page ships partway. In the meantime, the
+    // Insight report catalog has two genuinely still-planned entries
+    // (docs/specs/insight-standard-reports.md #7-#8) — this checks that pattern there instead.
     await page.goto("/overview");
     await page.getByRole("button", { name: /, switch module$/ }).click();
     const switcher = page.getByRole("dialog", { name: "Go to" });
-    await expect(switcher.getByText("Reports", { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: /^Reports/ })).toHaveCount(0);
     await expect(switcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
-    // A planned module (Insight) is listed as a heading, never a link.
-    await expect(switcher.getByRole("heading", { level: 3, name: /^Insight/ })).toBeVisible();
-    await expect(switcher.getByRole("link", { name: /Insight/ })).toHaveCount(0);
+    await expect(switcher.getByRole("link", { name: "Reports" })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.goto("/insight");
+    await expect(page.getByText("Planned — see spec", { exact: true })).toHaveCount(2);
+    await expect(page.getByRole("link", { name: /Prompt-pay scorecard/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /Underpayment variance/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Open" }).first()).toBeVisible();
   });
 
   test("the module switcher searches modules and pages and opens one", async ({ page }) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appHome, filterModules, locate, navApps } from "./navigation";
+import { appHome, filterModules, locate, navApps, type NavApp } from "./navigation";
 
 const all = { showRevenueCycle: true, showSettings: true };
 const none = { showRevenueCycle: false };
@@ -18,9 +18,32 @@ describe("navApps", () => {
     ]);
   });
 
-  it("an app with only planned pages has no home", () => {
+  it("every real module currently has a home — Appeals and Design system shipped, Insight ships its Reports page", () => {
+    // Every module and page in the current navigation has shipped (Design system removed
+    // entirely, Appeals shipped in A1, Insight standard reports shipped): there is currently no
+    // real NavItem with `available: false` to exercise "an app with only planned pages has no
+    // home" against. That property of appHome() is still real and still matters the next time a
+    // module ships partway, so it's tested directly below against a synthetic app instead of
+    // real navigation data.
+    for (const app of navApps(none)) {
+      expect(app.items.some((item) => item.available)).toBe(true);
+      expect(appHome(app)).not.toBeNull();
+    }
     const insight = navApps(none).find((app) => app.id === "insight")!;
-    expect(appHome(insight)).toBeNull();
+    expect(appHome(insight)).toBe("/insight");
+  });
+
+  it("an app with only planned pages has no home", () => {
+    const icon = (() => null) as unknown as NavApp["icon"];
+    const plannedOnly: NavApp = {
+      id: "planned-app",
+      label: "Planned app",
+      description: "Not shipped yet.",
+      icon,
+      tone: "slate",
+      items: [{ label: "Some page", href: "/some-page", icon, available: false }],
+    };
+    expect(appHome(plannedOnly)).toBeNull();
   });
 });
 

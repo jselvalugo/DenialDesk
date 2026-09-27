@@ -218,6 +218,13 @@
       "when": 1790465650342,
       "tag": "0030_appeals_review_fixes",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790467969344,
+      "tag": "0031_insight_report_indexes",
+      "breakpoints": true
     }
   ]
 }

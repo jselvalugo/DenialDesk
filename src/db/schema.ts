@@ -278,6 +278,9 @@ export const claims = pgTable(
     uniqueIndex("claims_tenant_id_key").on(t.tenantId, t.id),
     index("claims_tenant_payer_idx").on(t.tenantId, t.payerId),
     index("claims_tenant_patient_idx").on(t.tenantId, t.patientId),
+    // Insight reports (denial rate, claims by status) filter by these date ranges (docs/specs/insight-standard-reports.md).
+    index("claims_tenant_submitted_at_idx").on(t.tenantId, t.submittedAt),
+    index("claims_tenant_service_date_idx").on(t.tenantId, t.serviceDate),
   ],
 );
 
@@ -420,6 +423,8 @@ export const denials = pgTable(
     index("denials_queue_deadline_idx").on(t.tenantId, t.status, t.appealDeadline),
     index("denials_queue_amount_idx").on(t.tenantId, t.status, t.deniedCents),
     index("denials_claim_idx").on(t.claimId),
+    // Insight reports filter by notice date across the whole tenant (docs/specs/insight-standard-reports.md).
+    index("denials_tenant_notice_date_idx").on(t.tenantId, t.noticeDate),
     // Target of the tenant-scoped FK from appeals (FKs bypass RLS, so the tenant is part of the key).
     uniqueIndex("denials_tenant_id_key").on(t.tenantId, t.id),
   ],
