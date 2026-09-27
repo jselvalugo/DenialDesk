@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>DenialDesk Business Plan</title>
+<style>
+@page { size: Letter; margin: 0.7in 0.75in 0.8in; }
+@page :first { margin: 0; }
+:root{--navy:#0B1B3A;--blue:#1565D8;--sky:#0A8FEF;--teal:#14C6A8;--ink:#0F172A;--muted:#475569;--line:#E2E8F0;--tint:#EEF5FD;}
+*{box-sizing:border-box}
+body{font-family:"Helvetica Neue",Arial,sans-serif;color:var(--ink);font-size:10.5pt;line-height:1.5;margin:0}
+.cover{height:11in;width:8.5in;position:relative;background:linear-gradient(160deg,#fff 55%,var(--tint) 55%);page-break-after:always;padding:1.1in 0.9in}
+.cover img{width:4.6in}
+.cover h1{font-size:34pt;line-height:1.1;margin:1.3in 0 .15in;color:var(--navy)}
+.cover .sub{font-size:14pt;color:var(--blue);font-weight:600}
+.cover .meta{position:absolute;bottom:1in;left:.9in;right:.9in;border-top:3px solid var(--teal);padding-top:.15in;color:var(--muted);font-size:9.5pt}
+.cover .bar{position:absolute;top:0;left:0;width:.28in;height:100%;background:linear-gradient(var(--blue),var(--sky))}
+h2{color:var(--navy);font-size:19pt;margin:0 0 4pt;page-break-after:avoid}
+h2 .n{color:var(--sky);margin-right:8px}
+h2+.rule{height:3px;width:60px;background:var(--teal);margin-bottom:12pt}
+h3{color:var(--blue);font-size:12pt;margin:14pt 0 4pt;page-break-after:avoid}
+section{page-break-before:always}
+section.first{page-break-before:auto}
+table{width:100%;border-collapse:collapse;margin:8pt 0 12pt;font-size:9.5pt;page-break-inside:avoid}
+th{background:var(--navy);color:#fff;text-align:left;padding:6px 8px;font-weight:600}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:nth-child(even) td{background:#F8FAFC}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}
+tr.total td{font-weight:700;border-top:2px solid var(--navy);background:var(--tint)}
+.kpis{display:flex;gap:10px;margin:10pt 0 14pt}
+.kpi{flex:1;border:1px solid var(--line);border-top:4px solid var(--sky);border-radius:6px;padding:10px 12px}
+.kpi b{display:block;font-size:19pt;color:var(--navy);line-height:1.1}
+.kpi span{font-size:8.5pt;color:var(--muted)}
+.callout{background:var(--tint);border-left:4px solid var(--blue);padding:10px 14px;margin:10pt 0;border-radius:0 6px 6px 0;page-break-inside:avoid}
+.quote{font-size:16pt;color:var(--navy);font-weight:700;text-align:center;margin:14pt 0}
+.note{font-size:8.5pt;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.card{border:1px solid var(--line);border-radius:6px;padding:10px 12px;page-break-inside:avoid}
+.card h4{margin:0 0 4px;color:var(--navy);font-size:10.5pt}
+.card p{margin:0;font-size:9.5pt}
+ul{padding-left:18px;margin:4pt 0}li{margin:2pt 0}
+.bars{margin:8pt 0 14pt}
+.bars .row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:9pt}
+.bars .lab{width:70px;color:var(--muted)}
+.bars .b{height:18px;border-radius:0 4px 4px 0;background:linear-gradient(90deg,var(--blue),var(--sky));color:#fff;font-weight:700;font-size:8.5pt;padding-left:6px;line-height:18px}
+.toc td{border:none;padding:3px 0}
+.pill{display:inline-block;background:var(--teal);color:#fff;font-size:8pt;font-weight:700;border-radius:10px;padding:1px 8px}
+.logo-sm{height:26px;float:right;margin-top:-4px}
+</style></head><body>
+
+<div class="cover">
+  <div class="bar"></div>
+  <img src="logo.png" alt="DenialDesk">
+  <h1>Business Plan</h1>
+  <div class="sub">Claims and denial management for Florida physician practices</div>
+  <p style="max-width:5.6in;color:var(--muted);margin-top:14pt">Half the industry price, month to month, in English, Spanish and Portuguese. Built from the ground up for Florida law, HIPAA and SOC 2.</p>
+  <div class="meta"><b style="color:var(--navy)">Confidential. Prepared for prospective investors.</b><br>September 2026 · Do not distribute without permission. Contains forward-looking statements; see Section 10.</div>
+</div>
+
+<section class="first">
+<img class="logo-sm" src="logo.png" alt="">
+<h2>Contents</h2><div class="rule"></div>
+<table class="toc">
+<tr><td>1. Executive summary</td></tr><tr><td>2. The problem</td></tr><tr><td>3. The solution: the DenialDesk platform</td></tr>
+<tr><td>4. Target market</td></tr><tr><td>5. Competitive positioning and brand</td></tr><tr><td>6. Business model and pricing</td></tr>
+<tr><td>7. Go-to-market strategy</td></tr><tr><td>8. Financial plan</td></tr><tr><td>9. Product roadmap and milestones</td></tr>
+<tr><td>10. Risks and mitigations</td></tr><tr><td>11. Use of funds and next steps</td></tr>
+</table>
+
+<h2 style="margin-top:22pt"><span class="n">1</span>Executive summary</h2><div class="rule"></div>
+<p><b>DenialDesk</b> is a secure, cloud-based platform that helps Florida physician practices submit insurance claims, catch and work denials, enforce Florida's prompt-pay and appeal deadlines, and recover revenue they are legally owed.</p>
+<p>Practices lose money to denied, underpaid and late-paid claims. Today they work those claims by hand across payer portals, spreadsheets and email, and they typically pay an outsourced billing or revenue-cycle vendor around <b>8% of revenue</b> on multi-year contracts with per-user license fees on top.</p>
+<p>DenialDesk costs <b>4% of monthly revenue</b>. That is one flat, all-inclusive fee, with no per-license charges and no long-term contract, and support in <b>English, Spanish and Portuguese</b>.</p>
+<div class="kpis">
+ <div class="kpi"><b>4%</b><span>of monthly revenue, all-inclusive (industry: ~8%)</span></div>
+ <div class="kpi"><b>$80K+</b><span>minimum annual savings for a $2M practice</span></div>
+ <div class="kpi"><b>8–10</b><span>practices signed in Year 1</span></div>
+ <div class="kpi"><b>$640–800K</b><span>annual run-rate at end of Year 1</span></div>
+</div>
+<div class="callout"><b>Our promise to a physician:</b> "At minimum, we will save you $80,000 a year." We can show the number on one line of their own P&amp;L, and it is the reason a practice switches.</div>
+</section>
+
+<section>
+<img class="logo-sm" src="logo.png" alt="">
+<h2><span class="n">2</span>The problem</h2><div class="rule"></div>
+<p>For an independent physician practice, revenue depends on insurance claims being paid correctly and on time. It often isn't:</p>
+<div class="grid2">
+<div class="card"><h4>Denials are worked by hand</h4><p>Staff move between payer portals, spreadsheets and email. The same denial types come back again and again, and no one fixes the root cause.</p></div>
+<div class="card"><h4>Deadlines are missed</h4><p>Appeal and timely-filing windows run out silently. Once a deadline passes, that revenue is usually gone for good.</p></div>
+<div class="card"><h4>Florida law goes unenforced</h4><p>Florida prompt-pay statutes (Fla. Stat. §§ 627.6131, 641.3155) require insurers and HMOs to pay on time or owe interest. Practices rarely track the clock, so they rarely collect.</p></div>
+<div class="card"><h4>No sense of what's worth chasing</h4><p>Without ranking by dollar value and days left, staff work the oldest claim instead of the most valuable one.</p></div>
+</div>
+<h3>And the vendors cost too much</h3>
+<table>
+<tr><th>Pain point</th><th>Industry norm</th></tr>
+<tr><td>Expensive pricing</td><td>~8% of revenue</td></tr>
+<tr><td>Long-term contracts</td><td>Multi-year lock-ins</td></tr>
+<tr><td>Language barriers</td><td>English only, in a state where much of the workforce and patient base is Spanish- or Portuguese-speaking</td></tr>
+<tr><td>Lack of transparency</td><td>Hidden fees, unclear pricing</td></tr>
+<tr><td>Per-license fees</td><td>Charged per user or employee</td></tr>
+<tr><td>High overhead</td><td>Heavy administrative and physician time spent on billing</td></tr>
+</table>
+</section>
+
+<section>
+<img class="logo-sm" src="logo.png" alt="">
+<h2><span class="n">3</span>The solution: the DenialDesk platform</h2><div class="rule"></div>
+<p>DenialDesk is a multi-tenant web application. A practice's staff sign in and the platform covers the claim's whole life, from submission through payment, denial, appeal and outcome.</p>
+<table>
+<tr><th style="width:30%">Capability</th><th>What it does for the practice</th></tr>
+<tr><td><b>Practice setup</b></td><td>Locations, providers (NPI, taxonomy, Florida license) and payers, each tagged with its legal regime: Florida insurer, Florida HMO, ERISA self-funded, Medicare or Medicare Advantage.</td></tr>
+<tr><td><b>Claim submission</b></td><td>Sends electronic claims (X12 837P) through a contracted clearinghouse after a timely-filing check, and captures acknowledgments (999, 277CA).</td></tr>
+<tr><td><b>Prompt-pay enforcement</b></td><td>Starts the Florida prompt-pay clock on receipt, sends alerts, produces late-payment interest worksheets and flags uncontestable obligations.</td></tr>
+<tr><td><b>Remittance posting</b></td><td>Imports payer remittances (835), checks balances, and captures every denial with its standard reason codes (CARC / RARC / group code).</td></tr>
+<tr><td><b>Denial work queues</b></td><td>Ranks denials by dollar value and days left to the appeal deadline, so staff work the most valuable claim first.</td></tr>
+<tr><td><b>Appeals</b></td><td>Tracks each appeal from draft to decision, with deadlines calculated by the rules engine (never guessed). Recovered amounts feed back into reporting.</td></tr>
+<tr><td><b>Evidence and audit</b></td><td>Keeps an immutable audit log and claim version history, and exports evidence for complaints to Florida's Office of Insurance Regulation.</td></tr>
+<tr><td><b>Reporting</b></td><td>Standard revenue-cycle reports on denial rate, A/R, recovery and staff workload.</td></tr>
+</table>
+<h3>What sets the technology apart</h3>
+<ul>
+<li><b>Florida rules engine.</b> Every statutory deadline, interest rate and threshold is a versioned, effective-dated rule with its legal citation, with business-day and holiday calendars in Eastern time. When the law changes, we update one rule instead of rewriting code.</li>
+<li><b>Security and compliance from day one.</b> Single sign-on with MFA, row-level tenant isolation in the database, AES-256 encryption at rest with field-level encryption for sensitive identifiers, and full audit logging. The platform targets HIPAA, OWASP ASVS Level 2 and a SOC 2 Type I audit.</li>
+<li><b>U.S.-only data residency.</b> Florida law (Fla. Stat. § 408.051(3)) bans offshore storage of patient data. Production runs on Microsoft Azure in U.S. regions only.</li>
+<li><b>No code inflation.</b> The system never changes a CPT, ICD or HCPCS code without a recorded human approval. This protects practices from fraud-and-abuse exposure.</li>
+</ul>
+<h3>Where the build is today</h3>
+<p>The foundation is complete: the application shell, authentication with MFA, tenant isolation with automated tests, the audit log, the rules engine, a synthetic-data generator, and per-practice BAA tracking. MVP features are well underway: claims, the denial queue, payer catalog, remittance (835) import and posting, prompt-pay clocks with interest worksheets, and the first stage of appeals. Development uses synthetic data only and runs on a pre-production environment.</p>
+</section>
+
+<section>
+<img class="logo-sm" src="logo.png" alt="">
+<h2><span class="n">4</span>Target market</h2><div class="rule"></div>
+<div class="grid2">
+<div class="card"><h4>Primary: mid-market physician practices</h4><p>Independent Florida practices with around <b>$2M in annual revenue</b>. They are big enough to feel the 8% vendor fee (about $160K a year) but too small for an in-house revenue-cycle department.</p></div>
+<div class="card"><h4>Secondary: startup practices</h4><p>New practices choosing their first billing platform. They have no contract to break, are price-sensitive, and value month-to-month terms.</p></div>
+</div>
+<h3>Why Florida first</h3>
+<ul>
+<li>Florida has a distinctive and strict legal framework (prompt pay, offshore-data ban, patient refund rules). That creates demand for a specialist and a barrier to generic national tools.</li>
+<li>Florida's large Spanish- and Portuguese-speaking communities are underserved by English-only vendors. Our multilingual support is a real reason to choose us, not a nice extra.</li>
+<li>Payer mix at launch: Florida-regulated commercial insurers, Florida HMOs, Medicare Part B (First Coast) and Medicare Advantage. Florida Medicaid follows in Phase 2.</li>
+</ul>
+<h3>Who uses it inside the practice</h3>
+<table>
+<tr><th>User</th><th>What they need</th></tr>
+<tr><td>Biller / denial specialist</td><td>Submits claims and works denial and follow-up queues day to day</td></tr>
+<tr><td>Revenue-cycle manager</td><td>Watches A/R, denial rate, recovery and staff workload</td></tr>
+<tr><td>Practice administrator</td><td>Sets up the practice, providers, payers and users</td></tr>
+<tr><td>Compliance officer</td><td>Reviews audit logs, refunds and evidence of payer violations</td></tr>
+<tr><td>Physician / owner</td><td>Sees lower cost and recovered revenue</td></tr>
+</table>
+</section>
+
+<section>
+<img class="logo-sm" src="logo.png" alt="">
+<h2><span class="n">5</span>Competitive positioning and brand</h2><div class="rule"></div>
+<table>
+<tr><th>Challenge</th><th>The industry norm</th><th>The DenialDesk solution</th></tr>
+<tr><td><b>Expensive pricing</b></td><td>~8% of revenue</td><td><b>4% of monthly revenue</b>, half the competition's cost</td></tr>
+<tr><td><b>Long-term contracts</b></td><td>Multi-year lock-ins</td><td><b>Month to month.</b> No long-term commitment</td></tr>
+<tr><td><b>Language barriers</b></td><td>English only</td><td><b>English, Spanish and Portuguese</b></td></tr>
+<tr><td><b>Lack of transparency</b></td><td>Hidden fees</td><td><b>Upfront pricing.</b> Nothing hidden</td></tr>
+<tr><td><b>Per-license fees</b></td><td>Charged per user</td><td><b>No per-license charges.</b> One flat fee</td></tr>
+<tr><td><b>High overhead</b></td><td>Heavy admin and physician time</td><td><b>Aim: cut admin and physician billing time by more than half</b></td></tr>
+</table>
+<h3>Brand pillars</h3>
+<div class="grid2">
+<div class="card"><h4>1 · Affordable</h4><p>Half the industry rate.</p></div>
+<div class="card"><h4>2 · Flexible</h4><p>Month to month. We keep clients by earning it.</p></div>
+<div class="card"><h4>3 · Multilingual</h4><p>English, Spanish, Portuguese.</p></div>
+<div class="card"><h4>4 · Transparent</h4><p>4% of monthly revenue, stated upfront.</p></div>
+<div class="card"><h4>5 · Simple</h4><p>One flat fee. No per-license charges.</p></div>
+<div class="card"><h4>6 · Proven value</h4><p>At least $80K a year in savings for a $2M practice.</p></div>
+</div>
+<h3>Defensibility</h3>
+<ul>
+<li><b>Florida-specific depth:</b> encoded statutes, deadlines and interest rules that generic national tools don't carry.</li>
+<li><b>Compliance posture:</b> SOC 2, HIPAA Business Associate controls and U.S.-only residency are costly and slow for a new competitor to copy.</li>
+<li><b>Cost structure:</b> software-led workflows let us profitably charge half the market rate.</li>
+</ul>
+</section>
+
+<section>
+<img class="logo-sm" src="logo.png" alt="">
+<h2><span class="n">6</span>Business model and pricing</h2><div class="rule"></div>
+<ul>
+<li><b>4% of monthly revenue:</b> flat and all-inclusive, billed monthly.</li>
+<li><b>No per-license or per-employee fees:</b> the practice can add all its staff at no extra cost.</li>
+<li><b>Month to month:</b> no long-term contract.</li>
+<li><b>Fully transparent:</b> the price is the price.</li>
+</ul>
+<h3>Value to the customer: a $2M practice</h3>
+<table>
+<tr><th></th><th class="r">Competitor (8%)</th><th class="r">DenialDesk (4%)</th></tr>
+<tr><td>Annual fee on $2M revenue</td><td class="r">$160,000</td><td class="r">$80,000</td></tr>
+<tr><td>Per-employee license fees</td><td class="r">Varies</td><td class="r">$0</td></tr>
+<tr class="total"><td>Annual savings</td><td class="r"></td><td class="r">≥ $80,000</td></tr>
+</table>
+<p class="note">Total savings are at least $80,000, plus whatever the practice spends today on per-employee licenses. The more they spend on licenses now, the more they save with us.</p>
+<p class="quote">"At minimum, we will save you $80,000."</p>
+<h3>Unit economics per client</h3>
+<table>
+<tr><th>Metric</th><th class="r">Value</th></tr>
+<tr><td>Annual revenue per $2M client (4%)</td><td class="r">$80,000</td></tr>
+<tr><td>Monthly revenue per client</td><td class="r">≈ $6,667</td></tr>
+<tr><td>Target gross margin (software-led service)*</td><td class="r">65–75%</td></tr>
+<tr><td>Target customer acquisition cost*</td><td class="r">≤ $15,000</td></tr>
+<tr><td>CAC payback at 70% margin*</td><td class="r">≈ 3–4 months</td></tr>
+</table>
+<p class="note">* Planning targets, to be confirmed against actual clearinghouse, hosting and staffing costs.</p>
+</section>
+
+<section>
+<img class="logo-sm" src="logo.png" alt="">
+<h2><span class="n">7</span>Go-to-market strategy</h2><div class="rule"></div>
+<h3>Phase A: design partners (Months 1–6)</h3>
+<ul>
+<li>Sign 2–3 founding practices in South and Central Florida at the standard 4%, with priority onboarding and direct input into the roadmap.</li>
+<li>Measure savings, recovered revenue and time saved, and turn them into case studies in all three languages.</li>
+</ul>
+<h3>Phase B: founder-led sales (Months 4–12)</h3>
+<ul>
+<li>Direct outreach to practice owners and office managers with a <b>free savings analysis</b>: we compare their current vendor invoice with 4% and show the $80K+ difference.</li>
+<li>Target practices at contract renewal, when switching costs are lowest.</li>
+<li>Bilingual sales and onboarding (English, Spanish, Portuguese) for Hispanic- and Brazilian-owned practices in Miami-Dade, Broward, Palm Beach and Orange counties.</li>
+</ul>
+<h3>Phase C: repeatable channels (Year 2+)</h3>
+<ul>
+<li><b>Referral program:</b> credits for practices that refer peers.</li>
+<li><b>Partners:</b> practice-management consultants, healthcare CPAs, medical associations and county medical societies.</li>
+<li><b>Startup practices:</b> partnerships with healthcare attorneys and lenders who advise physicians opening a practice.</li>
+<li><b>Content:</b> Florida prompt-pay and denial guides in three languages, plus webinars.</li>
+</ul>
+<h3>Onboarding and retention</h3>
+<p>Because we are month to month, we have to earn every renewal. Each client gets a monthly value report showing dollars recovered, interest collected, denials overturned and fees saved compared with their previous vendor.</p>
+<h3>Sales funnel to reach 10 practices in Year 1 (planning assumptions)</h3>
+<table>
+<tr><th>Stage</th><th class="r">Count</th><th class="r">Conversion</th></tr>
+<tr><td>Practices contacted</td><td class="r">250</td><td class="r"></td></tr>
+<tr><td>Savings analyses delivered</td><td class="r">60</td><td class="r">24%</td></tr>
+<tr><td>Proposals</td><td class="r">25</td><td class="r">42%</td></tr>
+<tr class="total"><td>Signed practices</td><td class="r">10</td><td class="r">40%</td></tr>
+</table>
+</section>
+
+<section>
+<img class="logo-sm" src="logo.png" alt="">
+<h2><span class="n">8</span>Financial plan</h2><div class="rule"></div>
+<h3>Year 1 revenue target</h3>
+<table>
+<tr><th>Practices signed</th><th class="r">Annual revenue per client</th><th class="r">Full-year run-rate</th></tr>
+<tr><td>8</td><td class="r">$80,000</td><td class="r">$640,000</td></tr>
+<tr><td>10</td><td class="r">$80,000</td><td class="r">$800,000</td></tr>
+</table>
+<p class="note">Run-rate figures. Revenue actually recognized in Year 1 depends on when each practice signs.</p>
+<h3>Year 1 recognized revenue (signing ramp)</h3>
+<p>If we sign one practice a month from Month 3 through Month 12 (10 practices), active client-months total 55. Year 1 <b>recognized revenue is about $367,000</b>, and we exit the year at an <b>$800,000 annual run-rate</b>.</p>
+<h3>Three-year projection (base case)</h3>
+<table>
+<tr><th></th><th class="r">Year 1</th><th class="r">Year 2</th><th class="r">Year 3</th></tr>
+<tr><td>Practices at year end</td><td class="r">10</td><td class="r">30</td><td class="r">65</td></tr>
+<tr><td>Average active practices</td><td class="r">4.6</td><td class="r">20</td><td class="r">47</td></tr>
+<tr><td>Revenue</td><td class="r">$367K</td><td class="r">$1.60M</td><td class="r">$3.76M</td></tr>
+<tr><td>Exit annual run-rate</td><td class="r">$800K</td><td class="r">$2.40M</td><td class="r">$5.20M</td></tr>
+<tr><td>Cost of service (clearinghouse, hosting, support)</td><td class="r">$150K</td><td class="r">$480K</td><td class="r">$1.03M</td></tr>
+<tr><td>Gross profit</td><td class="r">$217K</td><td class="r">$1.12M</td><td class="r">$2.73M</td></tr>
+<tr><td>Operating expenses (engineering, sales, compliance, G&amp;A)</td><td class="r">$1.10M</td><td class="r">$1.50M</td><td class="r">$2.10M</td></tr>
+<tr class="total"><td>Operating income (loss)</td><td class="r">($883K)</td><td class="r">($380K)</td><td class="r">$630K</td></tr>
+</table>
+<div class="bars">
+<div class="row"><span class="lab">Year 1</span><div class="b" style="width:8%">$0.37M</div></div>
+<div class="row"><span class="lab">Year 2</span><div class="b" style="width:34%">$1.60M</div></div>
+<div class="row"><span class="lab">Year 3</span><div class="b" style="width:80%">$3.76M</div></div>
+</div>
+<p class="note">Base case assumes every client is a $2M-revenue practice paying 4%, no churn in Year 1 and 5% annual churn after that. Costs are planning estimates. Year 3 is the target break-even year. All projections are forward-looking and will be updated as real client data comes in.</p>
+<h3>Scenarios: year-end practices</h3>
+<table>
+<tr><th>Scenario</th><th class="r">Year 1</th><th class="r">Year 2</th><th class="r">Year 3</th><th class="r">Year 3 exit run-rate</th></tr>
+<tr><td>Conservative</td><td class="r">8</td><td class="r">20</td><td class="r">40</td><td class="r">$3.2M</td></tr>
+<tr><td>Base</td><td class="r">10</td><td class="r">30</td><td class="r">65</td><td class="r">$5.2M</td></tr>
+<tr><td>Upside</td><td class="r">12</td><td class="r">40</td><td class="r">90</td><td class="r">$7.2M</td></tr>
+</table>
+</section>
+
+<section>
+<img class="logo-sm" src="logo.png" alt="">
+<h2><span class="n">9</span>Product roadmap and milestones</h2><div class="rule"></div>
+<table>
+<tr><th style="width:22%">Phase</th><th>Scope</th><th style="width:14%">Status</th></tr>
+<tr><td><b>Phase 0: Foundation</b></td><td>Tech stack, app shell and design system, SSO + MFA, tenant isolation, audit log, rules engine, synthetic data, BAA tracking</td><td><span class="pill">Largely done</span></td></tr>
+<tr><td><b>Phase 1: MVP</b></td><td>Florida commercial, Florida HMO, Medicare and Medicare Advantage: claim submission (837P), acknowledgments, prompt-pay tracking, remittance posting (835), denial queues, appeals, evidence export, SOC 2 Type I</td><td>In progress</td></tr>
+<tr><td><b>Phase 2</b></td><td>Florida Medicaid (FFS + SMMC), self-funded ERISA workflows, AHCA dispute packets, patient refund tracker</td><td>Planned</td></tr>
+<tr><td><b>Phase 3</b></td><td>AI denial prediction and AI-drafted appeals (human-reviewed), FHIR prior-authorization API, workers' comp / PIP, patient payments</td><td>Planned</td></tr>
+</table>
+<h3>Milestones before the first live client</h3>
+<ul>
+<li>Florida healthcare counsel engaged and regulatory-role memo signed off</li>
+<li>Azure Business Associate Agreement in place; clearinghouse selected under a subcontractor BAA</li>
+<li>Security Officer and Privacy Officer named; risk analysis and core policies</li>
+<li>Production security gates: passkeys and just-in-time privileged access for operators, break-glass alerting</li>
+<li>SOC 2 Type I audit</li>
+</ul>
+</section>
+
+<section>
+<img class="logo-sm" src="logo.png" alt="">
+<h2><span class="n">10</span>Risks and mitigations</h2><div class="rule"></div>
+<table>
+<tr><th style="width:30%">Risk</th><th>Mitigation</th></tr>
+<tr><td>Regulatory and legal interpretation</td><td>All deadlines and rates live in a versioned rules engine and are flagged for verification until Florida healthcare counsel confirms them. The percentage-of-revenue fee structure will be reviewed by counsel for Medicare reassignment and fee-splitting rules.</td></tr>
+<tr><td>Data breach / HIPAA</td><td>Encryption, tenant isolation, MFA, immutable audit log, U.S.-only hosting, SOC 2 program and cyber insurance.</td></tr>
+<tr><td>Sales cycle longer than planned</td><td>Savings-analysis offer, renewal-timed outreach, and design partners who become references.</td></tr>
+<tr><td>Churn (month-to-month)</td><td>Monthly value reports, multilingual support, and measurable savings.</td></tr>
+<tr><td>Clearinghouse dependency</td><td>Integration kept behind an adapter so we can switch or add a second clearinghouse.</td></tr>
+<tr><td>Margin pressure at 4%</td><td>Software automation on queues, deadlines and appeals keeps cost per claim low. Gross margin is tracked monthly.</td></tr>
+<tr><td>Incumbent price response</td><td>Florida depth, language coverage and no lock-in are harder to match than a price cut.</td></tr>
+</table>
+<p class="note"><b>Forward-looking statements.</b> This plan contains projections and planning assumptions that involve risk and uncertainty. Actual results may differ materially. Savings figures assume a $2M practice currently paying about 8% of revenue.</p>
+</section>
+
+<section>
+<img class="logo-sm" src="logo.png" alt="">
+<h2><span class="n">11</span>Use of funds and next steps</h2><div class="rule"></div>
+<p>We are raising <b>[amount to be confirmed]</b> to complete the MVP, reach SOC 2 Type I, and sign our first 10 practices.</p>
+<table>
+<tr><th>Use</th><th class="r">Share</th><th>Purpose</th></tr>
+<tr><td>Product and engineering</td><td class="r">45%</td><td>Finish the MVP, clearinghouse integration and Phase 2 groundwork</td></tr>
+<tr><td>Sales and marketing</td><td class="r">25%</td><td>Bilingual sales, savings analyses, content in three languages</td></tr>
+<tr><td>Compliance and security</td><td class="r">15%</td><td>SOC 2 audit, counsel, security tooling, insurance</td></tr>
+<tr><td>Customer onboarding and support</td><td class="r">10%</td><td>Multilingual onboarding and billing specialists</td></tr>
+<tr><td>Working capital</td><td class="r">5%</td><td>Runway buffer</td></tr>
+</table>
+<h3>Next 12 months</h3>
+<ul>
+<li><b>Q1:</b> Counsel sign-off, clearinghouse contracted, MVP feature-complete, first design partner onboarded</li>
+<li><b>Q2:</b> SOC 2 Type I audit; 3 live practices</li>
+<li><b>Q3:</b> Referral and partner channels launched; 6 practices</li>
+<li><b>Q4:</b> 8–10 practices; $640K–$800K annual run-rate</li>
+</ul>
+<div class="callout" style="margin-top:20pt"><b>DenialDesk</b> is affordable, flexible, multilingual, transparent and simple, with proven value. Florida practices keep more of what they earn.</div>
+<p style="text-align:center;margin-top:30pt"><img src="logo.png" style="width:2.6in" alt="DenialDesk"></p>
+</section>
+</body></html>
