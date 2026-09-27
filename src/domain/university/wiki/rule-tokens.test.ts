@@ -44,6 +44,15 @@ describe("ruleReference", () => {
     });
   });
 
+  it("effective dating is a boundary: nothing the day before effectiveFrom, the value on the day", () => {
+    const rules: Rule[] = [
+      { ...base, id: "x", value: 30, unit: "calendar_days", effectiveFrom: "2026-01-01" },
+    ];
+    expect(ruleReference("x", "2025-12-31", rules)).toBeNull();
+    expect(ruleReference("x", "2026-01-01", rules)?.valueText).toBe("30 calendar days");
+    expect(ruleReference("x", "2026-01-02", rules)?.valueText).toBe("30 calendar days");
+  });
+
   it("returns null for an unknown rule or a date with no version in force", () => {
     const rules: Rule[] = [{ ...base, id: "x", value: 1, unit: "months", effectiveFrom: "2026-01-01" }];
     expect(ruleReference("nope", "2026-06-01", rules)).toBeNull();

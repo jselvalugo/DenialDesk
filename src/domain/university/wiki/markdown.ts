@@ -38,10 +38,12 @@ export function slugify(text: string): string {
 
 /** Only same-app paths and https addresses may be links; anything else renders as plain text. */
 export function isSafeHref(href: string): boolean {
-  return (href.startsWith("/") && !href.startsWith("//")) || href.startsWith("https://");
+  return (
+    (href.startsWith("/") && !href.startsWith("//") && !href.startsWith("/\\")) || href.startsWith("https://")
+  );
 }
 
-const INLINE = /(\*\*(.+?)\*\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)\s]+)\))|(\{\{rule:([a-z0-9_.]+)\}\})/g;
+const INLINE = /(\*\*([^*]+)\*\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)\s]+)\))|(\{\{rule:([a-z0-9_.]+)\}\})/g;
 
 export function parseInline(text: string): Inline[] {
   const out: Inline[] = [];

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { todayIn } from "@rules/calendar";
 import { articlesInCategory, findArticle, WIKI_ARTICLES, WIKI_CATEGORIES } from "./catalog";
 import { linkHrefs, parseMarkdown, ruleIds } from "./markdown";
 import { ruleExists, ruleReference } from "./rule-tokens";
@@ -56,7 +57,7 @@ describe("wiki catalog (docs/specs/university-wiki.md)", () => {
   });
 
   it("every rule token names a catalog rule with a version in force today", () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIn();
     for (const article of WIKI_ARTICLES) {
       for (const id of ruleIds(parseMarkdown(article.body))) {
         expect(ruleExists(id), `${article.slug} → ${id}`).toBe(true);
@@ -109,6 +110,14 @@ describe("searchArticles", () => {
     expect(hits.map((article) => article.slug)).toContain("florida-prompt-pay-clock");
     expect(searchArticles(WIKI_ARTICLES, "carc")).not.toHaveLength(0);
     expect(searchArticles(WIKI_ARTICLES, "zzzz-no-such-term")).toEqual([]);
+  });
+
+  it("matches a rendered rule value and not a rule ID or link path", () => {
+    expect(searchArticles(WIKI_ARTICLES, "calendar days").map((article) => article.slug)).toContain(
+      "florida-prompt-pay-clock",
+    );
+    expect(searchArticles(WIKI_ARTICLES, "fl.promptpay")).toEqual([]);
+    expect(searchArticles(WIKI_ARTICLES, "/remittances")).toEqual([]);
   });
 
   it("matches tags, not only titles", () => {

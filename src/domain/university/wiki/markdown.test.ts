@@ -30,6 +30,7 @@ describe("parseInline", () => {
     expect(parseInline("[x](javascript:alert)")).toEqual([{ type: "text", text: "x" }]);
     expect(parseInline("[x](http://insecure.example)")).toEqual([{ type: "text", text: "x" }]);
     expect(parseInline("[x](//evil.example)")).toEqual([{ type: "text", text: "x" }]);
+    expect(parseInline("[x](/\\evil.example)")).toEqual([{ type: "text", text: "x" }]);
     expect(isSafeHref("https://x12.org/codes")).toBe(true);
     expect(isSafeHref("/university/wiki")).toBe(true);
   });

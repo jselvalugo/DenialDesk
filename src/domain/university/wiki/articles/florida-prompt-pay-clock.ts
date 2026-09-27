@@ -42,29 +42,33 @@ show no prompt-pay clock. A payer whose regime is not yet verified gets no clock
 ## The milestones (electronic claims, Florida insurers)
 
 Every value below is read from the rules engine as of today, with its citation. A value marked
-unconfirmed is still waiting for Florida healthcare counsel to confirm it.
+unconfirmed is still waiting for Florida healthcare counsel to confirm it. A claim's own clock uses
+the rule version in force on the date the payer received the claim (and the interest rate in force
+on each payment date), so an older claim can show a different value once a rule changes.
 
 | Milestone | The payer must act within |
 | --- | --- |
-| Acknowledge receipt | {{rule:fl.promptpay.electronic.acknowledgment}} |
 | Pay, or notify that the claim is denied or contested | {{rule:fl.promptpay.electronic.pay_or_contest}} |
 | Pay or deny | {{rule:fl.promptpay.electronic.pay_or_deny}} |
 | Uncontestable obligation to pay | {{rule:fl.promptpay.electronic.uncontestable}} |
 
-If the payer **contests** the claim and asks for more information, the practice must answer within
-{{rule:fl.promptpay.electronic.provider_response}} of the request.
+The statute also sets two periods the clock does not track yet: the payer must acknowledge receipt
+within {{rule:fl.promptpay.electronic.acknowledgment}}, and when the payer **contests** the claim
+and asks for more information, the practice must answer within
+{{rule:fl.promptpay.electronic.provider_response}} of the request. Both are recorded in the rules
+engine and are **Planned** for the clock.
 
 ## Paper claims
 
-Paper claims have longer periods: acknowledgement within {{rule:fl.promptpay.paper.acknowledgment}},
-pay, deny, or contest within {{rule:fl.promptpay.paper.pay_or_contest}}, pay or deny within
-{{rule:fl.promptpay.paper.pay_or_deny}}, and the uncontestable obligation at
-{{rule:fl.promptpay.paper.uncontestable}}.
+Paper claims have longer periods: pay, deny, or contest within
+{{rule:fl.promptpay.paper.pay_or_contest}}, pay or deny within {{rule:fl.promptpay.paper.pay_or_deny}},
+and the uncontestable obligation at {{rule:fl.promptpay.paper.uncontestable}}. Acknowledgement
+(within {{rule:fl.promptpay.paper.acknowledgment}}) is recorded but not tracked yet.
 
 ## HMOs
 
-The HMO statute mirrors the insurer periods; DenialDesk keeps a separate rule set for it so the
-two can diverge if counsel finds they do. For example, an HMO must pay or contest an electronic
+DenialDesk treats the HMO statute as mirroring the insurer periods, pending counsel's confirmation;
+it keeps a separate rule set for HMOs so the two can diverge if counsel finds they do. For example, an HMO must pay or contest an electronic
 claim within {{rule:fl.hmo.promptpay.electronic.pay_or_contest}}.
 
 ## How DenialDesk decides a milestone was met
@@ -72,7 +76,7 @@ claim within {{rule:fl.hmo.promptpay.electronic.pay_or_contest}}.
 - The clock starts on the date the payer **received** the claim.
 - "Pay or contest" is met by the first payer response of any kind; "pay or deny" and the
   uncontestable milestone only by a payment or a denial.
-- A response on the due date counts as on time.
+- A response on the due date counts as on time (DenialDesk's working reading, pending counsel).
 - Payments and denials come from posted remittances. A **contest** or request for information is
   recorded by a person on the claim's prompt-pay page, with the date; it is never inferred from a
   code. A response recorded by mistake is marked **recorded in error** with a reason, and nothing is

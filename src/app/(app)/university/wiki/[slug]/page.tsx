@@ -7,7 +7,7 @@ import { requireAuth } from "@/auth/session";
 import { ArticleBody, RuleValue } from "@/components/university/ArticleBody";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
-import { findArticle, findCategory, WIKI_ARTICLES } from "@/domain/university/wiki/catalog";
+import { findArticle, findCategory } from "@/domain/university/wiki/catalog";
 import { headings, parseMarkdown, ruleIds } from "@/domain/university/wiki/markdown";
 import { ruleReferences } from "@/domain/university/wiki/rule-tokens";
 import { formatDate } from "@/lib/format";
@@ -19,9 +19,8 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return { title: article ? `Wiki — ${article.title}` : "Wiki" };
 }
 
-export function generateStaticParams() {
-  return WIKI_ARTICLES.map((article) => ({ slug: article.slug }));
-}
+// Never pre-rendered: every request runs requireAuth() first.
+export const dynamic = "force-dynamic";
 
 export default async function WikiArticlePage({ params }: { params: Params }) {
   const auth = await requireAuth();

@@ -16,8 +16,11 @@ test.describe("university wiki", () => {
 
     await page.getByLabel("Search the wiki").fill("prompt pay");
     await page.getByRole("button", { name: "Search" }).click();
-    await expect(page.getByRole("heading", { name: /articles? match "prompt pay"/ })).toBeVisible();
-    await page.getByRole("link", { name: "The Florida prompt-pay clock" }).click();
+    const results = page.getByRole("region", { name: "Search results" });
+    await expect(results.getByRole("status")).toContainText(/articles? match “prompt pay”/);
+    // The query was POSTed, never put in the address bar (CLAUDE.md #4).
+    expect(page.url()).not.toContain("prompt");
+    await results.getByRole("link", { name: "The Florida prompt-pay clock" }).click();
 
     await expect(page.getByRole("heading", { level: 1, name: "The Florida prompt-pay clock" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "On this page" })).toBeVisible();
@@ -30,4 +33,10 @@ test.describe("university wiki", () => {
   test("an unknown article is a 404", async ({ request }) => {
     expect((await request.get("/university/wiki/no-such-article")).status()).toBe(404);
   });
+});
+
+test("an article is never served without a session", async ({ request }) => {
+  const response = await request.get("/university/wiki/glossary", { maxRedirects: 0 });
+  expect([302, 303, 307, 404]).toContain(response.status());
+  expect(await response.text()).not.toContain("Files and transactions");
 });

@@ -29,8 +29,8 @@ counsel.
 
 | Claim | Window | Counted from |
 | --- | --- | --- |
-| Initial claim, Florida insurer | {{rule:fl.timely_filing.initial}} | Date of service |
-| Initial claim, Florida HMO | {{rule:fl.hmo.timely_filing.initial}} | Date of service |
+| Initial claim, Florida insurer | {{rule:fl.timely_filing.initial}} | Date of service (inpatient anchor pending counsel) |
+| Initial claim, Florida HMO | {{rule:fl.hmo.timely_filing.initial}} | Date of service (inpatient anchor pending counsel) |
 | Claim to a secondary payer, Florida | {{rule:fl.timely_filing.secondary}} | The primary payer's final determination |
 | Traditional Medicare | {{rule:medicare.timely_filing}} | Date of service |
 
@@ -40,7 +40,7 @@ DenialDesk shows **Not configured** for them until the payer's terms are entered
 ## How DenialDesk counts
 
 - A window in months or years lands on the same day of the month; when that day does not exist,
-  it clamps to the month's last day.
+  it clamps to the month's last day (DenialDesk's working reading, pending counsel).
 - A last day that falls on a weekend or holiday is also shown rolled to the next business day,
   marked "pending counsel"; the earlier date governs until counsel confirms the roll-forward rule.
 - The practice's working answer (pending counsel) is that a claim is filed on time when it is

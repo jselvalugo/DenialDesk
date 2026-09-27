@@ -28,8 +28,9 @@ arrives as an **835** file (also called an electronic remittance advice, or ERA)
    failed, never the file's contents.
 3. The payer is matched by its EDI payer ID, and every claim in the file must match one of that
    payer's claims in DenialDesk.
-4. The **balance check** confirms that the payment total equals the sum of the claim payments and
-   provider-level adjustments. A file that does not balance is refused.
+4. The **balance check** confirms that the claim payments, net of provider-level adjustments, equal
+   the payment total. A file that does not balance still loads so you can see it, but it cannot be
+   posted; void it with a reason and ask the payer for a corrected file.
 
 > **Planned:** a clearinghouse feed that delivers 835 files automatically, line-level posting, and
 > re-association of a remittance with its bank deposit.
