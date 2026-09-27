@@ -16,6 +16,8 @@ export type Block =
   | { kind: "rules"; caption: string; ruleIds: string[] }
   /** CARC summaries and DenialDesk categories rendered from src/domain/carc.ts. */
   | { kind: "carcs"; caption: string; codes: string[] }
+  /** Claim adjustment group code summaries rendered from src/domain/group-codes.ts. */
+  | { kind: "groupCodes"; caption: string; codes: string[] }
   | { kind: "table"; caption: string; columns: string[]; rows: string[][] }
   /** Standing note: describes product behavior; not legal or compliance advice. */
   | { kind: "notice"; text: string };
@@ -65,6 +67,7 @@ function blockWords(block: Block): number {
       // A rendered rule row is roughly a title, a value, and a citation.
       return block.ruleIds.length * 20;
     case "carcs":
+    case "groupCodes":
       return block.codes.length * 12;
   }
 }

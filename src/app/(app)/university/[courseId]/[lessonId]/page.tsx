@@ -54,10 +54,7 @@ export default async function LessonPage({ params }: { params: Params }) {
         <LessonBody blocks={lesson.blocks} />
       </Panel>
 
-      <Panel
-        title="Your progress"
-        description="Completions are kept as a training record for your practice and can't be undone."
-      >
+      <Panel title="Your progress" description="Completions are kept for your account and can't be undone.">
         <CompleteLessonForm
           courseId={course.id}
           lessonId={lesson.id}

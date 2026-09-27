@@ -187,26 +187,7 @@ export const COURSES: Course[] = [
             kind: "p",
             text: "A payer explains an adjustment or denial with standard codes on the remittance (the 835 file or the paper explanation of payment). DenialDesk shows three kinds.",
           },
-          {
-            kind: "table",
-            caption: "Claim adjustment group codes (X12 835; summaries, not the official text)",
-            columns: ["Group code", "Summary"],
-            rows: [
-              [
-                "CO",
-                "Contractual obligation: the amount is the provider's responsibility under the contract and cannot be billed to the patient.",
-              ],
-              [
-                "PR",
-                "Patient responsibility: the amount may be billed to the patient (deductible, copay, coinsurance).",
-              ],
-              ["OA", "Other adjustment: neither of the above applies."],
-              [
-                "PI",
-                "Payer-initiated reduction: the payer reduced the payment for a reason that is not a contractual obligation.",
-              ],
-            ],
-          },
+          { kind: "groupCodes", caption: "Claim adjustment group codes", codes: ["CO", "PR", "OA", "PI"] },
           {
             kind: "list",
             items: [
@@ -442,15 +423,15 @@ export const COURSES: Course[] = [
           {
             kind: "list",
             items: [
-              "Interest is simple interest per late payment: the late amount, times the annual rate, times the days late, divided by 365, rounded to whole cents.",
-              "Interest runs from the first calendar day after the payment due date (the owner's reading, pending counsel confirmation); the worksheet states the assumption it uses.",
+              "Interest is simple interest on each late payment; the worksheet shows the formula it applies.",
+              "DenialDesk assumes a start day for interest; that assumption is pending counsel confirmation, and each worksheet states it.",
               "The rate applied to a payment is the rate in force on that payment's date, so a rate change never rewrites earlier payments.",
             ],
           },
           {
             kind: "callout",
             title: "Interest worksheet",
-            text: "Each prompt-pay clock record itemizes the late payments, the days late, and the interest for each, so the practice can document a payer's violation for an Office of Insurance Regulation complaint.",
+            text: "Each prompt-pay clock record itemizes the late payments, the days late, and the interest for each, so the practice has an itemized record to review, for example before an Office of Insurance Regulation complaint.",
             href: "/prompt-pay",
             linkLabel: "Open Prompt pay",
           },
@@ -619,7 +600,7 @@ export const COURSES: Course[] = [
     title: "Protecting patient data in DenialDesk",
     description:
       "What each role can do, how identifiers are masked and reveals recorded, and how sessions and sign-in protect the practice.",
-    audience: "Everyone: required reading for anyone who opens a patient, claim, or denial",
+    audience: "Everyone: recommended for anyone who opens a patient, claim, or denial",
     lessons: [
       {
         id: "roles-and-minimum-necessary",
@@ -639,7 +620,7 @@ export const COURSES: Course[] = [
               [
                 "Administrator",
                 "Everything below, plus practice settings, custom fields, sensitivity tags, and revenue-cycle configuration.",
-                "Create the practice or its Business Associate Agreement (the platform operator does that).",
+                "Create the practice or record its signed Business Associate Agreement (the DenialDesk platform operator does that).",
               ],
               [
                 "RCM manager",
@@ -682,7 +663,7 @@ export const COURSES: Course[] = [
             items: [
               "Member IDs are encrypted in the database and shown masked, with only the last digits visible.",
               "Revealing a member ID asks for a reason and writes an audit event with your name, the record, the reason, and the time. Reveal only when the work needs the full number.",
-              "Every view of a queue, list, or record, and every change, is audited. The audit trail is append-only; nothing in it can be edited or removed from the product.",
+              "Every view of, and change to, patient, claim, denial, appeal, and remittance records and lists is audited. The audit trail is append-only; nothing in it can be edited or removed from the product.",
               "Patient names never appear in page addresses, browser titles, or notifications, so sharing a link inside the practice shares only an opaque ID.",
             ],
           },
@@ -711,8 +692,8 @@ export const COURSES: Course[] = [
             kind: "list",
             items: [
               "Every practice account signs in with a password and a six-digit code from an authenticator app. There is no way to skip the second step.",
-              "An idle session shows a warning after 13 minutes and ends after 15. Signing back in returns you to the welcome page.",
-              "Repeated wrong passwords lock the account for a period; an administrator can help, and the attempts are recorded.",
+              "An idle session ends after 15 minutes, with a warning shortly before. Signing back in returns you to the welcome page.",
+              "Repeated wrong passwords lock the account; the lock lifts on its own after a short wait, and the attempts are recorded.",
               "On a shared workstation, use Sign out in the user menu when you step away; do not rely on the timeout.",
             ],
           },

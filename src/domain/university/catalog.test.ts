@@ -28,26 +28,30 @@ describe("university catalog integrity", () => {
     }
   });
 
-  it("names only rules that resolve in the catalog today (no statutory values typed in prose)", () => {
-    const statute = /§|\bCFR\b|\bdays?\b.*\b(20|35|40|90|120|140|180)\b|12%|\b6 months\b|\b12 months\b/;
-    for (const course of COURSES) {
-      for (const lesson of course.lessons) {
-        for (const block of lesson.blocks) {
-          if (block.kind === "rules") {
-            expect(block.ruleIds.length).toBeGreaterThan(0);
-            for (const id of block.ruleIds) expect(() => resolveRule(id, today)).not.toThrow();
-          } else if (block.kind === "p" || block.kind === "notice") {
-            expect(block.text, `${course.id}/${lesson.id}`).not.toMatch(statute);
-          } else if (block.kind === "list") {
-            for (const item of block.items) expect(item, `${course.id}/${lesson.id}`).not.toMatch(statute);
-          } else if (block.kind === "callout") {
-            expect(block.text, `${course.id}/${lesson.id}`).not.toMatch(statute);
-          } else if (block.kind === "table") {
-            for (const row of block.rows) for (const cell of row) expect(cell).not.toMatch(statute);
-          }
-        }
-      }
+  it("names only rules that resolve in the catalog today", () => {
+    for (const block of COURSES.flatMap((c) => c.lessons).flatMap((l) => l.blocks)) {
+      if (block.kind !== "rules") continue;
+      expect(block.ruleIds.length).toBeGreaterThan(0);
+      for (const id of block.ruleIds) expect(() => resolveRule(id, today)).not.toThrow();
     }
+  });
+
+  it("types no statutory value into any string (rules blocks only, CLAUDE.md)", () => {
+    // Citations, and a number followed by a period/rate word, anywhere in the catalog. Product
+    // settings that are not legal values (7-day tile, 25 per page, 15-minute idle timeout) are listed.
+    const statute =
+      /§|\bCFR\b|\b(?:\d+|one|two|three|five|six|twelve)\s*(?:-\s*)?(?:calendar|business|hours?|days?|months?|years?|percent|%)/i;
+    const allowed = ["7 days", "25 denials", "15 minutes", "six-digit"];
+    const walk = (value: unknown, path: string) => {
+      if (typeof value === "string") {
+        let text = value;
+        for (const ok of allowed) text = text.replaceAll(ok, "");
+        expect(text, path).not.toMatch(statute);
+      } else if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}[${i}]`));
+      else if (value && typeof value === "object")
+        for (const [k, v] of Object.entries(value)) if (k !== "ruleIds") walk(v, `${path}.${k}`);
+    };
+    walk(COURSES, "COURSES");
   });
 
   it("names only CARCs that exist in src/domain/carc.ts", () => {

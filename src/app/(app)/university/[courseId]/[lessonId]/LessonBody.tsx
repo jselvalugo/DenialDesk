@@ -8,6 +8,7 @@ import { Code } from "@/components/ui/Code";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { CARC, CATEGORY_LABELS } from "@/domain/carc";
 import { REGIME_LABELS } from "@/domain/denial-status";
+import { GROUP_CODES } from "@/domain/group-codes";
 import type { Block } from "@/domain/university/content";
 
 const plural = (value: number, one: string, many: string) => `${value} ${value === 1 ? one : many}`;
@@ -68,13 +69,13 @@ function RulesBlock({ block, today }: { block: Extract<Block, { kind: "rules" }>
               </Td>
               <Td>{rule.citation}</Td>
               <Td>
-                {rule.verify ? (
-                  <Badge tone="warning" dot={false}>
-                    Pending counsel verification
+                {!rule.verify && rule.confirmedBy ? (
+                  <Badge tone="success" dot={false}>
+                    Confirmed by counsel {rule.confirmedBy.on}
                   </Badge>
                 ) : (
-                  <Badge tone="success" dot={false}>
-                    Verified
+                  <Badge tone="warning" dot={false}>
+                    Pending counsel verification
                   </Badge>
                 )}
               </Td>
@@ -115,6 +116,40 @@ function CarcsBlock({ block }: { block: Extract<Block, { kind: "carcs" }> }) {
       </Table>
       <p className="border-t border-border bg-surface-muted px-3 py-2 text-caption text-muted">
         Summaries, not the official X12 wording; categories are DenialDesk&rsquo;s own classification.
+      </p>
+    </div>
+  );
+}
+
+function GroupCodesBlock({ block }: { block: Extract<Block, { kind: "groupCodes" }> }) {
+  return (
+    <div className="overflow-hidden rounded-panel border border-border">
+      <Table caption={block.caption}>
+        <thead>
+          <tr>
+            <Th>Group code</Th>
+            <Th>Name</Th>
+            <Th>Summary</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {block.codes.map((code) => {
+            const entry = GROUP_CODES[code];
+            if (!entry) return null;
+            return (
+              <Tr key={code}>
+                <Td>
+                  <Code>{code}</Code>
+                </Td>
+                <Td className="font-medium">{entry.name}</Td>
+                <Td>{entry.summary}</Td>
+              </Tr>
+            );
+          })}
+        </tbody>
+      </Table>
+      <p className="border-t border-border bg-surface-muted px-3 py-2 text-caption text-muted">
+        Summaries of the X12 835 group codes, not the official wording.
       </p>
     </div>
   );
@@ -204,6 +239,8 @@ export function LessonBody({ blocks }: { blocks: Block[] }) {
             return <RulesBlock key={index} block={block} today={today} />;
           case "carcs":
             return <CarcsBlock key={index} block={block} />;
+          case "groupCodes":
+            return <GroupCodesBlock key={index} block={block} />;
           case "table":
             return <TableBlock key={index} block={block} />;
         }

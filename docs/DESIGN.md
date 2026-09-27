@@ -195,7 +195,7 @@ styled with our tokens (ADR 0004).
 ## 12. PHI-safe UI (REQUIREMENTS §7.4.8)
 - No PHI in URLs (use opaque IDs), page titles, browser notifications, or client logs.
 - Mask high-risk identifiers by default (`MaskedValue`).
-- Session timeout warning at 13 minutes idle, logout at 15 (R-7.2.7).
+- Session ends after 15 minutes idle with a warning shortly before (values in `src/auth/policy.ts` and `SessionTimeout.tsx`, R-7.2.7).
 - Print and export are explicit, audited actions.
 
 ## 13. Themes

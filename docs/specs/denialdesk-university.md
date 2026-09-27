@@ -4,7 +4,9 @@ Status: in progress (U1 built 2026-09-27; owner requested "a DenialDesk Universi
 the nav bar or the user menu)
 Roadmap item: Phase 1 → Setup (role-specific training for billing staff, R-10.4); supports the
 welcome page (`specs/welcome-page.md`, which left onboarding out of scope)
-Requirement IDs: R-10.4, R-7.5.1, R-7.2.4, R-7.4.8, R-15.6, §11 (usability, WCAG 2.1 AA)
+Requirement IDs: R-7.5.1, R-7.2.4, R-7.4.8, R-15.6, §11 (usability, WCAG 2.1 AA); supports practices'
+own workforce training (R-10.4 is DenialDesk's staff requirement; whether practice completions count as
+HIPAA training evidence is OA-035)
 
 ## Goal
 Every practice user can open DenialDesk University from the global header or the user menu and
@@ -50,15 +52,21 @@ lesson completions are kept per practice so the practice has a training record (
       title, value + unit, citation, and a "Pending counsel verification" badge while
       `verify` is true. A rule ID that is not in the catalog fails the unit test, never the page.
       When counsel changes a value, the lesson changes with it.
-- [x] CARC descriptions in lessons come from `src/domain/carc.ts` (summaries flagged ⚠️ VERIFY at
-      their source), never retyped.
+- [x] CARC descriptions come from `src/domain/carc.ts` and claim adjustment group codes from
+      `src/domain/group-codes.ts` (summaries flagged ⚠️ VERIFY at their source), never retyped.
+- [x] A rule shows "Confirmed by counsel <date>" only when `verify` is false and `confirmedBy` is
+      recorded; otherwise "Pending counsel verification".
 - [x] Progress table `university_progress` (tenant_id, user_id, lesson_id, completed_at; unique per
       tenant + user + lesson) with row-level security, the app role granted SELECT/INSERT only
-      (no UPDATE or DELETE: completions are append-only), and a row in the shared isolation test.
-      Contains no PHI (Internal data, REQUIREMENTS §9.1): user IDs and lesson slugs only.
+      (no UPDATE or DELETE: completions are append-only), and its own isolation tests in
+      `test/integration/university.test.ts` (the shared tenancy test assumes UPDATE is granted).
+      Row-level security is per practice; per-user scoping is done in code from the session's user
+      ID, never a request value. Contains no PHI (Internal data, REQUIREMENTS §9.1): user IDs and
+      lesson slugs only.
 - [x] Audit: `university.lesson_completed` (entity `university_lesson`, metadata `{ courseId,
       lessonId }`) is recorded in the same transaction as the completion, so the training record
-      is evidenced in the audit log (R-7.5.1, SOC 2 CC1.4 / CC2.2 training evidence). Viewing a
+      is evidenced in the audit log (R-7.5.1; SOC 2 CC7.2, and CC2.3 as a complementary user-entity
+      control; not DenialDesk workforce training evidence, CC1.4). Viewing a
       lesson is not audited (no PHI is read).
 - [x] Every lesson that touches HIPAA or Florida law says it describes how DenialDesk behaves and
       is not legal or compliance advice; practice policy and the practice's privacy officer govern.
@@ -96,14 +104,12 @@ lesson completions are kept per practice so the practice has a training record (
 - Data classification: Internal. No PHI anywhere in the feature. Logs: none beyond the audit row.
 
 ## Legal rules used
-Displayed only, never computed here: `fl.promptpay.electronic.pay_or_contest`,
-`fl.promptpay.electronic.provider_response`, `fl.promptpay.electronic.pay_or_deny`,
-`fl.promptpay.electronic.uncontestable`, `fl.promptpay.paper.pay_or_contest`,
-`fl.promptpay.paper.pay_or_deny`, `fl.promptpay.paper.uncontestable`, `fl.promptpay.interest_rate`,
-`fl.timely_filing.initial`, `medicare.timely_filing`, `medicare.redetermination.receipt_presumption`,
-`medicare.redetermination.filing_window`, `medicare.reconsideration.filing_window`,
-`medicare.alj_hearing.filing_window`, `medicare.council_review.filing_window`,
-`medicare.judicial_review.filing_window`. Each carries its own citation and ⚠️ VERIFY flag from
+Displayed only, never computed here: the FL insurer and FL HMO prompt-pay sets
+(`fl.promptpay.{electronic,paper}.{acknowledgment,pay_or_contest,pay_or_deny,uncontestable}`,
+`fl.promptpay.electronic.provider_response`, `fl.promptpay.interest_rate`, and their `fl.hmo.*`
+counterparts), `fl.timely_filing.{initial,secondary}` and the HMO counterparts,
+`medicare.timely_filing`, `medicare.redetermination.{receipt_presumption,filing_window}`,
+`medicare.appeals.receipt_presumption`, and the level 2–5 `medicare.*.filing_window` rules. Each carries its own citation and ⚠️ VERIFY flag from
 `rules/catalog.ts`; the University adds nothing to them. No new rules.
 
 ## Notes
@@ -120,6 +126,12 @@ Videos, external LMS integration, certificates, SCORM/xAPI, per-user reminders (
 content, role-gated courses, anything that writes to a claim, denial, or code.
 
 ## Open questions
+- Retention of completions after a user leaves the practice, and whether a content version should
+  be stored with each completion before they are used as evidence (U3). The FK to `memberships`
+  blocks deleting a membership with completions; offboarding must deactivate instead. Counsel
+  wording review of all lesson copy before production (customer-facing compliance statement).
+- Medicare amount-in-controversy thresholds (levels 3 and 5) still need an effective-dated entry in
+  `rules/` (florida-rules-engine; see the TODO in `rules/catalog.ts`).
 - U3: does the practice's HIPAA training program want DenialDesk completions as evidence, and in
   what form (owner / practice compliance officer)? Tracked as `OA-035`.
 - Should "Getting started" be suggested on a user's first sign-in (a one-time banner on `/`)?
