@@ -118,16 +118,16 @@ date order change. Rule IDs and citations shown on screen stay as cited.
   letters, statements sent to patients) — a later spec when those documents exist.
 - Locale-aware money formatting (decided against, above) and number entry in other decimal styles.
 - DenialDesk University lesson and Wiki article content (`src/domain/university/**`): the University's
-  UI is translated; its long-form educational content stays English until the owner decides (OA-039),
-  since it is legal-adjacent text that needs the same review as OA-038.
+  UI is translated; its long-form educational content stays English until the owner decides (OA-042),
+  since it is legal-adjacent text that needs the same review as OA-041.
 - Machine translation at runtime; every string is authored and reviewed.
 
 ## Open questions
 - Owner: should a practice administrator be able to set a practice-wide default language for new
   users (today: browser language until the user picks)? Added to `docs/owner/OWNER_ACTION_ITEMS.xlsx`
-  as OA-037.
+  as OA-040.
 - Owner: a native-speaker review of the Spanish and Portuguese billing terminology before launch
-  (OA-038), extended to counsel or compliance sign-off that the translated attestations and caveats
+  (OA-041), extended to counsel or compliance sign-off that the translated attestations and caveats
   (synthetic-data attestation, BAA recording labels, uncontestable-obligation alert, R-8.7
   suppression and residual-risk text) say the same thing in law. The glossary above is what the
   product uses until then. Pre-production holds synthetic data only, so this gates the Azure launch.

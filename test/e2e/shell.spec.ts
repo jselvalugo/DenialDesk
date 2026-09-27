@@ -208,6 +208,19 @@ test.describe("shell chrome", () => {
   });
 });
 
+test.describe("shell chrome with a long user name", () => {
+  // "Quinn Montgomery-Whitfield" (global-setup.ts): the name is truncated rather than widening the header.
+  test.use({ storageState: "test/e2e/.auth/viewer.json" });
+
+  test("the header still fits a 1024px window", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await page.goto("/overview");
+    await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+    await expect(page.getByRole("banner").getByRole("link", { name: "DenialDesk Wiki" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1024);
+  });
+});
+
 test.describe("signed in", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 

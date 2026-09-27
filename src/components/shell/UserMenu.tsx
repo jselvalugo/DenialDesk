@@ -88,8 +88,11 @@ export function UserMenu({ user }: { user: ShellUser }) {
         >
           {initials(user.displayName)}
         </span>
-        <span className="leading-tight">
-          <span className="block text-body font-medium text-text">{user.displayName}</span>
+        <span className="min-w-0 leading-tight">
+          {/* Truncated so a long name can't push the header past 1024px (DESIGN.md §8). */}
+          <span className="block max-w-40 truncate text-body font-medium text-text xl:max-w-56">
+            {user.displayName}
+          </span>
           <span className="block text-label text-muted">{role}</span>
         </span>
         <ChevronDown aria-hidden="true" className="size-4 text-subtle" />
