@@ -51,7 +51,18 @@ export async function listDenials(tx: TenantTx, filters: QueueFilters, userId: s
       ? [desc(denials.deniedCents), asc(denials.id)]
       : filters.sort === "notice"
         ? [desc(denials.noticeDate), asc(denials.id)]
-        : [sql`${denials.appealDeadline} asc nulls last`, desc(denials.deniedCents), asc(denials.id)];
+        : [
+            // Denials still awaiting practice action sort ahead of ones whose deadline is already
+            // met (e.g. appeal_submitted), so a soon-but-already-handled deadline never bumps a
+            // denial that still needs work (D1).
+            sql`case when ${denials.status} in (${sql.join(
+              ACTION_STATUSES.map((s) => sql`${s}`),
+              sql`, `,
+            )}) then 0 else 1 end`,
+            sql`${denials.appealDeadline} asc nulls last`,
+            desc(denials.deniedCents),
+            asc(denials.id),
+          ];
 
   const rows = await tx
     .select({

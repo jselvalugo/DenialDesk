@@ -1,5 +1,7 @@
 # Spec: Design system foundation
 
+> 2026-09-26: the `/design` page was removed at the owner's request; tokens and components remain.
+
 Status: done (2026-09-26)
 Roadmap item: `docs/ROADMAP.md` → Phase 0 → "Design system foundation + app shell"
 Requirement IDs: §11 (WCAG 2.1 AA), R-7.1.3, R-7.4.8
@@ -33,5 +35,5 @@ None. Deadline dates on `/design` are illustrative; tone thresholds are UI setti
 Radix primitives, icons, TanStack Table, dark theme, real navigation targets.
 
 ## Follow-ups
-- No automated test yet that production mode hides the banner and 404s `/design`; add one with
+- No automated test yet that production mode hides the banner and 404s `/design`; add one with (moot: page removed 2026-09-26)
   the Netlify deploy spec (needs a second server run with `APP_ENV=production`).

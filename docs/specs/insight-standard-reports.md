@@ -39,6 +39,13 @@ Status: approved
   tenant-wide scalar, not a breakdown into sibling rows, so cell-level suppression doesn't apply to
   it the same way; see "Accepted residual risks" below for what that leaves open.
 
+  **Second reviewer nit, same date:** report #6 (appeal outcomes) produces two sheets — by payer
+  and by category — that group the exact same set of decided-appeal rows two different ways, so
+  both sheets' totals are the same true grand total. If only the by-payer sheet's totals had been
+  suppressed, the by-category sheet's still-visible totals would reveal it (and vice versa).
+  `appealOutcomesSheets()` now suppresses both sheets' totals together whenever either sheet has a
+  suppressed row.
+
   **Accepted residual risks (⚠️ VERIFY with counsel — not fixed in this slice):** (1) suppression
   is decided independently per report and per date range; a determined reader comparing two
   overlapping date ranges of the same report, or two different reports covering the same
@@ -48,7 +55,7 @@ Status: approved
   date range or payer filter could still make it identify a single sensitive-tagged patient's
   claim. Both are stated as caveats on the relevant reports' About sheets, not silently accepted.
   (3) Exporting a suppressed report off the platform is itself gated on the still-open written
-  handling/retention question (`OA-023` below) — until that is resolved, treat any exported
+  handling/retention question (`OA-033` below) — until that is resolved, treat any exported
   workbook, suppressed or not, as needing the same handling care as an unsuppressed one, and do
   not treat suppression as a substitute for a handling policy once workbooks reach a production
   (Azure) environment.
@@ -56,12 +63,12 @@ Status: approved
   `manager`, and `compliance` can view and download. This matches what shipped in the first round
   (see "Owner decisions (2026-09-26)" below) — the owner reconfirmed it on the same date.
 - **Written handling/retention policy for downloaded workbooks: not decided yet.** The owner said
-  "not sure, let's confirm." Tracked as `OA-023` in `docs/owner/OWNER_ACTION_ITEMS.xlsx` (asks
+  "not sure, let's confirm." Tracked as `OA-033` in `docs/owner/OWNER_ACTION_ITEMS.xlsx` (asks
   owner/counsel to decide whether practices need a written policy for handling/retaining exported
   Insight workbooks once they leave the audited system as files — R-9.2.1, SOC 2 C1.1/CC6.7) and
   as an open question in `docs/PROJECT_STATE.md` and (via that file) `docs/OWNER_ACTIONS.md`.
-  **Export to production (Azure) is gated on `OA-023`:** Insight export should not be turned on for
-  a production (Azure) tenant until this question is answered, so the note is on `OA-023` itself,
+  **Export to production (Azure) is gated on `OA-033`:** Insight export should not be turned on for
+  a production (Azure) tenant until this question is answered, so the note is on `OA-033` itself,
   not only in this spec.
 
 ## Owner decisions (2026-09-26)
@@ -479,7 +486,7 @@ statutory deadline, rate, or threshold. No `rules/` changes.
 Almost all resolved by the owner on 2026-09-26 — see "Owner decisions" at the top of this spec.
 One remains open:
 - **Written handling/retention policy for downloaded .xlsx workbooks** (R-9.2.1, SOC 2
-  C1.1/CC6.7): owner said "not sure, let's confirm" — tracked as `OA-023` in
+  C1.1/CC6.7): owner said "not sure, let's confirm" — tracked as `OA-033` in
   `docs/owner/OWNER_ACTION_ITEMS.xlsx`.
 
 Left here for the historical record of what was asked in the first round:

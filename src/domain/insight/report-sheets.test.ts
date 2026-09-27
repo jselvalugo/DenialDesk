@@ -269,4 +269,54 @@ describe("appealOutcomesSheets — suppresses the outcome totals row too", () =>
     expect(isSuppressedCell(byPayerSheet.totals!.overturned)).toBe(false);
     expect(byPayerSheet.totals!.overturned).toBe(1);
   });
+
+  it("suppresses both sheets' totals together when only the by-payer sheet has a suppressed row (same underlying decided appeals)", () => {
+    // Both sheets group the very same set of decided appeals — one by payer, one by category —
+    // so they share one true grand total. If the by-category sheet's totals stayed visible while
+    // the by-payer sheet's were suppressed, a reader could read the true total off the
+    // by-category sheet and use it to back out the by-payer sheet's suppressed row.
+    const byPayer: OutcomeGroup[] = [
+      {
+        key: "p1",
+        label: "Sensitive Payer",
+        overturned: 1,
+        upheld: 1,
+        overturnRate: 0.5,
+        reversedCents: 100,
+        sensitive: true,
+      },
+      {
+        key: "p2",
+        label: "Bulk Payer",
+        overturned: 200,
+        upheld: 100,
+        overturnRate: 2 / 3,
+        reversedCents: 20_000,
+        sensitive: false,
+      },
+    ];
+    // Grouped by category instead: same total decided count (202 overturned, 101 upheld), no row
+    // here is itself suppressed (no sensitive category row, and none is under the threshold).
+    const byCategory: OutcomeGroup[] = [
+      {
+        key: "coding",
+        label: "coding",
+        overturned: 201,
+        upheld: 101,
+        overturnRate: 201 / 302,
+        reversedCents: 20_100,
+        sensitive: false,
+      },
+    ];
+    const [byPayerSheet, byCategorySheet] = appealOutcomesSheets(byPayer, byCategory);
+    // The by-payer sheet has a suppressed row, as before.
+    expect(isSuppressedCell(byPayerSheet!.totals!.overturned)).toBe(true);
+    // The by-category sheet has no suppressed row of its own, but its totals must be suppressed
+    // too, since they equal the by-payer sheet's true (suppressed) totals.
+    expect(byCategorySheet!.rows.every((r) => !isSuppressedCell(r.overturned))).toBe(true);
+    expect(isSuppressedCell(byCategorySheet!.totals!.overturned)).toBe(true);
+    expect(isSuppressedCell(byCategorySheet!.totals!.upheld)).toBe(true);
+    expect(isSuppressedCell(byCategorySheet!.totals!.overturnRate)).toBe(true);
+    expect(isSuppressedCell(byCategorySheet!.totals!.reversedCents)).toBe(true);
+  });
 });

@@ -3,6 +3,8 @@ import { eq, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
 import {
+  appealNotes,
+  appeals,
   auditEvents,
   businessRules,
   claimLines,
@@ -15,6 +17,7 @@ import {
   patients,
   payerClasses,
   payers,
+  practiceSettings,
   providers,
   rcmSites,
   tenants,
@@ -41,10 +44,24 @@ async function practice(label: string, seed: number): Promise<Ctx> {
   });
   const ctx = { tenantId, userId: userIds[0]! };
   await withTenant(ctx, async (tx) => {
-    const [denial] = await tx.select({ id: denials.id }).from(denials).limit(1);
+    const [denial] = await tx.select({ id: denials.id, claimId: denials.claimId }).from(denials).limit(1);
     await tx
       .insert(denialNotes)
       .values({ tenantId, denialId: denial!.id, authorId: ctx.userId, body: "Synthetic note" });
+    const [appeal] = await tx
+      .insert(appeals)
+      .values({
+        tenantId,
+        denialId: denial!.id,
+        claimId: denial!.claimId,
+        level: "first_level",
+        filedBy: ctx.userId,
+      })
+      .returning({ id: appeals.id });
+    await tx
+      .insert(appealNotes)
+      .values({ tenantId, appealId: appeal!.id, authorId: ctx.userId, body: "Synthetic appeal note" });
+    await tx.insert(practiceSettings).values({ tenantId, key: "appeal_follow_up_days", value: "30" });
   });
   return ctx;
 }
@@ -65,6 +82,8 @@ const tenantTables = {
   claimLines,
   denials,
   denialNotes,
+  appeals,
+  practiceSettings,
   rcmSites,
   glAccounts,
   payerClasses,
@@ -132,6 +151,102 @@ describe("cross-tenant inserts", () => {
           .values({ tenantId: b.tenantId, denialId: bDenial!.id, authorId: a.userId, body: "x" }),
       ),
       /row-level security/,
+    );
+  });
+
+  it("rejects a note on another tenant's appeal", async () => {
+    const [bAppeal] = await withTenant(b, (tx) => tx.select({ id: appeals.id }).from(appeals).limit(1));
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx
+          .insert(appealNotes)
+          .values({ tenantId: b.tenantId, appealId: bAppeal!.id, authorId: a.userId, body: "x" }),
+      ),
+      /row-level security/,
+    );
+  });
+
+  it("rejects an appeal on another tenant's denial or claim", async () => {
+    const [bDenial] = await withTenant(b, (tx) =>
+      tx.select({ id: denials.id, claimId: denials.claimId }).from(denials).limit(1),
+    );
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(appeals).values({
+          tenantId: a.tenantId,
+          denialId: bDenial!.id,
+          claimId: bDenial!.claimId,
+          level: "first_level",
+          filedBy: a.userId,
+        }),
+      ),
+      // Blocked one of two ways: the composite FK, or the claim-matches-denial trigger's own
+      // lookup (which runs first and, under tenant a's RLS, can't see tenant b's denial row either).
+      /row-level security|Integrity constraint violation|does not match the claim of denial/,
+    );
+  });
+
+  it("rejects an appeal on another tenant's own denial paired with its own claim (claim/denial mismatch)", async () => {
+    // Same tenant on both sides of the composite FKs, but the claim doesn't belong to the denial.
+    const [aDenial] = await withTenant(a, (tx) =>
+      tx.select({ id: denials.id, claimId: denials.claimId }).from(denials).limit(1),
+    );
+    const [otherClaim] = await withTenant(a, (tx) =>
+      tx
+        .select({ id: claims.id })
+        .from(claims)
+        .where(sql`${claims.id} != ${aDenial!.claimId}`)
+        .limit(1),
+    );
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(appeals).values({
+          tenantId: a.tenantId,
+          denialId: aDenial!.id,
+          claimId: otherClaim!.id,
+          level: "first_level",
+          filedBy: a.userId,
+        }),
+      ),
+      /does not match the claim of denial/,
+    );
+  });
+
+  it("rejects a practice setting stamped with another tenant", async () => {
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(practiceSettings).values({ tenantId: b.tenantId, key: "sneaky", value: "1" }),
+      ),
+      /row-level security/,
+    );
+  });
+});
+
+describe("appeal_notes tenant isolation (insert/select only, no update grant)", () => {
+  it("shows a tenant only its own notes", async () => {
+    const rows = await withTenant(a, (tx) => tx.select({ tenantId: appealNotes.tenantId }).from(appealNotes));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(new Set(rows.map((r) => r.tenantId))).toEqual(new Set([a.tenantId]));
+  });
+
+  it("hides another tenant's notes even when asked for them directly", async () => {
+    const rows = await withTenant(a, (tx) =>
+      tx.select({ id: appealNotes.id }).from(appealNotes).where(eq(appealNotes.tenantId, b.tenantId)),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("can't update a note at all (no UPDATE grant)", async () => {
+    await expectDbError(
+      withTenant(a, (tx) => tx.update(appealNotes).set({ body: "edited" })),
+      /permission denied/,
+    );
+  });
+
+  it("can't hard-delete a note", async () => {
+    await expectDbError(
+      withTenant(a, (tx) => tx.delete(appealNotes)),
+      /permission denied/,
     );
   });
 });

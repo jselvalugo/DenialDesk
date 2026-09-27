@@ -277,6 +277,12 @@ describe("recordAgreement", () => {
     expect(error.message).toMatch(/just recorded/);
     expect(error.message).not.toMatch(/Racer|%PDF/);
     expect(await listAgreements(tenantId)).toHaveLength(1);
+    // The loser's transaction rolled back whole: exactly one audit event, for the winner.
+    const events = await systemDb()
+      .select({ id: auditEvents.id })
+      .from(auditEvents)
+      .where(and(eq(auditEvents.action, "operator.agreement_recorded"), eq(auditEvents.tenantId, tenantId)));
+    expect(events).toHaveLength(1);
   });
 
   it("records the audit event in the same transaction as the agreement", async () => {

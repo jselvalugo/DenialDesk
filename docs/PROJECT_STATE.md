@@ -6,6 +6,20 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
+- Appeals A1 (`specs/appeals.md`): `appeals` + `appeal_notes` tables (tenant RLS, isolation test,
+  a DB trigger enforcing the status lifecycle draft → in_review → ready → submitted →
+  awaiting_decision → decided, with withdrawn/dismissed reachable from submitted/awaiting_decision).
+  `/appeals` work list (level/payer/status filters, deadline/amount sort, totals row); "Start
+  appeal" on the denial detail page opens `/appeals/new?denialId=<id>` (own create page, deadline
+  computed fresh from the rules engine, never guessed); `/appeals/[id]` records the submission
+  (method, date, tracking ref) and the decision (outcome, date, recovered amount, close reason),
+  syncing the linked denial's status. "Appeals" is now a live item in the Denials module switcher.
+  A practice-configurable appeal follow-up-day default lives in a new small `practice_settings`
+  key/value table (no admin UI yet to edit it in A1 — it always reads the built-in 30-day default
+  until one is set directly in the table). Next: A2 letter templates, A3 escalation/Medicare
+  5-level ladder, A4 overturn-rate analytics, A5 attachment storage. Open questions from the spec
+  (late-filing blocking, appeal version history, withdrawn/dismissed → denial status mapping,
+  amount-in-controversy source) are added to `docs/owner/OWNER_ACTION_ITEMS.xlsx`.
 - Remittances and prompt pay R1/PP1 (`specs/remittances-and-prompt-pay.md`): 835 upload (parser in
   `src/edi/x12/`), `/remittances` table and record page with balance check, post (claim version +
   prompt-pay response per claim) and void with reason; `/prompt-pay` table and clock record page
@@ -20,7 +34,7 @@ _Last updated: 2026-09-26_
   field encryption, BAA on file). Wording passed `compliance-checker`; owner sign-off on copy pending.
 - Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
   section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
-  planned; Design system in pre-production). Administrators define custom fields on patients,
+  planned). The `/design` style-guide page was removed 2026-09-26 (owner request). Administrators define custom fields on patients,
   claims, denials, and payers (`custom_fields`, migration 0023, RLS + isolation test, audited).
   Next: S2 render and store field values on record forms.
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
@@ -75,7 +89,7 @@ _Last updated: 2026-09-26_
   and the .xlsx always agree. Accepted residual risks, documented on the About sheet: cross-report
   / overlapping-date-range differencing isn't guarded against, and report #3 (denial rate)'s
   tenant-wide denied-claims count is never suppressed (it's one scalar, not a row breakdown).
-  Exporting to a production (Azure) tenant is gated on `OA-023` (the still-open written
+  Exporting to a production (Azure) tenant is gated on `OA-033` (the still-open written
   handling/retention policy question). Next: custom/user-built reports, patient-level drill-down
   once broader sensitivity-tag enforcement lands (R-3.5.1), and the two planned reports once their
   blockers clear.
@@ -156,6 +170,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Shell differentiated from any vendor's product; no third-party design IP; competitor names out of product copy and public docs | ADR 0005 |
 | 2026-09-26 | Every DB error sanitized where Drizzle creates it (system and tenant); kept messages opt-in (owner: fix both in PR #28) | ADR 0006 |
 | 2026-09-26 | Custom field values on records (settings S2) are in the Phase 1 MVP; sensitivity checkboxes hidden from the patient form (owner, 2026-09-26; R-3.5.1 tagging gap accepted, compliance sign-off pending) | `specs/settings-and-custom-fields.md` |
+| 2026-09-26 | Owner answers on the billing-structure review's open questions (§8) — **pending counsel confirmation; not yet implemented in rule logic**: (1) timely filing counts from the submission date, evidenced by the clearinghouse acknowledgement (not the payer's receipt date); (2) a deadline landing on a weekend or Florida/federal holiday rolls to the next business day; (4) Medicare Advantage is not under Florida prompt pay per the owner — MA payment timing follows the plan contract (⚠️ VERIFY: 42 CFR § 422.520 sets a 30-day clean-claim rule for non-contracted providers; counsel to confirm this doesn't reintroduce a statutory clock); (5) late-payment interest starts accruing the first calendar day after the prompt-pay deadline passes. Item (3), month-end clamping of the 6-/12-month timely-filing windows, is still open and being researched separately. | `docs/reviews/2026-09-26-billing-structure-review.md` §8 |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -173,13 +188,21 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): ADR 0007 and threat model accepted; PR 1
-   (encrypted storage, value history, role-gated reveal) in review on branch
-   `claude/custom-field-values-storage`. Next: PR 2 patient form, PR 3 claims/denials, PR 4 payers.
+   (encrypted storage, value history, role-gated reveal) merged as #53. Next: PR 2 patient form,
+   PR 3 claims/denials, PR 4 payers.
 7. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
+- Month-end clamping of the 6- and 12-month timely-filing windows (billing-structure review §3.4,
+  §8 item 3): being researched separately; not yet decided.
+- Appeals A1 (`specs/appeals.md`): late-filing blocking (OA-023), withdrawn/dismissed → denial
+  status mapping (OA-024), appeal version history before A2 (OA-025), Medicare amount-in-controversy
+  thresholds source (OA-026), tracking/recovered-amount field masking (OA-027), abandoning a draft
+  appeal (OA-028), compliance member-ID reveal on appeals (OA-029), counsel sign-off on the level
+  2–5 Medicare rules added in this review round (OA-030), sensitivity-tag masking timing (OA-031),
+  appeal record retention (OA-032).
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
@@ -195,9 +218,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   to `main` and protect it (R-7.4.4) before more PRs land.
 - Insight exported .xlsx workbooks (R-9.2.1, SOC 2 C1.1/CC6.7): owner said "not sure, let's
   confirm" on 2026-09-26 whether practices need a written handling/retention policy for downloaded
-  workbooks (they leave the audited system as files on a user's device). See `OA-023` in
+  workbooks (they leave the audited system as files on a user's device). See `OA-033` in
   `docs/owner/OWNER_ACTION_ITEMS.xlsx`. **Export to a production (Azure) tenant is gated on this
-  item being resolved** — don't enable Insight export for a real practice before `OA-023` closes.
+  item being resolved** — don't enable Insight export for a real practice before `OA-033` closes.
 
 - Revenue cycle imports (before real data, `docs/threat-models/revenue-cycle-imports.md`):
   sensitivity tags for lines (Part 2/HIV/behavioral CPTs); encrypt account numbers or confirm

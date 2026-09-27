@@ -5,6 +5,7 @@ import { closeDatabase } from "@/db/client";
 import { claims, denials } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { withTenant } from "@/db/tenant";
+import { ACTION_STATUSES } from "@/domain/denial-status";
 import { DUE_SOON_DAYS, listDenials, PAGE_SIZE, queueSummary } from "@/domain/denials/queries";
 import { generateDataset } from "@/domain/synthetic/generator";
 
@@ -64,15 +65,28 @@ describe("listDenials", () => {
     expect(result.rows.length).toBe(Math.min(allByPayer, PAGE_SIZE));
   });
 
-  it("sorts by deadline with no-deadline rows last", async () => {
+  it("sorts by deadline with no-deadline rows last, awaiting-action denials first (D1)", async () => {
     const { rows } = await withTenant(ctx, (tx) =>
-      listDenials(tx, { status: "open", sort: "deadline", page: 1 }, ctx.userId),
+      listDenials(tx, { status: "all", sort: "deadline", page: 1 }, ctx.userId),
     );
-    const deadlines = rows.map((r) => r.appealDeadline);
-    const firstNull = deadlines.indexOf(null);
-    const dated = (firstNull === -1 ? deadlines : deadlines.slice(0, firstNull)) as string[];
-    expect(dated).toEqual([...dated].sort());
-    if (firstNull !== -1) expect(deadlines.slice(firstNull).every((d) => d === null)).toBe(true);
+    // Awaiting-action denials (deadline not yet met) sort ahead of ones whose deadline is already
+    // met (e.g. appeal_submitted), even when the latter's deadline is sooner.
+    const awaiting = new Set(ACTION_STATUSES as readonly string[]);
+    const firstHandled = rows.findIndex((r) => !awaiting.has(r.status));
+    if (firstHandled !== -1) {
+      expect(rows.slice(0, firstHandled).every((r) => awaiting.has(r.status))).toBe(true);
+      expect(rows.slice(firstHandled).every((r) => !awaiting.has(r.status))).toBe(true);
+    }
+    for (const group of [
+      rows.slice(0, firstHandled === -1 ? rows.length : firstHandled),
+      rows.slice(firstHandled === -1 ? rows.length : firstHandled),
+    ]) {
+      const deadlines = group.map((r) => r.appealDeadline);
+      const firstNull = deadlines.indexOf(null);
+      const dated = (firstNull === -1 ? deadlines : deadlines.slice(0, firstNull)) as string[];
+      expect(dated).toEqual([...dated].sort());
+      if (firstNull !== -1) expect(deadlines.slice(firstNull).every((d) => d === null)).toBe(true);
+    }
   });
 
   it("filters to unassigned", async () => {

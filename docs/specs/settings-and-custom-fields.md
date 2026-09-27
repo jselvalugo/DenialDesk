@@ -18,9 +18,9 @@ tab per section; administrators add their own fields to patients, claims, denial
 
 ## Acceptance criteria
 - [x] The module switcher's "Setup" module is renamed **Settings**; it holds "Settings" (signed-in
-      users) and "Design system" (pre-production only).
+      users). (The "Design system" page was removed 2026-09-26, owner request.)
 - [x] `/settings` has section tabs: General, Custom fields, Users and roles (planned), Security
-      (planned), Notifications (planned), Integrations (planned), Design system (pre-production).
+      (planned), Notifications (planned), Integrations (planned).
       Planned tabs are labelled "Planned" and are never links.
 - [x] General shows practice name, environment, data residency, and the signed-in user's name,
       email, role, and whether they can change settings.

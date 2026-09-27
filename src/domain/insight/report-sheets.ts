@@ -277,23 +277,25 @@ function outcomeSheet(
   const totalUpheld = groups.reduce((t, g) => t + g.upheld, 0);
   const totalDecided = totalOverturned + totalUpheld;
   const totalReversed = groups.reduce((t, g) => t + g.reversedCents, 0);
-  const totals =
+  const rawTotals =
     groups.length === 0
       ? undefined
-      : suppressTotals(
-          {
-            group: "Total",
-            overturned: totalOverturned,
-            upheld: totalUpheld,
-            overturnRate: totalDecided === 0 ? null : totalOverturned / totalDecided,
-            reversedCents: totalReversed,
-          },
-          anySuppressed,
-          [...numericKeys],
-        );
-  return { name, columns, rows, totals, emptyMessage };
+      : {
+          group: "Total",
+          overturned: totalOverturned,
+          upheld: totalUpheld,
+          overturnRate: totalDecided === 0 ? null : totalOverturned / totalDecided,
+          reversedCents: totalReversed,
+        };
+  return { name, columns, rows, rawTotals, anySuppressed, emptyMessage, numericKeys };
 }
 
+/**
+ * Report #6 has two sheets (by payer, by category) grouping the *same* decided-appeal rows two
+ * different ways — both sheets' totals are the same underlying grand total. If only one sheet's
+ * totals were suppressed, the other sheet's visible totals would reveal it, so both sheets'
+ * totals rows are suppressed together whenever either sheet has a suppressed row.
+ */
 export function appealOutcomesSheets(byPayer: OutcomeGroup[], byCategory: OutcomeGroup[]): SheetSpec[] {
   const columns: SheetSpec["columns"] = [
     { header: "Group", key: "group", type: "text", width: 24 },
@@ -307,10 +309,22 @@ export function appealOutcomesSheets(byPayer: OutcomeGroup[], byCategory: Outcom
     ...g,
     label: CATEGORY_LABELS[g.label as never] ?? g.label,
   }));
-  return [
-    outcomeSheet(byPayer, "Appeal outcomes by payer", NO_DECIDED_APPEALS, columns),
-    outcomeSheet(byCategoryLabeled, "Appeal outcomes by category", NO_DECIDED_APPEALS, columns),
-  ];
+  const payerSheet = outcomeSheet(byPayer, "Appeal outcomes by payer", NO_DECIDED_APPEALS, columns);
+  const categorySheet = outcomeSheet(
+    byCategoryLabeled,
+    "Appeal outcomes by category",
+    NO_DECIDED_APPEALS,
+    columns,
+  );
+  const anySuppressed = payerSheet.anySuppressed || categorySheet.anySuppressed;
+  return [payerSheet, categorySheet].map((sheetResult) => {
+    const { rawTotals, numericKeys, anySuppressed: _ignoredOwnFlag, ...sheet } = sheetResult;
+    void _ignoredOwnFlag; // each sheet's own flag was already folded into the shared one above
+    return {
+      ...sheet,
+      totals: rawTotals ? suppressTotals(rawTotals, anySuppressed, [...numericKeys]) : undefined,
+    };
+  });
 }
 
 export const METRIC_DEFINITIONS: Record<ReportId, { term: string; definition: string }[]> = {

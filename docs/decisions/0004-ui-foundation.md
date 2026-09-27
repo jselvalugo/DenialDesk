@@ -19,7 +19,7 @@ consistent across hundreds of agent-built screens. Requirements: WCAG 2.1 AA (§
 - **Fonts:** self-hosted via `next/font` at build time (current set: see amendment below).
 - **Icons:** one set only (`lucide-react`, see amendment); always paired with text or an accessible label.
 - **Tables:** TanStack Table (headless) when sorting/pagination arrives; styled by `DataTable`.
-- **Living style guide:** `/design` route, disabled in production, shows every token and component.
+- **Living style guide:** ~~`/design` route~~ removed 2026-09-26 at the owner's request; `docs/DESIGN.md` is the reference.
 
 ## Consequences
 - New UI dependencies still go through the dependency check (R-15.7).

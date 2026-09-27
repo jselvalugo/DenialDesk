@@ -33,7 +33,7 @@ expression is DenialDesk's own and does not reproduce any vendor's shell (ADR 00
 - [x] Search: a query matching a module's name or description keeps all of its pages; otherwise
       only matching pages are listed under their module (`filterModules`).
 - [x] Modules respect permissions: Revenue cycle only for roles that can view it; Settings for signed-in
-      users, its Design system page only when the style guide is available (renamed from "Setup",
+      users (renamed from "Setup",
       `specs/settings-and-custom-fields.md`).
 - [x] Detail pages resolve to their list page's module and tab (e.g. `/denials/:id` → Denials › Denial queue).
 - [x] `PageHeader` pages show the module tile and a "Module · Page" eyebrow above the serif title;

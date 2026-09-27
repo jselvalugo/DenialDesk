@@ -10,7 +10,6 @@ import {
   LayoutDashboard,
   LineChart,
   NotebookPen,
-  Palette,
   PieChart,
   Receipt,
   Scale,
@@ -41,17 +40,12 @@ export interface NavApp {
 
 export interface NavVisibility {
   showRevenueCycle: boolean;
-  showDesignSystem: boolean;
   /** Signed-in practice users: the practice Settings pages. */
   showSettings?: boolean;
 }
 
 /** What the menus show. Not access control: every page still enforces its own permission on the server. */
-export function navApps({
-  showRevenueCycle,
-  showDesignSystem,
-  showSettings = false,
-}: NavVisibility): NavApp[] {
+export function navApps({ showRevenueCycle, showSettings = false }: NavVisibility): NavApp[] {
   const apps: NavApp[] = [
     {
       id: "denials",
@@ -62,7 +56,7 @@ export function navApps({
       items: [
         { label: "Overview", href: "/overview", icon: LayoutDashboard, available: true },
         { label: "Denial queue", href: "/denials", icon: Inbox, available: true },
-        { label: "Appeals", href: "/appeals", icon: Gavel, available: false },
+        { label: "Appeals", href: "/appeals", icon: Gavel, available: true },
       ],
     },
     {
@@ -117,14 +111,11 @@ export function navApps({
   if (showSettings) {
     settings.push({ label: "Settings", href: "/settings", icon: Settings2, available: true });
   }
-  if (showDesignSystem) {
-    settings.push({ label: "Design system", href: "/design", icon: Palette, available: true });
-  }
   if (settings.length > 0) {
     apps.push({
       id: "settings",
       label: "Settings",
-      description: "Practice profile, custom fields, access, and the design style guide.",
+      description: "Practice profile, custom fields, and access.",
       icon: Settings2,
       tone: "slate",
       items: settings,

@@ -425,6 +425,8 @@ export const denials = pgTable(
     index("denials_claim_idx").on(t.claimId),
     // Insight reports filter by notice date across the whole tenant (docs/specs/insight-standard-reports.md).
     index("denials_tenant_notice_date_idx").on(t.tenantId, t.noticeDate),
+    // Target of the tenant-scoped FK from appeals (FKs bypass RLS, so the tenant is part of the key).
+    uniqueIndex("denials_tenant_id_key").on(t.tenantId, t.id),
   ],
 );
 
@@ -443,6 +445,143 @@ export const denialNotes = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("denial_notes_denial_idx").on(t.denialId, t.createdAt)],
+);
+
+// ---------------------------------------------------------------------------------------------
+// Appeals (docs/specs/appeals.md A1). An appeal is its own case record linked to the denial it
+// came from: a denial can be appealed more than once, and each attempt has its own deadline,
+// submission, and outcome.
+// ---------------------------------------------------------------------------------------------
+
+export const appealLevelEnum = pgEnum("appeal_level", [
+  "first_level",
+  // Not yet computable by the rules engine (A3 adds them to rules/catalog.ts); no appeal at these
+  // levels is created until then.
+  "second_level",
+  "external_review",
+  "medicare_redetermination",
+  "medicare_qic",
+  "medicare_alj",
+  "medicare_council",
+  "medicare_federal_court",
+]);
+
+export const appealStatusEnum = pgEnum("appeal_status", [
+  "draft",
+  "in_review",
+  "ready",
+  "submitted",
+  "awaiting_decision",
+  "decided",
+  "withdrawn",
+  "dismissed",
+]);
+
+export const appealSubmittedMethodEnum = pgEnum("appeal_submitted_method", [
+  "portal",
+  "fax",
+  "mail",
+  "electronic",
+]);
+
+/** Withdrawn/dismissed are here too: recording either as the "decision" ends the case without a
+ * payer ruling on the merits, moving the appeal straight to that status rather than "decided". */
+export const appealDecisionOutcomeEnum = pgEnum("appeal_decision_outcome", [
+  "overturned_full",
+  "overturned_partial",
+  "upheld",
+  "withdrawn",
+  "dismissed",
+]);
+
+export const appeals = pgTable(
+  "appeals",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    denialId: uuid("denial_id")
+      .notNull()
+      .references(() => denials.id),
+    /** Denormalized from the denial's claim, for listing without an extra join. */
+    claimId: uuid("claim_id")
+      .notNull()
+      .references(() => claims.id),
+    level: appealLevelEnum("level").notNull(),
+    /** Self-reference for escalation (A3): the appeal this one continues, if any. */
+    previousAppealId: uuid("previous_appeal_id"),
+    status: appealStatusEnum("status").notNull().default("draft"),
+    deadline: date("deadline", { mode: "string" }),
+    /** Rule ID(s) from rules/, "payer_contract", or null ("not configured") — never a guess. */
+    deadlineBasis: text("deadline_basis"),
+    deadlineCitation: text("deadline_citation"),
+    filedBy: uuid("filed_by")
+      .notNull()
+      .references(() => users.id),
+    submittedMethod: appealSubmittedMethodEnum("submitted_method"),
+    submittedOn: date("submitted_on", { mode: "string" }),
+    trackingReference: text("tracking_reference"),
+    /** Practice-configured reminder date, not a legal deadline (see `practiceSettings`). */
+    followUpOn: date("follow_up_on", { mode: "string" }),
+    decisionOutcome: appealDecisionOutcomeEnum("decision_outcome"),
+    decisionOn: date("decision_on", { mode: "string" }),
+    recoveredCents: cents("recovered_cents"),
+    /** Required when the decision outcome is withdrawn/dismissed (the denial status a human picks). */
+    closeReason: text("close_reason"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("appeals_queue_idx").on(t.tenantId, t.status, t.deadline),
+    index("appeals_tenant_denial_idx").on(t.tenantId, t.denialId),
+    // Target of a future tenant-scoped self-reference FK (A3) and other tenant-scoped FKs.
+    uniqueIndex("appeals_tenant_id_key").on(t.tenantId, t.id),
+    // A denormalized claim must belong to the same practice as the appeal.
+    foreignKey({
+      name: "appeals_claim_fk",
+      columns: [t.tenantId, t.claimId],
+      foreignColumns: [claims.tenantId, claims.id],
+    }),
+    // A denial can only be appealed by the same practice it belongs to.
+    foreignKey({
+      name: "appeals_denial_fk",
+      columns: [t.tenantId, t.denialId],
+      foreignColumns: [denials.tenantId, denials.id],
+    }),
+  ],
+);
+
+export const appealNotes = pgTable(
+  "appeal_notes",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    appealId: uuid("appeal_id")
+      .notNull()
+      .references(() => appeals.id),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id),
+    body: text("body").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("appeal_notes_appeal_idx").on(t.appealId, t.createdAt)],
+);
+
+/**
+ * Small per-tenant key/value settings store (not `rules/`: nothing here is a legal deadline, rate,
+ * or threshold). A1 uses it only for `appeal_follow_up_days`; a missing row means the built-in
+ * default (`DEFAULT_APPEAL_FOLLOW_UP_DAYS`, src/domain/appeals/settings.ts) applies.
+ */
+export const practiceSettings = pgTable(
+  "practice_settings",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("practice_settings_tenant_key_key").on(t.tenantId, t.key)],
 );
 
 // ---------------------------------------------------------------------------------------------

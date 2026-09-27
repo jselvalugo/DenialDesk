@@ -51,6 +51,19 @@ export interface Aging {
 const emptyBuckets = () =>
   Object.fromEntries(AGING_BUCKETS.map((b) => [b.key, 0])) as Record<BucketKey, number>;
 
+/** Product default, not a legal threshold: warn when more than a quarter of open A/R is over 90 days. */
+export const OVER_90_WARNING_SHARE_BPS = 2_500;
+
+/** Sum of the 91-120 and over-120 buckets: money over 90 days old. */
+export function over90Cents(totals: AgingRow["buckets"]): number {
+  return totals["91_120"] + totals.over_120;
+}
+
+/** Share of `openCents` that is over 90 days old, in basis points (2500 = 25.0%); null with no open A/R. */
+export function over90ShareBps(over90: number, openCents: number): number | null {
+  return openCents > 0 ? Math.round((over90 * 10_000) / openCents) : null;
+}
+
 /** Open balances by financial class and age; credit balances are listed apart, never netted. */
 export function ageReceivables(totals: AgingTotal[]): Aging {
   const byClass = new Map<string, AgingRow>();

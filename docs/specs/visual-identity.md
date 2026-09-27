@@ -17,7 +17,7 @@ product's name, assets, or code is referenced.
 - [x] Status, link, and chart colors, every text/background pair ≥ 4.5:1 and
       UI boundaries ≥ 3:1 (values in `docs/DESIGN.md` §4–5).
 - [x] Fonts self-hosted through `next/font` (no runtime requests to Google).
-- [x] `docs/DESIGN.md`, ADR 0004 (amendment), and the `/design` style guide updated.
+- [x] `docs/DESIGN.md`, ADR 0004 (amendment), and the `/design` style guide updated (page since removed 2026-09-26).
 
 ## Dependencies
 - `lucide-react` 1.48.0 — ISC license, actively maintained (published 2026-09-24), no runtime

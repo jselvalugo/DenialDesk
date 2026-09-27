@@ -5,6 +5,11 @@ export function canWorkDenials(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "specialist";
 }
 
+/** Appeals (R-5.1.2, same matrix as denial-queue.md and claims.md): compliance reviews only. */
+export function canWorkAppeals(role: Role): boolean {
+  return role === "admin" || role === "manager" || role === "specialist";
+}
+
 /** Revenue cycle accounting (practice finance): compliance may review, specialists don't need it. */
 export function canViewRevenueCycle(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "compliance";
