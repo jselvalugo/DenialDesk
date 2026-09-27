@@ -311,6 +311,26 @@ technical decisions"). Decisions still get an ADR so a human can review them.
     spans or scrub that attribute.
   - Migrations: `drizzle-kit migrate` runs outside the sanitizer and prints full Postgres errors
     (including `detail` row values). Decide how production migrations run and where their output goes.
+- From the 2026-09-27 whole-codebase security audit (`docs/reviews/2026-09-27-security-audit.md`;
+  DenialDesk University/Wiki reviewed clean, no new finding there):
+  - **Client IP trusted from a Netlify-only header on every platform** (`src/lib/request-context.ts:18`):
+    off Netlify nothing strips a forged `x-nf-client-connection-ip`, which empties per-IP sign-in/MFA
+    rate limits and lets the audited `ipAddress` be faked. Must fix before the Azure cutover
+    (R-7.4.7, R-7.5.1).
+  - Rate-limit hash salt reuses `FIELD_ENCRYPTION_KEY` (`src/lib/rate-limit.ts:31`); give it its own
+    secret so rotating the PHI data key doesn't also reset every rate-limit bucket (R-7.3.4).
+  - Member-ID and TOTP-secret ciphertext has no AAD binding (unlike custom fields, ADR 0007), so
+    with DB write access a value could be copied between rows and still decrypt
+    (`denials/[id]/actions.ts:180`, `appeals/[id]/actions.ts:206`, `patients/queries.ts:258,323,401`,
+    `auth/enrollment.ts:23`); fix with the coverage-records work (R-7.3.3).
+  - `Dockerfile` base image isn't digest-pinned and there's no `docker` Dependabot ecosystem; runtime
+    files are copied `--chown=app:app` (writable by the app process). Pin the digest, add Dependabot
+    coverage, copy read-only (R-7.4.2, R-15.7).
+  - `docker-compose.yml` binds local Postgres to all interfaces (`"5432:5432"`) with a committed
+    password; bind to `127.0.0.1` only.
+  - `exceljs 4.4.0` pulls `uuid <11.1.1` (GHSA-w5hq-g745-h8pq, moderate; not blocked by CI's
+    `--audit-level=high`, reachability unverified); add a pnpm override or confirm exceljs is still
+    maintained.
 
 ## Lessons / conventions learned
 - Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
