@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { eq, sql } from "drizzle-orm";
 import { systemDb } from "@/db/client";
 import { users } from "@/db/schema";
-import { setLocaleCookie } from "@/i18n/actions";
+import { setLocaleCookie } from "@/i18n/cookie";
 import { isLocale } from "@/i18n/config";
 import { getT } from "@/i18n/server";
 import { auditSystem } from "@/lib/audit";

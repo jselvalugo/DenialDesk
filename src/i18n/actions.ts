@@ -1,35 +1,26 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { getOperatorSession, getSession } from "@/auth/session";
 import { systemDb } from "@/db/client";
 import { users } from "@/db/schema";
-import { isLocale, LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE_S, type Locale } from "./config";
-
-/** Remembers the language in the browser: a two-letter code, readable by the server only. */
-export async function setLocaleCookie(locale: Locale): Promise<void> {
-  (await cookies()).set(LOCALE_COOKIE, locale, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: LOCALE_COOKIE_MAX_AGE_S,
-  });
-}
+import { isLocale } from "./config";
+import { setLocaleCookie } from "./cookie";
 
 /**
  * The user menu's language choice (spec: internationalization, R-11.1). Sets the cookie for this
- * browser and, when someone is signed in (practice or operator), stores the choice on their account
- * so it follows them to their next sign-in on any device. An unsupported value is ignored.
+ * browser and, when the picker's realm (practice app or operator console) has a fully signed-in
+ * session, stores the choice on that account so it follows them to their next sign-in on any
+ * device. An unsupported value is ignored; a half-finished sign-in (no MFA yet) only gets the cookie.
  */
 export async function setLocale(formData: FormData): Promise<void> {
   const locale = formData.get("locale");
   if (!isLocale(locale)) return;
   await setLocaleCookie(locale);
-  const session = (await getSession()) ?? (await getOperatorSession());
-  if (session) {
+  const realm = formData.get("realm") === "operator" ? "operator" : "practice";
+  const session = realm === "operator" ? await getOperatorSession() : await getSession();
+  if (session?.mfaVerified) {
     await systemDb().update(users).set({ locale }).where(eq(users.id, session.userId));
   }
   revalidatePath("/", "layout");

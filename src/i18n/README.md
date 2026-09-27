@@ -54,6 +54,8 @@ const f = useFormat();
 ```
 
 Rich text (either side): `rich(t("hint.mfa"), { b: (c) => <strong>{c}</strong> })` from `@/i18n/rich`.
+`rich()` reads tags from the formatted text, so a message rendered with it must take only constant or
+numeric parameters, never free text (a payer name, a search query), or that text could smuggle a tag.
 
 ## Domain code (`src/domain/**`, `rules/`)
 

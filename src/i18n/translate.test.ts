@@ -49,3 +49,11 @@ describe("formatNumber", () => {
     expect(formatNumber(1234567, "pt")).toBe("1.234.567");
   });
 });
+
+describe("createTranslator hardening", () => {
+  it("ignores inherited object properties as keys", () => {
+    const t = createTranslator({ ok: "fine" }, "en") as unknown as (k: string) => string;
+    expect(t("constructor")).toBe("constructor");
+    expect(t("__proto__")).toBe("__proto__");
+  });
+});

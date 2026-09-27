@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { systemDb } from "@/db/client";
 import { memberships, tenants, users } from "@/db/schema";
-import { setLocaleCookie } from "@/i18n/actions";
+import { setLocaleCookie } from "@/i18n/cookie";
 import { isLocale } from "@/i18n/config";
 import type { MessageKey } from "@/i18n/messages/types";
 import { getT } from "@/i18n/server";

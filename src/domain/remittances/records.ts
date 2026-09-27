@@ -30,14 +30,20 @@ import { createTranslator } from "@/i18n/translate";
  * not here: this module never imports `@/i18n/server`.
  */
 const english = createTranslator(en.remittances, "en");
+/** Claim-number lists are capped in the message: an escaped error must never carry a whole 835's accounts. */
+const MAX_NAMED_IN_MESSAGE = 5;
 function englishMessage(
   key: MessageKey<"remittances">,
   params?: Record<string, string | number | string[]>,
 ): string {
+  const named = (list: string[]) =>
+    list.length > MAX_NAMED_IN_MESSAGE
+      ? `${list.slice(0, MAX_NAMED_IN_MESSAGE).join(", ")} (+${list.length - MAX_NAMED_IN_MESSAGE})`
+      : list.join(", ");
   return english(
     key,
     params &&
-      Object.fromEntries(Object.entries(params).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v])),
+      Object.fromEntries(Object.entries(params).map(([k, v]) => [k, Array.isArray(v) ? named(v) : v])),
   );
 }
 

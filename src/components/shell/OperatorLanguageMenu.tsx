@@ -50,7 +50,12 @@ export function OperatorLanguageMenu() {
           data-chrome="light"
           className="absolute top-full right-0 z-40 mt-1 w-56 rounded-panel border border-border bg-surface text-text shadow-sm"
         >
-          <LanguagePicker label={t("userMenu.language")} current={locale} className="px-4 py-3" />
+          <LanguagePicker
+            label={t("userMenu.language")}
+            current={locale}
+            realm="operator"
+            className="px-4 py-3"
+          />
         </div>
       )}
     </div>

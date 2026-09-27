@@ -130,15 +130,19 @@ export function UserMenu({ user }: { user: ShellUser }) {
 export function LanguagePicker({
   label,
   current,
+  realm = "practice",
   className,
 }: {
   label: string;
   current: string;
+  /** Which session the choice is saved on: the practice app's or the operator console's. */
+  realm?: "practice" | "operator";
   className?: string;
 }) {
   const groupId = useId();
   return (
     <form action={setLocale} className={className}>
+      <input type="hidden" name="realm" value={realm} />
       <p id={groupId} className="text-label text-subtle">
         {label}
       </p>

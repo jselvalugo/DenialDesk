@@ -109,10 +109,13 @@ export interface Translator<T extends MessageTable> {
  */
 export function createTranslator<T extends MessageTable>(table: T, locale: Locale): Translator<T> {
   const t = ((key: keyof T & string, params?: Params) => {
-    const message = table[key];
+    const message = Object.hasOwn(table, key) ? table[key] : undefined;
     return message === undefined ? key : formatMessage(message, params, locale);
   }) as Translator<T>;
   Object.defineProperty(t, "locale", { value: locale, enumerable: true });
-  Object.defineProperty(t, "raw", { value: (key: keyof T & string) => table[key] ?? key, enumerable: true });
+  Object.defineProperty(t, "raw", {
+    value: (key: keyof T & string) => (Object.hasOwn(table, key) ? table[key] : key),
+    enumerable: true,
+  });
   return t;
 }
