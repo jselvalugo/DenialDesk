@@ -341,7 +341,7 @@ export const COURSES: Course[] = [
               ["FL commercial (Florida-regulated insurer)", "Runs"],
               [
                 "FL HMO (Florida-licensed HMO)",
-                "Runs (its own rule set, mirroring the insurer rules until counsel confirms the HMO statute)",
+                "Runs, from its own rule set under the HMO statute; its values are assumed to mirror the insurer rules until counsel confirms them",
               ],
               ["Medicare", "Does not run; Medicare has its own timelines"],
               [
@@ -375,16 +375,22 @@ export const COURSES: Course[] = [
           { kind: "notice", text: RULES_NOTE },
           {
             kind: "p",
-            text: "The clock starts on the date the payer received the claim. DenialDesk counts calendar days in Eastern time and shows each milestone with its date and the days remaining.",
+            text: "The clock starts on the date the payer received the claim. DenialDesk counts calendar days in Eastern time and shows each milestone with its date and the days remaining. Each rule below says which regime it belongs to and what it is counted from.",
           },
           {
             kind: "rules",
             caption: "Electronic claims: payer milestones and the provider's response window",
             ruleIds: [
+              "fl.promptpay.electronic.acknowledgment",
               "fl.promptpay.electronic.pay_or_contest",
               "fl.promptpay.electronic.provider_response",
               "fl.promptpay.electronic.pay_or_deny",
               "fl.promptpay.electronic.uncontestable",
+              "fl.hmo.promptpay.electronic.acknowledgment",
+              "fl.hmo.promptpay.electronic.pay_or_contest",
+              "fl.hmo.promptpay.electronic.provider_response",
+              "fl.hmo.promptpay.electronic.pay_or_deny",
+              "fl.hmo.promptpay.electronic.uncontestable",
             ],
           },
           {
@@ -394,6 +400,7 @@ export const COURSES: Course[] = [
               "Pay-or-deny and the uncontestable milestone are met only by a payment or a denial. A response on the due date counts as on time.",
               "A contest recorded on or before the pay-or-contest date starts the provider's response window. Contests are recorded by a person on the clock record; DenialDesk does not infer them from codes.",
               "If neither a payment nor a denial arrives by the uncontestable date, DenialDesk flags the claim as an uncontestable obligation. A demand letter for it is planned.",
+              "When a milestone's last day falls on a weekend or a Florida legal holiday, the unrolled date governs until counsel confirms that deadlines roll forward to the next business day; the rolled date is shown beside it as informational, pending counsel.",
             ],
           },
           {
@@ -413,21 +420,30 @@ export const COURSES: Course[] = [
             kind: "rules",
             caption: "Paper (non-electronic) claims: payer milestones",
             ruleIds: [
+              "fl.promptpay.paper.acknowledgment",
               "fl.promptpay.paper.pay_or_contest",
               "fl.promptpay.paper.pay_or_deny",
               "fl.promptpay.paper.uncontestable",
+              "fl.hmo.promptpay.paper.acknowledgment",
+              "fl.hmo.promptpay.paper.pay_or_contest",
+              "fl.hmo.promptpay.paper.pay_or_deny",
+              "fl.hmo.promptpay.paper.uncontestable",
             ],
           },
           {
             kind: "p",
             text: "The rules catalog has no paper-claim value for the provider's response window, so DenialDesk does not show one for paper claims.",
           },
-          { kind: "rules", caption: "Interest on overdue payments", ruleIds: ["fl.promptpay.interest_rate"] },
+          {
+            kind: "rules",
+            caption: "Interest on overdue payments",
+            ruleIds: ["fl.promptpay.interest_rate", "fl.hmo.promptpay.interest_rate"],
+          },
           {
             kind: "list",
             items: [
               "Interest is simple interest per late payment: the late amount, times the annual rate, times the days late, divided by 365, rounded to whole cents.",
-              "The day interest starts accruing is still to be confirmed by counsel; the worksheet states the assumption it uses.",
+              "Interest runs from the first calendar day after the payment due date (the owner's reading, pending counsel confirmation); the worksheet states the assumption it uses.",
               "The rate applied to a payment is the rate in force on that payment's date, so a rate change never rewrites earlier payments.",
             ],
           },
@@ -457,13 +473,20 @@ export const COURSES: Course[] = [
           { kind: "notice", text: RULES_NOTE },
           {
             kind: "rules",
-            caption: "Filing windows after the date of service",
-            ruleIds: ["fl.timely_filing.initial", "medicare.timely_filing"],
+            caption: "Filing windows",
+            ruleIds: [
+              "fl.timely_filing.initial",
+              "fl.timely_filing.secondary",
+              "fl.hmo.timely_filing.initial",
+              "fl.hmo.timely_filing.secondary",
+              "medicare.timely_filing",
+            ],
           },
           {
             kind: "list",
             items: [
               "The claims list shows a warning when a claim's filing deadline is near or past. Today this is a warning only; blocking a late submission is planned for clearinghouse submission.",
+              "A window counted in months or years ends on the same day of the target month, or on its last day when that month is shorter.",
               "Medicare Advantage filing windows are assumed to come from the plan contract and are not computed by DenialDesk.",
               "A claim billed to an unverified payer gets no filing deadline until the payer's regime is verified.",
             ],
@@ -500,7 +523,7 @@ export const COURSES: Course[] = [
             items: [
               "Medicare: the notice is presumed received a set number of days after its date, and the filing window runs from that presumed receipt.",
               "FL commercial and FL HMO: the appeal window comes from the payer's contract, entered in the payer's setup as a number of days. Until it is entered, the denial shows \"Not configured\" rather than a guessed date.",
-              "A deadline that lands on a weekend or holiday is shown as computed; the owner's answer that such a deadline rolls to the next business day is pending counsel confirmation and is not yet applied.",
+              'When a deadline\'s last day falls on a weekend or holiday, the earlier, unrolled date governs alerts, sorting, and "past deadline" until counsel confirms that deadlines roll forward to the next business day. The rolled date is shown beside it as pending counsel.',
             ],
           },
           {

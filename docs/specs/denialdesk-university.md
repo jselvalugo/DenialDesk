@@ -121,6 +121,6 @@ content, role-gated courses, anything that writes to a claim, denial, or code.
 
 ## Open questions
 - U3: does the practice's HIPAA training program want DenialDesk completions as evidence, and in
-  what form (owner / practice compliance officer)? Tracked as `OA-034`.
+  what form (owner / practice compliance officer)? Tracked as `OA-035`.
 - Should "Getting started" be suggested on a user's first sign-in (a one-time banner on `/`)?
   Not built; the welcome page already links to the University.

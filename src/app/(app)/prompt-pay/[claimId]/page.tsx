@@ -153,6 +153,11 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                       </Td>
                       <Td className="tabular">
                         {formatDate(m.due)}
+                        {m.rolledDue && (
+                          <span className="block text-label text-muted">
+                            (pending counsel: {formatDate(m.rolledDue)})
+                          </span>
+                        )}
                         {m.daysRemaining !== null && m.state === "open" && (
                           <span className="block text-label text-muted">{m.daysRemaining} days left</span>
                         )}
@@ -176,7 +181,7 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
               {clock.interest.length === 0 ? (
                 <p className="p-4 text-body text-muted">
                   {clock.paymentDue
-                    ? `No late payments. Payment is due by ${formatDate(clock.paymentDue)}.`
+                    ? `No late payments. Payment is due by ${formatDate(clock.paymentDue)}${clock.paymentDueRolled ? ` (pending counsel: ${formatDate(clock.paymentDueRolled)})` : ""}.`
                     : "No payments yet."}
                 </p>
               ) : (
@@ -251,6 +256,11 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                 {clock.providerResponseDue && (
                   <Field label="Your response to the contest is due">
                     <span className="tabular">{formatDate(clock.providerResponseDue)}</span>
+                    {clock.providerResponseDueRolled && (
+                      <span className="block text-label text-muted">
+                        (pending counsel: {formatDate(clock.providerResponseDueRolled)})
+                      </span>
+                    )}
                   </Field>
                 )}
               </dl>

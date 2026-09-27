@@ -40,7 +40,9 @@ test.describe("university", () => {
       name: "Electronic claims: payer milestones and the provider's response window",
     });
     await expect(table).toBeVisible();
-    await expect(table.getByText("Fla. Stat. § 627.6131(4)(e); § 641.3155 (HMO)").first()).toBeVisible();
+    await expect(table.getByText("Fla. Stat. § 627.6131(4)(e)", { exact: true }).first()).toBeVisible();
+    await expect(table.getByText("Fla. Stat. § 641.3155 (mirrors § 627.6131(4)(e))").first()).toBeVisible();
+    await expect(table.getByText("Payer's receipt of the claim").first()).toBeVisible();
     await expect(table.getByText("Pending counsel verification").first()).toBeVisible();
     // Scoped to main: the pre-production banner is also a note.
     await expect(page.getByRole("main").getByRole("note")).toContainText("Pending counsel verification");

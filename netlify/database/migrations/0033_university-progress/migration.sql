@@ -10,9 +10,10 @@ CREATE TABLE "university_progress" (
 ALTER TABLE "university_progress" ADD CONSTRAINT "university_progress_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "university_progress" ADD CONSTRAINT "university_progress_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "university_progress_tenant_user_lesson_key" ON "university_progress" USING btree ("tenant_id","user_id","lesson_id");
--- Tenant isolation (R-7.2.4, CLAUDE.md #5): same policy as drizzle/0002_security.sql; covered by
--- test/integration/tenancy.test.ts. Completions are a training record (R-10.4): the app role can
--- read and add rows but never change or remove one.
+-- Tenant isolation (R-7.2.4, CLAUDE.md #5): same policy as drizzle/0002_security.sql; isolation
+-- tests in test/integration/university.test.ts (the shared tenancy test assumes UPDATE is granted).
+-- Completions are a training record (R-10.4): the app role can read and add rows but never change
+-- or remove one.
 ALTER TABLE "university_progress" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "university_progress" FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE POLICY tenant_isolation ON "university_progress"

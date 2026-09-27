@@ -7,13 +7,39 @@ import { Badge } from "@/components/ui/Badge";
 import { Code } from "@/components/ui/Code";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { CARC, CATEGORY_LABELS } from "@/domain/carc";
+import { REGIME_LABELS } from "@/domain/denial-status";
 import type { Block } from "@/domain/university/content";
 
+const plural = (value: number, one: string, many: string) => `${value} ${value === 1 ? one : many}`;
+
 const UNIT_LABELS: Record<Rule["unit"], (value: number) => string> = {
-  calendar_days: (value) => `${value} calendar ${value === 1 ? "day" : "days"}`,
-  months: (value) => `${value} ${value === 1 ? "month" : "months"}`,
+  calendar_days: (value) => plural(value, "calendar day", "calendar days"),
+  business_days: (value) => plural(value, "business day", "business days"),
+  months: (value) => plural(value, "month", "months"),
+  years: (value) => plural(value, "year", "years"),
+  hours_after_next_business_day: (value) =>
+    `${plural(value, "hour", "hours")} after the start of the next business day`,
   percent_per_year: (value) => `${value}% per year`,
 };
+
+/** What each clock is counted from (rules/types.ts RuleAnchor), in plain words. */
+const ANCHOR_LABELS: Record<NonNullable<Rule["anchor"]>, string> = {
+  service_date: "Date of service",
+  payer_receipt: "Payer's receipt of the claim",
+  notice_date: "Date of the notice",
+  presumed_notice_receipt: "Presumed receipt of the notice",
+  contest_notice: "Payer's contest notice",
+  primary_final_determination: "Primary payer's final determination",
+  overpayment_demand_receipt: "Receipt of the overpayment demand",
+  payment_date: "Date of payment",
+  overpayment_determined: "When the overpayment was determined",
+  payment_due_date: "Payment due date",
+  prior_decision_receipt: "Receipt of the prior level's decision",
+};
+
+function regimeList(rule: Rule): string {
+  return rule.regimes.map((regime) => REGIME_LABELS[regime] ?? regime).join(", ");
+}
 
 /** A rule row: the catalog's own title, value, citation, and verification state, never retyped. */
 function RulesBlock({ block, today }: { block: Extract<Block, { kind: "rules" }>; today: string }) {
@@ -24,6 +50,8 @@ function RulesBlock({ block, today }: { block: Extract<Block, { kind: "rules" }>
         <thead>
           <tr>
             <Th>Rule</Th>
+            <Th>Applies to</Th>
+            <Th>Counted from</Th>
             <Th>Value</Th>
             <Th>Source</Th>
             <Th>Status</Th>
@@ -33,6 +61,8 @@ function RulesBlock({ block, today }: { block: Extract<Block, { kind: "rules" }>
           {rules.map((rule) => (
             <Tr key={rule.id}>
               <Td className="font-medium">{rule.title}</Td>
+              <Td>{regimeList(rule)}</Td>
+              <Td>{rule.anchor ? ANCHOR_LABELS[rule.anchor] : "—"}</Td>
               <Td>
                 <span className="font-mono tabular-nums">{UNIT_LABELS[rule.unit](rule.value)}</span>
               </Td>
@@ -121,14 +151,18 @@ function TableBlock({ block }: { block: Extract<Block, { kind: "table" }> }) {
 export function LessonBody({ blocks }: { blocks: Block[] }) {
   const today = todayIn();
   return (
-    <div className="flex max-w-[720px] flex-col gap-5 text-body text-text">
+    <div className="flex flex-col gap-5 text-body text-text">
       {blocks.map((block, index) => {
         switch (block.kind) {
           case "p":
-            return <p key={index}>{block.text}</p>;
+            return (
+              <p key={index} className="max-w-[720px]">
+                {block.text}
+              </p>
+            );
           case "list":
             return (
-              <ul key={index} className="flex list-disc flex-col gap-2 pl-5">
+              <ul key={index} className="flex max-w-[720px] list-disc flex-col gap-2 pl-5">
                 {block.items.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
@@ -139,7 +173,7 @@ export function LessonBody({ blocks }: { blocks: Block[] }) {
               <aside
                 key={index}
                 aria-label={block.title}
-                className="rounded-panel border border-border bg-surface-muted px-4 py-3"
+                className="max-w-[720px] rounded-panel border border-border bg-surface-muted px-4 py-3"
               >
                 <p className="text-label font-semibold tracking-wider text-muted uppercase">In DenialDesk</p>
                 <p className="mt-1 font-semibold text-text">{block.title}</p>
@@ -160,7 +194,7 @@ export function LessonBody({ blocks }: { blocks: Block[] }) {
               <p
                 key={index}
                 role="note"
-                className="flex gap-2 rounded-panel border border-info-border bg-info-bg px-4 py-3 text-label text-info-fg"
+                className="flex max-w-[720px] gap-2 rounded-panel border border-info-border bg-info-bg px-4 py-3 text-label text-info-fg"
               >
                 <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" strokeWidth={1.75} />
                 <span>{block.text}</span>
