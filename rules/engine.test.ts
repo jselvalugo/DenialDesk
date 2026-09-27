@@ -106,7 +106,7 @@ describe("catalog", () => {
       "fl.patient_refund",
       "medicare.timely_filing",
       "medicare.redetermination.filing_window",
-      "medicare.alj.filing_window",
+      "medicare.alj_hearing.filing_window",
     ])
       expect(side(id), id).toBe("provider");
   });

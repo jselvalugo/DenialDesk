@@ -54,10 +54,12 @@ Remittance and denials:
 
 Appeals:
 - [x] Appeal deadline engine per payer regime [§8.4]
+- [x] Appeal case record, work list, and first-level lifecycle (create, submit, decide), synced to
+      the denial's status (`specs/appeals.md` A1) [§8.4]
 - [ ] Appeal letter templates with merge fields and attachments; human review before export [R-7.11.2]
 - [ ] Corrected (freq 7) and void (freq 8) claims [§8.3]
 - [ ] Medicare 5-level appeal workflow [R-4.2.1]
-- [ ] Appeal outcome tracking
+- [ ] Appeal outcome tracking (basic decision recording is in A1; a payer/category analytics view is A4)
 
 Evidence and security:
 - [ ] OIR complaint evidence package export [R-3.1.7]
@@ -78,7 +80,11 @@ Evidence and security:
 - [ ] Payer overpayment-demand inbox [R-3.1.6]
 - [ ] Patient refund 30-day tracker [R-3.6]
 - [ ] Sensitivity tags and masking [R-3.5]
-- [ ] Reporting: A/R aging, denial rate, prompt-pay scorecard, underpayment variance [§8.7]
+- [x] Insight standard reports: denial summary by category/CARC and by payer, denial rate, open
+  denials by appeal-deadline bucket, claims by status/A/R summary, appeal outcomes — aggregate-only,
+  exported as formatted .xlsx workbooks (`specs/insight-standard-reports.md`) [§8.7]
+- [ ] Prompt-pay scorecard and underpayment variance — planned, blocked on notice-classification
+  fix and a `payer_contracts`/fee-schedule table (`specs/insight-standard-reports.md` #7–8) [§8.7]
 - [ ] Eligibility (270/271) and claim status (276/277)
 - [ ] SOC 2 Type II observation window → report (human)
 

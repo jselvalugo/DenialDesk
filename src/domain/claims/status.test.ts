@@ -3,7 +3,7 @@ import { FILING_WARNING_DAYS, filingStatus, isUnsubmitted } from "./status";
 
 // Florida: 6 months from 2026-03-31 → 2026-09-30 (fl.timely_filing.initial, ⚠️ VERIFY).
 // Medicare: 1 year from 2026-02-15 → 2027-02-15, Washington's Birthday (federal holiday). Until
-// counsel confirms roll-forward (OA-023, owner 2026-09-27 option 1) 02-15 governs; the rolled
+// counsel confirms roll-forward (OA-034, owner 2026-09-27 option 1) 02-15 governs; the rolled
 // 2027-02-16 is informational only (medicare.timely_filing, ⚠️ VERIFY).
 describe("timely-filing status (R-3.1.5)", () => {
   it.each([

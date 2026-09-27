@@ -15,6 +15,18 @@ export function formatCents(cents: number): string {
   return usd.format(cents === 0 ? 0 : cents / 100);
 }
 
+/**
+ * A plain dollar amount ("0.29", "125", "1250.00") to integer cents. Returns null for anything
+ * else — blank, negative, a thousands separator, a currency sign, or more than two decimal places
+ * (e.g. "1.005") — so a caller never silently rounds a mistyped amount.
+ */
+export function parseDollarsToCents(text: string): number | null {
+  const cleaned = text.trim();
+  if (!/^\d{1,9}(\.\d{1,2})?$/.test(cleaned)) return null;
+  const [whole, fraction = ""] = cleaned.split(".");
+  return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+}
+
 /** Formats a calendar date (YYYY-MM-DD, no time zone shift) as MM/DD/YYYY. */
 export function formatDate(isoDate: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {

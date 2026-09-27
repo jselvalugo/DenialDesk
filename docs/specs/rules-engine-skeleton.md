@@ -68,7 +68,7 @@ Requirement IDs: R-15.6, R-3.1.1, R-3.1.3, R-3.1.5, R-3.1.6, R-3.6.2, R-4.2.1, �
 - Weekend/holiday roll-forward: yes (basis above) — but see option 1 below: it does not govern
   until counsel confirms it.
 
-### Owner decision 2026-09-27 (option 1) — conservative date until counsel confirms (OA-023)
+### Owner decision 2026-09-27 (option 1) — conservative date until counsel confirms (OA-034)
 Requirement IDs: R-15.6, R-3.1.1, R-3.1.3, R-3.1.5, R-4.2.1.
 - [x] One mechanism in `rules/`: `ROLL_FORWARD_POLICY` (`rules/roll-forward.ts`) is an
       effective-dated list; roll-forward governs only where a version has `confirmed: true` **and**

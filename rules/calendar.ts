@@ -45,6 +45,63 @@ export function addMonths(iso: string, months: number): string {
   return toIso(target);
 }
 
+/** True for a real calendar date in YYYY-MM-DD form (rejects e.g. "2026-02-31"). */
+export function isValidIsoDate(iso: string): boolean {
+  try {
+    toUtc(iso);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The UTC instant of `hour:00` local time in `timeZone` on `iso`'s date. One correction pass
+ * (naive UTC guess, then shift by that guess's offset) is exact except within the single hour of
+ * a DST transition, an acceptable tradeoff for a report date-range boundary (not a legal clock).
+ */
+function zonedInstant(iso: string, hour: number, timeZone: string): Date {
+  const naive = new Date(`${iso}T${String(hour).padStart(2, "0")}:00:00Z`);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+    .formatToParts(naive)
+    .reduce<Record<string, string>>((acc, p) => ({ ...acc, [p.type]: p.value }), {});
+  const localAsUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second),
+  );
+  const offsetMs = localAsUtc - naive.getTime();
+  return new Date(naive.getTime() - offsetMs);
+}
+
+/**
+ * The UTC instants bounding a calendar day in `timeZone` (default Eastern — legal-clock time
+ * zone, REQUIREMENTS §11): `start` is that day's midnight, `endExclusive` is the next day's
+ * midnight. Lets a timestamp column be range-filtered by Eastern calendar date without wrapping
+ * the column in a function (sargable — the column stays index-scannable).
+ */
+export function easternDayBoundsUtc(
+  iso: string,
+  timeZone = "America/New_York",
+): { start: Date; endExclusive: Date } {
+  return {
+    start: zonedInstant(iso, 0, timeZone),
+    endExclusive: zonedInstant(addCalendarDays(iso, 1), 0, timeZone),
+  };
+}
+
 /** Whole days from `from` to `to` (positive when `to` is later). */
 export function daysBetween(from: string, to: string): number {
   return Math.round((toUtc(to).getTime() - toUtc(from).getTime()) / DAY_MS);

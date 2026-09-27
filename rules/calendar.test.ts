@@ -3,10 +3,12 @@ import {
   addCalendarDays,
   addMonths,
   daysBetween,
+  easternDayBoundsUtc,
   federalHolidays,
   floridaHolidays,
   holidayCalendars,
   isBusinessDay,
+  isValidIsoDate,
   rollForwardToBusinessDay,
   todayIn,
 } from "./calendar";
@@ -90,5 +92,37 @@ describe("Florida legal holidays (§ 110.117 via Rule 2.514(a)(6), ⚠️ VERIFY
     ["2026-03-09", "federal_holiday", "2026-03-09"],
   ] as const)("%s rolls forward under %s to %s", (date, cal, expected) => {
     expect(rollForwardToBusinessDay(date, holidayCalendars[cal])).toBe(expected);
+  });
+});
+
+describe("isValidIsoDate", () => {
+  it("accepts a real calendar date", () => {
+    expect(isValidIsoDate("2026-02-28")).toBe(true);
+    expect(isValidIsoDate("2024-02-29")).toBe(true); // leap year
+  });
+
+  it("rejects a date that doesn't exist", () => {
+    expect(isValidIsoDate("2026-02-31")).toBe(false);
+    expect(isValidIsoDate("2023-02-29")).toBe(false); // not a leap year
+    expect(isValidIsoDate("not-a-date")).toBe(false);
+  });
+});
+
+describe("easternDayBoundsUtc", () => {
+  it("bounds a winter (EST, UTC-5) day", () => {
+    const { start, endExclusive } = easternDayBoundsUtc("2026-01-15");
+    expect(start.toISOString()).toBe("2026-01-15T05:00:00.000Z");
+    expect(endExclusive.toISOString()).toBe("2026-01-16T05:00:00.000Z");
+  });
+
+  it("bounds a summer (EDT, UTC-4) day", () => {
+    const { start, endExclusive } = easternDayBoundsUtc("2026-07-15");
+    expect(start.toISOString()).toBe("2026-07-15T04:00:00.000Z");
+    expect(endExclusive.toISOString()).toBe("2026-07-16T04:00:00.000Z");
+  });
+
+  it("is exactly 24 hours across a non-DST-transition day", () => {
+    const { start, endExclusive } = easternDayBoundsUtc("2026-03-01");
+    expect(endExclusive.getTime() - start.getTime()).toBe(24 * 60 * 60 * 1000);
   });
 });

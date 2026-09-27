@@ -12,7 +12,7 @@ import {
   timelyFilingDeadline,
 } from "./deadlines";
 
-/** Roll-forward as it would be once counsel confirms (OA-023): the rolled date governs. */
+/** Roll-forward as it would be once counsel confirms (OA-034): the rolled date governs. */
 const CONFIRMED: RollForwardPolicy[] = [
   {
     confirmed: true,
@@ -392,7 +392,7 @@ describe("effective-date switchover through the deadline functions", () => {
   });
 });
 
-describe("roll-forward policy switch (OA-023, owner 2026-09-27 option 1)", () => {
+describe("roll-forward policy switch (OA-034, owner 2026-09-27 option 1)", () => {
   const withSwitch: RollForwardPolicy[] = [
     { confirmed: false, confirmedBy: null, effectiveFrom: null, effectiveTo: "2027-01-01" },
     { ...CONFIRMED[0]!, effectiveFrom: "2027-01-01" },

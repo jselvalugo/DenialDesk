@@ -32,7 +32,7 @@ export interface ClockMilestone {
   title: string;
   citation: string;
   verify: boolean;
-  /** Governing due date (unrolled until roll-forward is confirmed, OA-023). */
+  /** Governing due date (unrolled until roll-forward is confirmed, OA-034). */
   due: string;
   /** Rolled due date, informational while pending counsel; null when it equals `due`. */
   rolledDue: string | null;

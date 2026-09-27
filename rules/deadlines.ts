@@ -14,7 +14,7 @@ export interface Deadline {
   /** Governing date: used for alerts, sorting, "past deadline" and blocking. */
   date: string;
   /**
-   * Weekend/holiday-rolled date while roll-forward is pending counsel (OA-023); informational
+   * Weekend/holiday-rolled date while roll-forward is pending counsel (OA-034); informational
    * only. Null when it equals `date` or roll-forward is confirmed (then `date` is already rolled).
    */
   rolledDate: string | null;
@@ -226,4 +226,56 @@ export function payerResponseStatus(
 ): { met: boolean; daysLate: number } {
   const daysLate = Math.max(0, daysBetween(milestoneDate, responseDate));
   return { met: daysLate === 0, daysLate };
+}
+
+/** Medicare appeal levels after redetermination (REQUIREMENTS §4.2, R-4.2.1). */
+export type MedicareAppealLevel = "reconsideration" | "alj_hearing" | "council_review" | "judicial_review";
+
+const MEDICARE_LEVEL_WINDOW: Record<MedicareAppealLevel, string> = {
+  reconsideration: "medicare.reconsideration.filing_window",
+  alj_hearing: "medicare.alj_hearing.filing_window",
+  council_review: "medicare.council_review.filing_window",
+  judicial_review: "medicare.judicial_review.filing_window",
+};
+
+/** The level a party may request after a decision at the given level. */
+export const MEDICARE_LEVEL_AFTER = {
+  redetermination: "reconsideration",
+  reconsideration: "alj_hearing",
+  alj_hearing: "council_review",
+  council_review: "judicial_review",
+} as const satisfies Record<string, MedicareAppealLevel>;
+
+/**
+ * Deadline to request `nextLevel` of a Medicare appeal, counted from the prior level's decision
+ * (notice) date: the 5-day receipt presumption plus the level's window, in calendar days — the same
+ * convention as `appealDeadline` for redetermination. The unrolled date governs while roll-forward
+ * is pending counsel (option 1); the federal-holiday-rolled date is returned as `rolledDate`. Rules resolve as in force on the decision
+ * date. Returns null for any regime other than Medicare (MA and commercial appeals follow plan
+ * documents and contracts).
+ */
+export function medicareNextLevelDeadline(input: {
+  regime: Regime;
+  nextLevel: MedicareAppealLevel;
+  priorDecisionDate: string;
+  rules?: Rule[];
+  rollPolicy?: RollForwardPolicy[];
+}): Deadline | null {
+  const rules = input.rules ?? catalog;
+  const window = resolveRule(MEDICARE_LEVEL_WINDOW[input.nextLevel], input.priorDecisionDate, rules);
+  if (!appliesTo(window, input.regime)) return null;
+  const presumption = resolveRule("medicare.appeals.receipt_presumption", input.priorDecisionDate, rules);
+  // Same path as appealDeadline: unrolled date governs while roll-forward is pending (option 1).
+  const due = ruleDueDates(
+    window,
+    ruleDueDate(presumption, input.priorDecisionDate, input.rollPolicy),
+    input.rollPolicy,
+  );
+  return {
+    date: due.date,
+    rolledDate: due.rolledDate,
+    basis: `${presumption.id}+${window.id}`,
+    citation: window.citation,
+    verify: presumption.verify || window.verify,
+  };
 }

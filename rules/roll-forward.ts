@@ -1,7 +1,7 @@
 import type { Confirmation, Rule } from "./types";
 
 /**
- * Whether weekend/holiday roll-forward governs deadlines (OA-023). Effective-dated like any rule:
+ * Whether weekend/holiday roll-forward governs deadlines (OA-034). Effective-dated like any rule:
  * after counsel confirms, close the current version (effectiveTo) and add one with
  * `confirmed: true` and `confirmedBy` recorded by a human. Only a human flips it.
  *

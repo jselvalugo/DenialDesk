@@ -6,6 +6,20 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
+- Appeals A1 (`specs/appeals.md`): `appeals` + `appeal_notes` tables (tenant RLS, isolation test,
+  a DB trigger enforcing the status lifecycle draft → in_review → ready → submitted →
+  awaiting_decision → decided, with withdrawn/dismissed reachable from submitted/awaiting_decision).
+  `/appeals` work list (level/payer/status filters, deadline/amount sort, totals row); "Start
+  appeal" on the denial detail page opens `/appeals/new?denialId=<id>` (own create page, deadline
+  computed fresh from the rules engine, never guessed); `/appeals/[id]` records the submission
+  (method, date, tracking ref) and the decision (outcome, date, recovered amount, close reason),
+  syncing the linked denial's status. "Appeals" is now a live item in the Denials module switcher.
+  A practice-configurable appeal follow-up-day default lives in a new small `practice_settings`
+  key/value table (no admin UI yet to edit it in A1 — it always reads the built-in 30-day default
+  until one is set directly in the table). Next: A2 letter templates, A3 escalation/Medicare
+  5-level ladder, A4 overturn-rate analytics, A5 attachment storage. Open questions from the spec
+  (late-filing blocking, appeal version history, withdrawn/dismissed → denial status mapping,
+  amount-in-controversy source) are added to `docs/owner/OWNER_ACTION_ITEMS.xlsx`.
 - Remittances and prompt pay R1/PP1 (`specs/remittances-and-prompt-pay.md`): 835 upload (parser in
   `src/edi/x12/`), `/remittances` table and record page with balance check, post (claim version +
   prompt-pay response per claim) and void with reason; `/prompt-pay` table and clock record page
@@ -45,6 +59,46 @@ _Last updated: 2026-09-26_
   calculation/display bugs (comma charges, `-$0.00`, "filed on time" with no deadline, prompt-pay
   "Met" on any notice), missing catalog rules, and a page-by-page record-model gap list with a
   prioritized order of work (P0–P4). Next session should start with its P0 list.
+- Insight standard reports (`specs/insight-standard-reports.md`): `/insight` lists 6 available
+  reports (denials by category/CARC, denials by payer, denial rate, open denials by appeal-deadline
+  bucket, claims by status/A/R summary, appeal outcomes) plus 2 planned (prompt-pay scorecard,
+  underpayment variance). Every role can view; export (owner decision 2026-09-26) is limited to
+  admin/manager/compliance. Reports are aggregate-only (no patient/claim drill-down), tenant-scoped
+  through `withTenant`, and every view/export is audited (`insight.report_viewed`,
+  `insight.report_exported`). The primary export is a formatted **.xlsx workbook** (not CSV — owner
+  decision 2026-09-26: "business people need to export the data"), built server-side with the new
+  `exceljs` dependency (MIT, `src/domain/insight/workbook.ts`): an About cover sheet plus data
+  sheet(s) with a bold frozen header, autofilter, real numeric/date/percent cells, a totals row, and
+  formula-injection sanitization; an "All reports" workbook is also offered. New indexes:
+  `denials(tenant_id, notice_date)`, `claims(tenant_id, submitted_at)`,
+  `claims(tenant_id, service_date)` (migration 0029). Navigation's Insight "Reports" item now
+  points at `/insight` and is `available: true`. Small-cell suppression (owner decision
+  2026-09-26, R-8.7): a report row whose underlying claims include a sensitivity-tagged patient
+  (R-3.5.1) and whose count is under `SMALL_CELL_SUPPRESSION_THRESHOLD` (default 11, config in
+  `src/domain/insight/suppression-config.ts`, ⚠️ VERIFY with counsel — modeled on CMS's public-
+  use-file cell-size suppression policy, not a Florida statute) shows "Suppressed (<11)" instead
+  of its count/dollars/rate, on-screen and in the export; complementary suppression (decided once
+  per whole sheet, never per sub-group, and never picking a zero-count row) also hides the
+  next-smallest sibling row when only one row would otherwise be suppressed. A reviewer fix
+  (2026-09-26) closed a back-calculation gap: whenever any row in a sheet is suppressed, that
+  sheet's own totals row is suppressed too (previously it showed the true grand total, letting
+  `Total − visible rows` reconstruct a hidden value). Suppression is a typed `SuppressedCell`
+  marker (`src/domain/insight/suppression.ts`), never a string comparison, and the decision is
+  made once on the actual sheet rows in `src/domain/insight/report-sheets.ts` (not in
+  `calculations.ts`, which only computes each group's `sensitive` flag), so the on-screen table
+  and the .xlsx always agree. Accepted residual risks, documented on the About sheet: cross-report
+  / overlapping-date-range differencing isn't guarded against, and report #3 (denial rate)'s
+  tenant-wide denied-claims count is never suppressed (it's one scalar, not a row breakdown).
+  Exporting to a production (Azure) tenant is gated on `OA-033` (the still-open written
+  handling/retention policy question). Next: custom/user-built reports, patient-level drill-down
+  once broader sensitivity-tag enforcement lands (R-3.5.1), and the two planned reports once their
+  blockers clear.
+- Fixed the same date: `isSameOrigin()` (`src/lib/same-origin.ts`), used by the Insight export
+  routes' CSRF check, rejected every real "Download Excel" click with a 403 — this app's own
+  `Referrer-Policy: no-referrer` makes browsers send a literal `Origin: null` for a same-origin
+  full-page form POST, which `new URL("null")` can't parse. Now checks `Sec-Fetch-Site` first
+  (unaffected by referrer policy; reliable in all modern browsers), falling back to the
+  Origin/Host comparison only when that header is absent.
 - Payer catalog P1 (`specs/payer-catalog.md`): `payers.edi_payer_id`/`regime` are now nullable plus
   a `payers.source` column; a payer missing either is "unverified". Starter Florida insurer catalog
   by name only (`src/domain/payers/florida-catalog.ts`, no payer IDs/regimes) loaded per-tenant,
@@ -82,8 +136,10 @@ _Last updated: 2026-09-26_
 - The one-click demo practice was removed entirely (owner request, 2026-09-26); migration 0021
   archived any live demo practice and ended demo sessions; 0022 disabled demo-only accounts and
   audited each retired demo practice (`system.demo_retired`). Practices are created from the console.
-- Open item (owner decision): retention of the archived demo practices (synthetic). Proposed: keep
-  them until the Terminate → offboarding flow exists, then terminate them through it.
+- Archived demo practices purged (owner decision, 2026-09-26; ADR 0008): migration 0032 deletes
+  every demo practice, its synthetic data, and its demo-only users, so none appear in the console.
+  Audit events are kept (no longer foreign-keyed to tenants/users) and each purge is audited
+  (`system.demo_purged`, `system.demo_user_purged`).
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
 - Open item (human decision): single-administrator risk acceptance with compensating controls
@@ -107,6 +163,8 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Secrets scanning: gitleaks in CI | `specs/project-skeleton.md` |
 | 2026-09-26 | Agents merge their own PRs once CI is green and reviewers have no blocking findings | `CLAUDE.md` #12 |
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
+| 2026-09-26 | Insight standard reports: all roles view, export limited to admin/manager/compliance, aggregate-only (no drill-down), primary export is a formatted .xlsx workbook (not CSV); `exceljs` added | `specs/insight-standard-reports.md` |
+| 2026-09-26 | Insight small-cell suppression (R-8.7): rows tied to a sensitivity-tagged patient with a count under 11 (config, ⚠️ VERIFY) show "Suppressed (<11)" instead of values on-screen and in exports, with complementary suppression to prevent back-calculation | `specs/insight-standard-reports.md` |
 | 2026-09-26 | ERP shell: global header, navy tab bar, module switcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
 | 2026-09-26 | Operator two-step is off on the Netlify console for now (`PLATFORM_OPERATOR_MFA=off`; ignored in production); unset the variable to turn it back on | `specs/operator-login.md` |
 | 2026-09-26 | No self-service sign-up; the operator creates practices after the BAA is signed, and records the BAA on the practice page | `specs/practice-agreements.md` |
@@ -115,7 +173,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Every DB error sanitized where Drizzle creates it (system and tenant); kept messages opt-in (owner: fix both in PR #28) | ADR 0006 |
 | 2026-09-26 | Custom field values on records (settings S2) are in the Phase 1 MVP; sensitivity checkboxes hidden from the patient form (owner, 2026-09-26; R-3.5.1 tagging gap accepted, compliance sign-off pending) | `specs/settings-and-custom-fields.md` |
 | 2026-09-26 | Owner answers on the billing-structure review's open questions (§8) — **pending counsel confirmation; not yet implemented in rule logic**: (1) timely filing counts from the submission date, evidenced by the clearinghouse acknowledgement (not the payer's receipt date); (2) a deadline landing on a weekend or Florida/federal holiday rolls to the next business day; (4) Medicare Advantage is not under Florida prompt pay per the owner — MA payment timing follows the plan contract (⚠️ VERIFY: 42 CFR § 422.520 sets a 30-day clean-claim rule for non-contracted providers; counsel to confirm this doesn't reintroduce a statutory clock); (5) late-payment interest starts accruing the first calendar day after the prompt-pay deadline passes. Item (3), month-end clamping of the 6-/12-month timely-filing windows, is still open and being researched separately. | `docs/reviews/2026-09-26-billing-structure-review.md` §8 |
-| 2026-09-27 | Roll-forward pending counsel (OA-023), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-023 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
+| 2026-09-27 | Roll-forward pending counsel (OA-034), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-034 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -147,6 +205,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 ## Open questions for humans
 - Month-end clamping of the 6- and 12-month timely-filing windows (billing-structure review §3.4,
   §8 item 3): being researched separately; not yet decided.
+- Appeals A1 (`specs/appeals.md`): late-filing blocking (OA-023), withdrawn/dismissed → denial
+  status mapping (OA-024), appeal version history before A2 (OA-025), Medicare amount-in-controversy
+  thresholds source (OA-026), tracking/recovered-amount field masking (OA-027), abandoning a draft
+  appeal (OA-028), compliance member-ID reveal on appeals (OA-029), counsel sign-off on the level
+  2–5 Medicare rules added in this review round (OA-030), sensitivity-tag masking timing (OA-031),
+  appeal record retention (OA-032).
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.
@@ -160,6 +224,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   (`public/brand/README.md`); it is owner-supplied and described as a synthetic render.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.
+- Insight exported .xlsx workbooks (R-9.2.1, SOC 2 C1.1/CC6.7): owner said "not sure, let's
+  confirm" on 2026-09-26 whether practices need a written handling/retention policy for downloaded
+  workbooks (they leave the audited system as files on a user's device). See `OA-033` in
+  `docs/owner/OWNER_ACTION_ITEMS.xlsx`. **Export to a production (Azure) tenant is gated on this
+  item being resolved** — don't enable Insight export for a real practice before `OA-033` closes.
 
 - Revenue cycle imports (before real data, `docs/threat-models/revenue-cycle-imports.md`):
   sensitivity tags for lines (Part 2/HIV/behavioral CPTs); encrypt account numbers or confirm
