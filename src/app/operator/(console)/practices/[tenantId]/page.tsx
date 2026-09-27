@@ -8,39 +8,36 @@ import { Badge } from "@/components/ui/Badge";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
-import { agreementStatus, listAgreements } from "@/domain/platform/agreements";
+import { agreementStatus, listAgreements, type AgreementStatus } from "@/domain/platform/agreements";
 import { getPractice } from "@/domain/platform/practices";
+import { getFormat, getT } from "@/i18n/server";
+import type { MessageKey } from "@/i18n/messages/types";
 import { auditSystem } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
 import { AgreementStatusBadge } from "../../AgreementStatusBadge";
 import { RecordAgreementForm } from "./RecordAgreementForm";
 import { VoidAgreementForm } from "./VoidAgreementForm";
 
-export const metadata: Metadata = { title: "Practice" };
-
-const dateFormat = new Intl.DateTimeFormat("en-US", {
-  month: "2-digit",
-  day: "2-digit",
-  year: "numeric",
-  timeZone: "America/New_York",
-});
-
-/** A calendar date (YYYY-MM-DD) as MM/DD/YYYY without a time-zone shift. */
-function calendarDate(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${m}/${d}/${y}`;
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("operator");
+  return { title: t("practice.metaTitle") };
 }
-
-const recordStatus = {
-  active: { label: "Active", tone: "success" },
-  superseded: { label: "Superseded", tone: "neutral" },
-  historical: { label: "Historical", tone: "info" },
-  voided: { label: "Recorded in error", tone: "danger" },
-} as const;
 
 function fileSize(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
 }
+
+type RecordStatus = "active" | "superseded" | "historical" | "voided";
+
+const recordStatusKeys: Record<
+  RecordStatus,
+  { labelKey: MessageKey<"operator">; tone: "success" | "neutral" | "info" | "danger" }
+> = {
+  active: { labelKey: "status.active", tone: "success" },
+  superseded: { labelKey: "recordStatus.superseded", tone: "neutral" },
+  historical: { labelKey: "recordStatus.historical", tone: "info" },
+  voided: { labelKey: "recordStatus.voided", tone: "danger" },
+};
 
 /** Operator's view of one practice: metadata and its agreements (docs/specs/practice-agreements.md). */
 export default async function PracticePage({ params }: { params: Promise<{ tenantId: string }> }) {
@@ -57,114 +54,119 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
     entityId: tenantId,
   });
 
+  const t = await getT("operator");
+  const tc = await getT("common");
+  const f = await getFormat();
+
   const customer = practice.kind === "customer";
   const agreements = customer ? await listAgreements(tenantId) : [];
   const active = agreements.find((a) => a.status === "active") ?? null;
-  const status = agreementStatus(agreements, todayIn());
+  const status: AgreementStatus = agreementStatus(agreements, todayIn());
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
       <PageHeader
         title={practice.name}
-        description={
-          customer ? "Customer practice. Practice-level details only." : "Demo practice on synthetic data."
-        }
+        description={customer ? t("practice.descriptionCustomer") : t("practice.descriptionDemo")}
         actions={
           <Link href="/operator" className="text-body font-medium text-link hover:underline">
-            All practices
+            {t("nav.allPractices")}
           </Link>
         }
       />
 
-      <Panel title="Practice">
+      <Panel title={t("practice.panelTitle")}>
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-body">
-          <dt className="text-muted">Type</dt>
+          <dt className="text-muted">{tc("word.type")}</dt>
           <dd>
             <Badge tone={customer ? "neutral" : "info"} dot={false}>
-              {customer ? "Customer" : "Demo"}
+              {customer ? t("status.customer") : t("status.demo")}
             </Badge>
           </dd>
-          <dt className="text-muted">Status</dt>
+          <dt className="text-muted">{tc("word.status")}</dt>
           <dd>
             {practice.suspendedAt ? (
-              <Badge tone={customer ? "danger" : "neutral"}>{customer ? "Suspended" : "Archived"}</Badge>
+              <Badge tone={customer ? "danger" : "neutral"}>
+                {customer ? t("status.suspended") : t("status.archived")}
+              </Badge>
             ) : (
-              <Badge tone="success">Active</Badge>
+              <Badge tone="success">{t("status.active")}</Badge>
             )}
           </dd>
-          <dt className="text-muted">Created</dt>
-          <dd className="tabular">{dateFormat.format(practice.createdAt)}</dd>
-          <dt className="text-muted">Team</dt>
-          <dd className="tabular">{practice.teamSize}</dd>
+          <dt className="text-muted">{tc("word.created")}</dt>
+          <dd className="tabular">{f.dateTime(practice.createdAt)}</dd>
+          <dt className="text-muted">{t("list.columns.team")}</dt>
+          <dd className="tabular">{f.number(practice.teamSize)}</dd>
         </dl>
       </Panel>
 
       {customer && (
         <>
           <Panel
-            title="Business Associate Agreement"
-            description="The signed agreement on file for this practice, and every earlier version."
+            title={t("practice.baaTitle")}
+            description={t("practice.baaDescription")}
             actions={<AgreementStatusBadge status={status} />}
             flush
           >
             {agreements.length === 0 ? (
-              <p className="p-4 text-body text-muted">
-                No agreement on file. Record the signed BAA below before this practice handles patient data.
-              </p>
+              <p className="p-4 text-body text-muted">{t("practice.noAgreement")}</p>
             ) : (
-              <Table caption="Agreements on file">
+              <Table caption={t("practice.tableCaption")}>
                 <thead>
                   <tr>
-                    <Th>Status</Th>
-                    <Th>Effective</Th>
-                    <Th>Expires</Th>
-                    <Th>Signed</Th>
-                    <Th>Practice signer</Th>
-                    <Th>DenialDesk signer</Th>
-                    <Th>Recorded</Th>
-                    <Th>File</Th>
+                    <Th>{tc("word.status")}</Th>
+                    <Th>{t("practice.columns.effective")}</Th>
+                    <Th>{t("practice.columns.expires")}</Th>
+                    <Th>{t("practice.columns.signed")}</Th>
+                    <Th>{t("practice.columns.practiceSigner")}</Th>
+                    <Th>{t("practice.columns.ourSigner")}</Th>
+                    <Th>{t("practice.columns.recorded")}</Th>
+                    <Th>{t("practice.columns.file")}</Th>
                   </tr>
                 </thead>
                 <tbody>
-                  {agreements.map((a) => (
-                    <Tr key={a.id}>
-                      <Td>
-                        <Badge tone={recordStatus[a.status].tone}>{recordStatus[a.status].label}</Badge>
-                      </Td>
-                      <Td className="tabular">{calendarDate(a.effectiveDate)}</Td>
-                      <Td className="tabular">
-                        {a.expiresOn ? calendarDate(a.expiresOn) : "Until terminated"}
-                      </Td>
-                      <Td className="tabular">{calendarDate(a.signedOn)}</Td>
-                      <Td>{a.practiceSigner}</Td>
-                      <Td>{a.ourSigner}</Td>
-                      <Td className="tabular text-muted">{dateFormat.format(a.createdAt)}</Td>
-                      <Td>
-                        <a
-                          href={`/operator/practices/${tenantId}/agreements/${a.id}/download`}
-                          className="font-medium text-link hover:underline"
-                          title={`SHA-256 ${a.sha256}`}
-                        >
-                          {a.filename}
-                        </a>
-                        <span className="ml-2 text-label text-muted">{fileSize(a.sizeBytes)}</span>
-                        {a.note && <p className="mt-0.5 text-label text-muted">{a.note}</p>}
-                        {a.voidReason && (
-                          <p className="mt-0.5 text-label text-danger-fg">
-                            Recorded in error: {a.voidReason}
-                          </p>
-                        )}
-                      </Td>
-                    </Tr>
-                  ))}
+                  {agreements.map((a) => {
+                    const recordStatus = recordStatusKeys[a.status];
+                    return (
+                      <Tr key={a.id}>
+                        <Td>
+                          <Badge tone={recordStatus.tone}>{t(recordStatus.labelKey)}</Badge>
+                        </Td>
+                        <Td className="tabular">{f.date(a.effectiveDate)}</Td>
+                        <Td className="tabular">
+                          {a.expiresOn ? f.date(a.expiresOn) : t("practice.untilTerminated")}
+                        </Td>
+                        <Td className="tabular">{f.date(a.signedOn)}</Td>
+                        <Td>{a.practiceSigner}</Td>
+                        <Td>{a.ourSigner}</Td>
+                        <Td className="tabular text-muted">{f.dateTime(a.createdAt)}</Td>
+                        <Td>
+                          <a
+                            href={`/operator/practices/${tenantId}/agreements/${a.id}/download`}
+                            className="font-medium text-link hover:underline"
+                            title={t("practice.fileHashTitle", { sha: a.sha256 })}
+                          >
+                            {a.filename}
+                          </a>
+                          <span className="ml-2 text-label text-muted">{fileSize(a.sizeBytes)}</span>
+                          {a.note && <p className="mt-0.5 text-label text-muted">{a.note}</p>}
+                          {a.voidReason && (
+                            <p className="mt-0.5 text-label text-danger-fg">
+                              {t("practice.voidedNote", { reason: a.voidReason })}
+                            </p>
+                          )}
+                        </Td>
+                      </Tr>
+                    );
+                  })}
                 </tbody>
               </Table>
             )}
           </Panel>
 
           <Panel
-            title={active ? "Record a renewed agreement" : "Record the signed agreement"}
-            description="Stored with the practice for the retention period; agreements are never edited or deleted."
+            title={active ? t("practice.recordTitleRenew") : t("practice.recordTitleNew")}
+            description={t("practice.recordDescription")}
           >
             <div className="max-w-3xl">
               <RecordAgreementForm
@@ -176,10 +178,7 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
           </Panel>
 
           {agreements.some((a) => a.status !== "voided") && (
-            <Panel
-              title="Correct the record"
-              description="A wrong upload or a typo can't be edited. Mark the agreement as recorded in error, then record the correct one; both stay on file."
-            >
+            <Panel title={t("practice.correctTitle")} description={t("practice.correctDescription")}>
               <div className="max-w-3xl">
                 <VoidAgreementForm
                   tenantId={tenantId}
@@ -187,7 +186,11 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
                     .filter((a) => a.status !== "voided")
                     .map((a) => ({
                       id: a.id,
-                      label: `${a.filename} · effective ${calendarDate(a.effectiveDate)} · ${recordStatus[a.status].label}`,
+                      label: t("voidForm.optionLabel", {
+                        filename: a.filename,
+                        date: f.date(a.effectiveDate),
+                        status: t(recordStatusKeys[a.status].labelKey),
+                      }),
                     }))}
                 />
               </div>

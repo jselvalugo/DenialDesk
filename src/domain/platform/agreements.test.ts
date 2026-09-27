@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { en } from "@/i18n/messages/en";
+import { createTranslator } from "@/i18n/translate";
 import {
   agreementStatus,
   checkAgreementFile,
@@ -6,7 +8,16 @@ import {
   MAX_AGREEMENT_BYTES,
   MAX_FILENAME_LENGTH,
   type AgreementDates,
+  type FileCheck,
 } from "./agreements";
+
+// checkAgreementFile returns `operator` namespace message keys (never English text: domain code
+// never imports `@/i18n/server`); tests build a translator from the English source to assert content.
+const t = createTranslator(en.operator, "en");
+function errorText(check: FileCheck): string {
+  if (check.ok) throw new Error("expected a failed check");
+  return t(check.error, check.params);
+}
 
 // docs/specs/practice-agreements.md: status from the agreements on file, with boundary days.
 describe("agreementStatus", () => {
@@ -123,12 +134,9 @@ describe("checkAgreementFile", () => {
   });
 
   it("rejects a file over the cap", () => {
-    expect(
-      checkAgreementFile({ name: "baa.pdf", size: MAX_AGREEMENT_BYTES + 1, head: pdf, ...real }),
-    ).toMatchObject({
-      ok: false,
-      error: expect.stringContaining("5 MB"),
-    });
+    const check = checkAgreementFile({ name: "baa.pdf", size: MAX_AGREEMENT_BYTES + 1, head: pdf, ...real });
+    expect(check).toMatchObject({ ok: false });
+    expect(errorText(check)).toContain("5 MB");
   });
 
   it("rejects a renamed non-PDF and a PDF with the wrong extension", () => {
@@ -153,24 +161,26 @@ describe("checkAgreementFile", () => {
 
   it("in synthetic-only environments needs the SYN- prefix and the attestation (ADR 0003)", () => {
     const syntheticOnly = { syntheticOnly: true };
-    expect(
-      checkAgreementFile({
-        name: "Signed BAA.pdf",
-        size: pdf.length,
-        head: pdf,
-        ...syntheticOnly,
-        attestedSynthetic: true,
-      }),
-    ).toMatchObject({ ok: false, error: expect.stringContaining("SYN-") });
-    expect(
-      checkAgreementFile({
-        name: "SYN-baa.pdf",
-        size: pdf.length,
-        head: pdf,
-        ...syntheticOnly,
-        attestedSynthetic: false,
-      }),
-    ).toMatchObject({ ok: false, error: expect.stringContaining("Confirm") });
+    const missingPrefix = checkAgreementFile({
+      name: "Signed BAA.pdf",
+      size: pdf.length,
+      head: pdf,
+      ...syntheticOnly,
+      attestedSynthetic: true,
+    });
+    expect(missingPrefix).toMatchObject({ ok: false });
+    expect(errorText(missingPrefix)).toContain("SYN-");
+
+    const missingAttestation = checkAgreementFile({
+      name: "SYN-baa.pdf",
+      size: pdf.length,
+      head: pdf,
+      ...syntheticOnly,
+      attestedSynthetic: false,
+    });
+    expect(missingAttestation).toMatchObject({ ok: false });
+    expect(errorText(missingAttestation)).toContain("Confirm");
+
     expect(
       checkAgreementFile({
         name: "syn-baa.pdf",
