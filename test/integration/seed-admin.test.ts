@@ -19,6 +19,8 @@ const adminRow = async () =>
   )[0]!;
 
 describe("seedDemoPractice", () => {
+  // Seven real scrypt derivations (N=2^17, src/auth/password.ts): about 2.5 s on an idle machine,
+  // past vitest's 5 s default when a full run shares the CPU. The budget fits the work.
   it("repairs the admin when the practice exists: creates, resets password, clears lockout, keeps MFA unless asked", async () => {
     await seedDemoPractice({ email: `first-${email}`, password: "first-synthetic-password" });
     // The practice exists (this or an earlier run), so the configured admin is created in it.
@@ -62,7 +64,7 @@ describe("seedDemoPractice", () => {
       { resetMfa: false, created: false },
       { resetMfa: true, created: false },
     ]);
-  });
+  }, 30_000);
 
   it("ends the admin's sessions and leaves a disabled account disabled", async () => {
     const admin = await adminRow();
