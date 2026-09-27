@@ -14,7 +14,9 @@ _Last updated: 2026-09-27_
   from `rules/catalog.ts` at render time with its citation and "Pending counsel verification" badge
   (a unit test rejects statutory numbers typed in prose), CARC meanings come from
   `src/domain/carc.ts`. Per-user completions in `university_progress` (migration 0033; RLS; app role
-  SELECT/INSERT only, append-only; member FK) audited as `university.lesson_completed`. Next: U2
+  SELECT/INSERT only, append-only; member FK; migration 0034 adds the table to the demo purge)
+  audited as `university.lesson_completed`. Rules a lesson lists but the product does not compute
+  yet (acknowledgment, secondary filing, Medicare levels 2–5) are tagged "Reference only". Next: U2
   knowledge checks, U3 practice training record/export (OA-035), U4 more courses.
 - Appeals A1 (`specs/appeals.md`): `appeals` + `appeal_notes` tables (tenant RLS, isolation test,
   a DB trigger enforcing the status lifecycle draft → in_review → ready → submitted →

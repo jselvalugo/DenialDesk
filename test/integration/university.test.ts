@@ -73,6 +73,11 @@ describe("lesson completion", () => {
   });
 
   it("is invisible to another practice", async () => {
+    await withTenant(other, (tx) =>
+      recordLessonCompleted(tx, { ...other, courseId: course.id, lessonId: lesson.id }),
+    );
+    const mine = await withTenant(ctx, (tx) => completedLessons(tx, ctx.userId));
+    expect(mine.size).toBe(1);
     const rows = await withTenant(other, (tx) =>
       tx
         .select({ id: universityProgress.id })

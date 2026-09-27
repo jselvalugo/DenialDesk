@@ -13,7 +13,8 @@ export type Block =
   /** "In DenialDesk": how the product behaves, with an optional link to the page described. */
   | { kind: "callout"; title: string; text: string; href?: string; linkLabel?: string }
   /** Legal values rendered from the rules catalog; never retyped here. */
-  | { kind: "rules"; caption: string; ruleIds: string[] }
+  /** `referenceOnly`: in the catalog, but DenialDesk computes no deadline from them yet. */
+  | { kind: "rules"; caption: string; ruleIds: string[]; referenceOnly?: string[] }
   /** CARC summaries and DenialDesk categories rendered from src/domain/carc.ts. */
   | { kind: "carcs"; caption: string; codes: string[] }
   /** Claim adjustment group code summaries rendered from src/domain/group-codes.ts. */

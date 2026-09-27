@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { resolveRule } from "@rules/engine";
 import { todayIn } from "@rules/calendar";
 import { CARC } from "@/domain/carc";
+import { DUE_SOON_DAYS, PAGE_SIZE } from "@/domain/denials/queries";
+import { GROUP_CODES } from "@/domain/group-codes";
 import { navApps } from "@/components/shell/navigation";
 import { COURSES, findCourse, findLesson } from "./catalog";
 import { courseProgress, isSlug, lessonKey, progressLabel, readingMinutes } from "./content";
@@ -41,7 +43,7 @@ describe("university catalog integrity", () => {
     // settings that are not legal values (7-day tile, 25 per page, 15-minute idle timeout) are listed.
     const statute =
       /§|\bCFR\b|\b(?:\d+|one|two|three|five|six|twelve)\s*(?:-\s*)?(?:calendar|business|hours?|days?|months?|years?|percent|%)/i;
-    const allowed = ["7 days", "25 denials", "15 minutes", "six-digit"];
+    const allowed = [`${DUE_SOON_DAYS} days`, `${PAGE_SIZE} denials`, "15 minutes", "six-digit"];
     const walk = (value: unknown, path: string) => {
       if (typeof value === "string") {
         let text = value;
@@ -63,6 +65,21 @@ describe("university catalog integrity", () => {
         }
       }
     }
+  });
+
+  it("names only group codes that exist, and reference-only rules that are listed", () => {
+    for (const block of COURSES.flatMap((c) => c.lessons).flatMap((l) => l.blocks)) {
+      if (block.kind === "groupCodes")
+        for (const code of block.codes) expect(GROUP_CODES[code], code).toBeDefined();
+      if (block.kind === "rules")
+        for (const id of block.referenceOnly ?? []) expect(block.ruleIds).toContain(id);
+    }
+  });
+
+  it("quotes the queue's product settings as they are in code", () => {
+    const text = JSON.stringify(COURSES);
+    expect(text).toContain(`Pages hold ${PAGE_SIZE} denials`);
+    expect(text).toContain(`due in ${DUE_SOON_DAYS} days`);
   });
 
   it("links only to shipped pages, with a label", () => {

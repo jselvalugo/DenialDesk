@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { ChevronDown, GraduationCap, Search } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "./BrandMark";
@@ -20,6 +21,7 @@ export type { ShellUser };
  */
 export function GlobalHeader({ user }: { user: ShellUser | null }) {
   const location = useShellLocation();
+  const pathname = usePathname();
   const [switcherOpen, setSwitcherOpen] = useState(false);
 
   // Ctrl+K / ⌘K opens "Go to" from anywhere.
@@ -68,6 +70,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
           {user && (
             <Link
               href="/university"
+              aria-current={pathname.startsWith("/university") ? "page" : undefined}
               className="inline-flex h-9 items-center gap-1.5 rounded-control px-2.5 text-body font-medium text-text hover:bg-surface-muted"
             >
               <GraduationCap aria-hidden="true" className="size-4 text-accent" strokeWidth={1.75} />

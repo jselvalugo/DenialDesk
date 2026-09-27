@@ -15,7 +15,7 @@ const NOT_ADVICE =
   "This lesson describes how DenialDesk behaves. It is not legal or compliance advice: your practice's policies and its privacy and security officers decide how patient data is handled, and Florida healthcare counsel decides what the law requires.";
 
 const RULES_NOTE =
-  'Every deadline below is read from DenialDesk\'s rules catalog as of today, with its citation. A rule marked "Pending counsel verification" has not yet been confirmed by Florida healthcare counsel; the product still uses it, and the flag is only cleared by a person.';
+  'Every deadline below is read from DenialDesk\'s rules catalog as of today, with its citation. A rule marked "Pending counsel verification" has not yet been confirmed by Florida healthcare counsel; the flag is only cleared by a person. A rule marked "Reference only" is in the catalog, but DenialDesk does not compute a deadline from it yet.';
 
 export const COURSES: Course[] = [
   {
@@ -221,7 +221,7 @@ export const COURSES: Course[] = [
           },
           {
             kind: "p",
-            text: 'A code that DenialDesk does not know goes to the "Other" category so a person can classify it. Categories never change a claim\'s codes: a coding denial is a prompt to review the claim, and any change to a procedure or diagnosis code is made by a person and recorded.',
+            text: "A code that DenialDesk does not know goes to the \"Other\" category; it stays there, and staff record the likely reason in a note (changing a denial's category by hand is planned). Categories never change a claim's codes: a coding denial is a prompt to review the claim, and any change to a procedure or diagnosis code is made by a person and recorded.",
           },
           {
             kind: "table",
@@ -241,7 +241,7 @@ export const COURSES: Course[] = [
               ["Coordination of benefits", "Confirm which payer is primary and bill in the right order."],
               ["Missing information", "Supply the attachment or field the payer asked for."],
               ["Credentialing", "Check the provider's enrollment with the payer."],
-              ["Other", "Classify by hand and add a note explaining the reason."],
+              ["Other", "Add a note with the likely reason; the category stays Other for now."],
             ],
           },
         ],
@@ -258,7 +258,7 @@ export const COURSES: Course[] = [
           {
             kind: "list",
             items: [
-              "Filter by status, payer, category, or assignee; sort by deadline, amount, or newest notice. Pages hold 25 denials.",
+              "Filter by status, payer, category, or assignment (mine or unassigned); sort by deadline, amount, or newest notice. Pages hold 25 denials.",
               "Totals above the list: open denials, amount at risk, due in 7 days, past deadline, and denials with no deadline configured. Deadline counts include only denials still awaiting the practice's action; once an appeal is submitted the deadline has been met.",
               '"Not configured" as a deadline means DenialDesk has no rule or payer setting to compute one from. It never guesses.',
             ],
@@ -271,12 +271,12 @@ export const COURSES: Course[] = [
               ["New", "Captured, not yet looked at."],
               ["In review", "Someone is working it."],
               ["Needs records", "Waiting on documentation."],
-              ["Appeal drafted", "An appeal record exists and has not been submitted."],
+              ["Appeal drafted", "An appeal is being prepared and has not been submitted."],
               ["Appeal submitted", "The appeal is with the payer; the deadline has been met."],
               ["Overturned", "Closed: the payer reversed the denial."],
               ["Upheld", "Closed: the payer kept the denial."],
               ["Written off", "Closed: the practice stopped pursuing it."],
-              ["Closed", "Closed for another recorded reason."],
+              ["Closed", "Closed without an appeal decision, or after an appeal was withdrawn or dismissed."],
             ],
           },
           {
@@ -356,11 +356,15 @@ export const COURSES: Course[] = [
           { kind: "notice", text: RULES_NOTE },
           {
             kind: "p",
-            text: "The clock starts on the date the payer received the claim. DenialDesk counts calendar days in Eastern time and shows each milestone with its date and the days remaining. Each rule below says which regime it belongs to and what it is counted from.",
+            text: "The clock starts on the date the payer received the claim. DenialDesk counts calendar days in Eastern time and shows each computed milestone with its date and the days remaining. Each rule below says which regime it belongs to and what it is counted from.",
           },
           {
             kind: "rules",
             caption: "Electronic claims: payer milestones and the provider's response window",
+            referenceOnly: [
+              "fl.promptpay.electronic.acknowledgment",
+              "fl.hmo.promptpay.electronic.acknowledgment",
+            ],
             ruleIds: [
               "fl.promptpay.electronic.acknowledgment",
               "fl.promptpay.electronic.pay_or_contest",
@@ -379,7 +383,7 @@ export const COURSES: Course[] = [
             items: [
               "Pay-or-contest is met by the payer's first response of any kind: a payment, a denial, or a contest (a request for more information).",
               "Pay-or-deny and the uncontestable milestone are met only by a payment or a denial. A response on the due date counts as on time.",
-              "A contest recorded on or before the pay-or-contest date starts the provider's response window. Contests are recorded by a person on the clock record; DenialDesk does not infer them from codes.",
+              "The first contest recorded on a clock starts the provider's response window; the claim counts as contested only when that contest is on or before the pay-or-contest date. Contests are recorded by a person on the clock record; DenialDesk does not infer them from codes.",
               "If neither a payment nor a denial arrives by the uncontestable date, DenialDesk flags the claim as an uncontestable obligation. A demand letter for it is planned.",
               "When a milestone's last day falls on a weekend or a Florida legal holiday, the unrolled date governs until counsel confirms that deadlines roll forward to the next business day; the rolled date is shown beside it as informational, pending counsel.",
             ],
@@ -400,6 +404,7 @@ export const COURSES: Course[] = [
           {
             kind: "rules",
             caption: "Paper (non-electronic) claims: payer milestones",
+            referenceOnly: ["fl.promptpay.paper.acknowledgment", "fl.hmo.promptpay.paper.acknowledgment"],
             ruleIds: [
               "fl.promptpay.paper.acknowledgment",
               "fl.promptpay.paper.pay_or_contest",
@@ -455,6 +460,7 @@ export const COURSES: Course[] = [
           {
             kind: "rules",
             caption: "Filing windows",
+            referenceOnly: ["fl.timely_filing.secondary", "fl.hmo.timely_filing.secondary"],
             ruleIds: [
               "fl.timely_filing.initial",
               "fl.timely_filing.secondary",
@@ -503,14 +509,14 @@ export const COURSES: Course[] = [
             kind: "list",
             items: [
               "Medicare: the notice is presumed received a set number of days after its date, and the filing window runs from that presumed receipt.",
-              "FL commercial and FL HMO: the appeal window comes from the payer's contract, entered in the payer's setup as a number of days. Until it is entered, the denial shows \"Not configured\" rather than a guessed date.",
-              'When a deadline\'s last day falls on a weekend or holiday, the earlier, unrolled date governs alerts, sorting, and "past deadline" until counsel confirms that deadlines roll forward to the next business day. The rolled date is shown beside it as pending counsel.',
+              'FL commercial and FL HMO: the appeal window comes from the payer\'s contract, recorded on the payer as a number of days during payer setup (a practice screen for it is planned). Until it is recorded, the denial shows "Not configured" rather than a guessed date.',
+              'When a deadline\'s last day falls on a weekend or holiday, the earlier, unrolled date governs alerts, sorting, and "past deadline" until counsel confirms that deadlines roll forward to the next business day. For Medicare, timely-filing, and prompt-pay deadlines the rolled date is shown beside it as pending counsel; payer-contract windows are not rolled.',
             ],
           },
           {
             kind: "callout",
             title: "Deadlines are always explicit",
-            text: 'A deadline shows its date, the days remaining, and the time zone (Eastern). "Due soon" and "overdue" tones come from the practice\'s own reminder window, never from a legal value.',
+            text: 'A deadline shows its date and the days remaining, counted in Eastern time. "Due soon" and "overdue" tones come from a fixed DenialDesk warning window, never from a legal value.',
             href: "/denials",
             linkLabel: "Open the denial queue",
           },
@@ -544,8 +550,8 @@ export const COURSES: Course[] = [
             items: [
               "The status can only move forward through this order; the database refuses any other change.",
               "Recording a submission after the deadline is allowed and flagged, so a late filing is visible rather than hidden.",
-              "The linked denial's status follows the appeal: Appeal drafted, Appeal submitted, then Overturned or Upheld.",
-              "A practice-configurable follow-up reminder is set when an appeal is submitted; it is a reminder, not a legal date.",
+              "The linked denial's status follows the appeal: Appeal drafted, Appeal submitted, then Overturned or Upheld; a withdrawn or dismissed appeal closes the denial.",
+              "A follow-up reminder date is set when an appeal is submitted (a practice default; a settings screen is planned); it is a reminder, not a legal date.",
             ],
           },
           {
@@ -565,7 +571,7 @@ export const COURSES: Course[] = [
       {
         id: "medicare-levels",
         title: "The Medicare appeal levels",
-        summary: "The five levels and the window for each, as DenialDesk records them.",
+        summary: "The five levels and the window for each, shown for reference.",
         blocks: [
           { kind: "notice", text: RULES_NOTE },
           {
@@ -575,6 +581,13 @@ export const COURSES: Course[] = [
           {
             kind: "rules",
             caption: "Levels two to five",
+            referenceOnly: [
+              "medicare.appeals.receipt_presumption",
+              "medicare.reconsideration.filing_window",
+              "medicare.alj_hearing.filing_window",
+              "medicare.council_review.filing_window",
+              "medicare.judicial_review.filing_window",
+            ],
             ruleIds: [
               "medicare.appeals.receipt_presumption",
               "medicare.reconsideration.filing_window",
@@ -588,7 +601,7 @@ export const COURSES: Course[] = [
             items: [
               'Level one, redetermination, is in the "Appeal deadlines" lesson.',
               "Levels three and five have a minimum amount in controversy that changes each year. Those amounts are not yet in DenialDesk's rules catalog, so DenialDesk does not check them; confirm the current threshold before filing.",
-              "Escalating an appeal record to the next level is planned; today each level is recorded as its own appeal.",
+              "DenialDesk records first-level appeals today. Recording levels two to five and escalating an appeal record to the next level are planned; the windows above are shown for reference only.",
             ],
           },
         ],

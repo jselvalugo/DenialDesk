@@ -44,7 +44,15 @@ function regimeList(rule: Rule): string {
 
 /** A rule row: the catalog's own title, value, citation, and verification state, never retyped. */
 function RulesBlock({ block, today }: { block: Extract<Block, { kind: "rules" }>; today: string }) {
-  const rules = block.ruleIds.map((id) => resolveRule(id, today));
+  const reference = new Set(block.referenceOnly ?? []);
+  // A rule with no version in force today renders a row saying so, never a crashed page.
+  const rules = block.ruleIds.map((id) => {
+    try {
+      return resolveRule(id, today);
+    } catch {
+      return id;
+    }
+  });
   return (
     <div className="overflow-hidden rounded-panel border border-border">
       <Table caption={block.caption}>
@@ -59,28 +67,39 @@ function RulesBlock({ block, today }: { block: Extract<Block, { kind: "rules" }>
           </tr>
         </thead>
         <tbody>
-          {rules.map((rule) => (
-            <Tr key={rule.id}>
-              <Td className="font-medium">{rule.title}</Td>
-              <Td>{regimeList(rule)}</Td>
-              <Td>{rule.anchor ? ANCHOR_LABELS[rule.anchor] : "—"}</Td>
-              <Td>
-                <span className="font-mono tabular-nums">{UNIT_LABELS[rule.unit](rule.value)}</span>
-              </Td>
-              <Td>{rule.citation}</Td>
-              <Td>
-                {!rule.verify && rule.confirmedBy ? (
-                  <Badge tone="success" dot={false}>
-                    Confirmed by counsel {rule.confirmedBy.on}
-                  </Badge>
-                ) : (
-                  <Badge tone="warning" dot={false}>
-                    Pending counsel verification
-                  </Badge>
-                )}
-              </Td>
-            </Tr>
-          ))}
+          {rules.map((rule) =>
+            typeof rule === "string" ? (
+              <Tr key={rule}>
+                <Td colSpan={6}>No version of this rule is in force today.</Td>
+              </Tr>
+            ) : (
+              <Tr key={rule.id}>
+                <Td className="font-medium">{rule.title}</Td>
+                <Td>{regimeList(rule)}</Td>
+                <Td>{rule.anchor ? ANCHOR_LABELS[rule.anchor] : "—"}</Td>
+                <Td>
+                  <span className="font-mono tabular-nums">{UNIT_LABELS[rule.unit](rule.value)}</span>
+                </Td>
+                <Td>{rule.citation}</Td>
+                <Td>
+                  {reference.has(rule.id) && (
+                    <Badge tone="neutral" dot={false}>
+                      Reference only
+                    </Badge>
+                  )}{" "}
+                  {!rule.verify && rule.confirmedBy ? (
+                    <Badge tone="success" dot={false}>
+                      Confirmed by counsel {rule.confirmedBy.on}
+                    </Badge>
+                  ) : (
+                    <Badge tone="warning" dot={false}>
+                      Pending counsel verification
+                    </Badge>
+                  )}
+                </Td>
+              </Tr>
+            ),
+          )}
         </tbody>
       </Table>
     </div>
