@@ -20,7 +20,6 @@ import { Badge } from "@/components/ui/Badge";
 import { primaryLinkButtonClass } from "@/components/ui/linkButton";
 import { Panel } from "@/components/ui/Panel";
 import { cn } from "@/lib/cn";
-import { isProduction } from "@/lib/env";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Welcome" };
@@ -149,7 +148,6 @@ export default async function HomePage() {
   const auth = await requireAuth();
   const firstName = auth.displayName.trim().split(/\s+/)[0] || auth.displayName;
   const apps = navApps({
-    showDesignSystem: !isProduction(),
     showRevenueCycle: canViewRevenueCycle(auth.role),
     showSettings: true,
   });

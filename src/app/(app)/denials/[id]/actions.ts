@@ -9,6 +9,7 @@ import { requireAuth } from "@/auth/session";
 import { claims, denialNotes, denials, memberships, patients } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { denialStatusEnum } from "@/db/schema";
+import { nextAppealSubmittedOn } from "@/domain/denial-status";
 import { audit } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
 
@@ -42,15 +43,12 @@ export async function changeStatus(_: ActionState, formData: FormData): Promise<
       .for("update");
     if (!current) return { error: "This denial no longer exists." };
     if (current.status === parsed.data.status) return { ok: true };
+    const stamped = nextAppealSubmittedOn(parsed.data.status, current.appealSubmittedOn, todayIn());
     await tx
       .update(denials)
       .set({
         status: parsed.data.status,
-        // Record when the appeal was filed so a late filing stays visible.
-        appealSubmittedOn:
-          parsed.data.status === "appeal_submitted"
-            ? (current.appealSubmittedOn ?? todayIn())
-            : current.appealSubmittedOn,
+        appealSubmittedOn: stamped,
         updatedAt: new Date(),
       })
       .where(eq(denials.id, parsed.data.denialId));
@@ -60,7 +58,14 @@ export async function changeStatus(_: ActionState, formData: FormData): Promise<
       tenantId: auth.tenantId,
       entityType: "denial",
       entityId: parsed.data.denialId,
-      metadata: { from: current.status, to: parsed.data.status },
+      metadata: {
+        from: current.status,
+        to: parsed.data.status,
+        // Keep the previous appeal-filed date when a re-stamp overwrites it (R-7.5.1, R-3.10.3).
+        ...(current.appealSubmittedOn !== null && stamped !== current.appealSubmittedOn
+          ? { previousAppealSubmittedOn: current.appealSubmittedOn }
+          : {}),
+      },
     });
     return { ok: true };
   });

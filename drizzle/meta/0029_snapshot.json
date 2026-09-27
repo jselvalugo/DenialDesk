@@ -1,9 +1,407 @@
 {
-  "id": "639c13ae-6e48-4617-99af-db0bb0d41bf3",
+  "id": "345de840-1e7e-4617-947c-6dc9ba963efa",
   "prevId": "136ba31f-347c-4645-b400-e2b043e34070",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.appeal_notes": {
+      "name": "appeal_notes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "appeal_id": {
+          "name": "appeal_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_id": {
+          "name": "author_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "appeal_notes_appeal_idx": {
+          "name": "appeal_notes_appeal_idx",
+          "columns": [
+            {
+              "expression": "appeal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "appeal_notes_tenant_id_tenants_id_fk": {
+          "name": "appeal_notes_tenant_id_tenants_id_fk",
+          "tableFrom": "appeal_notes",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "appeal_notes_appeal_id_appeals_id_fk": {
+          "name": "appeal_notes_appeal_id_appeals_id_fk",
+          "tableFrom": "appeal_notes",
+          "tableTo": "appeals",
+          "columnsFrom": [
+            "appeal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "appeal_notes_author_id_users_id_fk": {
+          "name": "appeal_notes_author_id_users_id_fk",
+          "tableFrom": "appeal_notes",
+          "tableTo": "users",
+          "columnsFrom": [
+            "author_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.appeals": {
+      "name": "appeals",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "denial_id": {
+          "name": "denial_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "claim_id": {
+          "name": "claim_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "level": {
+          "name": "level",
+          "type": "appeal_level",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "previous_appeal_id": {
+          "name": "previous_appeal_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "appeal_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "deadline": {
+          "name": "deadline",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deadline_basis": {
+          "name": "deadline_basis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deadline_citation": {
+          "name": "deadline_citation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "filed_by": {
+          "name": "filed_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "submitted_method": {
+          "name": "submitted_method",
+          "type": "appeal_submitted_method",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submitted_on": {
+          "name": "submitted_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tracking_reference": {
+          "name": "tracking_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "follow_up_on": {
+          "name": "follow_up_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decision_outcome": {
+          "name": "decision_outcome",
+          "type": "appeal_decision_outcome",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decision_on": {
+          "name": "decision_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recovered_cents": {
+          "name": "recovered_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "close_reason": {
+          "name": "close_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "appeals_queue_idx": {
+          "name": "appeals_queue_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "deadline",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "appeals_tenant_denial_idx": {
+          "name": "appeals_tenant_denial_idx",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "denial_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "appeals_tenant_id_key": {
+          "name": "appeals_tenant_id_key",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "appeals_tenant_id_tenants_id_fk": {
+          "name": "appeals_tenant_id_tenants_id_fk",
+          "tableFrom": "appeals",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "appeals_denial_id_denials_id_fk": {
+          "name": "appeals_denial_id_denials_id_fk",
+          "tableFrom": "appeals",
+          "tableTo": "denials",
+          "columnsFrom": [
+            "denial_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "appeals_claim_id_claims_id_fk": {
+          "name": "appeals_claim_id_claims_id_fk",
+          "tableFrom": "appeals",
+          "tableTo": "claims",
+          "columnsFrom": [
+            "claim_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "appeals_filed_by_users_id_fk": {
+          "name": "appeals_filed_by_users_id_fk",
+          "tableFrom": "appeals",
+          "tableTo": "users",
+          "columnsFrom": [
+            "filed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "appeals_claim_fk": {
+          "name": "appeals_claim_fk",
+          "tableFrom": "appeals",
+          "tableTo": "claims",
+          "columnsFrom": [
+            "tenant_id",
+            "claim_id"
+          ],
+          "columnsTo": [
+            "tenant_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.audit_events": {
       "name": "audit_events",
       "schema": "",
@@ -120,7 +518,34 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "audit_events_tenant_id_tenants_id_fk": {
+          "name": "audit_events_tenant_id_tenants_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "audit_events_actor_user_id_users_id_fk": {
+          "name": "audit_events_actor_user_id_users_id_fk",
+          "tableFrom": "audit_events",
+          "tableTo": "users",
+          "columnsFrom": [
+            "actor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -2805,6 +3230,87 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.practice_settings": {
+      "name": "practice_settings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "practice_settings_tenant_key_key": {
+          "name": "practice_settings_tenant_key_key",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "practice_settings_tenant_id_tenants_id_fk": {
+          "name": "practice_settings_tenant_id_tenants_id_fk",
+          "tableFrom": "practice_settings",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.prompt_pay_responses": {
       "name": "prompt_pay_responses",
       "schema": "",
@@ -5410,6 +5916,55 @@
       "schema": "public",
       "values": [
         "baa"
+      ]
+    },
+    "public.appeal_decision_outcome": {
+      "name": "appeal_decision_outcome",
+      "schema": "public",
+      "values": [
+        "overturned_full",
+        "overturned_partial",
+        "upheld",
+        "withdrawn",
+        "dismissed"
+      ]
+    },
+    "public.appeal_level": {
+      "name": "appeal_level",
+      "schema": "public",
+      "values": [
+        "first_level",
+        "second_level",
+        "external_review",
+        "medicare_redetermination",
+        "medicare_qic",
+        "medicare_alj",
+        "medicare_council",
+        "medicare_federal_court"
+      ]
+    },
+    "public.appeal_status": {
+      "name": "appeal_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "in_review",
+        "ready",
+        "submitted",
+        "awaiting_decision",
+        "decided",
+        "withdrawn",
+        "dismissed"
+      ]
+    },
+    "public.appeal_submitted_method": {
+      "name": "appeal_submitted_method",
+      "schema": "public",
+      "values": [
+        "portal",
+        "fax",
+        "mail",
+        "electronic"
       ]
     },
     "public.claim_status": {

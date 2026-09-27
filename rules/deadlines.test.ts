@@ -32,6 +32,14 @@ describe("Florida prompt-pay milestones (electronic)", () => {
   });
 
   it.each([
+    ["2026-05-30", 1],
+    ["2026-05-31", 0],
+    ["2026-06-01", -1],
+  ])("90-day pay-or-deny boundary: on %s, %i days remain", (today, remaining) => {
+    expect(daysUntil(milestones[1]!.date, today)).toBe(remaining);
+  });
+
+  it.each([
     ["2026-06-29", 1],
     ["2026-06-30", 0],
     ["2026-07-01", -1],
@@ -50,6 +58,43 @@ describe("Florida prompt-pay milestones (electronic)", () => {
       expect(promptPayMilestones({ regime, electronic: true, receivedDate: "2026-03-02" })).toBeNull();
     },
   );
+
+  // §3.4: regime exclusion untested for medicaid_ffs, smmc, workers_comp, pip. Behaviour is
+  // correct (all return null → "Not configured"); no rule in the catalog names these regimes.
+  it.each(["medicaid_ffs", "smmc", "workers_comp", "pip"] as const)(
+    "does not apply to %s claims either",
+    (regime) => {
+      expect(promptPayMilestones({ regime, electronic: true, receivedDate: "2026-03-02" })).toBeNull();
+    },
+  );
+});
+
+describe("Florida prompt-pay milestones (paper)", () => {
+  const paper = promptPayMilestones({ regime: "fl_insurer", electronic: false, receivedDate: "2026-03-02" })!;
+
+  it.each([
+    ["2026-04-10", 1],
+    ["2026-04-11", 0],
+    ["2026-04-12", -1],
+  ])("40-day pay-or-contest boundary: on %s, %i days remain", (today, remaining) => {
+    expect(daysUntil(paper[0]!.date, today)).toBe(remaining);
+  });
+
+  it.each([
+    ["2026-06-29", 1],
+    ["2026-06-30", 0],
+    ["2026-07-01", -1],
+  ])("120-day pay-or-deny boundary: on %s, %i days remain", (today, remaining) => {
+    expect(daysUntil(paper[1]!.date, today)).toBe(remaining);
+  });
+
+  it.each([
+    ["2026-07-19", 1],
+    ["2026-07-20", 0],
+    ["2026-07-21", -1],
+  ])("140-day uncontestable boundary: on %s, %i days remain", (today, remaining) => {
+    expect(daysUntil(paper[2]!.date, today)).toBe(remaining);
+  });
 });
 
 describe("appeal deadlines", () => {
@@ -91,6 +136,36 @@ describe("appeal deadlines", () => {
       appealDeadline({ regime: "fl_hmo", noticeDate: "2026-06-01", payerAppealWindowDays: null }),
     ).toBeNull();
   });
+
+  // §3.4: payer-contract appeal deadline (used for FL insurer, FL HMO, MA) had no boundary test.
+  it.each([
+    ["2026-08-29", 1],
+    ["2026-08-30", 0],
+    ["2026-08-31", -1],
+  ])("payer-contract boundary: on %s, %i days remain", (today, remaining) => {
+    const deadline = appealDeadline({
+      regime: "fl_insurer",
+      noticeDate: "2026-06-01",
+      payerAppealWindowDays: 90,
+    })!;
+    expect(daysUntil(deadline.date, today)).toBe(remaining);
+  });
+
+  it.each(["fl_hmo", "medicare_advantage"] as const)(
+    "%s: also uses the payer-contract window when configured",
+    (regime) => {
+      const deadline = appealDeadline({ regime, noticeDate: "2026-06-01", payerAppealWindowDays: 90 })!;
+      expect(deadline).toMatchObject({ date: "2026-08-30", basis: "payer_contract" });
+    },
+  );
+
+  // §3.4: appealDeadline untested for MA and ERISA with no configured window.
+  it.each(["medicare_advantage", "erisa_self_funded"] as const)(
+    "%s without a configured window: no deadline",
+    (regime) => {
+      expect(appealDeadline({ regime, noticeDate: "2026-06-01", payerAppealWindowDays: null })).toBeNull();
+    },
+  );
 });
 
 describe("timely filing", () => {

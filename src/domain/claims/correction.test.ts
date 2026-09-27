@@ -38,6 +38,13 @@ describe("claim correction input", () => {
     ["12.345", Number.NaN],
     ["-5", Number.NaN],
     ["abc", Number.NaN],
+    // F1: malformed thousands grouping must be rejected, not silently stripped.
+    ["12,50", Number.NaN],
+    ["1,2,3.00", Number.NaN],
+    ["1,25", Number.NaN],
+    ["1250,00.00", Number.NaN],
+    ["12,345", 1_234_500],
+    ["1,234,567", 123_456_700],
   ])("reads %s as %s cents", (text, cents) => {
     expect(dollarsToCents(text)).toBe(cents);
   });

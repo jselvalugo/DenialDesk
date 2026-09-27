@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { addCalendarDays, addMonths, daysBetween, federalHolidays, isBusinessDay, todayIn } from "./calendar";
+import {
+  addCalendarDays,
+  addMonths,
+  daysBetween,
+  easternDayBoundsUtc,
+  federalHolidays,
+  isBusinessDay,
+  isValidIsoDate,
+  todayIn,
+} from "./calendar";
 
 describe("calendar", () => {
   it("adds days across month, year, and DST boundaries", () => {
@@ -51,5 +60,37 @@ describe("calendar", () => {
     expect(isBusinessDay("2026-09-26")).toBe(false); // Saturday
     expect(isBusinessDay("2026-07-03")).toBe(false); // observed Independence Day
     expect(isBusinessDay("2021-12-31")).toBe(false); // observed New Year's Day 2022
+  });
+});
+
+describe("isValidIsoDate", () => {
+  it("accepts a real calendar date", () => {
+    expect(isValidIsoDate("2026-02-28")).toBe(true);
+    expect(isValidIsoDate("2024-02-29")).toBe(true); // leap year
+  });
+
+  it("rejects a date that doesn't exist", () => {
+    expect(isValidIsoDate("2026-02-31")).toBe(false);
+    expect(isValidIsoDate("2023-02-29")).toBe(false); // not a leap year
+    expect(isValidIsoDate("not-a-date")).toBe(false);
+  });
+});
+
+describe("easternDayBoundsUtc", () => {
+  it("bounds a winter (EST, UTC-5) day", () => {
+    const { start, endExclusive } = easternDayBoundsUtc("2026-01-15");
+    expect(start.toISOString()).toBe("2026-01-15T05:00:00.000Z");
+    expect(endExclusive.toISOString()).toBe("2026-01-16T05:00:00.000Z");
+  });
+
+  it("bounds a summer (EDT, UTC-4) day", () => {
+    const { start, endExclusive } = easternDayBoundsUtc("2026-07-15");
+    expect(start.toISOString()).toBe("2026-07-15T04:00:00.000Z");
+    expect(endExclusive.toISOString()).toBe("2026-07-16T04:00:00.000Z");
+  });
+
+  it("is exactly 24 hours across a non-DST-transition day", () => {
+    const { start, endExclusive } = easternDayBoundsUtc("2026-03-01");
+    expect(endExclusive.getTime() - start.getTime()).toBe(24 * 60 * 60 * 1000);
   });
 });
