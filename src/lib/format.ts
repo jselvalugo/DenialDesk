@@ -11,7 +11,8 @@ export function formatCents(cents: number): string {
   if (!Number.isSafeInteger(cents)) {
     throw new Error("formatCents expects an integer number of cents");
   }
-  return usd.format(cents / 100);
+  // Avoid "-$0.00": -0 cents (e.g. a month with zero net adjustments, negated for display) is zero.
+  return usd.format(cents === 0 ? 0 : cents / 100);
 }
 
 /**

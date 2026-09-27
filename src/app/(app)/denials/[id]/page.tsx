@@ -103,13 +103,20 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
         <Link href="/denials" className="font-medium text-link hover:underline">
           Denial queue
         </Link>{" "}
-        <span aria-hidden>/</span> <span className="font-mono">{claim.claimNumber}</span>
+        <span aria-hidden>/</span>{" "}
+        <Link href={`/claims/${claim.id}`} className="font-mono font-medium text-link hover:underline">
+          {claim.claimNumber}
+        </Link>
       </nav>
 
       <header className="flex flex-wrap items-start justify-between gap-6 rounded-panel border border-border bg-surface px-5 py-4 shadow-xs">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <h1 className="font-mono text-[1.5rem] leading-8 font-bold text-primary">{claim.claimNumber}</h1>
+            <h1 className="font-mono text-[1.5rem] leading-8 font-bold text-primary">
+              <Link href={`/claims/${claim.id}`} className="hover:underline">
+                {claim.claimNumber}
+              </Link>
+            </h1>
             <Badge tone={status.tone}>{status.label}</Badge>
           </div>
           <p className="mt-1 text-body text-muted">

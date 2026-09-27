@@ -5,17 +5,15 @@ import { ShellProvider } from "./ShellContext";
 
 export function AppShell({
   user,
-  showDesignSystem,
   showRevenueCycle = false,
   children,
 }: {
   user: ShellUser | null;
-  showDesignSystem: boolean;
   showRevenueCycle?: boolean;
   children: ReactNode;
 }) {
   return (
-    <ShellProvider visibility={{ showDesignSystem, showRevenueCycle, showSettings: user !== null }}>
+    <ShellProvider visibility={{ showRevenueCycle, showSettings: user !== null }}>
       <div className="flex min-h-0 flex-1 flex-col">
         <a
           href="#main"

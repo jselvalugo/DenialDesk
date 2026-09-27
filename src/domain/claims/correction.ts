@@ -25,12 +25,19 @@ export function splitCodes(text: string): string[] {
     .filter(Boolean);
 }
 
+// Same strict grouping as parseMoney in revenue-cycle/monthly-file.ts: thousands separators must
+// be correctly placed ("1,250.00"), never scattered ("1,2,3.00") or dropped mid-number ("12,50").
+const STRICT_DOLLARS = /^\$?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?$/;
+
 /** Dollars text ("125", "125.5", "1,250.00") to integer cents; NaN when not a plain amount. */
 export function dollarsToCents(text: string): number {
-  const cleaned = text.replace(/[$,\s]/g, "");
-  if (!/^\d{1,7}(\.\d{1,2})?$/.test(cleaned)) return Number.NaN;
-  const [whole, fraction = ""] = cleaned.split(".");
-  return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  const cleaned = text.replace(/\s/g, "");
+  const match = STRICT_DOLLARS.exec(cleaned);
+  if (!match) return Number.NaN;
+  const whole = match[1]!.replace(/,/g, "");
+  const fraction = (match[2] ?? "").padEnd(2, "0");
+  if (whole.length > 7) return Number.NaN;
+  return Number(whole) * 100 + Number(fraction);
 }
 
 const lineSchema = z.object({

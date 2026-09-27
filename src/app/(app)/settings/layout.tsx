@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/ui/PageHeader";
-import { isProduction } from "@/lib/env";
 import { SettingsTabs, type SettingsTab } from "./SettingsTabs";
 
 /** Settings: one header, a tab per section (docs/specs/settings-and-custom-fields.md). */
@@ -12,8 +11,6 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     { label: "Notifications", href: "/settings/notifications", available: false },
     { label: "Integrations", href: "/settings/integrations", available: false },
   ];
-  // The style guide is a pre-production page with its own route; it is listed here to find it.
-  if (!isProduction()) tabs.push({ label: "Design system", href: "/design", available: true });
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <PageHeader

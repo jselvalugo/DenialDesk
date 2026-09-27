@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { appHome, filterModules, locate, navApps } from "./navigation";
 
-const all = { showRevenueCycle: true, showDesignSystem: true, showSettings: true };
-const none = { showRevenueCycle: false, showDesignSystem: false };
+const all = { showRevenueCycle: true, showSettings: true };
+const none = { showRevenueCycle: false };
 
 describe("navApps", () => {
   it("hides revenue cycle and settings from users who can't open them", () => {
@@ -45,10 +45,6 @@ describe("locate", () => {
     });
     expect(locate(apps, "/revenue-cycle/deposits")).toMatchObject({ item: { label: "Deposits" } });
     expect(locate(apps, "/revenue-cycle/ar-aging")).toMatchObject({ item: { label: "A/R aging" } });
-    expect(locate(apps, "/design")).toMatchObject({
-      app: { id: "settings" },
-      item: { label: "Design system" },
-    });
     expect(locate(apps, "/settings/fields")).toMatchObject({
       app: { id: "settings" },
       item: { label: "Settings" },

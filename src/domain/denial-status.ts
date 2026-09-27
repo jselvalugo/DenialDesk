@@ -27,6 +27,20 @@ const statuses = Object.keys(DENIAL_STATUSES) as DenialStatus[];
 export const OPEN_STATUSES = statuses.filter((s) => DENIAL_STATUSES[s].open);
 export const ACTION_STATUSES = statuses.filter((s) => DENIAL_STATUSES[s].awaitingAction);
 
+/**
+ * The `appealSubmittedOn` value a status change should store. Every entry into
+ * `appeal_submitted` re-stamps today's date, even a re-filing after the denial moved back out of
+ * it: keeping the original date would show a late refiling as on time (F5, R-3.10.3). Any other
+ * transition leaves the stored date untouched.
+ */
+export function nextAppealSubmittedOn(
+  nextStatus: DenialStatus,
+  current: string | null,
+  today: string,
+): string | null {
+  return nextStatus === "appeal_submitted" ? today : current;
+}
+
 export const REGIME_LABELS: Record<string, string> = {
   fl_insurer: "FL commercial",
   fl_hmo: "FL HMO",

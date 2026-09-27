@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
+import { over90Cents, over90ShareBps, OVER_90_WARNING_SHARE_BPS } from "@/domain/revenue-cycle/aging";
 import { periodLabel } from "@/domain/revenue-cycle/imports";
 import { dashboardReport } from "@/domain/revenue-cycle/reporting";
 import { formatCents } from "@/lib/format";
@@ -20,8 +21,6 @@ export const metadata: Metadata = { title: "RCM dashboard" };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const percent = (bps: number) => `${(bps / 100).toFixed(1)}%`;
-/** Product default, not a legal threshold: warn when more than a quarter of A/R is over 90 days. */
-const OVER_90_WARNING_SHARE_BPS = 2_500;
 
 export default async function RcmDashboardPage() {
   const auth = await requireAuth();
@@ -47,8 +46,9 @@ export default async function RcmDashboardPage() {
   }
 
   const { kpis, aging, denials } = report;
-  const over90 = aging.totals.buckets["91_120"] + aging.totals.buckets.over_120;
+  const over90 = over90Cents(aging.totals.buckets);
   const openAr = kpis.openArCents;
+  const over90Bps = over90ShareBps(over90, openAr);
   const trailing = `last ${kpis.trailingMonths} month${kpis.trailingMonths === 1 ? "" : "s"}`;
   const maxRevenue = Math.max(1, ...report.months.map((m) => m.netRevenueCents));
   const clearing = report.reconciliation.at(-1);
@@ -80,11 +80,9 @@ export default async function RcmDashboardPage() {
         />
         <StatTile
           label="Over 90 days"
-          value={openAr > 0 ? percent(Math.round((over90 * 10_000) / openAr)) : "—"}
+          value={over90Bps === null ? "—" : percent(over90Bps)}
           detail={formatCents(over90)}
-          emphasis={
-            openAr > 0 && over90 * 10_000 > openAr * OVER_90_WARNING_SHARE_BPS ? "warning" : undefined
-          }
+          emphasis={over90Bps !== null && over90Bps > OVER_90_WARNING_SHARE_BPS ? "warning" : undefined}
         />
       </section>
 
