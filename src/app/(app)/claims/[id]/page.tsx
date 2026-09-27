@@ -12,29 +12,22 @@ import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
 import { Money } from "@/components/ui/Money";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
-import { CATEGORY_LABELS } from "@/domain/carc";
+import { CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { diffSnapshots } from "@/domain/claims/correction";
 import { getClaim } from "@/domain/claims/queries";
 import { claimPayments } from "@/domain/remittances/queries";
 import { REMITTANCE_STATUSES } from "@/domain/remittances/status";
 import { CLAIM_STATUSES, FILING_WARNING_DAYS, filingStatus, isUnsubmitted } from "@/domain/claims/status";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
-import { formatDate } from "@/lib/format";
 import { CorrectionForm } from "./CorrectionForm";
 
 // The title never includes patient data (DESIGN.md §12).
-export const metadata: Metadata = { title: "Claim" };
-
-const dateTime = new Intl.DateTimeFormat("en-US", {
-  month: "2-digit",
-  day: "2-digit",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  timeZone: "America/New_York",
-  timeZoneName: "short",
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("claims");
+  return { title: t("detail.pageTitle") };
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -50,6 +43,10 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   if (!z.uuid().safeParse(id).success) notFound();
   const auth = await requireAuth();
   const today = todayIn();
+  const t = await getT("claims");
+  const tc = await getT("common");
+  const tr = await getT("remittances");
+  const f = await getFormat();
 
   const detail = await withTenant(auth, async (tx) => {
     const detail = await getClaim(tx, id);
@@ -80,9 +77,9 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href="/claims" className="font-medium text-link hover:underline">
-          Claims
+          {t("detail.breadcrumbClaims")}
         </Link>{" "}
         <span aria-hidden>/</span> <span className="font-mono">{claim.claimNumber}</span>
       </nav>
@@ -91,42 +88,44 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <h1 className="font-mono text-[1.5rem] leading-8 font-bold text-primary">{claim.claimNumber}</h1>
-            <Badge tone={status.tone}>{status.label}</Badge>
+            <Badge tone={status.tone}>{tc(status.labelKey)}</Badge>
           </div>
           <p className="mt-1 text-body text-muted">
-            {payer.name} · date of service {formatDate(claim.serviceDate)} · version {claim.version}
+            {payer.name} · {t("detail.subtitle", { date: f.date(claim.serviceDate), version: claim.version })}
           </p>
         </div>
       </header>
 
       <div className="grid grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] items-start gap-6">
         <div className="flex min-w-0 flex-col gap-6">
-          <Panel title="Claim" flush>
+          <Panel title={tc("word.claim")} flush>
             <dl className="grid grid-cols-4 gap-x-6 gap-y-4 p-4">
-              <Field label="Date of service">
-                <span className="tabular">{formatDate(claim.serviceDate)}</span>
+              <Field label={t("detail.field.dateOfService")}>
+                <span className="tabular">{f.date(claim.serviceDate)}</span>
               </Field>
-              <Field label="Provider">
+              <Field label={t("detail.field.provider")}>
                 {detail.providerName}
-                <span className="block font-mono text-label text-muted">NPI {detail.providerNpi}</span>
-              </Field>
-              <Field label="Location">{detail.locationName}</Field>
-              <Field label="Payer">
-                {payer.name}
-                <span className="block text-label text-muted">{regimeLabel(payer.regime)}</span>
-              </Field>
-              <Field label="Billed">
-                <Money cents={claim.billedCents} />
-              </Field>
-              <Field label="Paid">
-                <Money cents={claim.paidCents} />
-              </Field>
-              <Field label="Payer received">
-                <span className="tabular">
-                  {claim.payerReceivedDate ? formatDate(claim.payerReceivedDate) : "—"}
+                <span className="block font-mono text-label text-muted">
+                  {t("detail.field.npi", { npi: detail.providerNpi })}
                 </span>
               </Field>
-              <Field label="Diagnosis">
+              <Field label={t("detail.field.location")}>{detail.locationName}</Field>
+              <Field label={t("detail.field.payer")}>
+                {payer.name}
+                <span className="block text-label text-muted">{regimeLabel(payer.regime, tc)}</span>
+              </Field>
+              <Field label={t("detail.field.billed")}>
+                <Money cents={claim.billedCents} />
+              </Field>
+              <Field label={t("detail.field.paid")}>
+                <Money cents={claim.paidCents} />
+              </Field>
+              <Field label={t("detail.field.payerReceived")}>
+                <span className="tabular">
+                  {claim.payerReceivedDate ? f.date(claim.payerReceivedDate) : "—"}
+                </span>
+              </Field>
+              <Field label={t("detail.field.diagnosis")}>
                 <span className="flex flex-wrap gap-1">
                   {claim.diagnosisCodes.map((code) => (
                     <Code key={code}>{code}</Code>
@@ -135,14 +134,14 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
               </Field>
             </dl>
             <div className="border-t border-border">
-              <Table caption="Claim lines">
+              <Table caption={t("detail.table.claimLinesCaption")}>
                 <thead>
                   <tr>
-                    <Th>Line</Th>
-                    <Th>Procedure</Th>
-                    <Th>Modifiers</Th>
-                    <Th numeric>Units</Th>
-                    <Th numeric>Charge</Th>
+                    <Th>{t("detail.table.line")}</Th>
+                    <Th>{t("detail.table.procedure")}</Th>
+                    <Th>{t("detail.table.modifiers")}</Th>
+                    <Th numeric>{t("detail.table.units")}</Th>
+                    <Th numeric>{t("detail.table.charge")}</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -181,25 +180,28 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
             )}
             {!canCorrect && unsubmitted && (
               <p role="note" className="border-t border-border px-4 py-3 text-body text-muted">
-                You have read-only access to claims.
+                {t("detail.readOnlyNote")}
               </p>
             )}
           </Panel>
 
-          <Panel
-            title="Version history"
-            description="Every change to this claim: who, when, and why. History can't be edited."
-          >
-            <ol className="flex flex-col divide-y divide-border" aria-label="Claim versions">
+          <Panel title={t("detail.history.title")} description={t("detail.history.description")}>
+            <ol className="flex flex-col divide-y divide-border" aria-label={t("detail.history.title")}>
               {detail.history.map((entry) => {
                 const previous = snapshots.get(entry.version - 1);
-                const changes = previous ? diffSnapshots(previous, entry.snapshot) : [];
+                const changes = previous ? diffSnapshots(previous, entry.snapshot, t, tc) : [];
                 return (
                   <li key={entry.id} className="py-3 first:pt-0 last:pb-0">
                     <p className="text-label text-muted">
-                      <span className="font-medium text-text">Version {entry.version}</span> ·{" "}
-                      {entry.author ?? (entry.changedBy ? "Former team member" : "System")} ·{" "}
-                      {dateTime.format(entry.createdAt)}
+                      <span className="font-medium text-text">
+                        {t("detail.history.version", { version: entry.version })}
+                      </span>{" "}
+                      ·{" "}
+                      {entry.author ??
+                        (entry.changedBy
+                          ? t("detail.history.formerTeamMember")
+                          : t("detail.history.system"))}{" "}
+                      · {f.dateTime(entry.createdAt)}
                     </p>
                     <p className="mt-1 text-body whitespace-pre-wrap text-text">{entry.reason}</p>
                     {changes.length > 0 && (
@@ -209,7 +211,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                             <span className="font-medium text-text">{change.label}</span>:{" "}
                             <span className="font-mono text-muted line-through">{change.from}</span>{" "}
                             <span aria-hidden>→</span>
-                            <span className="sr-only">changed to</span>{" "}
+                            <span className="sr-only">{t("detail.history.changedTo")}</span>{" "}
                             <span className="font-mono text-text">{change.to}</span>
                           </li>
                         ))}
@@ -223,20 +225,17 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
         </div>
 
         <div className="flex flex-col gap-6">
-          <Panel title="Timely filing">
+          <Panel title={t("detail.filing.title")}>
             {!showDeadline ? (
               <p className="text-body text-muted">
                 {claim.payerReceivedDate
-                  ? `Received by the payer ${formatDate(claim.payerReceivedDate)}.`
-                  : "Accepted by the payer."}{" "}
-                Timely filing no longer applies.
+                  ? t("detail.filing.receivedNoLongerApplies", { date: f.date(claim.payerReceivedDate) })
+                  : t("detail.filing.acceptedNoLongerApplies")}
               </p>
             ) : filing.deadline && filing.daysRemaining !== null ? (
               <div className="flex flex-col gap-3">
                 {awaitingReceipt && (
-                  <p className="text-body text-text">
-                    Sent; the filing window is met once the payer confirms receipt.
-                  </p>
+                  <p className="text-body text-text">{t("detail.filing.awaitingReceipt")}</p>
                 )}
                 <DeadlineIndicator
                   dueDate={filing.deadline.date}
@@ -244,52 +243,46 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                   dueSoonDays={FILING_WARNING_DAYS}
                 />
                 {filing.state === "past_deadline" && (
-                  <p className="text-body text-danger-fg">
-                    The filing window has closed. The payer is likely to deny this claim as untimely unless an
-                    exception applies.
-                  </p>
+                  <p className="text-body text-danger-fg">{t("detail.filing.pastDeadlineWarning")}</p>
                 )}
                 <p className="text-label text-muted">
-                  From the date of service ({filing.deadline.citation}).
+                  {t("detail.filing.fromServiceDate", { citation: filing.deadline.citation })}
                 </p>
-                {filing.deadline.verify && <Badge tone="warning">Pending counsel verification</Badge>}
+                {filing.deadline.verify && (
+                  <Badge tone="warning">{t("detail.filing.pendingVerification")}</Badge>
+                )}
               </div>
             ) : filing.state === "payer_unverified" ? (
-              <p className="text-body text-warning-fg">
-                No deadline — payer not verified. Once this payer&apos;s regulatory regime is verified,
-                confirm the filing window manually with the payer contract or applicable law; DenialDesk
-                cannot compute one until then.
-              </p>
+              <p className="text-body text-warning-fg">{t("detail.filing.payerUnverified")}</p>
             ) : (
               <p className="text-body text-warning-fg">
-                DenialDesk has no filing rule configured for {regimeLabel(payer.regime)} claims. Confirm the
-                filing window with the payer contract or applicable law before it lapses.
+                {t("detail.filing.notConfigured", { regime: regimeLabel(payer.regime, tc) })}
               </p>
             )}
           </Panel>
 
-          <Panel title="Patient">
+          <Panel title={t("detail.patient.title")}>
             <dl className="flex flex-col gap-3">
-              <Field label="Name">
+              <Field label={tc("word.name")}>
                 <Link href={`/patients/${patient.id}`} className="font-medium text-link hover:underline">
                   {patient.lastName}, {patient.firstName}
                 </Link>
               </Field>
-              <Field label="Date of birth">
-                <span className="tabular">{formatDate(patient.birthDate)}</span>
+              <Field label={t("detail.patient.dob")}>
+                <span className="tabular">{f.date(patient.birthDate)}</span>
               </Field>
-              <Field label="MRN">
+              <Field label={t("detail.patient.mrn")}>
                 <span className="font-mono">{patient.mrn}</span>
               </Field>
-              <Field label="Member ID">
+              <Field label={t("detail.patient.memberId")}>
                 <span className="font-mono">•••• {patient.memberIdLast4}</span>
               </Field>
             </dl>
           </Panel>
 
-          <Panel title="Payments">
+          <Panel title={t("detail.payments.title")}>
             {detail.payments.length === 0 ? (
-              <p className="text-body text-muted">No remittance has paid or denied this claim yet.</p>
+              <p className="text-body text-muted">{t("detail.payments.none")}</p>
             ) : (
               <ul className="flex flex-col gap-3">
                 {detail.payments.map((payment) => (
@@ -302,7 +295,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                         {payment.traceNumber}
                       </Link>
                       <span className="block text-label text-muted">
-                        paid {formatDate(payment.paymentDate)}
+                        {t("detail.payments.paidOn", { date: f.date(payment.paymentDate) })}
                         {payment.adjustments.length > 0 &&
                           ` · ${payment.adjustments.map((a) => `${a.group}-${a.carc}`).join(", ")}`}
                       </span>
@@ -310,7 +303,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                     <span className="shrink-0 text-right">
                       <Money cents={payment.paidCents} className="block" />
                       <Badge tone={REMITTANCE_STATUSES[payment.status].tone}>
-                        {REMITTANCE_STATUSES[payment.status].label}
+                        {tr(REMITTANCE_STATUSES[payment.status].labelKey)}
                       </Badge>
                     </span>
                   </li>
@@ -320,31 +313,32 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
             {claim.payerReceivedDate && (
               <p className="mt-3 border-t border-border pt-3 text-label">
                 <Link href={`/prompt-pay/${claim.id}`} className="font-medium text-link hover:underline">
-                  Prompt-pay clock
+                  {t("detail.payments.promptPayLink")}
                 </Link>
               </p>
             )}
           </Panel>
 
-          <Panel title="Denials">
+          <Panel title={t("detail.denials.title")}>
             {detail.denials.length === 0 ? (
-              <p className="text-body text-muted">No denials on this claim.</p>
+              <p className="text-body text-muted">{t("detail.denials.none")}</p>
             ) : (
               <ul className="flex flex-col gap-3">
                 {detail.denials.map((denial) => (
                   <li key={denial.id} className="flex items-start justify-between gap-3">
                     <span className="min-w-0">
                       <Link href={`/denials/${denial.id}`} className="font-medium text-link hover:underline">
-                        {CATEGORY_LABELS[denial.category]}
+                        {tc(CATEGORY_LABEL_KEYS[denial.category])}
                       </Link>
                       <span className="block text-label text-muted">
-                        {denial.groupCode}-{denial.carc} · notice {formatDate(denial.noticeDate)}
+                        {denial.groupCode}-{denial.carc} ·{" "}
+                        {t("detail.denials.notice", { date: f.date(denial.noticeDate) })}
                       </span>
                     </span>
                     <span className="shrink-0 text-right">
                       <Money cents={denial.deniedCents} className="block" />
                       <Badge tone={DENIAL_STATUSES[denial.status].tone}>
-                        {DENIAL_STATUSES[denial.status].label}
+                        {tc(DENIAL_STATUSES[denial.status].labelKey)}
                       </Badge>
                     </span>
                   </li>

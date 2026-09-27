@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClaimSnapshot } from "@/db/schema";
+import { en } from "@/i18n/messages/en";
+import { createTranslator } from "@/i18n/translate";
 import {
   changedFields,
   correctionSchema,
@@ -8,6 +10,9 @@ import {
   snapshotOf,
   splitCodes,
 } from "./correction";
+
+const t = createTranslator(en.claims, "en");
+const tc = createTranslator(en.common, "en");
 
 const base: ClaimSnapshot = snapshotOf(
   { serviceDate: "2026-08-01", diagnosisCodes: ["E11.9"], billedCents: 23_000, status: "draft" },
@@ -84,7 +89,7 @@ describe("claim version differences", () => {
     after.lines[1]!.units = 3;
     after.lines[1]!.chargeCents = 12_000;
     expect(changedFields(base, after)).toEqual(["diagnosisCodes", "line 2 units", "line 2 chargeCents"]);
-    expect(diffSnapshots(base, after)).toEqual([
+    expect(diffSnapshots(base, after, t, tc)).toEqual([
       { label: "diagnosis codes", from: "E11.9", to: "E11.65" },
       { label: "line 2 units", from: "2", to: "3" },
       { label: "line 2 charge", from: "$80.00", to: "$120.00" },
@@ -119,7 +124,7 @@ describe("posting history (status and paid amount)", () => {
       [],
     );
     expect(changedFields(before, after)).toEqual(["status", "paidCents"]);
-    expect(diffSnapshots(before, after)).toEqual([
+    expect(diffSnapshots(before, after, t, tc)).toEqual([
       { label: "status", from: "Accepted by payer", to: "Paid" },
       { label: "paid", from: "$0.00", to: "$80.00" },
     ]);

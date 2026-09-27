@@ -9,15 +9,20 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { getPromptPayClock } from "@/domain/prompt-pay/queries";
+import { getT } from "@/i18n/server";
 import { ContestForm } from "./ContestForm";
 
-export const metadata: Metadata = { title: "Record payer contest" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("promptPay");
+  return { title: t("newContest.title") };
+}
 
 export default async function NewContestPage({ params }: { params: Promise<{ claimId: string }> }) {
   const { claimId } = await params;
   if (!z.uuid().safeParse(claimId).success) notFound();
   const auth = await requireAuth();
   const today = todayIn();
+  const t = await getT("promptPay");
   // Claim number and received date only; no patient data on this page.
   const detail = await withTenant(auth, (tx) => getPromptPayClock(tx, claimId, today));
   if (!detail?.clock?.applies) notFound();
@@ -25,27 +30,24 @@ export default async function NewContestPage({ params }: { params: Promise<{ cla
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href="/prompt-pay" className="font-medium text-link hover:underline">
-          Prompt pay
+          {t("detail.breadcrumbPromptPay")}
         </Link>{" "}
         <span aria-hidden>/</span>{" "}
         <Link href={`/prompt-pay/${claim.id}`} className="font-mono font-medium text-link hover:underline">
           {claim.claimNumber}
         </Link>{" "}
-        <span aria-hidden>/</span> Record contest
+        <span aria-hidden>/</span> {t("newContest.breadcrumbRecordContest")}
       </nav>
-      <PageHeader
-        title="Record payer contest"
-        description="The payer contested this claim or asked for more information. This meets the pay-or-contest milestone only; the pay-or-deny clock keeps running."
-      />
+      <PageHeader title={t("newContest.title")} description={t("newContest.description")} />
       {canRecordPromptPay(auth.role) ? (
         <Panel>
           <ContestForm claimId={claim.id} minDate={claim.receivedDate!} today={today} />
         </Panel>
       ) : (
         <p role="note" className="text-body text-muted">
-          Your role can view prompt-pay clocks but not record responses.
+          {t("action.error.forbiddenRecord")}
         </p>
       )}
     </div>

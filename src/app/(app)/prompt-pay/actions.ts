@@ -8,6 +8,7 @@ import { canRecordPromptPay } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
 import { PromptPayError, recordContest, voidResponse } from "@/domain/prompt-pay/responses";
+import { getT } from "@/i18n/server";
 
 export interface PromptPayActionState {
   error?: string;
@@ -16,7 +17,7 @@ export interface PromptPayActionState {
 
 const contestSchema = z.object({
   claimId: z.uuid(),
-  responseDate: z.iso.date("Enter the date on the payer's notice."),
+  responseDate: z.iso.date(),
 });
 
 export async function recordContestAction(
@@ -24,13 +25,13 @@ export async function recordContestAction(
   formData: FormData,
 ): Promise<PromptPayActionState> {
   const auth = await requireAuth();
-  if (!canRecordPromptPay(auth.role))
-    return { error: "Your role can view prompt-pay clocks but not record responses." };
+  const t = await getT("promptPay");
+  if (!canRecordPromptPay(auth.role)) return { error: t("action.error.forbiddenRecord") };
   const parsed = contestSchema.safeParse({
     claimId: formData.get("claimId"),
     responseDate: formData.get("responseDate"),
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]!.message };
+  if (!parsed.success) return { error: t("action.error.invalidDate") };
   try {
     await withTenant(auth, (tx) =>
       recordContest(tx, {
@@ -43,7 +44,7 @@ export async function recordContestAction(
       }),
     );
   } catch (error) {
-    if (error instanceof PromptPayError) return { error: error.message };
+    if (error instanceof PromptPayError) return { error: t(error.key, error.params) };
     throw error;
   }
   revalidatePath(`/prompt-pay/${parsed.data.claimId}`);
@@ -55,10 +56,10 @@ export async function voidResponseAction(
   formData: FormData,
 ): Promise<PromptPayActionState> {
   const auth = await requireAuth();
-  if (!canRecordPromptPay(auth.role))
-    return { error: "Your role can view prompt-pay clocks but not change them." };
+  const t = await getT("promptPay");
+  if (!canRecordPromptPay(auth.role)) return { error: t("action.error.forbiddenChange") };
   const id = z.uuid().safeParse(formData.get("responseId"));
-  if (!id.success) return { error: "Reload the page and try again." };
+  if (!id.success) return { error: t("action.error.reload") };
   try {
     const { claimId } = await withTenant(auth, (tx) =>
       voidResponse(tx, {
@@ -69,9 +70,9 @@ export async function voidResponseAction(
       }),
     );
     revalidatePath(`/prompt-pay/${claimId}`);
-    return { done: "Marked as recorded in error." };
+    return { done: t("action.done.voided") };
   } catch (error) {
-    if (error instanceof PromptPayError) return { error: error.message };
+    if (error instanceof PromptPayError) return { error: t(error.key, error.params) };
     throw error;
   }
 }

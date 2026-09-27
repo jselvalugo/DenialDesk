@@ -1,13 +1,19 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import type { TenantTx } from "@/db/tenant";
 import { claimLines, claims, claimVersions, users } from "@/db/schema";
+import type { MessageKey } from "@/i18n/messages/types";
+import type { Params } from "@/i18n/translate";
 import { audit } from "@/lib/audit";
 import { changedFields, snapshotOf, type Correction } from "./correction";
 import { isUnsubmitted } from "./status";
 
+/** Carries a message key (claims namespace) instead of English text; the action translates it. */
 export class ClaimCorrectionError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(
+    public readonly key: MessageKey<"claims">,
+    public readonly params?: Params,
+  ) {
+    super(key);
     this.name = "ClaimCorrectionError";
   }
 }
@@ -29,16 +35,16 @@ export async function correctClaim(
   },
 ): Promise<{ version: number; changedFields: string[] }> {
   const [claim] = await tx.select().from(claims).where(eq(claims.id, input.claimId)).for("update").limit(1);
-  if (!claim) throw new ClaimCorrectionError("Claim not found.");
+  if (!claim) throw new ClaimCorrectionError("correction.error.claimNotFound");
   if (!isUnsubmitted(claim.status)) {
-    throw new ClaimCorrectionError("Only draft or rejected claims can be corrected.");
+    throw new ClaimCorrectionError("correction.error.notCorrectable");
   }
   if (claim.version !== input.expectedVersion) {
-    throw new ClaimCorrectionError("This claim changed since you opened it. Reload and try again.");
+    throw new ClaimCorrectionError("correction.error.staleVersion");
   }
   const { correction } = input;
   if (correction.serviceDate > input.today) {
-    throw new ClaimCorrectionError("The date of service can't be in the future.");
+    throw new ClaimCorrectionError("correction.error.futureServiceDate");
   }
 
   const lines = await tx
@@ -52,7 +58,7 @@ export async function correctClaim(
     incoming.size !== lines.length ||
     lines.some((l) => !incoming.has(l.lineNumber))
   ) {
-    throw new ClaimCorrectionError("Lines can be corrected but not added or removed.");
+    throw new ClaimCorrectionError("correction.error.linesChanged");
   }
 
   const before = snapshotOf(claim, lines);
@@ -67,7 +73,7 @@ export async function correctClaim(
     correction.lines,
   );
   const changes = changedFields(before, after);
-  if (changes.length === 0) throw new ClaimCorrectionError("Nothing changed.");
+  if (changes.length === 0) throw new ClaimCorrectionError("correction.error.noChanges");
 
   const version = claim.version + 1;
   const [row] = await tx

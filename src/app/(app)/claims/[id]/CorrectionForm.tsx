@@ -3,6 +3,7 @@
 import { startTransition, useActionState, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FormAlert } from "@/components/ui/FormAlert";
+import { useT } from "@/i18n/client";
 import { submitCorrection, type CorrectionState } from "./actions";
 
 const inputClass =
@@ -35,16 +36,18 @@ export function CorrectionForm({
 }) {
   const [open, setOpen] = useState(false);
   const [state, action, pending] = useActionState<CorrectionState, FormData>(submitCorrection, {});
+  const t = useT("claims");
+  const tc = useT("common");
 
   if (!open) {
     return (
       <div className="flex flex-wrap items-center gap-3">
         <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
-          Correct claim
+          {t("correction.button")}
         </Button>
         {state.savedVersion && (
           <p role="status" className="text-label font-medium text-success-fg">
-            Saved as version {state.savedVersion}.
+            {t("correction.savedAs", { version: state.savedVersion })}
           </p>
         )}
       </div>
@@ -62,23 +65,23 @@ export function CorrectionForm({
         startTransition(() => action(formData));
       }}
       className="flex flex-col gap-4"
-      aria-label="Correct claim"
+      aria-label={t("correction.button")}
     >
       <input type="hidden" name="claimId" value={claimId} />
       <input type="hidden" name="expectedVersion" value={version} />
       <FormAlert message={state.error} />
       {state.savedVersion && !state.error && (
         <p role="status" className="text-label font-medium text-success-fg">
-          Saved as version {state.savedVersion}.
+          {t("correction.savedAs", { version: state.savedVersion })}
         </p>
       )}
       <div className="grid grid-cols-[180px_minmax(0,1fr)] gap-4">
         <label className="flex flex-col gap-1 text-label font-medium text-text">
-          Date of service
+          {t("correction.form.dateOfService")}
           <input type="date" name="serviceDate" defaultValue={serviceDate} required className={inputClass} />
         </label>
         <label className="flex flex-col gap-1 text-label font-medium text-text">
-          Diagnosis codes (ICD-10-CM, separated by commas)
+          {t("correction.form.diagnosisCodes")}
           <input
             name="diagnosisCodes"
             defaultValue={diagnosisCodes.join(", ")}
@@ -90,14 +93,14 @@ export function CorrectionForm({
       </div>
 
       <table className="w-full text-body">
-        <caption className="sr-only">Claim lines to correct</caption>
+        <caption className="sr-only">{t("correction.form.linesCaption")}</caption>
         <thead>
           <tr className="text-left text-label text-muted">
-            <th className="pb-1 font-medium">Line</th>
-            <th className="pb-1 font-medium">Procedure</th>
-            <th className="pb-1 font-medium">Modifiers</th>
-            <th className="pb-1 font-medium">Units</th>
-            <th className="pb-1 font-medium">Charge ($)</th>
+            <th className="pb-1 font-medium">{t("detail.table.line")}</th>
+            <th className="pb-1 font-medium">{t("detail.table.procedure")}</th>
+            <th className="pb-1 font-medium">{t("detail.table.modifiers")}</th>
+            <th className="pb-1 font-medium">{t("detail.table.units")}</th>
+            <th className="pb-1 font-medium">{t("correction.form.chargeHeader")}</th>
           </tr>
         </thead>
         <tbody>
@@ -109,7 +112,7 @@ export function CorrectionForm({
               </td>
               <td className="py-1 pr-3">
                 <input
-                  aria-label={`Line ${line.lineNumber} procedure code`}
+                  aria-label={t("correction.form.lineProcedureAria", { number: line.lineNumber })}
                   name={`line-${line.lineNumber}-procedureCode`}
                   defaultValue={line.procedureCode}
                   required
@@ -120,7 +123,7 @@ export function CorrectionForm({
               </td>
               <td className="py-1 pr-3">
                 <input
-                  aria-label={`Line ${line.lineNumber} modifiers`}
+                  aria-label={t("correction.form.lineModifiersAria", { number: line.lineNumber })}
                   name={`line-${line.lineNumber}-modifiers`}
                   defaultValue={line.modifiers.join(", ")}
                   autoComplete="off"
@@ -129,7 +132,7 @@ export function CorrectionForm({
               </td>
               <td className="py-1 pr-3">
                 <input
-                  aria-label={`Line ${line.lineNumber} units`}
+                  aria-label={t("correction.form.lineUnitsAria", { number: line.lineNumber })}
                   name={`line-${line.lineNumber}-units`}
                   type="number"
                   min={1}
@@ -141,7 +144,7 @@ export function CorrectionForm({
               </td>
               <td className="py-1">
                 <input
-                  aria-label={`Line ${line.lineNumber} charge`}
+                  aria-label={t("correction.form.lineChargeAria", { number: line.lineNumber })}
                   name={`line-${line.lineNumber}-charge`}
                   inputMode="decimal"
                   defaultValue={(line.chargeCents / 100).toFixed(2)}
@@ -155,7 +158,7 @@ export function CorrectionForm({
       </table>
 
       <label className="flex flex-col gap-1 text-label font-medium text-text">
-        Reason for the correction (required, saved in the claim history)
+        {t("correction.form.reason")}
         <textarea
           name="reason"
           required
@@ -165,15 +168,13 @@ export function CorrectionForm({
           className="rounded-control border border-border-strong bg-surface px-2 py-1.5 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus"
         />
       </label>
-      <p className="text-label text-muted">
-        Don&apos;t put patient details in the reason. Code changes must be supported by the medical record.
-      </p>
+      <p className="text-label text-muted">{t("correction.form.reasonHint")}</p>
       <div className="flex gap-2">
         <Button type="submit" variant="primary" disabled={pending} aria-disabled={pending}>
-          {pending ? "Saving…" : "Save new version"}
+          {pending ? t("correction.form.saving") : t("correction.form.save")}
         </Button>
         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
+          {tc("action.cancel")}
         </Button>
       </div>
     </form>

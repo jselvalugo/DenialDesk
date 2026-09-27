@@ -1,37 +1,42 @@
 import type { Tone } from "@/components/ui/Badge";
 import type { RemittanceAdjustment, remittanceMethodEnum, remittanceStatusEnum } from "@/db/schema";
 import type { ClaimStatus } from "@/domain/claims/status";
+import type { MessageKey } from "@/i18n/messages/types";
 
 export type RemittanceStatus = (typeof remittanceStatusEnum.enumValues)[number];
 export type RemittanceMethod = (typeof remittanceMethodEnum.enumValues)[number];
 
-export const REMITTANCE_STATUSES: Record<RemittanceStatus, { label: string; tone: Tone }> = {
-  received: { label: "Ready to post", tone: "info" },
-  posted: { label: "Posted", tone: "success" },
-  void: { label: "Void", tone: "neutral" },
+export const REMITTANCE_STATUSES: Record<
+  RemittanceStatus,
+  { labelKey: MessageKey<"remittances">; tone: Tone }
+> = {
+  received: { labelKey: "status.received", tone: "info" },
+  posted: { labelKey: "status.posted", tone: "success" },
+  void: { labelKey: "status.void", tone: "neutral" },
 };
 
-export const METHOD_LABELS: Record<RemittanceMethod, string> = {
-  check: "Check",
-  eft: "EFT",
-  non_payment: "No payment",
+export const METHOD_LABEL_KEYS: Record<RemittanceMethod, MessageKey<"remittances">> = {
+  check: "method.check",
+  eft: "method.eft",
+  non_payment: "method.non_payment",
 };
 
 /**
  * CLP02 claim status codes (X12 835 5010, Claim Status Code list). Labels only; posting logic uses
- * "4" (denied) and refuses "22" (reversal) until phase R2.
+ * "4" (denied) and refuses "22" (reversal) until phase R2. Message key (remittances namespace) for
+ * each code; an unlisted code shows `clpStatus.other`.
  */
-export const CLP_STATUS_LABELS: Record<string, string> = {
-  "1": "Processed as primary",
-  "2": "Processed as secondary",
-  "3": "Processed as tertiary",
-  "4": "Denied",
-  "19": "Primary, forwarded",
-  "20": "Secondary, forwarded",
-  "21": "Tertiary, forwarded",
-  "22": "Reversal",
-  "23": "Not our claim, forwarded",
-  "25": "Predetermination only",
+export const CLP_STATUS_LABEL_KEYS: Record<string, MessageKey<"remittances">> = {
+  "1": "clpStatus.1",
+  "2": "clpStatus.2",
+  "3": "clpStatus.3",
+  "4": "clpStatus.4",
+  "19": "clpStatus.19",
+  "20": "clpStatus.20",
+  "21": "clpStatus.21",
+  "22": "clpStatus.22",
+  "23": "clpStatus.23",
+  "25": "clpStatus.25",
 };
 
 /**

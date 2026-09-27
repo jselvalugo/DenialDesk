@@ -29,6 +29,16 @@ export const FILING_WARNING_DAYS = 30;
 
 export type FilingState = "open" | "due_soon" | "past_deadline" | "not_configured" | "payer_unverified";
 
+/** Message key (claims namespace) for the filing states shown as a plain label (not paired with a day count). */
+export const FILING_STATE_LABEL_KEYS: Record<
+  Exclude<FilingState, "open" | "due_soon">,
+  MessageKey<"claims">
+> = {
+  past_deadline: "filing.state.pastDeadline",
+  not_configured: "filing.state.notConfigured",
+  payer_unverified: "filing.state.payerUnverified",
+};
+
 export interface FilingStatus {
   state: FilingState;
   deadline: Deadline | null;

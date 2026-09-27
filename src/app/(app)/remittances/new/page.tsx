@@ -4,34 +4,36 @@ import { canPostRemittances } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
+import { getT } from "@/i18n/server";
 import { syntheticDataOnly } from "@/lib/env";
 import { UploadRemittanceForm } from "./UploadRemittanceForm";
 
-export const metadata: Metadata = { title: "New remittance" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("remittances");
+  return { title: t("new.title") };
+}
 
 export default async function NewRemittancePage() {
   const auth = await requireAuth();
+  const t = await getT("remittances");
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href="/remittances" className="font-medium text-link hover:underline">
-          Remittances
+          {t("new.breadcrumbRemittances")}
         </Link>{" "}
-        <span aria-hidden>/</span> New
+        <span aria-hidden>/</span> {t("new.breadcrumbNew")}
       </nav>
-      <PageHeader
-        title="New remittance"
-        description="Upload an 835 from the payer or clearinghouse. DenialDesk checks that it balances and matches your claims before anything is posted."
-      />
+      <PageHeader title={t("new.title")} description={t("new.description")} />
       {canPostRemittances(auth.role) ? (
         <Panel>
           <UploadRemittanceForm syntheticOnly={syntheticDataOnly()} />
         </Panel>
       ) : (
         <p role="note" className="text-body text-muted">
-          Your role can view remittances but not load them.{" "}
+          {t("action.error.forbiddenUpload")}{" "}
           <Link href="/remittances" className="font-medium text-link hover:underline">
-            Back to remittances
+            {t("new.backToRemittances")}
           </Link>
         </p>
       )}
