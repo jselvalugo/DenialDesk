@@ -173,9 +173,9 @@ export default async function HomePage() {
           <Link
             href="/university/wiki"
             title="DenialDesk Wiki"
-            className="inline-flex h-12 items-center rounded-control border border-border bg-surface px-3 hover:bg-surface-muted"
+            className="inline-flex h-9 items-center rounded-control border border-border px-2 hover:bg-surface-muted"
           >
-            <Image src="/brand/denialdesk-wiki.png" alt="DenialDesk Wiki" width={140} height={42} />
+            <Image src="/brand/denialdesk-wiki.png" alt="DenialDesk Wiki" width={100} height={30} />
           </Link>
           <Link href="/denials" className={primaryLinkButtonClass}>
             Open denial queue

@@ -20,8 +20,26 @@ test.describe("university", () => {
 
   test("the wordmark buttons in the header and on the welcome page open the wiki", async ({ page }) => {
     await page.goto("/overview");
-    await page.getByRole("banner").getByRole("link", { name: "DenialDesk Wiki" }).click();
+    const headerButton = page.getByRole("banner").getByRole("link", { name: "DenialDesk Wiki" });
+    const image = headerButton.getByRole("img", { name: "DenialDesk Wiki" });
+    await expect
+      .poll(() =>
+        image.evaluate(
+          (el) => (el as HTMLImageElement).complete && (el as HTMLImageElement).naturalWidth > 0,
+        ),
+      )
+      .toBe(true);
+    await expect(headerButton).not.toHaveAttribute("aria-current");
+    await headerButton.click();
     await expect(page).toHaveURL(/\/university\/wiki$/);
+    // Only the Wiki button is current here, not the University link beside it.
+    await expect(headerButton).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("banner").getByRole("link", { name: "University" })).not.toHaveAttribute(
+      "aria-current",
+    );
+    await page.goto("/university/wiki/glossary");
+    await expect(headerButton).toHaveAttribute("aria-current", "true");
+
     await page.goto("/");
     await page.getByRole("main").getByRole("link", { name: "DenialDesk Wiki" }).click();
     await expect(page).toHaveURL(/\/university\/wiki$/);
