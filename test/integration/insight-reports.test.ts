@@ -19,6 +19,8 @@ import {
   recordReportViewed,
 } from "@/domain/insight/queries";
 import { buildAllReportsWorkbookFor, buildSingleReportWorkbook } from "@/domain/insight/report";
+import { denialsByDeadlineBucketSheet, denialsByPayerSheet } from "@/domain/insight/report-sheets";
+import { isSuppressedCell } from "@/domain/insight/suppression";
 import { generateDataset } from "@/domain/synthetic/generator";
 import type { Actor } from "@/domain/revenue-cycle/vouchers";
 
@@ -449,13 +451,17 @@ describe("Insight reports — small-cell suppression (R-8.7)", () => {
     }
 
     const byPayer = await withTenant(t, (tx) => fetchDenialsByPayer(tx, wideFilters));
-    const sensitiveRow = byPayer.find((g) => g.payerName === sensitivePayer)!;
-    const mediumRow = byPayer.find((g) => g.payerName === mediumPayer)!;
-    const hugeRow = byPayer.find((g) => g.payerName === hugePayer)!;
-    expect(sensitiveRow.suppressed).toBe(true);
-    expect(mediumRow.suppressed).toBe(true); // complementary suppression (next-smallest visible)
-    expect(hugeRow.suppressed).toBe(false);
-    expect(hugeRow.count).toBe(40);
+    const payerSheetSpec = denialsByPayerSheet(byPayer);
+    const rowFor = (name: string) => payerSheetSpec.rows.find((r) => r.payerName === name)!;
+    expect(isSuppressedCell(rowFor(sensitivePayer).count)).toBe(true);
+    // complementary suppression (next-smallest visible, nonzero row)
+    expect(isSuppressedCell(rowFor(mediumPayer).count)).toBe(true);
+    expect(isSuppressedCell(rowFor(hugePayer).count)).toBe(false);
+    expect(rowFor(hugePayer).count).toBe(40);
+    // Since some rows are suppressed, the sheet's totals row must be too — otherwise Total minus
+    // the visible rows (hugePayer's 40) would reconstruct the sensitive/medium rows' combined count.
+    expect(isSuppressedCell(payerSheetSpec.totals!.count)).toBe(true);
+    expect(isSuppressedCell(payerSheetSpec.totals!.sumCents)).toBe(true);
 
     const workbook = await withTenant(t, (tx) =>
       buildSingleReportWorkbook(tx, "denials-by-payer", wideFilters, {
@@ -465,14 +471,21 @@ describe("Insight reports — small-cell suppression (R-8.7)", () => {
     );
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(workbook.buffer as unknown as ArrayBuffer);
-    const sheet = wb.getWorksheet("Denials by payer")!;
-    const values = sheet.getSheetValues();
+    const xlsxSheet = wb.getWorksheet("Denials by payer")!;
+    const values = xlsxSheet.getSheetValues();
     const sensitiveExcelRow = values.find((row) => Array.isArray(row) && row.includes(sensitivePayer)) as
       unknown[] | undefined;
     expect(sensitiveExcelRow).toBeDefined();
     expect(sensitiveExcelRow!.some((v) => typeof v === "string" && v.startsWith("Suppressed"))).toBe(true);
     // Never a bare number (the raw count/deniedCents) for the suppressed payer's row.
     expect(sensitiveExcelRow!.some((v) => v === 12_345 || v === 123.45)).toBe(false);
+
+    // The exported Total row is suppressed too, and never leaks the true grand totals.
+    const totalExcelRow = values.find((row) => Array.isArray(row) && row.includes("Total")) as
+      unknown[] | undefined;
+    expect(totalExcelRow).toBeDefined();
+    expect(totalExcelRow!.some((v) => typeof v === "string" && v.startsWith("Suppressed"))).toBe(true);
+    expect(totalExcelRow!.some((v) => v === 46)).toBe(false); // true count total (1 + 5 + 40)
 
     const about = wb.getWorksheet("About")!;
     const aboutText = about
@@ -481,6 +494,7 @@ describe("Insight reports — small-cell suppression (R-8.7)", () => {
       .filter((v): v is string => typeof v === "string")
       .join(" ");
     expect(aboutText).toContain("Small-cell suppression");
+    expect(aboutText).not.toContain("Totals still reflect every row");
   });
 
   it("complementary suppression hides the next-smallest row when exactly one row would otherwise be suppressed alone", async () => {
@@ -506,7 +520,67 @@ describe("Insight reports — small-cell suppression (R-8.7)", () => {
     }
     const byPayer = await withTenant(t, (tx) => fetchDenialsByPayer(tx, wideFilters));
     expect(byPayer).toHaveLength(2);
-    expect(byPayer.every((g) => g.suppressed)).toBe(true);
+    const sheet = denialsByPayerSheet(byPayer);
+    expect(sheet.rows.every((r) => isSuppressedCell(r.count))).toBe(true);
+    // With every row suppressed, the totals row must be too.
+    expect(isSuppressedCell(sheet.totals!.count)).toBe(true);
+  });
+
+  it("suppresses the totals row for a single-row sheet whose lone row is suppressed", async () => {
+    const t = await bareTenant("single-row", 96);
+    const today = todayIn();
+    await seedDenial(t, {
+      payerName: "Single Row Sensitive Payer (synthetic)",
+      category: "coding",
+      deniedCents: 700,
+      noticeDate: today,
+      sensitivityTags: ["genetic"],
+    });
+    const byPayer = await withTenant(t, (tx) => fetchDenialsByPayer(tx, wideFilters));
+    expect(byPayer).toHaveLength(1);
+    const sheet = denialsByPayerSheet(byPayer);
+    expect(isSuppressedCell(sheet.rows[0]!.count)).toBe(true);
+    expect(isSuppressedCell(sheet.totals!.count)).toBe(true);
+    expect(isSuppressedCell(sheet.totals!.sumCents)).toBe(true);
+  });
+
+  it("never chooses a zero-count bucket as the complementary suppression target (deadline buckets)", async () => {
+    const t = await bareTenant("zero-complement", 97);
+    const today = todayIn();
+    // One small, sensitive-tagged open denial with no deadline (goes to the "no_deadline"
+    // bucket), and a much larger open group far out (goes to "31-plus"). Every other bucket
+    // (past_deadline, 0-7, 8-30) is empty (count 0) and must never be chosen as the complement.
+    await seedDenial(t, {
+      payerName: "Zero Complement Sensitive Payer (synthetic)",
+      category: "coding",
+      deniedCents: 300,
+      noticeDate: today,
+      appealDeadline: null,
+      sensitivityTags: ["hiv"],
+    });
+    for (let i = 0; i < 40; i++) {
+      await seedDenial(t, {
+        payerName: "Zero Complement Bulk Payer (synthetic)",
+        category: "coding",
+        deniedCents: 100,
+        noticeDate: today,
+        appealDeadline: "2099-01-01",
+      });
+    }
+    const buckets = await withTenant(t, (tx) => fetchDenialsByDeadlineBucket(tx, wideFilters, today));
+    const sheet = denialsByDeadlineBucketSheet(buckets);
+    const rowFor = (label: string) => sheet.rows.find((r) => r.bucket === label)!;
+    expect(isSuppressedCell(rowFor("No deadline configured").count)).toBe(true);
+    // The zero-count buckets are never suppressed — there is nothing in them to hide, and
+    // suppressing "0" would be misleading rather than protective.
+    for (const emptyLabel of ["Past deadline", "0–7 days", "8–30 days"]) {
+      const row = rowFor(emptyLabel);
+      if (row) expect(isSuppressedCell(row.count)).toBe(false);
+    }
+    // "31+ days" (count 40) is the only nonzero, not-yet-suppressed bucket, so it becomes the
+    // complement — the zero-count buckets were correctly skipped as candidates for it, but a
+    // complement still has to be picked from whatever nonzero bucket remains.
+    expect(isSuppressedCell(rowFor("31+ days").count)).toBe(true);
   });
 });
 

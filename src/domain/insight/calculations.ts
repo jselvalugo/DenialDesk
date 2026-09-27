@@ -4,11 +4,18 @@
  * counts, and edge cases (zero denominators, unlabeled CARCs, unverified payers) can be unit
  * tested against synthetic fixture rows without a database. The query layer
  * (`src/domain/insight/queries.ts`) fetches rows tenant-scoped and calls these.
+ *
+ * Small-cell suppression (R-8.7) is NOT decided here: these functions only compute each group's
+ * `sensitive` flag (whether ≥1 underlying claim belongs to a sensitivity-tagged patient). Which
+ * rows actually get suppressed, and whether the sheet's totals row does too, is decided once per
+ * whole sheet in `report-sheets.ts` (after any flattening across sub-groups, e.g. every CARC row
+ * across every category) — never per sub-group here — so the decision sees every sibling row that
+ * will actually share one totals row, and back-calculation from that total can't slip through a
+ * category-sized blind spot.
  */
 import type { DenialCategory } from "@/domain/carc";
 import { CATEGORY_LABELS } from "@/domain/carc";
 import { type DeadlineBucket, DEADLINE_BUCKET_ORDER, deadlineBucket } from "./buckets";
-import { applySmallCellSuppression } from "./suppression";
 
 // Category enum order, used to break ties when picking a payer's "top category" (spec #2).
 const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS) as DenialCategory[];
@@ -36,8 +43,6 @@ export interface CarcBreakdown {
   avgCents: number;
   /** True when ≥1 underlying claim is for a sensitive-tagged patient (R-8.7). */
   sensitive: boolean;
-  /** Small-cell suppression applied (R-8.7, owner decision 2026-09-26): count/avg/sum suppressed. */
-  suppressed: boolean;
 }
 
 export interface CategoryGroup {
@@ -63,7 +68,7 @@ export function denialsByCategoryReport(rows: DenialCategoryCarcRow[]): Category
       list.push(row);
       byCarc.set(row.carc, list);
     }
-    const unsuppressed = [...byCarc.entries()]
+    const carcs: CarcBreakdown[] = [...byCarc.entries()]
       .map(([carc, carcRows]) => {
         const sumCents = sumBy(carcRows, (r) => r.deniedCents);
         return {
@@ -75,13 +80,6 @@ export function denialsByCategoryReport(rows: DenialCategoryCarcRow[]): Category
         };
       })
       .sort((a, b) => b.sumCents - a.sumCents);
-    // Complementary suppression is applied within each category's own CARC breakdown, the
-    // natural sibling set a reader could otherwise use to back out a hidden row (R-8.7).
-    const suppressedFlags = applySmallCellSuppression(unsuppressed);
-    const carcs: CarcBreakdown[] = unsuppressed.map((row, i) => ({
-      ...row,
-      suppressed: suppressedFlags[i]!,
-    }));
     const sumCents = sumBy(categoryRows, (r) => r.deniedCents);
     groups.push({
       category,
@@ -116,7 +114,6 @@ export interface PayerGroup {
   sumCents: number;
   topCategory: DenialCategory;
   sensitive: boolean;
-  suppressed: boolean;
 }
 
 export function denialsByPayerReport(rows: DenialPayerRow[]): PayerGroup[] {
@@ -126,7 +123,7 @@ export function denialsByPayerReport(rows: DenialPayerRow[]): PayerGroup[] {
     list.push(row);
     byPayer.set(row.payerId, list);
   }
-  const unsuppressed: Omit<PayerGroup, "suppressed">[] = [];
+  const groups: PayerGroup[] = [];
   for (const [payerId, payerRows] of byPayer) {
     const byCategory = new Map<DenialCategory, number>();
     for (const row of payerRows) {
@@ -141,7 +138,7 @@ export function denialsByPayerReport(rows: DenialPayerRow[]): PayerGroup[] {
         topCategory = category;
       }
     }
-    unsuppressed.push({
+    groups.push({
       payerId,
       payerName: payerRows[0]!.payerName,
       verified: payerRows[0]!.verified,
@@ -151,11 +148,7 @@ export function denialsByPayerReport(rows: DenialPayerRow[]): PayerGroup[] {
       sensitive: payerRows.some((r) => r.patientSensitive),
     });
   }
-  const sorted = unsuppressed.sort((a, b) => b.sumCents - a.sumCents);
-  // Complementary suppression across all payer rows: this is the whole sibling set shown in
-  // the report (R-8.7).
-  const suppressedFlags = applySmallCellSuppression(sorted);
-  return sorted.map((group, i) => ({ ...group, suppressed: suppressedFlags[i]! }));
+  return groups.sort((a, b) => b.sumCents - a.sumCents);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -196,7 +189,6 @@ export interface BucketGroup {
   count: number;
   sumCents: number;
   sensitive: boolean;
-  suppressed: boolean;
 }
 
 /** Every bucket is present, even at zero, so the report never implies a deadline that isn't set. */
@@ -210,9 +202,7 @@ export function denialsByDeadlineBucketReport(rows: OpenDenialRow[], today: stri
     entry.sumCents += row.deniedCents;
     if (row.patientSensitive) entry.sensitive = true;
   }
-  const unsuppressed = DEADLINE_BUCKET_ORDER.map((bucket) => ({ bucket, ...totals.get(bucket)! }));
-  const suppressedFlags = applySmallCellSuppression(unsuppressed);
-  return unsuppressed.map((group, i) => ({ ...group, suppressed: suppressedFlags[i]! }));
+  return DEADLINE_BUCKET_ORDER.map((bucket) => ({ bucket, ...totals.get(bucket)! }));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -248,7 +238,6 @@ export interface StatusGroup {
   paidCents: number;
   outstandingCents: number;
   sensitive: boolean;
-  suppressed: boolean;
 }
 
 export function claimsByStatusReport(rows: ClaimStatusRow[]): StatusGroup[] {
@@ -258,7 +247,7 @@ export function claimsByStatusReport(rows: ClaimStatusRow[]): StatusGroup[] {
     list.push(row);
     byStatus.set(row.status, list);
   }
-  const unsuppressed = CLAIM_STATUS_ORDER.filter((status) => byStatus.has(status)).map((status) => {
+  return CLAIM_STATUS_ORDER.filter((status) => byStatus.has(status)).map((status) => {
     const statusRows = byStatus.get(status)!;
     const billedCents = sumBy(statusRows, (r) => r.billedCents);
     const paidCents = sumBy(statusRows, (r) => r.paidCents);
@@ -271,8 +260,6 @@ export function claimsByStatusReport(rows: ClaimStatusRow[]): StatusGroup[] {
       sensitive: statusRows.some((r) => r.patientSensitive),
     };
   });
-  const suppressedFlags = applySmallCellSuppression(unsuppressed);
-  return unsuppressed.map((group, i) => ({ ...group, suppressed: suppressedFlags[i]! }));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -298,7 +285,6 @@ export interface OutcomeGroup {
   /** Denied amount on overturned rows — an upper bound, not a captured payment (spec #6). */
   reversedCents: number;
   sensitive: boolean;
-  suppressed: boolean;
 }
 
 function groupOutcomes(rows: AppealOutcomeRow[]): OutcomeGroup[] {
@@ -308,12 +294,12 @@ function groupOutcomes(rows: AppealOutcomeRow[]): OutcomeGroup[] {
     list.push(row);
     byKey.set(row.key, list);
   }
-  const unsuppressed: Omit<OutcomeGroup, "suppressed">[] = [];
+  const groups: OutcomeGroup[] = [];
   for (const [key, keyRows] of byKey) {
     const overturned = keyRows.filter((r) => r.status === "overturned");
     const upheld = keyRows.filter((r) => r.status === "upheld");
     const decided = overturned.length + upheld.length;
-    unsuppressed.push({
+    groups.push({
       key,
       label: keyRows[0]!.label,
       overturned: overturned.length,
@@ -323,13 +309,7 @@ function groupOutcomes(rows: AppealOutcomeRow[]): OutcomeGroup[] {
       sensitive: keyRows.some((r) => r.patientSensitive),
     });
   }
-  const sorted = unsuppressed.sort((a, b) => a.label.localeCompare(b.label));
-  // Suppression here keys off the decided count (overturned + upheld), the number a reader could
-  // otherwise use to infer which patient's appeal this row represents (R-8.7).
-  const suppressedFlags = applySmallCellSuppression(
-    sorted.map((g) => ({ count: g.overturned + g.upheld, sensitive: g.sensitive })),
-  );
-  return sorted.map((group, i) => ({ ...group, suppressed: suppressedFlags[i]! }));
+  return groups.sort((a, b) => a.label.localeCompare(b.label));
 }
 
 export interface AppealOutcomesReport {

@@ -63,13 +63,28 @@ _Last updated: 2026-09-26_
   (R-3.5.1) and whose count is under `SMALL_CELL_SUPPRESSION_THRESHOLD` (default 11, config in
   `src/domain/insight/suppression-config.ts`, ⚠️ VERIFY with counsel — modeled on CMS's public-
   use-file cell-size suppression policy, not a Florida statute) shows "Suppressed (<11)" instead
-  of its count/dollars/rate, on-screen and in the export; complementary suppression also hides
-  the next-smallest sibling row when only one row would otherwise be suppressed, so the hidden
-  value can't be inferred; totals still reflect every row. Logic lives once in the domain layer
-  (`src/domain/insight/suppression.ts`, wired through `calculations.ts`) so the on-screen table
-  and the .xlsx both suppress identically. Next: custom/user-built reports, patient-level drill-
-  down once broader sensitivity-tag enforcement lands (R-3.5.1), and the two planned reports once
-  their blockers clear.
+  of its count/dollars/rate, on-screen and in the export; complementary suppression (decided once
+  per whole sheet, never per sub-group, and never picking a zero-count row) also hides the
+  next-smallest sibling row when only one row would otherwise be suppressed. A reviewer fix
+  (2026-09-26) closed a back-calculation gap: whenever any row in a sheet is suppressed, that
+  sheet's own totals row is suppressed too (previously it showed the true grand total, letting
+  `Total − visible rows` reconstruct a hidden value). Suppression is a typed `SuppressedCell`
+  marker (`src/domain/insight/suppression.ts`), never a string comparison, and the decision is
+  made once on the actual sheet rows in `src/domain/insight/report-sheets.ts` (not in
+  `calculations.ts`, which only computes each group's `sensitive` flag), so the on-screen table
+  and the .xlsx always agree. Accepted residual risks, documented on the About sheet: cross-report
+  / overlapping-date-range differencing isn't guarded against, and report #3 (denial rate)'s
+  tenant-wide denied-claims count is never suppressed (it's one scalar, not a row breakdown).
+  Exporting to a production (Azure) tenant is gated on `OA-023` (the still-open written
+  handling/retention policy question). Next: custom/user-built reports, patient-level drill-down
+  once broader sensitivity-tag enforcement lands (R-3.5.1), and the two planned reports once their
+  blockers clear.
+- Fixed the same date: `isSameOrigin()` (`src/lib/same-origin.ts`), used by the Insight export
+  routes' CSRF check, rejected every real "Download Excel" click with a 403 — this app's own
+  `Referrer-Policy: no-referrer` makes browsers send a literal `Origin: null` for a same-origin
+  full-page form POST, which `new URL("null")` can't parse. Now checks `Sec-Fetch-Site` first
+  (unaffected by referrer policy; reliable in all modern browsers), falling back to the
+  Origin/Host comparison only when that header is absent.
 - Payer catalog P1 (`specs/payer-catalog.md`): `payers.edi_payer_id`/`regime` are now nullable plus
   a `payers.source` column; a payer missing either is "unverified". Starter Florida insurer catalog
   by name only (`src/domain/payers/florida-catalog.ts`, no payer IDs/regimes) loaded per-tenant,
@@ -181,7 +196,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Insight exported .xlsx workbooks (R-9.2.1, SOC 2 C1.1/CC6.7): owner said "not sure, let's
   confirm" on 2026-09-26 whether practices need a written handling/retention policy for downloaded
   workbooks (they leave the audited system as files on a user's device). See `OA-023` in
-  `docs/owner/OWNER_ACTION_ITEMS.xlsx`.
+  `docs/owner/OWNER_ACTION_ITEMS.xlsx`. **Export to a production (Azure) tenant is gated on this
+  item being resolved** — don't enable Insight export for a real practice before `OA-023` closes.
 
 - Revenue cycle imports (before real data, `docs/threat-models/revenue-cycle-imports.md`):
   sensitivity tags for lines (Part 2/HIV/behavioral CPTs); encrypt account numbers or confirm

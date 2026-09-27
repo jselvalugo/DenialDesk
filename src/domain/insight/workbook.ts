@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { isSuppressedValue } from "./suppression";
+import { isSuppressedCell, suppressedLabel, type SuppressedCell } from "./suppression";
 
 /**
  * Builds well-formatted .xlsx workbooks for Insight standard reports (owner decision 2026-09-26:
@@ -30,12 +30,19 @@ export interface ColumnSpec {
   width?: number;
 }
 
+/**
+ * A cell's value. `SuppressedCell` is a typed, explicit marker (R-8.7 small-cell suppression) —
+ * never a string compared against the marker's display label — so a genuine value that happens to
+ * read like the label text is never misread as suppressed, and vice versa.
+ */
+export type CellValue = string | number | null | SuppressedCell;
+
 export interface SheetSpec {
   name: string;
   columns: ColumnSpec[];
-  rows: Record<string, string | number | null>[];
+  rows: Record<string, CellValue>[];
   /** Values for the totals row, keyed by column key; omitted keys are left blank. */
-  totals?: Record<string, string | number | null>;
+  totals?: Record<string, CellValue>;
   /** Shown instead of an empty data area (e.g. "No decided appeals in this period"). */
   emptyMessage?: string;
 }
@@ -55,11 +62,11 @@ const CURRENCY_FORMAT = '"$"#,##0.00;[Red]-"$"#,##0.00';
 const PERCENT_FORMAT = "0.00%";
 const DATE_FORMAT = "mm/dd/yyyy";
 
-function cellValue(type: ColumnType, value: string | number | null): string | number | Date | null {
+function cellValue(type: ColumnType, value: CellValue): string | number | Date | null {
   if (value === null) return null;
   // Small-cell suppression (R-8.7): the marker is text regardless of the column's declared type
   // (currency/percent/number), so it never gets coerced into a number or a currency format.
-  if (isSuppressedValue(value)) return sanitizeCellText(String(value));
+  if (isSuppressedCell(value)) return sanitizeCellText(suppressedLabel());
   if (type === "text") return sanitizeCellText(String(value));
   if (type === "date") return new Date(`${value}T00:00:00Z`);
   // currency: convert integer cents to dollars only at write time (never stored as dollars elsewhere).
@@ -147,7 +154,7 @@ function addDataSheet(workbook: ExcelJS.Workbook, spec: SheetSpec, sheetName: st
     const added = sheet.addRow(values);
     for (const column of spec.columns) {
       const raw = row[column.key] ?? null;
-      if (isSuppressedValue(raw)) continue; // leave the suppression marker as plain text
+      if (isSuppressedCell(raw)) continue; // leave the suppression marker as plain text
       const fmt = numberFormat(column.type);
       if (fmt) added.getCell(column.key).numFmt = fmt;
     }
@@ -162,6 +169,8 @@ function addDataSheet(workbook: ExcelJS.Workbook, spec: SheetSpec, sheetName: st
     const totalsRow = sheet.addRow(values);
     totalsRow.font = { bold: true };
     for (const column of spec.columns) {
+      const raw = spec.totals[column.key] ?? null;
+      if (isSuppressedCell(raw)) continue; // leave the suppression marker as plain text
       const fmt = numberFormat(column.type);
       if (fmt) totalsRow.getCell(column.key).numFmt = fmt;
     }

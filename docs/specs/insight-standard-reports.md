@@ -14,18 +14,44 @@ Status: approved
   statute, so it is never read by or written into `rules/`, and never hard-coded in a report query
   or calculation. Rationale for 11: CMS's public-use-file cell-size suppression convention, used
   here only as a reasonable starting point. ⚠️ VERIFY with counsel before relying on 11 as the
-  right number for DenialDesk's own risk profile. Complementary suppression prevents
-  back-calculation: when exactly one row in a sibling set (e.g. one payer's row among all payer
-  rows, or one CARC row within one category) would be suppressed, the next-smallest-count row
-  among the rest is also suppressed, even if it isn't itself sensitive-linked. Totals still reflect
-  every row (suppressed or not) — they combine enough rows, or (after complementary suppression)
-  at least two, that they never reveal one hidden row's value on their own; this is documented on
-  every workbook's About sheet as a caveat. Suppression is implemented once, in the domain layer
-  (`src/domain/insight/suppression.ts`, wired through `src/domain/insight/calculations.ts`), so the
-  on-screen table and the .xlsx export always agree. Applies to reports #1, #2, #4, #5, and #6
-  (every report that groups rows by category/CARC, payer, deadline bucket, status, or outcome).
-  Report #3 (denial rate) is a single tenant-wide scalar, not a breakdown into sibling rows, so
-  cell-level suppression doesn't apply to it the same way; it is left as-is.
+  right number for DenialDesk's own risk profile.
+
+  **Fixed by reviewer finding, same date:** the first pass suppressed rows but left each sheet's
+  totals row showing the true grand total, which let a reader recover a suppressed row's exact
+  value as `Total − every visible row`. The rule is now: **whenever any row in a sheet is
+  suppressed, that sheet's own totals row is suppressed too** (its count/$/rate cells) — this
+  covers a single-row sheet, a category's rows vs. the sheet-wide total, and the appeal-outcomes
+  totals row alike, and it is the one rule that actually closes the back-calculation path, so it's
+  applied unconditionally rather than only "when it might reveal something." Complementary
+  suppression is unchanged in intent (when exactly one row in a sheet would be suppressed, the
+  next-smallest-count row with a nonzero count is also suppressed) but is now decided **once per
+  whole sheet** — after any flattening across sub-groups (e.g. every CARC row across every
+  category in the denials-by-category sheet) — instead of per sub-group, and it never picks a
+  zero-count row as the complement (there's nothing in a "0" to hide, and suppressing it would be
+  misleading rather than protective). Suppression is implemented once, in the domain layer
+  (`src/domain/insight/report-sheets.ts`, which decides suppression on the actual sheet rows;
+  `src/domain/insight/calculations.ts` only computes each group's `sensitive` flag), and rendered
+  through a typed `SuppressedCell` marker (`src/domain/insight/suppression.ts`) — never a string
+  comparison against the marker's display label — so the on-screen table (`page.tsx`) and the
+  .xlsx export (`workbook.ts`) always agree and a genuine value can never be mistaken for the
+  marker or vice versa. Applies to reports #1, #2, #4, #5, and #6 (every report that groups rows by
+  category/CARC, payer, deadline bucket, status, or outcome). Report #3 (denial rate) is a single
+  tenant-wide scalar, not a breakdown into sibling rows, so cell-level suppression doesn't apply to
+  it the same way; see "Accepted residual risks" below for what that leaves open.
+
+  **Accepted residual risks (⚠️ VERIFY with counsel — not fixed in this slice):** (1) suppression
+  is decided independently per report and per date range; a determined reader comparing two
+  overlapping date ranges of the same report, or two different reports covering the same
+  underlying claims, could still difference out a value this slice doesn't guard against; no
+  cross-report or cross-range differencing guard exists. (2) Report #3's denied-claims count is a
+  tenant-wide total for the whole date range, never suppressed even when small, so a narrow enough
+  date range or payer filter could still make it identify a single sensitive-tagged patient's
+  claim. Both are stated as caveats on the relevant reports' About sheets, not silently accepted.
+  (3) Exporting a suppressed report off the platform is itself gated on the still-open written
+  handling/retention question (`OA-023` below) — until that is resolved, treat any exported
+  workbook, suppressed or not, as needing the same handling care as an unsuppressed one, and do
+  not treat suppression as a substitute for a handling policy once workbooks reach a production
+  (Azure) environment.
 - **Export roles: confirmed final, no change.** `specialist` views on-screen only; `admin`,
   `manager`, and `compliance` can view and download. This matches what shipped in the first round
   (see "Owner decisions (2026-09-26)" below) — the owner reconfirmed it on the same date.
@@ -34,6 +60,9 @@ Status: approved
   owner/counsel to decide whether practices need a written policy for handling/retaining exported
   Insight workbooks once they leave the audited system as files — R-9.2.1, SOC 2 C1.1/CC6.7) and
   as an open question in `docs/PROJECT_STATE.md` and (via that file) `docs/OWNER_ACTIONS.md`.
+  **Export to production (Azure) is gated on `OA-023`:** Insight export should not be turned on for
+  a production (Azure) tenant until this question is answered, so the note is on `OA-023` itself,
+  not only in this spec.
 
 ## Owner decisions (2026-09-26)
 
@@ -360,16 +389,30 @@ Small-cell suppression (R-8.7, owner decision 2026-09-26):
   (including the "All reports" workbook).
 - [x] Threshold boundary: count 10 is suppressed, count 11 is shown, count 0 is shown as 0 (unit
   tests in `src/domain/insight/suppression.test.ts`).
-- [x] Complementary suppression: when exactly one row in a sibling set would be suppressed, the
-  next-smallest-count row among the rest is also suppressed (unit and integration tests).
+- [x] Complementary suppression: when exactly one row in a whole sheet (after flattening across
+  any sub-groups) would be suppressed, the next-smallest-count row with a nonzero count is also
+  suppressed; a zero-count row is never chosen as the complement (unit tests, including deadline
+  buckets shaped `[{3, sensitive}, {0}, {40}]`, and integration tests).
+- [x] Whenever any row in a sheet is suppressed, that sheet's own totals row is suppressed too
+  (count/$/rate cells) — covering a single-row sheet, a category's rows vs. the sheet-wide total,
+  and the appeal-outcomes totals row — so `Total − every visible row` can never reconstruct a
+  suppressed row's value (unit tests in `report-sheets.test.ts` and an integration test).
 - [x] Non-sensitive rows are never suppressed, regardless of count.
+- [x] Suppression is a typed, explicit `SuppressedCell` marker (`src/domain/insight/suppression.ts`),
+  never a string comparison against the marker's display label, so the on-screen page and the
+  workbook builder can't mistake a genuine value for the marker or vice versa.
 - [x] An integration test seeds a synthetic sensitive-tagged patient and asserts suppression in
-  both the fetched report data and the exported workbook's cells.
-- [x] The About sheet states the suppression policy and threshold as a data caveat on every
-  report that groups rows (denials-by-category, denials-by-payer, denials-by-deadline-bucket,
-  claims-by-status, appeal-outcomes).
-- [x] Suppression logic lives once in the domain layer (`src/domain/insight/suppression.ts`), not
+  both the built sheet output and the exported workbook's cells (rows and totals).
+- [x] The About sheet states the suppression policy, the totals-row rule, and the accepted
+  residual risks (cross-report/date-range differencing; report #3's un-suppressed tenant-wide
+  count) as data caveats on every report that groups rows (denials-by-category, denials-by-payer,
+  denials-by-deadline-bucket, claims-by-status, appeal-outcomes) and on denial-rate respectively.
+- [x] Suppression logic lives once in the domain layer (`src/domain/insight/report-sheets.ts`,
+  decided on the actual sheet rows; `calculations.ts` only computes the `sensitive` flag), not
   duplicated between the on-screen page and the workbook builder.
+- [x] `claims.patientId` is `NOT NULL` (`src/db/schema.ts`), so every Insight query joins `patients`
+  with an inner join; if that column is ever made nullable, the joins must switch to a left join
+  and treat a missing patient as not sensitive (documented in `src/domain/insight/queries.ts`).
 
 Legal deadlines:
 - [x] None of these reports compute or display a new legal deadline; they read

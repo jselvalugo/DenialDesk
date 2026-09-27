@@ -26,12 +26,15 @@ test("unbuilt sections are not links", async ({ page }) => {
   await page.goto("/design");
   await page.getByRole("button", { name: /, switch module$/ }).click();
   const switcher = page.getByRole("dialog", { name: "Go to" });
-  await expect(switcher.getByText("Appeals")).toBeVisible();
+  // Appeals (a page within the Denials module — Insight shipped in this slice, so it is no
+  // longer the "still planned" example) is listed with its "Planned" tag and is never a link.
+  const appealsRow = switcher.locator("li", { hasText: "Appeals" }).last();
+  await expect(appealsRow.getByText("Planned")).toBeVisible();
   await expect(page.getByRole("link", { name: /^Appeals/ })).toHaveCount(0);
   await expect(switcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
-  // A planned module (Insight) is listed as a heading, never a link.
-  await expect(switcher.getByRole("heading", { level: 3, name: /^Insight/ })).toBeVisible();
-  await expect(switcher.getByRole("link", { name: /Insight/ })).toHaveCount(0);
+  // Insight now has a working "Reports" page (docs/specs/insight-standard-reports.md), so its
+  // module heading is a link, not a planned heading.
+  await expect(switcher.getByRole("link", { name: /^Insight module$/ })).toBeVisible();
 });
 
 test("the module switcher searches modules and pages and opens one", async ({ page }) => {

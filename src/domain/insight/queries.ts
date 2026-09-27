@@ -1,6 +1,10 @@
 import { and, eq, exists, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { easternDayBoundsUtc, todayIn } from "@rules/calendar";
 import type { TenantTx } from "@/db/tenant";
+// `claims.patientId` is NOT NULL (src/db/schema.ts) — every claim has exactly one patient, so
+// every fetch* below joins `patients` with an inner join (never left) for the small-cell
+// suppression sensitivity check (R-8.7). If that column is ever made nullable, these joins must
+// switch to a left join and treat a missing patient as not sensitive, never as an error.
 import { claims, denials, patients, payers } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OPEN_STATUSES } from "@/domain/denial-status";

@@ -2,6 +2,13 @@
  * Turns each report's calculation result into the SheetSpec(s) and metric definitions the
  * workbook builder needs. Kept separate from `calculations.ts` (pure math) and `workbook.ts`
  * (generic xlsx mechanics) so each layer is testable on its own.
+ *
+ * Small-cell suppression (R-8.7, owner decision 2026-09-26) is decided here, once per whole
+ * sheet — after any flattening across sub-groups (e.g. every CARC row across every category in
+ * the denials-by-category sheet) — never per sub-group, so the decision sees every sibling row
+ * that will actually share one totals row. Whenever any row in a sheet ends up suppressed, the
+ * sheet's own totals row is suppressed too (its count/$/rate cells), because otherwise Total minus
+ * every visible row would reconstruct the hidden value(s) exactly.
  */
 import { CATEGORY_LABELS } from "@/domain/carc";
 import { DEADLINE_BUCKET_LABELS } from "./buckets";
@@ -14,26 +21,48 @@ import type {
   PayerGroup,
   StatusGroup,
 } from "./calculations";
-import type { SheetSpec } from "./workbook";
+import type { CellValue, SheetSpec } from "./workbook";
 import { catalogEntry, type ReportId } from "./catalog";
-import { suppressedLabel } from "./suppression";
+import { applySmallCellSuppression, SUPPRESSED_CELL, type SuppressibleGroup } from "./suppression";
+
+interface SuppressibleRow<T> extends SuppressibleGroup {
+  values: T;
+}
 
 /**
- * Small-cell suppression (R-8.7, owner decision 2026-09-26): when `suppressed` is true, every
- * numeric/rate value in `values` is replaced with the suppression marker text so neither the
- * on-screen table nor the .xlsx export shows the underlying count or dollar amount. Non-numeric
- * identifying columns (category, payer name, status, bucket label) are left untouched — only the
- * count/dollar/rate cells are hidden.
+ * Applies small-cell suppression across one whole sheet's rows (already flattened across any
+ * sub-groups) and returns the rows with their numeric/dollar/rate cells replaced by the typed
+ * suppression marker wherever suppressed, plus whether any row in the sheet was suppressed at all
+ * (the caller must then suppress the sheet's totals row too — see `suppressTotals`).
  */
-function suppressRow<T extends Record<string, string | number | null>>(
-  values: T,
-  suppressed: boolean,
+function buildSuppressedRows<T extends Record<string, CellValue>>(
+  items: SuppressibleRow<T>[],
+  numericKeys: (keyof T)[],
+): { rows: T[]; anySuppressed: boolean } {
+  const suppressedFlags = applySmallCellSuppression(items);
+  const rows = items.map((item, i) => {
+    if (!suppressedFlags[i]) return item.values;
+    const next = { ...item.values };
+    for (const key of numericKeys) next[key] = SUPPRESSED_CELL as T[typeof key];
+    return next;
+  });
+  return { rows, anySuppressed: suppressedFlags.some(Boolean) };
+}
+
+/**
+ * Suppresses a sheet's totals row whenever any of its data rows was suppressed (R-8.7): Total
+ * minus every still-visible row would otherwise reconstruct the hidden row's value exactly (or,
+ * with two suppressed rows, their combined value), so the totals row can't be trusted to be safe
+ * on its own once any row underneath it is hidden.
+ */
+function suppressTotals<T extends Record<string, CellValue>>(
+  totals: T,
+  anySuppressed: boolean,
   numericKeys: (keyof T)[],
 ): T {
-  if (!suppressed) return values;
-  const label = suppressedLabel();
-  const next = { ...values };
-  for (const key of numericKeys) next[key] = label as T[typeof key];
+  if (!anySuppressed) return totals;
+  const next = { ...totals };
+  for (const key of numericKeys) next[key] = SUPPRESSED_CELL as T[typeof key];
   return next;
 }
 
@@ -46,21 +75,24 @@ export function filenameFor(reportId: string, dateFrom: string, dateTo: string):
 }
 
 export function denialsByCategorySheet(groups: CategoryGroup[]): SheetSpec {
-  const rows = groups.flatMap((group) =>
-    group.carcs.map((carc) =>
-      suppressRow(
-        {
-          category: CATEGORY_LABELS[group.category],
-          carc: carc.carc,
-          count: carc.count,
-          sumCents: carc.sumCents,
-          avgCents: carc.avgCents,
-        },
-        carc.suppressed,
-        ["count", "sumCents", "avgCents"],
-      ),
-    ),
+  // Flattened across every category first: suppression must see the whole sheet's sibling rows,
+  // not just one category's CARC breakdown, or a category-sized blind spot could let a reader
+  // back-calculate a hidden row from a category total this sheet doesn't even display but the
+  // reader could reconstruct from the raw denominator elsewhere.
+  const items = groups.flatMap((group) =>
+    group.carcs.map((carc) => ({
+      values: {
+        category: CATEGORY_LABELS[group.category],
+        carc: carc.carc,
+        count: carc.count,
+        sumCents: carc.sumCents,
+        avgCents: carc.avgCents,
+      } satisfies Record<string, CellValue>,
+      count: carc.count,
+      sensitive: carc.sensitive,
+    })),
   );
+  const { rows, anySuppressed } = buildSuppressedRows(items, ["count", "sumCents", "avgCents"]);
   const totalCount = groups.reduce((t, g) => t + g.count, 0);
   const totalSum = groups.reduce((t, g) => t + g.sumCents, 0);
   return {
@@ -73,11 +105,27 @@ export function denialsByCategorySheet(groups: CategoryGroup[]): SheetSpec {
       { header: "Average denied ($)", key: "avgCents", type: "currency", width: 18 },
     ],
     rows,
-    totals: { category: "Total", carc: "", count: totalCount, sumCents: totalSum, avgCents: null },
+    totals: suppressTotals(
+      { category: "Total", carc: "", count: totalCount, sumCents: totalSum, avgCents: null },
+      anySuppressed,
+      ["count", "sumCents", "avgCents"],
+    ),
   };
 }
 
 export function denialsByPayerSheet(groups: PayerGroup[]): SheetSpec {
+  const items = groups.map((g) => ({
+    values: {
+      payerName: g.payerName,
+      verified: g.verified ? "Verified" : "Unverified",
+      count: g.count,
+      sumCents: g.sumCents,
+      topCategory: CATEGORY_LABELS[g.topCategory],
+    } satisfies Record<string, CellValue>,
+    count: g.count,
+    sensitive: g.sensitive,
+  }));
+  const { rows, anySuppressed } = buildSuppressedRows(items, ["count", "sumCents"]);
   const totalCount = groups.reduce((t, g) => t + g.count, 0);
   const totalSum = groups.reduce((t, g) => t + g.sumCents, 0);
   return {
@@ -89,20 +137,12 @@ export function denialsByPayerSheet(groups: PayerGroup[]): SheetSpec {
       { header: "Denied ($)", key: "sumCents", type: "currency", width: 16 },
       { header: "Top category", key: "topCategory", type: "text", width: 20 },
     ],
-    rows: groups.map((g) =>
-      suppressRow(
-        {
-          payerName: g.payerName,
-          verified: g.verified ? "Verified" : "Unverified",
-          count: g.count,
-          sumCents: g.sumCents,
-          topCategory: CATEGORY_LABELS[g.topCategory],
-        },
-        g.suppressed,
-        ["count", "sumCents"],
-      ),
+    rows,
+    totals: suppressTotals(
+      { payerName: "Total", verified: "", count: totalCount, sumCents: totalSum, topCategory: "" },
+      anySuppressed,
+      ["count", "sumCents"],
     ),
-    totals: { payerName: "Total", verified: "", count: totalCount, sumCents: totalSum, topCategory: "" },
   };
 }
 
@@ -110,6 +150,10 @@ export function denialsByPayerSheet(groups: PayerGroup[]): SheetSpec {
  * One row of typed metrics (never text-formatted numbers), so both the on-screen table and the
  * workbook render the rate as a real percentage (e.g. 25.00%), not the string "0.25". With a zero
  * denominator, the sheet is empty with a message instead of a row of blanks.
+ *
+ * Not subject to small-cell suppression: this is one tenant-wide scalar for the whole date range,
+ * not a breakdown into sibling rows a reader could differentially compare (see the About sheet's
+ * residual-risk caveat on this report).
  */
 export function denialRateSheet(result: DenialRateResult): SheetSpec {
   const columns: SheetSpec["columns"] = [
@@ -128,6 +172,16 @@ export function denialRateSheet(result: DenialRateResult): SheetSpec {
 }
 
 export function denialsByDeadlineBucketSheet(groups: BucketGroup[]): SheetSpec {
+  const items = groups.map((g) => ({
+    values: {
+      bucket: DEADLINE_BUCKET_LABELS[g.bucket],
+      count: g.count,
+      sumCents: g.sumCents,
+    } satisfies Record<string, CellValue>,
+    count: g.count,
+    sensitive: g.sensitive,
+  }));
+  const { rows, anySuppressed } = buildSuppressedRows(items, ["count", "sumCents"]);
   const totalCount = groups.reduce((t, g) => t + g.count, 0);
   const totalSum = groups.reduce((t, g) => t + g.sumCents, 0);
   return {
@@ -137,14 +191,11 @@ export function denialsByDeadlineBucketSheet(groups: BucketGroup[]): SheetSpec {
       { header: "Count", key: "count", type: "number", width: 10 },
       { header: "Denied ($)", key: "sumCents", type: "currency", width: 16 },
     ],
-    rows: groups.map((g) =>
-      suppressRow(
-        { bucket: DEADLINE_BUCKET_LABELS[g.bucket], count: g.count, sumCents: g.sumCents },
-        g.suppressed,
-        ["count", "sumCents"],
-      ),
-    ),
-    totals: { bucket: "Total", count: totalCount, sumCents: totalSum },
+    rows,
+    totals: suppressTotals({ bucket: "Total", count: totalCount, sumCents: totalSum }, anySuppressed, [
+      "count",
+      "sumCents",
+    ]),
   };
 }
 
@@ -160,6 +211,19 @@ const STATUS_LABELS: Record<ClaimStatus, string> = {
 };
 
 export function claimsByStatusSheet(groups: StatusGroup[]): SheetSpec {
+  const items = groups.map((g) => ({
+    values: {
+      status: STATUS_LABELS[g.status],
+      count: g.count,
+      billedCents: g.billedCents,
+      paidCents: g.paidCents,
+      outstandingCents: g.outstandingCents,
+    } satisfies Record<string, CellValue>,
+    count: g.count,
+    sensitive: g.sensitive,
+  }));
+  const numericKeys = ["count", "billedCents", "paidCents", "outstandingCents"] as const;
+  const { rows, anySuppressed } = buildSuppressedRows(items, [...numericKeys]);
   const totalCount = groups.reduce((t, g) => t + g.count, 0);
   const totalBilled = groups.reduce((t, g) => t + g.billedCents, 0);
   const totalPaid = groups.reduce((t, g) => t + g.paidCents, 0);
@@ -173,43 +237,61 @@ export function claimsByStatusSheet(groups: StatusGroup[]): SheetSpec {
       { header: "Paid ($)", key: "paidCents", type: "currency", width: 16 },
       { header: "Outstanding ($)", key: "outstandingCents", type: "currency", width: 18 },
     ],
-    rows: groups.map((g) =>
-      suppressRow(
-        {
-          status: STATUS_LABELS[g.status],
-          count: g.count,
-          billedCents: g.billedCents,
-          paidCents: g.paidCents,
-          outstandingCents: g.outstandingCents,
-        },
-        g.suppressed,
-        ["count", "billedCents", "paidCents", "outstandingCents"],
-      ),
+    rows,
+    totals: suppressTotals(
+      {
+        status: "Total",
+        count: totalCount,
+        billedCents: totalBilled,
+        paidCents: totalPaid,
+        outstandingCents: totalOutstanding,
+      },
+      anySuppressed,
+      [...numericKeys],
     ),
-    totals: {
-      status: "Total",
-      count: totalCount,
-      billedCents: totalBilled,
-      paidCents: totalPaid,
-      outstandingCents: totalOutstanding,
-    },
   };
 }
 
-function outcomeRows(groups: OutcomeGroup[]) {
-  return groups.map((g) =>
-    suppressRow(
-      {
-        group: g.label,
-        overturned: g.overturned,
-        upheld: g.upheld,
-        overturnRate: g.overturnRate,
-        reversedCents: g.reversedCents,
-      },
-      g.suppressed,
-      ["overturned", "upheld", "overturnRate", "reversedCents"],
-    ),
-  );
+function outcomeSheet(
+  groups: OutcomeGroup[],
+  name: string,
+  emptyMessage: string,
+  columns: SheetSpec["columns"],
+) {
+  const items = groups.map((g) => ({
+    values: {
+      group: g.label,
+      overturned: g.overturned,
+      upheld: g.upheld,
+      overturnRate: g.overturnRate,
+      reversedCents: g.reversedCents,
+    } satisfies Record<string, CellValue>,
+    // Suppression keys off the decided count (overturned + upheld) — the number a reader could
+    // otherwise use to infer which patient's appeal this row represents.
+    count: g.overturned + g.upheld,
+    sensitive: g.sensitive,
+  }));
+  const numericKeys = ["overturned", "upheld", "overturnRate", "reversedCents"] as const;
+  const { rows, anySuppressed } = buildSuppressedRows(items, [...numericKeys]);
+  const totalOverturned = groups.reduce((t, g) => t + g.overturned, 0);
+  const totalUpheld = groups.reduce((t, g) => t + g.upheld, 0);
+  const totalDecided = totalOverturned + totalUpheld;
+  const totalReversed = groups.reduce((t, g) => t + g.reversedCents, 0);
+  const totals =
+    groups.length === 0
+      ? undefined
+      : suppressTotals(
+          {
+            group: "Total",
+            overturned: totalOverturned,
+            upheld: totalUpheld,
+            overturnRate: totalDecided === 0 ? null : totalOverturned / totalDecided,
+            reversedCents: totalReversed,
+          },
+          anySuppressed,
+          [...numericKeys],
+        );
+  return { name, columns, rows, totals, emptyMessage };
 }
 
 export function appealOutcomesSheets(byPayer: OutcomeGroup[], byCategory: OutcomeGroup[]): SheetSpec[] {
@@ -221,22 +303,13 @@ export function appealOutcomesSheets(byPayer: OutcomeGroup[], byCategory: Outcom
     { header: "Denied amount reversed ($)", key: "reversedCents", type: "currency", width: 24 },
   ];
   const NO_DECIDED_APPEALS = "No decided appeals in this period";
+  const byCategoryLabeled = byCategory.map((g) => ({
+    ...g,
+    label: CATEGORY_LABELS[g.label as never] ?? g.label,
+  }));
   return [
-    {
-      name: "Appeal outcomes by payer",
-      columns,
-      rows: outcomeRows(byPayer),
-      emptyMessage: NO_DECIDED_APPEALS,
-    },
-    {
-      name: "Appeal outcomes by category",
-      columns,
-      rows: outcomeRows(byCategory).map((r) => ({
-        ...r,
-        group: CATEGORY_LABELS[r.group as never] ?? r.group,
-      })),
-      emptyMessage: NO_DECIDED_APPEALS,
-    },
+    outcomeSheet(byPayer, "Appeal outcomes by payer", NO_DECIDED_APPEALS, columns),
+    outcomeSheet(byCategoryLabeled, "Appeal outcomes by category", NO_DECIDED_APPEALS, columns),
   ];
 }
 
@@ -299,11 +372,23 @@ const SMALL_CELL_SUPPRESSION_CAVEAT =
   "Small-cell suppression (R-8.7): a row that includes a claim for a patient carrying a " +
   "sensitivity tag (R-3.5.1) and whose count is under the suppression threshold shows " +
   '"Suppressed (<11)" instead of its count and dollar amounts/rates, to avoid identifying that ' +
-  "patient. When exactly one row in a breakdown would be suppressed, the next-smallest row is " +
-  "also suppressed so the hidden value can't be inferred from the others. Totals still reflect " +
-  "every row, suppressed or not. ⚠️ VERIFY: the threshold (11) follows CMS's public-use-file " +
-  "cell-size suppression convention as a policy baseline, not a Florida statute — confirm with " +
-  "counsel.";
+  "patient. When exactly one row in the sheet would be suppressed, the next-smallest row with a " +
+  "nonzero count is also suppressed so the hidden value can't be inferred from the others. " +
+  "Whenever any row in a sheet is suppressed, that sheet's own totals row is suppressed too — " +
+  "otherwise Total minus the visible rows would reconstruct the hidden value(s) exactly. " +
+  "Accepted residual risk (⚠️ VERIFY with counsel): this suppression is per report and per date " +
+  "range — comparing two overlapping date ranges of the same report, or two different reports " +
+  "covering the same claims, can still let a determined reader difference out a suppressed cell; " +
+  "no cross-report or cross-range differencing guard exists in this slice. ⚠️ VERIFY: the " +
+  "threshold (11) follows CMS's public-use-file cell-size suppression convention as a policy " +
+  "baseline, not a Florida statute — confirm with counsel.";
+
+const DENIAL_RATE_RESIDUAL_RISK_CAVEAT =
+  "This report is one tenant-wide rate for the whole date range, not a row-by-row breakdown, so " +
+  "small-cell suppression (R-8.7) does not apply to it the same way. Accepted residual risk " +
+  "(⚠️ VERIFY with counsel): the denied-claims count is a tenant-wide total, not suppressed even " +
+  "when small, and a narrow enough date range or payer filter could still make it identify a " +
+  "single sensitive-tagged patient's claim.";
 
 export const DATA_CAVEATS: Record<ReportId, string[]> = {
   "denials-by-category": [
@@ -316,6 +401,7 @@ export const DATA_CAVEATS: Record<ReportId, string[]> = {
   ],
   "denial-rate": [
     "Submission-date tracking (C3 837P) is not yet built; falls back to service date when submittedAt is null.",
+    DENIAL_RATE_RESIDUAL_RISK_CAVEAT,
   ],
   "denials-by-deadline-bucket": [
     '"No deadline configured" includes unverified payers and payers with no configured appeal window.',

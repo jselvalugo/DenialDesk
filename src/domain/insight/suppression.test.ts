@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySmallCellSuppression, isSuppressedValue, suppressedLabel } from "./suppression";
+import { applySmallCellSuppression, isSuppressedCell, SUPPRESSED_CELL, suppressedLabel } from "./suppression";
 import { SMALL_CELL_SUPPRESSION_THRESHOLD } from "./suppression-config";
 
 describe("applySmallCellSuppression", () => {
@@ -62,17 +62,41 @@ describe("applySmallCellSuppression", () => {
   it("does not add complementary suppression to a lone suppressed row with no siblings", () => {
     expect(applySmallCellSuppression([{ count: 2, sensitive: true }])).toEqual([true]);
   });
+
+  it("never picks a zero-count row as the complement, even if it is the smallest remaining", () => {
+    // Deadline-bucket-shaped case: one small sensitive row, one empty bucket, one large bucket.
+    // The zero-count row must never be "the complement" — there's nothing to hide in a 0, and
+    // suppressing it would be misleading, not protective.
+    const groups = [
+      { count: 3, sensitive: true },
+      { count: 0, sensitive: false },
+      { count: 40, sensitive: false },
+    ];
+    expect(applySmallCellSuppression(groups)).toEqual([true, false, true]);
+  });
+
+  it("chooses no complement at all when every other row has a zero count", () => {
+    const groups = [
+      { count: 3, sensitive: true },
+      { count: 0, sensitive: false },
+    ];
+    expect(applySmallCellSuppression(groups)).toEqual([true, false]);
+  });
 });
 
-describe("suppressedLabel / isSuppressedValue", () => {
+describe("suppressedLabel / isSuppressedCell", () => {
   it("labels the suppression marker with the configured threshold", () => {
     expect(suppressedLabel()).toBe("Suppressed (<11)");
   });
 
-  it("recognizes the exact marker text and nothing else", () => {
-    expect(isSuppressedValue(suppressedLabel())).toBe(true);
-    expect(isSuppressedValue(11)).toBe(false);
-    expect(isSuppressedValue("Suppressed")).toBe(false);
-    expect(isSuppressedValue(null)).toBe(false);
+  it("recognizes only the typed suppressed-cell marker, never a string comparison", () => {
+    expect(isSuppressedCell(SUPPRESSED_CELL)).toBe(true);
+    expect(isSuppressedCell({ suppressed: true })).toBe(true);
+    // A genuine value that happens to read like the label is never mistaken for the marker.
+    expect(isSuppressedCell(suppressedLabel())).toBe(false);
+    expect(isSuppressedCell(11)).toBe(false);
+    expect(isSuppressedCell("Suppressed")).toBe(false);
+    expect(isSuppressedCell(null)).toBe(false);
+    expect(isSuppressedCell(undefined)).toBe(false);
   });
 });

@@ -13,8 +13,8 @@ import { catalogEntry, isAvailableReportId } from "@/domain/insight/catalog";
 import { parseFilters } from "@/domain/insight/filters";
 import { listPayers, recordReportViewed } from "@/domain/insight/queries";
 import { runReport } from "@/domain/insight/report";
-import { isSuppressedValue } from "@/domain/insight/suppression";
-import type { ColumnType, SheetSpec } from "@/domain/insight/workbook";
+import { isSuppressedCell, suppressedLabel } from "@/domain/insight/suppression";
+import type { CellValue, ColumnType, SheetSpec } from "@/domain/insight/workbook";
 import { formatCents } from "@/lib/format";
 
 export async function generateMetadata({
@@ -26,10 +26,11 @@ export async function generateMetadata({
   return { title: catalogEntry(reportId)?.title ?? "Insight" };
 }
 
-function formatCell(type: ColumnType, value: string | number | null): string {
+function formatCell(type: ColumnType, value: CellValue): string {
+  // Small-cell suppression (R-8.7): the typed marker renders its label regardless of the
+  // column's declared type — never inferred by comparing rendered text to that label.
+  if (isSuppressedCell(value)) return suppressedLabel();
   if (value === null) return "—";
-  // Small-cell suppression (R-8.7): shown verbatim, regardless of the column's declared type.
-  if (isSuppressedValue(value)) return String(value);
   if (type === "currency") return formatCents(Number(value));
   if (type === "percent") return `${(Number(value) * 100).toFixed(2)}%`;
   return String(value);

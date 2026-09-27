@@ -38,34 +38,17 @@ describe("denialsByCategoryReport", () => {
     expect(denialsByCategoryReport([])).toEqual([]);
   });
 
-  it("suppresses a small, sensitive-tagged CARC row and, by complementary suppression, the next-smallest sibling row, while a much larger row stays visible", () => {
-    const sensitiveRows = Array.from({ length: 5 }, () => ({
-      category: "coding" as const,
-      carc: "11",
-      deniedCents: 100,
-      patientSensitive: true,
-    }));
-    const mediumRows = Array.from({ length: 8 }, () => ({
-      category: "coding" as const,
-      carc: "4",
-      deniedCents: 200,
-      patientSensitive: false,
-    }));
-    const bulkRows = Array.from({ length: 1_000 }, () => ({
-      category: "coding" as const,
-      carc: "29",
-      deniedCents: 300,
-      patientSensitive: false,
-    }));
-    const result = denialsByCategoryReport([...sensitiveRows, ...mediumRows, ...bulkRows]);
+  it("marks a CARC row sensitive when any of its underlying claims is for a sensitivity-tagged patient (R-8.7)", () => {
+    // Small-cell suppression itself is decided once per whole sheet in report-sheets.ts (see
+    // report-sheets.test.ts), not per category here — this only checks the `sensitive` flag these
+    // calculations hand off.
+    const result = denialsByCategoryReport([
+      { category: "coding", carc: "11", deniedCents: 100, patientSensitive: true },
+      { category: "coding", carc: "4", deniedCents: 200, patientSensitive: false },
+    ]);
     const coding = result.find((g) => g.category === "coding")!;
-    // "11" (count 5, sensitive) is suppressed outright.
-    expect(coding.carcs.find((c) => c.carc === "11")!.suppressed).toBe(true);
-    // "4" (count 8, not sensitive) is the next-smallest visible row — complementary suppression
-    // hides it too, so a reader can't back out "11" from the category total minus "4" and "29".
-    expect(coding.carcs.find((c) => c.carc === "4")!.suppressed).toBe(true);
-    // "29" (count 1000) is far larger and stays visible.
-    expect(coding.carcs.find((c) => c.carc === "29")!.suppressed).toBe(false);
+    expect(coding.carcs.find((c) => c.carc === "11")!.sensitive).toBe(true);
+    expect(coding.carcs.find((c) => c.carc === "4")!.sensitive).toBe(false);
   });
 });
 
