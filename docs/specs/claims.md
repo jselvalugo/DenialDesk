@@ -103,5 +103,10 @@ submission.
 - PIP (Fla. Stat. § 627.736(5)(c)), workers' comp, and Medicaid filing limits are not in `rules/`
   yet; the UI says "no filing rule configured", never that none exists. (florida-rules-engine + counsel)
 - `fl.timely_filing.initial` cites § 627.6131(2) for HMO claims too; confirm § 641.3155. (counsel)
-- Is timely filing met when the claim is sent or when the payer receives it? Submitted claims
-  without a receipt date keep showing the deadline until C4. (counsel)
+- Is timely filing met when the claim is sent or when the payer receives it? Owner answer
+  (2026-09-26, pending counsel): when **submitted**, evidenced by the clearinghouse acknowledgement.
+  Since 2026-09-27 a submitted claim without a receipt date is compared by its submission date
+  (on time / after the deadline), not counted down to today (review D2). Assumptions for counsel:
+  the date is DenialDesk's own `submitted_at` read as an Eastern calendar date (not yet the
+  clearinghouse acknowledgement, C4), and C3 must overwrite `submitted_at` on every resubmission
+  of a rejected claim so a late resubmission is never judged by the first send. (counsel)

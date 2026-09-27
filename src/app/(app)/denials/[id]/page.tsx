@@ -21,6 +21,7 @@ import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { CARC, CATEGORY_LABELS } from "@/domain/carc";
 import { ACTION_STATUSES, DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
+import { payerContractBasisText } from "@/domain/denials/deadline-basis";
 import { DUE_SOON_DAYS, getDenial, teamMembers } from "@/domain/denials/queries";
 import { openAppealsForDenial } from "@/domain/appeals/queries";
 import { audit } from "@/lib/audit";
@@ -335,7 +336,12 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                 )}
                 <p className="text-label text-muted">
                   {denial.appealDeadlineBasis === "payer_contract"
-                    ? `From the payer contract: ${payer.appealWindowDays} days after the notice date${payer.appealWindowSource ? ` (${payer.appealWindowSource})` : ""}.`
+                    ? payerContractBasisText(
+                        denial.noticeDate,
+                        denial.appealDeadline,
+                        payer.appealWindowDays,
+                        payer.appealWindowSource,
+                      )
                     : basisRules
                         .map((rule) => `${rule.title}: ${rule.value} days (${rule.citation}).`)
                         .join(" ")}

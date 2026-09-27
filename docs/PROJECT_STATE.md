@@ -218,9 +218,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 6. Custom field values on records, settings S2 (MVP): ADR 0007 and threat model accepted; PR 1
    (encrypted storage, value history, role-gated reveal) merged as #53. Next: PR 2 patient form,
    PR 3 claims/denials, PR 4 payers.
-7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
-   payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
-   timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.
+7. ~~Claim page timely-filing copy (review D2)~~ done 2026-09-27: sent claims are judged by
+   submission date; payer-contract appeal text on the denial and appeal pages no longer contradicts a
+   stored deadline or shows "null days" (F7).
 8. Re-seed pre-production data after PR #59 (P1 rules): `denials.appeal_deadline` rows written
    before it hold the old rolled (later) date and show no "pending counsel" marker.
 9. DenialDesk University U2–U3 (`specs/denialdesk-university.md`): knowledge checks; per-user

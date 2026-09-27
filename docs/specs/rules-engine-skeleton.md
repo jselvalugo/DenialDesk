@@ -58,8 +58,9 @@ Requirement IDs: R-15.6, R-3.1.1, R-3.1.3, R-3.1.5, R-3.1.6, R-3.6.2, R-4.2.1, �
 
 ### Owner answers (2026-09-26) — ⚠️ pending counsel; encoded only as stated
 - Timely filing counts from the **submission date**, evidenced by the clearinghouse acknowledgement.
-  ⚠️ Current claim detail copy says the deadline is "met once the payer confirms receipt"
-  (`src/app/(app)/claims/[id]/page.tsx`); not changed here (review D2), listed for a builder PR.
+  Claim detail (2026-09-27, review D2): a sent claim awaiting receipt is judged by its submission
+  date (`submittedFilingStatus` in `src/domain/claims/status.ts`), never today, with a "Pending
+  counsel verification" badge and a prompt to keep the clearinghouse acknowledgement.
 - Late-payment interest accrues from the **first calendar day after** the prompt-pay deadline
   (superseded 2026-09-27: from the day after the UNROLLED due date until counsel confirms roll-forward).
 - Medicare Advantage is **not** under Florida prompt pay; timing follows the plan contract.

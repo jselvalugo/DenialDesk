@@ -15,6 +15,7 @@ import { MaskedMemberId } from "@/components/patients/MaskedMemberId";
 import { withTenant } from "@/db/tenant";
 import { CARC, CATEGORY_LABELS } from "@/domain/carc";
 import { DUE_SOON_DAYS, getAppeal } from "@/domain/appeals/queries";
+import { payerContractBasisText } from "@/domain/denials/deadline-basis";
 import {
   APPEAL_DECISION_OUTCOME_LABELS,
   APPEAL_LEVEL_LABELS,
@@ -232,7 +233,12 @@ export default async function AppealPage({ params }: { params: Promise<{ id: str
                 )}
                 <p className="text-label text-muted">
                   {appeal.deadlineBasis === "payer_contract"
-                    ? `From the payer contract: ${payer.appealWindowDays} days after the notice date${payer.appealWindowSource ? ` (${payer.appealWindowSource})` : ""}.`
+                    ? payerContractBasisText(
+                        denial.noticeDate,
+                        appeal.deadline,
+                        payer.appealWindowDays,
+                        payer.appealWindowSource,
+                      )
                     : appeal.deadlineCitation}
                 </p>
               </div>

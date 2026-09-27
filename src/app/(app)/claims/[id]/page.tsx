@@ -17,7 +17,13 @@ import { diffSnapshots } from "@/domain/claims/correction";
 import { getClaim } from "@/domain/claims/queries";
 import { claimPayments } from "@/domain/remittances/queries";
 import { REMITTANCE_STATUSES } from "@/domain/remittances/status";
-import { CLAIM_STATUSES, FILING_WARNING_DAYS, filingStatus, isUnsubmitted } from "@/domain/claims/status";
+import {
+  CLAIM_STATUSES,
+  FILING_WARNING_DAYS,
+  filingStatus,
+  isUnsubmitted,
+  submittedFilingStatus,
+} from "@/domain/claims/status";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { audit } from "@/lib/audit";
 import { formatDate } from "@/lib/format";
@@ -75,6 +81,11 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   // Sent but not yet confirmed received (999/277CA capture is phase C4): the window still matters.
   const awaitingReceipt = claim.status === "submitted" && !claim.payerReceivedDate;
   const showDeadline = unsubmitted || awaitingReceipt;
+  // A sent claim is judged by its submission date, not today (review D2; owner answer pending counsel).
+  const sentFiling =
+    awaitingReceipt && claim.submittedAt
+      ? submittedFilingStatus(payer.regime, claim.serviceDate, claim.submittedAt)
+      : null;
   const canCorrect = canCorrectClaims(auth.role) && unsubmitted;
   const snapshots = new Map(detail.history.map((v) => [v.version, v.snapshot]));
 
@@ -231,11 +242,35 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                   : "Accepted by the payer."}{" "}
                 Timely filing no longer applies.
               </p>
+            ) : sentFiling ? (
+              <div className="flex flex-col gap-3">
+                <p className="text-body text-text">
+                  Submitted {formatDate(sentFiling.submittedOn)}; filing deadline{" "}
+                  {formatDate(sentFiling.deadline.date)}, measured by the submission date.
+                </p>
+                {sentFiling.onTime ? (
+                  <Badge tone="success">Submitted by the deadline</Badge>
+                ) : sentFiling.withinPendingExtension ? (
+                  <p className="text-body text-warning-fg">
+                    Submitted after {formatDate(sentFiling.deadline.date)} but by{" "}
+                    {formatDate(sentFiling.deadline.rolledDate ?? sentFiling.deadline.date)}, the
+                    weekend/holiday extension that counsel has not yet confirmed.
+                  </p>
+                ) : (
+                  <Badge tone="danger">Submitted after the deadline</Badge>
+                )}
+                <p className="text-label text-muted">
+                  From the date of service ({sentFiling.deadline.citation}). Keep the clearinghouse
+                  acknowledgement as evidence of the submission date.
+                </p>
+                <Badge tone="warning">Pending counsel verification</Badge>
+              </div>
             ) : filing.deadline && filing.daysRemaining !== null ? (
               <div className="flex flex-col gap-3">
                 {awaitingReceipt && (
                   <p className="text-body text-text">
-                    Sent; the filing window is met once the payer confirms receipt.
+                    Sent, but no submission date is recorded, so the countdown below runs to today. Confirm
+                    the submission date from the clearinghouse acknowledgement.
                   </p>
                 )}
                 <DeadlineIndicator
@@ -249,7 +284,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                     yet confirmed, so file by the date above)
                   </p>
                 )}
-                {filing.state === "past_deadline" && (
+                {filing.state === "past_deadline" && !awaitingReceipt && (
                   <p className="text-body text-danger-fg">
                     The filing window has closed. The payer is likely to deny this claim as untimely unless an
                     exception applies.

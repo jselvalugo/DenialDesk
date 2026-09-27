@@ -1,3 +1,4 @@
+import { todayIn } from "@rules/calendar";
 import { daysUntil, timelyFilingDeadline, type Deadline } from "@rules/deadlines";
 import type { Regime } from "@rules/types";
 import type { Tone } from "@/components/ui/Badge";
@@ -50,4 +51,38 @@ export function filingStatus(regime: Regime | null, serviceDate: string, today: 
   const state: FilingState =
     daysRemaining < 0 ? "past_deadline" : daysRemaining <= FILING_WARNING_DAYS ? "due_soon" : "open";
   return { state, deadline, daysRemaining };
+}
+
+export interface SubmittedFilingStatus {
+  deadline: Deadline;
+  /** The Eastern calendar date the claim was submitted. */
+  submittedOn: string;
+  /** Submitted on or before the governing (unrolled) deadline; the deadline day itself counts. */
+  onTime: boolean;
+  /** Late by the governing date but on or before the rolled date that is pending counsel (OA-034). */
+  withinPendingExtension: boolean;
+}
+
+/**
+ * Timely filing of a claim already sent but not yet confirmed received (review D2, R-3.1.5).
+ * Measured by the submission date, never today: a claim sent on time must not turn "past deadline"
+ * while it waits for the payer's acknowledgement. The owner's answer (2026-09-26, pending counsel)
+ * is that a claim is timely when submitted by the deadline, evidenced by the clearinghouse
+ * acknowledgement. The submission instant is read as an Eastern calendar date, like `todayIn()`
+ * (per-location time zones are an open item in specs/rules-engine-skeleton.md).
+ * Null when no deadline is computed (unverified payer or no filing rule for the regime).
+ */
+export function submittedFilingStatus(
+  regime: Regime | null,
+  serviceDate: string,
+  submittedAt: Date,
+): SubmittedFilingStatus | null {
+  if (regime === null) return null;
+  const deadline = timelyFilingDeadline(regime, serviceDate);
+  if (!deadline) return null;
+  const submittedOn = todayIn("America/New_York", submittedAt);
+  const onTime = daysUntil(deadline.date, submittedOn) >= 0;
+  const withinPendingExtension =
+    !onTime && deadline.rolledDate !== null && daysUntil(deadline.rolledDate, submittedOn) >= 0;
+  return { deadline, submittedOn, onTime, withinPendingExtension };
 }
