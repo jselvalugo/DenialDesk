@@ -1,4 +1,4 @@
--- Generated from drizzle/0036_university_access.sql by `pnpm netlify:migrations`. Do not edit.
+-- Generated from drizzle/0037_university_access.sql by `pnpm netlify:migrations`. Do not edit.
 CREATE TABLE "university_access" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,

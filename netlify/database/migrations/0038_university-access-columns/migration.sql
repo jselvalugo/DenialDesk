@@ -1,12 +1,12 @@
--- Generated from drizzle/0037_university_access_columns.sql by `pnpm netlify:migrations`. Do not edit.
+-- Generated from drizzle/0038_university_access_columns.sql by `pnpm netlify:migrations`. Do not edit.
 -- Practice sessions may read the state of their access row but not the operator's internal
 -- fields (note: order/invoice reference; revoke reason; who granted/revoked). Replaces the
--- table-level SELECT from 0036 with a column list (security review, 2026-09-27).
+-- table-level SELECT from 0037 with a column list (security review, 2026-09-27).
 REVOKE SELECT ON "university_access" FROM denialdesk_app;--> statement-breakpoint
 GRANT SELECT ("id", "tenant_id", "requested_at", "requested_by", "granted_at", "revoked_at", "created_at", "updated_at")
   ON "university_access" TO denialdesk_app;--> statement-breakpoint
 
--- purge_demo_practices() (0034) predates university_access (0036), whose foreign keys to tenants
+-- purge_demo_practices() (0034) predates university_access (0037), whose foreign keys to tenants
 -- and users would make a purge fail for a demo practice with a row. Same function, one more DELETE.
 CREATE OR REPLACE FUNCTION purge_demo_practices() RETURNS integer
   LANGUAGE plpgsql

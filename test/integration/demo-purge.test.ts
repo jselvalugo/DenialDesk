@@ -74,7 +74,7 @@ describe("purge_demo_practices", () => {
       userId: demo.userIds[0]!,
       lessonId: "getting-started/finding-your-way",
     });
-    // Nor must a University access row (0036); 0037 adds it to the purge.
+    // Nor must a University access row (0037); 0038 adds it to the purge.
     await systemDb()
       .insert(universityAccess)
       .values({ tenantId: demo.tenantId, requestedAt: new Date(), requestedBy: demo.userIds[0]! });

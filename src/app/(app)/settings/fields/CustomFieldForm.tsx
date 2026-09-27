@@ -35,6 +35,7 @@ export interface CustomFieldValues {
   required: boolean;
   helpText: string | null;
   sensitivity: string | null;
+  showInList: boolean;
   updatedAt: string;
 }
 
@@ -51,6 +52,7 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
   const [label, setLabel] = useState(field?.label ?? "");
   const [key, setKey] = useState(field?.key ?? "");
   const [fieldType, setFieldType] = useState<CustomFieldType>(field?.fieldType ?? "text");
+  const [sensitivity, setSensitivity] = useState<string>(field?.sensitivity ?? "");
   const errorFor = (name: string) => (state.field === name ? state.error : undefined);
 
   return (
@@ -160,7 +162,8 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
         <select
           id="field-sensitivity"
           name="sensitivity"
-          defaultValue={field?.sensitivity ?? ""}
+          value={sensitivity}
+          onChange={(event) => setSensitivity(event.target.value)}
           aria-describedby="field-sensitivity-hint"
           aria-invalid={errorFor("sensitivity") ? true : undefined}
           className={selectClass}
@@ -183,6 +186,17 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
         <input type="checkbox" name="required" defaultChecked={field?.required ?? false} className="size-4" />
         {t("form.requiredLabel")}
       </label>
+      <label className="flex items-center gap-2 text-body text-text">
+        <input
+          type="checkbox"
+          name="showInList"
+          defaultChecked={field?.showInList ?? false}
+          disabled={Boolean(sensitivity)}
+          className="size-4"
+        />
+        {t("form.showInListLabel")}
+      </label>
+      {Boolean(sensitivity) && <p className="text-label text-muted">{t("form.showInListDisabledHint")}</p>}
       <div className="flex items-center gap-2">
         <SubmitButton variant="primary" pendingLabel={editing ? tc("action.saving") : t("form.adding")}>
           {editing ? t("form.saveField") : t("fields.addField")}

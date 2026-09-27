@@ -82,13 +82,13 @@ lesson completions are kept per practice so the practice has a training record (
       menu links open the University; a lesson can be completed and the course list reflects it).
 
 ### Access (owner request 2026-09-27: prompt on every visit; courses locked until purchased)
-- [x] A practice's University access is a platform record, `university_access` (migration 0036,
+- [x] A practice's University access is a platform record, `university_access` (migration 0037,
       one row per practice; RLS + FORCE with the shared tenant policy; the app role has SELECT and
       INSERT/UPDATE on the `requested_*` columns only, so a practice session can never grant
       itself access; grant/revoke run as the owner role under the same policy through
       `withTenantAsPlatform` in `src/domain/platform/university-access.ts`, which practice code
       never imports). Access = granted and not revoked. Practice sessions read only the state
-      columns (migration 0037 narrows SELECT; the operator's note, revoke reason, and grantor are
+      columns (migration 0038 narrows SELECT; the operator's note, revoke reason, and grantor are
       hidden). Tests in `test/integration/university-access.test.ts`, including an unfiltered
       cross-practice read that the policy alone must hide.
 - [x] While the practice has no access, every visit to `/university` opens a modal dialog "Get
@@ -97,8 +97,7 @@ lesson completions are kept per practice so the practice has a training record (
       from the catalog by `programSummary()`, Wiki article count), "Access starts at $299.00"
       (`UNIVERSITY_ACCESS_FROM_CENTS`, owner-set business content formatted by the platform money
       rule, never a legal value), that the courses unlock for the whole practice once access is
-      confirmed, and the courses disclaimer. Close, Escape, backdrop, and "Continue to the
-      courses" dismiss it; nothing is remembered, so it opens again next visit. Once access is
+      confirmed, and the courses disclaimer. Close, Escape, backdrop, and "Browse the catalog" dismiss it; nothing is remembered, so it opens again next visit. Once access is
       granted the prompt is not rendered.
 - [x] "Request access" records the request on the practice's row (latest request wins) and audits
       `university.access_requested` (entity `university_access`, the row id, metadata
@@ -121,7 +120,7 @@ lesson completions are kept per practice so the practice has a training record (
       panel shows only the latest outcome.
 - [x] Copy in the `university` (`access.*`) and `operator` (`university.*`) namespaces in all three
       languages; the modal is `aria-labelledby`/`aria-describedby` (the body paragraph), focus is
-      contained by the native dialog and moves to "Continue" after a request.
+      contained by the native dialog and moves to "Browse the catalog" after a request.
 - [x] E2E: the e2e practice has access (seeded in `global-setup.ts`; no prompt, courses open); the
       manager practice is locked (prompt with price and length, three dismiss paths, reload
       re-opens, locked marks, course/lesson redirects, Wiki open, request recorded and remembered);
@@ -150,7 +149,7 @@ lesson completions are kept per practice so the practice has a training record (
   validates the slugs against the catalog, inserts `ON CONFLICT DO NOTHING`, audits when a row
   was inserted, revalidates the lesson, course, and catalog pages.
 - Audit action `university.lesson_completed`; entity type `university_lesson`.
-- New table `university_access` (migration 0036): `tenant_id` (unique), `requested_at/by`,
+- New table `university_access` (migration 0037): `tenant_id` (unique), `requested_at/by`,
   `granted_at/by`, `note`, `revoked_at/by`, `revoke_reason`, timestamps; CHECKs keep each pair
   together and revocation after a grant. RLS + FORCE with the tenant policy; app role: SELECT,
   INSERT (request columns), UPDATE (request columns, `updated_at`). Internal data, no PHI.

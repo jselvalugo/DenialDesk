@@ -39,6 +39,7 @@ export default async function EditCustomFieldPage({ params }: { params: Promise<
           required: field.required,
           helpText: field.helpText,
           sensitivity: field.sensitivity,
+          showInList: field.showInList,
           updatedAt: field.updatedAt.toISOString(),
         }}
       />

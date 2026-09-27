@@ -1,6 +1,7 @@
 import { appeals } from "./appeals";
 import { auth } from "./auth";
 import { claims } from "./claims";
+import { customFields } from "./customFields";
 import { common } from "./common";
 import { denials } from "./denials";
 import { insight } from "./insight";
@@ -23,6 +24,7 @@ export const es: Messages = {
   denials,
   appeals,
   claims,
+  customFields,
   remittances,
   promptPay,
   patients,
