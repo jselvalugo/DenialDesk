@@ -1,7 +1,14 @@
+import { englishRevenue, type RevenueT } from "./i18n";
+
 /**
  * Financial statements and dashboard figures (docs/specs/revenue-cycle-accounting.md, B5). Pure
  * builders over totals already routed to GL accounts; integer cents throughout.
  */
+
+/** The name shown for a GL account number the practice's chart of accounts no longer lists. */
+export function unknownAccountName(t: RevenueT = englishRevenue): string {
+  return t("statements.notInChart");
+}
 
 export interface MonthKey {
   periodYear: number;
@@ -31,7 +38,12 @@ export interface IncomeStatement {
   netCents: number[];
 }
 
-function rows(totals: AccountTotal[], months: MonthKey[], names: Map<string, string>): StatementRow[] {
+function rows(
+  totals: AccountTotal[],
+  months: MonthKey[],
+  names: Map<string, string>,
+  t: RevenueT = englishRevenue,
+): StatementRow[] {
   const index = new Map(months.map((m, i) => [monthKey(m), i]));
   const byAccount = new Map<string, number[]>();
   for (const t of totals) {
@@ -45,7 +57,7 @@ function rows(totals: AccountTotal[], months: MonthKey[], names: Map<string, str
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([account, byMonth]) => ({
       account,
-      name: names.get(account) ?? "Not in the chart of accounts",
+      name: names.get(account) ?? t("statements.notInChart"),
       byMonth,
       totalCents: byMonth.reduce((a, b) => a + b, 0),
     }));
@@ -60,9 +72,10 @@ export function incomeStatement(
   charges: AccountTotal[],
   adjustments: AccountTotal[],
   names: Map<string, string>,
+  translate: RevenueT = englishRevenue,
 ): IncomeStatement {
-  const revenue = rows(charges, months, names);
-  const deductions = rows(adjustments, months, names);
+  const revenue = rows(charges, months, names, translate);
+  const deductions = rows(adjustments, months, names, translate);
   const column = (list: StatementRow[]) => months.map((_, i) => list.reduce((t, r) => t + r.byMonth[i]!, 0));
   const grossCents = column(revenue);
   const deductionCents = column(deductions);

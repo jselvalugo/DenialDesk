@@ -12,35 +12,35 @@ import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { statementsReport } from "@/domain/revenue-cycle/reporting";
 import type { StatementRow } from "@/domain/revenue-cycle/statements";
-import { formatDate } from "@/lib/format";
+import { INTL_TAGS, type Locale } from "@/i18n/config";
+import { getFormat, getT } from "@/i18n/server";
 
-export const metadata: Metadata = { title: "Statements" };
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const short = (m: { periodYear: number; periodMonth: number }) =>
-  `${MONTHS[m.periodMonth - 1]} ${String(m.periodYear).slice(2)}`;
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("revenue");
+  return { title: t("statements.title") };
+}
 
 export default async function StatementsPage() {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
+  const t = await getT("revenue");
+  const f = await getFormat();
   // The report records the view (R-7.5.1).
-  const report = await withTenant(auth, (tx) => statementsReport(tx, auth));
+  const report = await withTenant(auth, (tx) => statementsReport(tx, auth, t));
 
   if (!report) {
     return (
       <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-        <PageHeader title="Statements" description="Revenue, receivables, and cash by month." />
+        <PageHeader title={t("statements.title")} description={t("statements.description")} />
         <Panel>
-          <EmptyState
-            title="No activity files yet"
-            description="Import a month-end activity file to build the statements."
-          />
+          <EmptyState title={t("statements.emptyTitle")} description={t("statements.emptyDescription")} />
         </Panel>
       </div>
     );
   }
 
   const { income } = report;
+  const short = (m: { periodYear: number; periodMonth: number }) => periodLabelShort(m, t.locale);
   const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
   const accountRow = (row: StatementRow, sign: 1 | -1) => (
     <Tr key={`${sign}-${row.account}`}>
@@ -73,48 +73,45 @@ export default async function StatementsPage() {
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="Statements"
-        description="Revenue as routed by the practice's accounting rules, open receivables by account, and cash by month. From the month-end activity files (the posted voucher's file where one exists)."
-      />
+      <PageHeader title={t("statements.title")} description={t("statements.pageDescription")} />
 
       <Panel
-        title="Income statement"
-        description="Charges by revenue account less adjustments and write-offs by adjustment account. ⚠️ Management view: confirm the presentation with the practice's accountant."
+        title={t("statements.incomeStatementTitle")}
+        description={t("statements.incomeStatementDescription")}
         flush
       >
         <div className="overflow-x-auto">
-          <Table caption="Income statement by month">
+          <Table caption={t("statements.incomeStatementTableCaption")}>
             <thead>
               <tr>
-                <Th>Account</Th>
+                <Th>{t("rules.col.account")}</Th>
                 {income.months.map((m) => (
                   <Th key={`${m.periodYear}-${m.periodMonth}`} numeric>
                     {short(m)}
                   </Th>
                 ))}
-                <Th numeric>Total</Th>
+                <Th numeric>{t("arAging.col.total")}</Th>
               </tr>
             </thead>
             <tbody>
               <Tr>
                 <Td className="font-semibold" colSpan={income.months.length + 2}>
-                  Revenue
+                  {t("statements.revenue")}
                 </Td>
               </Tr>
               {income.revenue.map((row) => accountRow(row, 1))}
-              {totalRow("Total revenue", income.grossCents)}
+              {totalRow(t("statements.totalRevenue"), income.grossCents)}
               <Tr>
                 <Td className="font-semibold" colSpan={income.months.length + 2}>
-                  Less adjustments and write-offs
+                  {t("statements.lessAdjustments")}
                 </Td>
               </Tr>
               {income.deductions.map((row) => accountRow(row, -1))}
               {totalRow(
-                "Total adjustments",
+                t("statements.totalAdjustments"),
                 income.deductionCents.map((c) => -c),
               )}
-              {totalRow("Net revenue", income.netCents, true)}
+              {totalRow(t("statements.netRevenue"), income.netCents, true)}
             </tbody>
           </Table>
         </div>
@@ -122,17 +119,17 @@ export default async function StatementsPage() {
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel
-          title="Receivables"
-          description={`Open balances at ${formatDate(report.asOf)} by receivable account. Credit balances are money that may be owed back.`}
+          title={t("statements.receivablesTitle")}
+          description={t("statements.receivablesDescription", { date: f.date(report.asOf) })}
           flush
         >
-          <Table caption="Receivables by account">
+          <Table caption={t("statements.receivablesTableCaption")}>
             <thead>
               <tr>
-                <Th>Account</Th>
-                <Th numeric>Open</Th>
-                <Th numeric>Credit balances</Th>
-                <Th numeric>Net</Th>
+                <Th>{t("rules.col.account")}</Th>
+                <Th numeric>{t("statements.open")}</Th>
+                <Th numeric>{t("arAging.creditBalances")}</Th>
+                <Th numeric>{t("statements.net")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -153,7 +150,7 @@ export default async function StatementsPage() {
                 </Tr>
               ))}
               <Tr>
-                <Td className="font-semibold">Total</Td>
+                <Td className="font-semibold">{t("statements.total")}</Td>
                 <Td numeric className="font-semibold">
                   <Money cents={sum(report.receivables.map((r) => r.openCents))} />
                 </Td>
@@ -167,22 +164,18 @@ export default async function StatementsPage() {
             </tbody>
           </Table>
           <p className="border-t border-border px-4 py-2.5 text-label text-muted">
-            No allowance for doubtful accounts is estimated; the practice sets its own policy.
+            {t("statements.noAllowance")}
           </p>
         </Panel>
 
-        <Panel
-          title="Cash"
-          description="Payments posted, bank deposits, and undeposited payments by month"
-          flush
-        >
-          <Table caption="Cash by month">
+        <Panel title={t("statements.cashTitle")} description={t("statements.cashDescription")} flush>
+          <Table caption={t("statements.cashTableCaption")}>
             <thead>
               <tr>
-                <Th>Month</Th>
-                <Th numeric>Payments posted</Th>
-                <Th numeric>Deposits</Th>
-                <Th numeric>Undeposited to date</Th>
+                <Th>{t("arAging.col.month")}</Th>
+                <Th numeric>{t("arAging.col.paymentsPosted")}</Th>
+                <Th numeric>{t("arAging.col.deposits")}</Th>
+                <Th numeric>{t("statements.undepositedToDate")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -206,4 +199,16 @@ export default async function StatementsPage() {
       </div>
     </div>
   );
+}
+
+const shortFormats = new Map<Locale, Intl.DateTimeFormat>();
+
+/** "Jan 26" for a statement column header, in the given language. */
+function periodLabelShort(m: { periodYear: number; periodMonth: number }, locale: Locale): string {
+  let format = shortFormats.get(locale);
+  if (!format) {
+    format = new Intl.DateTimeFormat(INTL_TAGS[locale], { month: "short", year: "2-digit", timeZone: "UTC" });
+    shortFormats.set(locale, format);
+  }
+  return format.format(new Date(Date.UTC(m.periodYear, m.periodMonth - 1, 1)));
 }

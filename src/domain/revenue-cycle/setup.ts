@@ -8,6 +8,7 @@ import { ensureCatalogPayers } from "@/domain/payers/catalog";
 import { CATALOG_VERSION } from "@/domain/payers/florida-catalog";
 import { DEFAULT_GL_ACCOUNTS, DEFAULT_PAYER_CLASSES, DEFAULTS_SOURCE, DEFAULT_RULES } from "./defaults";
 import { EngineConfigError, ruleMatchSchema, type EngineConfig } from "./engine";
+import { englishRevenue, type RevenueT } from "./i18n";
 
 /**
  * Seeds DenialDesk's starter ledger configuration for the current tenant and audits it. Does
@@ -123,31 +124,34 @@ export async function seedRevenueCycleDefaults(
 export type LoadDefaultsResult = { ok: true } | { ok: false; error: string };
 
 /** The "Load the default rule set" action: administrators only, practices without rules only. */
-export async function loadDefaultRuleSet(auth: {
-  tenantId: string;
-  userId: string;
-  role: Role;
-}): Promise<LoadDefaultsResult> {
+export async function loadDefaultRuleSet(
+  auth: {
+    tenantId: string;
+    userId: string;
+    role: Role;
+  },
+  t: RevenueT = englishRevenue,
+): Promise<LoadDefaultsResult> {
   if (!canConfigureRevenueCycle(auth.role)) {
-    return { ok: false, error: "Only administrators can set up accounting rules." };
+    return { ok: false, error: t("rules.error.onlyAdmin") };
   }
   const created = await withTenant(auth, (tx) => seedRevenueCycleDefaults(tx, auth.tenantId, auth.userId));
-  return created ? { ok: true } : { ok: false, error: "This practice already has accounting rules." };
+  return created ? { ok: true } : { ok: false, error: t("rules.error.alreadyHasRules") };
 }
 
 /** Reads and validates the tenant's configuration for the rules engine. */
-export async function loadEngineConfig(tx: TenantTx): Promise<EngineConfig> {
+export async function loadEngineConfig(tx: TenantTx, t: RevenueT = englishRevenue): Promise<EngineConfig> {
   const [rules, classes, accounts] = await Promise.all([
     tx.select().from(businessRules).orderBy(asc(businessRules.priority)),
     tx.select({ code: payerClasses.code, arGl: payerClasses.arGl }).from(payerClasses),
     tx.select().from(glAccounts).where(eq(glAccounts.kind, "ar")),
   ]);
   const defaultAr = accounts.find((a) => a.isDefaultAr);
-  if (!defaultAr) throw new EngineConfigError("Set a default AR account before processing claims.");
+  if (!defaultAr) throw new EngineConfigError("rule.error.noDefaultAr", undefined, t);
   return {
     rules: rules.map((r) => {
       const match = ruleMatchSchema.safeParse(r.match);
-      if (!match.success) throw new EngineConfigError(`Rule ${r.code} has invalid conditions.`);
+      if (!match.success) throw new EngineConfigError("rule.error.invalidConditions", { code: r.code }, t);
       return { ...r, match: match.data };
     }),
     payerClasses: classes,

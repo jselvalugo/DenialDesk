@@ -22,11 +22,15 @@ import {
 } from "@/domain/revenue-cycle/aging";
 import { periodLabel } from "@/domain/revenue-cycle/imports";
 import { receivablesReport } from "@/domain/revenue-cycle/receivables";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { cn } from "@/lib/cn";
-import { formatCents, formatDate } from "@/lib/format";
+import { formatCents } from "@/lib/format";
 
-export const metadata: Metadata = { title: "A/R aging" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("revenue");
+  return { title: t("arAging.title") };
+}
 
 const query = z.object({
   month: z
@@ -45,10 +49,13 @@ export default async function AgingPage({
 }) {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
+  const t = await getT("revenue");
+  const tc = await getT("common");
+  const f = await getFormat();
   const { month } = query.parse(await searchParams);
   const chosen = month ? { year: Number(month.slice(0, 4)), month: Number(month.slice(5)) } : undefined;
   const report = await withTenant(auth, async (tx) => {
-    const result = await receivablesReport(tx, chosen);
+    const result = await receivablesReport(tx, chosen, t);
     // Totals only, but built from PHI lines: record the view (R-7.5.1).
     if (result) {
       await audit(tx, {
@@ -66,22 +73,19 @@ export default async function AgingPage({
   if (!report) {
     return (
       <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-        <PageHeader title="A/R aging" description="Open receivables by financial class and age." />
+        <PageHeader title={t("arAging.title")} description={t("arAging.description")} />
         <Panel>
-          <EmptyState
-            title="No activity files yet"
-            description="Import a month-end activity file on the Monthly files page to see receivables here."
-          />
+          <EmptyState title={t("arAging.emptyTitle")} description={t("arAging.emptyDescription")} />
         </Panel>
       </div>
     );
   }
 
   const { aging, selected } = report;
-  const label = periodLabel(selected.periodYear, selected.periodMonth);
+  const label = periodLabel(selected.periodYear, selected.periodMonth, t.locale);
   const over90 = over90Cents(aging.totals.buckets);
   const over90Bps = over90ShareBps(over90, aging.totals.totalCents);
-  const credits = aging.credits.reduce((t, c) => t + c.totalCents, 0);
+  const credits = aging.credits.reduce((total, c) => total + c.totalCents, 0);
   // The tile is for "this month" (the header says "at the end of {selected month}"), so it must
   // read the reconciliation row for the selected period, not always the most recent one (F6).
   const latestRecon = report.reconciliation.find(
@@ -90,12 +94,9 @@ export default async function AgingPage({
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="A/R aging"
-        description={`Open receivables at the end of ${label}, by financial class and days since service. From the month's activity file; totals only.`}
-      />
+      <PageHeader title={t("arAging.title")} description={t("arAging.pageDescription", { month: label })} />
 
-      <nav aria-label="Month" className="flex flex-wrap gap-2 text-label">
+      <nav aria-label={t("arAging.monthNav")} className="flex flex-wrap gap-2 text-label">
         {report.periods.map((p) => {
           const current = p.periodYear === selected.periodYear && p.periodMonth === selected.periodMonth;
           return (
@@ -110,37 +111,47 @@ export default async function AgingPage({
                   : "border-border-strong text-link hover:bg-surface-muted",
               )}
             >
-              {periodLabel(p.periodYear, p.periodMonth)}
+              {periodLabel(p.periodYear, p.periodMonth, t.locale)}
             </Link>
           );
         })}
       </nav>
 
-      <section aria-label="Receivables summary" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <section aria-label={t("arAging.summary")} className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile
-          label="Open A/R"
+          label={t("arAging.openAr")}
           value={formatCents(aging.totals.totalCents)}
-          detail={`As of ${formatDate(report.asOf)}`}
+          detail={t("arAging.asOf", { date: f.date(report.asOf) })}
         />
         <StatTile
-          label="Over 90 days"
+          label={t("arAging.over90")}
           value={formatCents(over90)}
-          detail={over90Bps === null ? "No open A/R" : `${(over90Bps / 100).toFixed(1)}% of open A/R`}
+          detail={
+            over90Bps === null
+              ? t("arAging.noOpenAr")
+              : t("arAging.shareOfOpenAr", { percent: (over90Bps / 100).toFixed(1) })
+          }
           emphasis={over90Bps !== null && over90Bps > OVER_90_WARNING_SHARE_BPS ? "warning" : undefined}
         />
         <StatTile
-          label="Credit balances"
+          label={t("arAging.creditBalances")}
           value={formatCents(credits)}
-          detail={`${aging.credits.reduce((t, c) => t + c.lines, 0)} lines; refunds may be due`}
+          detail={t("arAging.creditBalancesDetail", {
+            count: aging.credits.reduce((total, c) => total + c.lines, 0),
+          })}
           emphasis={credits < 0 ? "warning" : undefined}
         />
         <StatTile
-          label={latestRecon && latestRecon.clearingCents < 0 ? "Unposted deposits" : "Undeposited payments"}
+          label={
+            latestRecon && latestRecon.clearingCents < 0
+              ? t("arAging.unpostedDeposits")
+              : t("arAging.undepositedPayments")
+          }
           value={latestRecon ? formatCents(Math.abs(latestRecon.clearingCents)) : "—"}
           detail={
             latestRecon && latestRecon.clearingCents < 0
-              ? "Deposited but not posted in the practice-management system"
-              : "Payments posted minus deposits"
+              ? t("arAging.depositedNotPosted")
+              : t("arAging.postedMinusDeposited")
           }
           emphasis={latestRecon?.alert || (latestRecon?.clearingCents ?? 0) < 0 ? "warning" : undefined}
         />
@@ -148,33 +159,37 @@ export default async function AgingPage({
 
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
         <Panel
-          title="Aging by financial class"
-          description={`Open balances at ${formatDate(report.asOf)}`}
+          title={t("arAging.byClassTitle")}
+          description={t("arAging.openBalancesAt", { date: f.date(report.asOf) })}
           flush
         >
           {aging.rows.length === 0 ? (
             <EmptyState
-              title="Nothing open"
-              description="Every line in this month's file has a zero or credit balance."
+              title={t("arAging.nothingOpenTitle")}
+              description={t("arAging.nothingOpenDescription")}
             />
           ) : (
-            <Table caption="Open receivables by financial class and age">
+            <Table caption={t("arAging.byClassTableCaption")}>
               <thead>
                 <tr>
-                  <Th>Class</Th>
+                  <Th>{t("arAging.col.class")}</Th>
                   {AGING_BUCKETS.map((b) => (
                     <Th key={b.key} numeric>
-                      {b.label}
+                      {t(b.labelKey)}
                     </Th>
                   ))}
-                  <Th numeric>Total</Th>
+                  <Th numeric>{t("arAging.col.total")}</Th>
                 </tr>
               </thead>
               <tbody>
                 {[...aging.rows, aging.totals].map((row) => (
                   <Tr key={row.payerClass}>
                     <Td className={row === aging.totals ? "font-semibold" : undefined}>
-                      {row === aging.totals ? row.payerClass : <Code>{row.payerClass || "(blank)"}</Code>}
+                      {row === aging.totals ? (
+                        row.payerClass
+                      ) : (
+                        <Code>{row.payerClass || t("arAging.blank")}</Code>
+                      )}
                     </Td>
                     {AGING_BUCKETS.map((b) => (
                       <Td key={b.key} numeric>
@@ -192,12 +207,12 @@ export default async function AgingPage({
         </Panel>
 
         <div className="flex flex-col gap-6">
-          <Panel title="Open A/R by age">
+          <Panel title={t("arAging.byAgeTitle")}>
             <BarList
-              label="Open receivables by age"
+              label={t("arAging.byAgeBarListLabel")}
               rows={AGING_BUCKETS.map((b) => ({
                 key: b.key,
-                label: b.label,
+                label: t(b.labelKey),
                 value: aging.totals.buckets[b.key],
                 display: formatCents(aging.totals.buckets[b.key]),
                 tone: b.key === "over_120" ? "chart-danger" : b.key === "91_120" ? "chart-4" : undefined,
@@ -205,26 +220,26 @@ export default async function AgingPage({
             />
           </Panel>
           <Panel
-            title="Credit balances"
-            description="Negative open balances by class; refund deadlines aren't tracked here"
+            title={t("arAging.creditBalancesTitle")}
+            description={t("arAging.creditBalancesPanelDescription")}
             flush
           >
             {aging.credits.length === 0 ? (
-              <p className="px-4 py-3 text-body text-muted">No credit balances this month.</p>
+              <p className="px-4 py-3 text-body text-muted">{t("arAging.noCreditBalances")}</p>
             ) : (
-              <Table caption="Credit balances by financial class">
+              <Table caption={t("arAging.creditBalancesTableCaption")}>
                 <thead>
                   <tr>
-                    <Th>Class</Th>
-                    <Th numeric>Lines</Th>
-                    <Th numeric>Total</Th>
+                    <Th>{t("arAging.col.class")}</Th>
+                    <Th numeric>{t("arAging.col.lines")}</Th>
+                    <Th numeric>{t("arAging.col.total")}</Th>
                   </tr>
                 </thead>
                 <tbody>
                   {aging.credits.map((c) => (
                     <Tr key={c.payerClass}>
                       <Td>
-                        <Code>{c.payerClass || "(blank)"}</Code>
+                        <Code>{c.payerClass || t("arAging.blank")}</Code>
                       </Td>
                       <Td numeric>{c.lines}</Td>
                       <Td numeric>
@@ -239,27 +254,23 @@ export default async function AgingPage({
         </div>
       </div>
 
-      <Panel
-        title="Roll-forward"
-        description="Each month's open balance explained from the prior month's. A difference usually means the export missed open lines."
-        flush
-      >
-        <Table caption="Receivables roll-forward by month">
+      <Panel title={t("arAging.rollForwardTitle")} description={t("arAging.rollForwardDescription")} flush>
+        <Table caption={t("arAging.rollForwardTableCaption")}>
           <thead>
             <tr>
-              <Th>Month</Th>
-              <Th numeric>Opening</Th>
-              <Th numeric>Charges</Th>
-              <Th numeric>Payments</Th>
-              <Th numeric>Adjustments</Th>
-              <Th numeric>Closing</Th>
-              <Th>Ties</Th>
+              <Th>{t("arAging.col.month")}</Th>
+              <Th numeric>{t("arAging.col.opening")}</Th>
+              <Th numeric>{t("arAging.col.charges")}</Th>
+              <Th numeric>{t("arAging.col.payments")}</Th>
+              <Th numeric>{t("arAging.col.adjustments")}</Th>
+              <Th numeric>{t("arAging.col.closing")}</Th>
+              <Th>{t("arAging.col.ties")}</Th>
             </tr>
           </thead>
           <tbody>
             {report.rollForward.map((r) => (
               <Tr key={key(r.periodYear, r.periodMonth)}>
-                <Td>{periodLabel(r.periodYear, r.periodMonth)}</Td>
+                <Td>{periodLabel(r.periodYear, r.periodMonth, t.locale)}</Td>
                 <Td numeric>{r.openingCents === null ? "—" : <Money cents={r.openingCents} />}</Td>
                 <Td numeric>
                   <Money cents={r.chargesCents} />
@@ -275,11 +286,13 @@ export default async function AgingPage({
                 </Td>
                 <Td>
                   {r.unexplainedCents === null ? (
-                    <span className="text-label text-muted">No prior month</span>
+                    <span className="text-label text-muted">{t("arAging.noPriorMonth")}</span>
                   ) : r.unexplainedCents === 0 ? (
-                    <Badge tone="success">Ties</Badge>
+                    <Badge tone="success">{t("arAging.ties")}</Badge>
                   ) : (
-                    <Badge tone="danger">Off by {formatCents(r.unexplainedCents)}</Badge>
+                    <Badge tone="danger">
+                      {t("arAging.offBy", { amount: formatCents(r.unexplainedCents) })}
+                    </Badge>
                   )}
                 </Td>
               </Tr>
@@ -289,30 +302,30 @@ export default async function AgingPage({
       </Panel>
 
       <Panel
-        title="Payments and deposits"
-        description="Payments posted in the practice-management system against bank deposits in the same month. The running difference (since the first month shown, restarting after a missing month) is what the payments-clearing account should hold."
+        title={t("arAging.paymentsAndDepositsTitle")}
+        description={t("arAging.paymentsAndDepositsDescription")}
         actions={
           <Link href="/revenue-cycle/deposits" className="text-label font-medium text-link hover:underline">
-            Deposits
+            {t("deposits.title")}
           </Link>
         }
         flush
       >
-        <Table caption="Payments and deposits by month">
+        <Table caption={t("arAging.paymentsAndDepositsTableCaption")}>
           <thead>
             <tr>
-              <Th>Month</Th>
-              <Th numeric>Payments posted</Th>
-              <Th numeric>Deposits</Th>
-              <Th numeric>Difference</Th>
-              <Th numeric>Posted minus deposited</Th>
-              <Th>Status</Th>
+              <Th>{t("arAging.col.month")}</Th>
+              <Th numeric>{t("arAging.col.paymentsPosted")}</Th>
+              <Th numeric>{t("arAging.col.deposits")}</Th>
+              <Th numeric>{t("arAging.col.difference")}</Th>
+              <Th numeric>{t("arAging.col.postedMinusDeposited")}</Th>
+              <Th>{tc("word.status")}</Th>
             </tr>
           </thead>
           <tbody>
             {report.reconciliation.map((r) => (
               <Tr key={key(r.periodYear, r.periodMonth)}>
-                <Td>{periodLabel(r.periodYear, r.periodMonth)}</Td>
+                <Td>{periodLabel(r.periodYear, r.periodMonth, t.locale)}</Td>
                 <Td numeric>
                   <Money cents={r.paymentsCents} />
                 </Td>
@@ -327,13 +340,13 @@ export default async function AgingPage({
                 </Td>
                 <Td>
                   {r.clearingCents < 0 ? (
-                    <Badge tone="warning">Deposits not posted</Badge>
+                    <Badge tone="warning">{t("arAging.depositsNotPosted")}</Badge>
                   ) : r.alert ? (
-                    <Badge tone="warning">Follow up</Badge>
+                    <Badge tone="warning">{t("arAging.followUp")}</Badge>
                   ) : r.clearingCents === 0 ? (
-                    <Badge tone="success">Cleared</Badge>
+                    <Badge tone="success">{t("arAging.cleared")}</Badge>
                   ) : (
-                    <span className="text-label text-muted">In transit</span>
+                    <span className="text-label text-muted">{t("arAging.inTransit")}</span>
                   )}
                 </Td>
               </Tr>

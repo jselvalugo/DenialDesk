@@ -11,15 +11,26 @@ import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { describeMatch, ruleMatchSchema } from "@/domain/revenue-cycle/engine";
 import { ledgerSetup } from "@/domain/revenue-cycle/setup";
+import type { MessageKey } from "@/i18n/messages/types";
+import { getT } from "@/i18n/server";
 import { LoadDefaults } from "./LoadDefaults";
 
-export const metadata: Metadata = { title: "Rules and ledger" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("revenue");
+  return { title: t("rules.title") };
+}
 
-const kindLabels = { cash: "Cash", ar: "Accounts receivable", revenue: "Revenue", adjustment: "Adjustment" };
+const kindLabelKeys = {
+  cash: "rules.kind.cash",
+  ar: "rules.kind.ar",
+  revenue: "rules.kind.revenue",
+  adjustment: "rules.kind.adjustment",
+} as const satisfies Record<string, MessageKey<"revenue">>;
 
 export default async function RulesPage() {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
+  const t = await getT("revenue");
   const { rules, accounts, classes, sites } = await withTenant(auth, (tx) => ledgerSetup(tx));
   const accountName = new Map(accounts.map((a) => [a.number, a.name]));
   const gl = (number: string | null, fallback: string) =>
@@ -33,37 +44,38 @@ export default async function RulesPage() {
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="Rules and ledger"
-        description="Which general-ledger accounts each line of the monthly activity file posts to. The first active rule that matches wins; amounts always post as the practice-management system recorded them."
-      />
+      <PageHeader title={t("rules.title")} description={t("rules.description")} />
 
       {rules.length === 0 ? (
         <Panel>
           <EmptyState
-            title="No accounting rules yet"
-            description="Load DenialDesk's starter configuration (rules, a chart of accounts, one payer class per payer type, and one site per location) to start processing monthly files. Review every rule and map the accounts to your general ledger before the first import."
+            title={t("rules.emptyTitle")}
+            description={t("rules.emptyDescription")}
             action={
               canConfigureRevenueCycle(auth.role) ? (
                 <LoadDefaults />
               ) : (
-                <p className="text-body text-muted">Ask an administrator to load it.</p>
+                <p className="text-body text-muted">{t("rules.askAdmin")}</p>
               )
             }
           />
         </Panel>
       ) : (
-        <Panel title="Business rules" description={`${rules.length} rules, evaluated in order`} flush>
-          <Table caption="Business rules in evaluation order">
+        <Panel
+          title={t("rules.businessRulesTitle")}
+          description={t("rules.businessRulesDescription", { count: rules.length })}
+          flush
+        >
+          <Table caption={t("rules.tableCaption")}>
             <thead>
               <tr>
                 <Th numeric>#</Th>
-                <Th>Rule</Th>
-                <Th>Matches when</Th>
-                <Th>AR</Th>
-                <Th>Revenue</Th>
-                <Th>Adjustment</Th>
-                <Th>Status</Th>
+                <Th>{t("rules.col.rule")}</Th>
+                <Th>{t("rules.col.matchesWhen")}</Th>
+                <Th>{t("rules.col.ar")}</Th>
+                <Th>{t("rules.col.revenue")}</Th>
+                <Th>{t("rules.col.adjustment")}</Th>
+                <Th>{t("rules.col.status")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -84,21 +96,21 @@ export default async function RulesPage() {
                     <Td className="align-top">
                       {match.success ? (
                         <ul className="space-y-0.5">
-                          {describeMatch(match.data).map((text) => (
+                          {describeMatch(match.data, t).map((text) => (
                             <li key={text}>{text}</li>
                           ))}
                         </ul>
                       ) : (
-                        <Badge tone="danger">Invalid conditions</Badge>
+                        <Badge tone="danger">{t("rules.invalidConditions")}</Badge>
                       )}
                     </Td>
-                    <Td className="align-top">{gl(rule.arGl, "Payer class or default")}</Td>
-                    <Td className="align-top">{gl(rule.revenueGl, "From AR account")}</Td>
-                    <Td className="align-top">{gl(rule.adjustmentGl, "From AR account")}</Td>
+                    <Td className="align-top">{gl(rule.arGl, t("rules.payerClassOrDefault"))}</Td>
+                    <Td className="align-top">{gl(rule.revenueGl, t("rules.fromArAccount"))}</Td>
+                    <Td className="align-top">{gl(rule.adjustmentGl, t("rules.fromArAccount"))}</Td>
                     <Td className="align-top">
                       <div className="flex flex-col items-start gap-1">
                         <Badge tone={rule.active ? "success" : "neutral"}>
-                          {rule.active ? "Active" : "Inactive"}
+                          {rule.active ? t("rules.active") : t("rules.inactive")}
                         </Badge>
                       </div>
                     </Td>
@@ -108,22 +120,21 @@ export default async function RulesPage() {
             </tbody>
           </Table>
           <p className="border-t border-border px-4 py-2.5 text-label text-muted">
-            Source: {rules[0]!.source}. These are the practice&apos;s accounting policies, not payer or legal
-            rules.
+            {t("rules.source", { source: rules[0]!.source })}
           </p>
         </Panel>
       )}
 
       {accounts.length > 0 && (
         <div className="grid gap-6 xl:grid-cols-2">
-          <Panel title="GL accounts" description="Chart of accounts used for journal vouchers" flush>
-            <Table caption="GL accounts">
+          <Panel title={t("rules.glAccountsTitle")} description={t("rules.glAccountsDescription")} flush>
+            <Table caption={t("rules.glAccountsTitle")}>
               <thead>
                 <tr>
-                  <Th>Account</Th>
-                  <Th>Name</Th>
-                  <Th>Type</Th>
-                  <Th>Posts revenue / adjustments to</Th>
+                  <Th>{t("rules.col.account")}</Th>
+                  <Th>{t("rules.col.name")}</Th>
+                  <Th>{t("rules.col.type")}</Th>
+                  <Th>{t("rules.col.postsTo")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -136,11 +147,11 @@ export default async function RulesPage() {
                       {a.name}
                       {a.isDefaultAr && (
                         <span className="ml-2">
-                          <Badge tone="info">Default AR</Badge>
+                          <Badge tone="info">{t("rules.defaultAr")}</Badge>
                         </span>
                       )}
                     </Td>
-                    <Td className="text-muted">{kindLabels[a.kind]}</Td>
+                    <Td className="text-muted">{t(kindLabelKeys[a.kind])}</Td>
                     <Td>
                       {a.kind === "ar" ? (
                         <span className="flex gap-1.5">
@@ -158,14 +169,18 @@ export default async function RulesPage() {
           </Panel>
 
           <div className="flex flex-col gap-6">
-            <Panel title="Payer classes" description="Linked to DenialDesk payers where one matches" flush>
-              <Table caption="Payer classes">
+            <Panel
+              title={t("rules.payerClassesTitle")}
+              description={t("rules.payerClassesDescription")}
+              flush
+            >
+              <Table caption={t("rules.payerClassesTitle")}>
                 <thead>
                   <tr>
-                    <Th>Class</Th>
-                    <Th>Name</Th>
-                    <Th>DenialDesk payer</Th>
-                    <Th>AR account</Th>
+                    <Th>{t("rules.col.class")}</Th>
+                    <Th>{t("rules.col.name")}</Th>
+                    <Th>{t("rules.col.denialDeskPayer")}</Th>
+                    <Th>{t("rules.col.arAccount")}</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -175,27 +190,26 @@ export default async function RulesPage() {
                         <Code>{pc.code}</Code>
                       </Td>
                       <Td>{pc.name}</Td>
-                      <Td className={pc.payerName ? "" : "text-subtle"}>{pc.payerName ?? "Not linked"}</Td>
-                      <Td>{gl(pc.arGl, "Default")}</Td>
+                      <Td className={pc.payerName ? "" : "text-subtle"}>
+                        {pc.payerName ?? t("rules.notLinked")}
+                      </Td>
+                      <Td>{gl(pc.arGl, t("rules.default"))}</Td>
                     </Tr>
                   ))}
                 </tbody>
               </Table>
             </Panel>
 
-            <Panel title="Sites" description="Cost centers on journal vouchers" flush>
+            <Panel title={t("rules.sitesTitle")} description={t("rules.sitesDescription")} flush>
               {sites.length === 0 ? (
-                <EmptyState
-                  title="No sites"
-                  description="Add practice locations first; each location becomes an accounting site."
-                />
+                <EmptyState title={t("rules.noSitesTitle")} description={t("rules.noSitesDescription")} />
               ) : (
-                <Table caption="Accounting sites">
+                <Table caption={t("rules.sitesTitle")}>
                   <thead>
                     <tr>
-                      <Th>Site</Th>
-                      <Th>Name</Th>
-                      <Th>Location</Th>
+                      <Th>{t("rules.col.site")}</Th>
+                      <Th>{t("rules.col.name")}</Th>
+                      <Th>{t("rules.col.location")}</Th>
                     </tr>
                   </thead>
                   <tbody>

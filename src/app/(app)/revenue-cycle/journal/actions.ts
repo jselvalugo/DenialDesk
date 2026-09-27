@@ -12,6 +12,7 @@ import {
   voidVoucher,
   VoucherError,
 } from "@/domain/revenue-cycle/vouchers";
+import { getT } from "@/i18n/server";
 
 export interface VoucherActionState {
   error?: string;
@@ -34,9 +35,10 @@ export async function prepareVoucherAction(
   formData: FormData,
 ): Promise<VoucherActionState> {
   const auth = await requireAuth();
+  const t = await getT("revenue");
   const fileId = uuid.safeParse(formData.get("fileId"));
-  if (!fileId.success) return { error: "Choose a monthly file." };
-  const result = await run(() => withTenant(auth, (tx) => prepareVoucher(tx, auth, fileId.data)));
+  if (!fileId.success) return { error: t("journal.chooseFile") };
+  const result = await run(() => withTenant(auth, (tx) => prepareVoucher(tx, auth, fileId.data, t)));
   if (!result.ok) return { error: result.error };
   redirect(`/revenue-cycle/journal/${result.value}`);
 }
@@ -46,9 +48,10 @@ export async function approveVoucherAction(
   formData: FormData,
 ): Promise<VoucherActionState> {
   const auth = await requireAuth();
+  const t = await getT("revenue");
   const id = uuid.safeParse(formData.get("voucherId"));
-  if (!id.success) return { error: "That voucher doesn't exist." };
-  const result = await run(() => withTenant(auth, (tx) => approveVoucher(tx, auth, id.data)));
+  if (!id.success) return { error: t("voucher.error.voucherNotFound") };
+  const result = await run(() => withTenant(auth, (tx) => approveVoucher(tx, auth, id.data, t)));
   if (!result.ok) return { error: result.error };
   revalidatePath(`/revenue-cycle/journal/${id.data}`);
   return {};
@@ -59,12 +62,13 @@ export async function voidVoucherAction(
   formData: FormData,
 ): Promise<VoucherActionState> {
   const auth = await requireAuth();
+  const t = await getT("revenue");
   const id = uuid.safeParse(formData.get("voucherId"));
-  if (!id.success) return { error: "That voucher doesn't exist." };
+  if (!id.success) return { error: t("voucher.error.voucherNotFound") };
   const reason = String(formData.get("reason") ?? "");
   const reversedInGl = formData.get("reversedInGl") === "on";
   const result = await run(() =>
-    withTenant(auth, (tx) => voidVoucher(tx, auth, id.data, reason, { reversedInGl })),
+    withTenant(auth, (tx) => voidVoucher(tx, auth, id.data, reason, { reversedInGl }, t)),
   );
   if (!result.ok) return { error: result.error };
   revalidatePath(`/revenue-cycle/journal/${id.data}`);
@@ -79,9 +83,10 @@ export type ExportResult = { ok: true; filename: string; csv: string } | { ok: f
  */
 export async function exportVoucherAction(voucherId: string): Promise<ExportResult> {
   const auth = await requireAuth();
+  const t = await getT("revenue");
   const id = uuid.safeParse(voucherId);
-  if (!id.success) return { ok: false, error: "That voucher doesn't exist." };
-  const result = await run(() => withTenant(auth, (tx) => exportVoucher(tx, auth, id.data)));
+  if (!id.success) return { ok: false, error: t("voucher.error.voucherNotFound") };
+  const result = await run(() => withTenant(auth, (tx) => exportVoucher(tx, auth, id.data, t)));
   if (!result.ok) return { ok: false, error: result.error };
   revalidatePath(`/revenue-cycle/journal/${id.data}`);
   return { ok: true, ...result.value };

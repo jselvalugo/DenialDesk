@@ -1,5 +1,7 @@
 import { csvCell } from "@/lib/csv/parse";
+import type { MessageKey } from "@/i18n/messages/types";
 import { formatCents } from "@/lib/format";
+import { englishRevenue, type RevenueT } from "./i18n";
 import { periodEnd } from "./monthly-file";
 
 /**
@@ -134,16 +136,27 @@ export interface CheckInput {
   balances: { opening: Balances | null; closing: Balances; missingPrior?: string | null };
 }
 
+export type VoucherCheckId =
+  "balanced" | "ties_to_file" | "receivables_tie" | "accounts_valid" | "not_posted_twice";
+
 export interface VoucherCheck {
-  id: "balanced" | "ties_to_file" | "receivables_tie" | "accounts_valid" | "not_posted_twice";
-  label: string;
+  id: VoucherCheckId;
   passed: boolean;
   detail: string;
 }
 
+/** The check's name, for the UI: `t(VOUCHER_CHECK_LABEL_KEYS[c.id])`. `detail` is already translated. */
+export const VOUCHER_CHECK_LABEL_KEYS = {
+  balanced: "voucher.check.balanced",
+  ties_to_file: "voucher.check.tiesToFile",
+  receivables_tie: "voucher.check.receivablesTie",
+  accounts_valid: "voucher.check.accountsValid",
+  not_posted_twice: "voucher.check.notPostedTwice",
+} as const satisfies Record<VoucherCheckId, MessageKey<"revenue">>;
+
 const money = formatCents;
 
-export function checkVoucher(input: CheckInput): VoucherCheck[] {
+export function checkVoucher(input: CheckInput, t: RevenueT = englishRevenue): VoucherCheck[] {
   const { lines, source, accounts } = input;
   const sum = (filter: (l: CheckInput["lines"][number]) => boolean, side: "debitCents" | "creditCents") =>
     lines.filter(filter).reduce((total, l) => total + l[side], 0);
@@ -197,56 +210,62 @@ export function checkVoucher(input: CheckInput): VoucherCheck[] {
   return [
     {
       id: "balanced",
-      label: "Debits equal credits",
       passed: debits === credits && lines.length > 0,
       detail:
         lines.length === 0
-          ? "The voucher has no lines."
+          ? t("voucher.detail.noLines")
           : debits === credits
-            ? `Debits ${money(debits)}, credits ${money(credits)}.`
-            : `Debits ${money(debits)}, credits ${money(credits)}. The file doesn't roll forward from last month's: check that the export includes every open line.`,
+            ? t("voucher.detail.balanced", { debits: money(debits), credits: money(credits) })
+            : t("voucher.detail.unbalanced", { debits: money(debits), credits: money(credits) }),
     },
     {
       id: "ties_to_file",
-      label: "Ties to the source file",
       passed:
         postedGross === source.grossCents &&
         postedAdjustments === source.adjustmentCents &&
         postedPayments === source.paymentCents,
-      detail: `Charges ${money(postedGross)} of ${money(source.grossCents)}; adjustments ${money(postedAdjustments)} of ${money(source.adjustmentCents)}; payments ${money(postedPayments)} of ${money(source.paymentCents)}.`,
+      detail: t("voucher.detail.tiesToFile", {
+        charges: money(postedGross),
+        chargesTotal: money(source.grossCents),
+        adjustments: money(postedAdjustments),
+        adjustmentsTotal: money(source.adjustmentCents),
+        payments: money(postedPayments),
+        paymentsTotal: money(source.paymentCents),
+      }),
     },
     {
       id: "receivables_tie",
-      label: "Receivables tie to the file by account and site",
       passed: untied.length === 0 && !input.balances.missingPrior,
       detail: input.balances.missingPrior
-        ? `No current activity file for ${input.balances.missingPrior}. Import it first, so this month's receivables can be tied.`
+        ? t("voucher.detail.missingPrior", { period: input.balances.missingPrior })
         : !opening
-          ? "First imported month: opening receivables come from your general ledger."
+          ? t("voucher.detail.firstMonth")
           : untied.length > 0
-            ? `Don't match the file's open balances: ${untied.slice(0, 5).join(", ")}${untied.length > 5 ? ", …" : ""}.`
-            : "Opening balances plus this month's movements equal the file's open balances.",
+            ? t("voucher.detail.untied", {
+                list: untied.slice(0, 5).join(", ") + (untied.length > 5 ? ", …" : ""),
+              })
+            : t("voucher.detail.tied"),
     },
     {
       id: "accounts_valid",
-      label: "Accounts and sites are valid",
       passed: wrongAccounts.length === 0 && missingSite === 0 && badPairs === 0,
       detail:
         wrongAccounts.length > 0
-          ? `Not in the chart or the wrong type: ${[...new Set(wrongAccounts.map((l) => l.account))].join(", ")}.`
+          ? t("voucher.detail.wrongAccounts", {
+              accounts: [...new Set(wrongAccounts.map((l) => l.account))].join(", "),
+            })
           : missingSite > 0
-            ? `${missingSite} lines have no site. Set a default site and re-import the file.`
+            ? t("voucher.detail.missingSite", { count: missingSite })
             : badPairs > 0
-              ? "Every movement must post to exactly one receivable account."
-              : "Every account is in the chart with the right type, and every line has a site.",
+              ? t("voucher.detail.badPairs")
+              : t("voucher.detail.accountsValid"),
     },
     {
       id: "not_posted_twice",
-      label: "Period not already posted",
       passed: input.otherPostedVoucher === null,
       detail: input.otherPostedVoucher
-        ? `Voucher ${input.otherPostedVoucher} is already approved for this period. Void it first.`
-        : "No other approved or exported voucher covers this period.",
+        ? t("voucher.detail.alreadyPosted", { number: input.otherPostedVoucher })
+        : t("voucher.detail.notPosted"),
     },
   ];
 }

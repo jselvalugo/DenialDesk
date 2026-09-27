@@ -6,7 +6,10 @@ import { rcmClaimLines, rcmDepositFiles, rcmDeposits, rcmFiles, users } from "@/
 import { audit, auditSystem } from "@/lib/audit";
 import { z } from "zod";
 import { createHash } from "node:crypto";
+import type { MessageKey } from "@/i18n/messages/types";
+import type { Params } from "@/i18n/translate";
 import { ageReceivables, reconcileDeposits, rollForward, type BucketKey, type DepositLine } from "./aging";
+import { englishRevenue, type RevenueT } from "./i18n";
 import { periodEnd } from "./monthly-file";
 import { periodFiles } from "./periods";
 import type { Actor } from "./vouchers";
@@ -14,23 +17,33 @@ import type { Actor } from "./vouchers";
 // A/R aging, roll-forward, and deposits (docs/specs/revenue-cycle-accounting.md, B4). Reports
 // hold totals only; deposit imports are audited with counts.
 
-/** A refused deposit operation; `code` is safe to audit (the message is shown to the user). */
+/**
+ * A refused deposit operation; `code` is safe to audit. `message` is rendered eagerly (English by
+ * default); the catching server action re-renders `key`/`params` in the request's language.
+ */
 export class DepositError extends Error {
   constructor(
-    message: string,
+    readonly key: MessageKey<"revenue">,
     readonly code = "refused",
+    params?: Params,
+    t: RevenueT = englishRevenue,
   ) {
-    super(message);
+    super(t(key, params));
   }
 }
 
 /** Stores a parsed deposit file in the caller's transaction and audits it (counts only). */
-export async function importDeposits(tx: TenantTx, actor: Actor, deposits: DepositLine[]): Promise<string> {
+export async function importDeposits(
+  tx: TenantTx,
+  actor: Actor,
+  deposits: DepositLine[],
+  t: RevenueT = englishRevenue,
+): Promise<string> {
   if (!canRunRevenueCycle(actor.role))
-    throw new DepositError("Only administrators and RCM managers can import deposits.");
-  if (deposits.length === 0) throw new DepositError("The file has no deposits.");
+    throw new DepositError("deposits.error.onlyManagers", "refused", undefined, t);
+  if (deposits.length === 0) throw new DepositError("deposits.error.noDeposits", "refused", undefined, t);
   if (!deposits.every((d) => Number.isSafeInteger(d.amountCents) && d.amountCents !== 0)) {
-    throw new DepositError("Deposit amounts must be whole, non-zero cents.");
+    throw new DepositError("deposits.error.wholeNonZeroCents", "refused", undefined, t);
   }
   const totalCents = deposits.reduce((t, d) => t + d.amountCents, 0);
   const contentHash = createHash("sha256")
@@ -45,10 +58,7 @@ export async function importDeposits(tx: TenantTx, actor: Actor, deposits: Depos
     .from(rcmDepositFiles)
     .where(and(eq(rcmDepositFiles.contentHash, contentHash), isNull(rcmDepositFiles.reversesFileId)))
     .limit(1);
-  if (existing)
-    throw new DepositError(
-      "This exact deposit file was already imported. A reversed file can't be imported again; import the corrected export instead.",
-    );
+  if (existing) throw new DepositError("deposits.error.alreadyImported", "refused", undefined, t);
   // Bank exports often cover overlapping ranges; importing one twice would double deposits.
   const reversed = tx
     .select({ id: rcmDepositFiles.reversesFileId })
@@ -68,7 +78,10 @@ export async function importDeposits(tx: TenantTx, actor: Actor, deposits: Depos
     .limit(1);
   if (overlap) {
     throw new DepositError(
-      `These deposits overlap a file already imported (${overlap.from} to ${overlap.to}). Export only the new dates, or reverse the earlier file first.`,
+      "deposits.error.overlap",
+      "refused",
+      { from: overlap.from ?? "", to: overlap.to ?? "" },
+      t,
     );
   }
   const [file] = await tx
@@ -110,22 +123,28 @@ export async function importDeposits(tx: TenantTx, actor: Actor, deposits: Depos
  * Cancels an imported deposit file with a reversing file of negated rows (administrators, with a
  * reason). Deposits are never edited or deleted; each file can be reversed once.
  */
-export async function reverseDepositFile(tx: TenantTx, actor: Actor, fileId: string, reason: string) {
+export async function reverseDepositFile(
+  tx: TenantTx,
+  actor: Actor,
+  fileId: string,
+  reason: string,
+  t: RevenueT = englishRevenue,
+) {
   if (!canConfigureRevenueCycle(actor.role))
-    throw new DepositError("Only administrators can reverse deposit files.", "forbidden");
+    throw new DepositError("deposits.error.onlyAdminReverse", "forbidden", undefined, t);
   const trimmed = reason.trim();
   if (trimmed.length < 10 || trimmed.length > 500)
-    throw new DepositError("Give a reason of 10 to 500 characters.", "reason_length");
+    throw new DepositError("error.reasonLength", "reason_length", undefined, t);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`rcm_deposits:${actor.tenantId}`}))`);
   const [file] = await tx.select().from(rcmDepositFiles).where(eq(rcmDepositFiles.id, fileId)).limit(1);
-  if (!file) throw new DepositError("That deposit file doesn't exist.", "not_found");
-  if (file.reversesFileId) throw new DepositError("A reversing file can't be reversed.", "is_reversal");
+  if (!file) throw new DepositError("deposits.error.fileNotFound", "not_found", undefined, t);
+  if (file.reversesFileId) throw new DepositError("deposits.error.isReversal", "is_reversal", undefined, t);
   const [already] = await tx
     .select({ id: rcmDepositFiles.id })
     .from(rcmDepositFiles)
     .where(eq(rcmDepositFiles.reversesFileId, fileId))
     .limit(1);
-  if (already) throw new DepositError("This file was already reversed.", "already_reversed");
+  if (already) throw new DepositError("deposits.error.alreadyReversed", "already_reversed", undefined, t);
   const rows = await tx.select().from(rcmDeposits).where(eq(rcmDeposits.fileId, fileId));
   const [reversal] = await tx
     .insert(rcmDepositFiles)
@@ -184,7 +203,11 @@ export async function listDepositFiles(tx: TenantTx) {
  * Aging for one month (the latest by default), plus the roll-forward and deposit reconciliation
  * for every month that has a current-format file.
  */
-export async function receivablesReport(tx: TenantTx, month?: { year: number; month: number }) {
+export async function receivablesReport(
+  tx: TenantTx,
+  month?: { year: number; month: number },
+  t: RevenueT = englishRevenue,
+) {
   const periods = await periodFiles(tx);
   if (periods.length === 0) return null;
   const selected =
@@ -251,7 +274,7 @@ export async function receivablesReport(tx: TenantTx, month?: { year: number; mo
     periods,
     selected,
     asOf,
-    aging: ageReceivables(agingRows),
+    aging: ageReceivables(agingRows, t),
     rollForward: rollForward(months),
     reconciliation: reconcileDeposits(months, deposits),
   };
@@ -290,6 +313,7 @@ export async function reverseDepositsFor(
   actor: Actor,
   fileId: unknown,
   reason: string,
+  t: RevenueT = englishRevenue,
 ): Promise<{ ok: true; reversalId: string } | { ok: false; error: string }> {
   const id = z.uuid().safeParse(fileId);
   const refused = async (code: string, error: string) => {
@@ -302,9 +326,9 @@ export async function reverseDepositsFor(
     });
     return { ok: false as const, error };
   };
-  if (!id.success) return refused("bad_id", "That deposit file doesn't exist.");
+  if (!id.success) return refused("bad_id", t("deposits.error.fileNotFound"));
   try {
-    const reversalId = await withTenant(actor, (tx) => reverseDepositFile(tx, actor, id.data, reason));
+    const reversalId = await withTenant(actor, (tx) => reverseDepositFile(tx, actor, id.data, reason, t));
     return { ok: true, reversalId };
   } catch (error) {
     if (!(error instanceof DepositError)) throw error;

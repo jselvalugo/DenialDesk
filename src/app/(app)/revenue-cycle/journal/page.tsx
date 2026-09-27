@@ -11,44 +11,45 @@ import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { CURRENT_FORMAT_VERSION, listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
 import { listVouchers } from "@/domain/revenue-cycle/vouchers";
+import { getFormat, getT } from "@/i18n/server";
 import { VoucherStatusBadge } from "./VoucherStatusBadge";
 import { PrepareVoucherForm } from "./VoucherForms";
 
-export const metadata: Metadata = { title: "Journal vouchers" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("revenue");
+  return { title: t("journal.title") };
+}
 
 export default async function JournalPage() {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
+  const t = await getT("revenue");
+  const tc = await getT("common");
+  const f = await getFormat();
   const { vouchers, files } = await withTenant(auth, async (tx) => ({
     vouchers: await listVouchers(tx),
     files: await listFiles(tx),
   }));
   const fileOptions = files
-    .filter((f) => f.formatVersion === CURRENT_FORMAT_VERSION)
-    .map((f) => ({
-      value: f.id,
-      label: `${periodLabel(f.periodYear, f.periodMonth)} · imported ${f.createdAt.toLocaleDateString("en-US", { timeZone: "America/New_York" })}`,
+    .filter((file) => file.formatVersion === CURRENT_FORMAT_VERSION)
+    .map((file) => ({
+      value: file.id,
+      label: `${periodLabel(file.periodYear, file.periodMonth, t.locale)} · ${t("journal.importedOn", { date: f.dateTime(file.createdAt) })}`,
     }));
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="Journal vouchers"
-        description="Each month's charges, adjustments and write-offs, and payments, posted to the general ledger in balanced lines. A voucher is approved by someone other than its preparer, then exported for the GL."
-      />
+      <PageHeader title={t("journal.title")} description={t("journal.description")} />
 
       {canRunRevenueCycle(auth.role) && (
-        <Panel
-          title="Prepare a voucher"
-          description="Builds a draft from a monthly file. Preparing again for the same month replaces the draft."
-        >
+        <Panel title={t("journal.prepareTitle")} description={t("journal.prepareDescription")}>
           {fileOptions.length === 0 ? (
             <p className="text-body text-muted">
-              Import a{" "}
+              {t("journal.importFileFirst.prefix")}{" "}
               <Link href="/revenue-cycle/files" className="font-medium text-link hover:underline">
-                monthly file
+                {t("journal.importFileFirst.link")}
               </Link>{" "}
-              first.
+              {t("journal.importFileFirst.suffix")}
             </p>
           ) : (
             <PrepareVoucherForm files={fileOptions} />
@@ -56,21 +57,22 @@ export default async function JournalPage() {
         </Panel>
       )}
 
-      <Panel title="Vouchers" description={`${vouchers.length} vouchers, newest month first`} flush>
+      <Panel
+        title={t("journal.vouchersTitle")}
+        description={t("journal.vouchersDescription", { count: vouchers.length })}
+        flush
+      >
         {vouchers.length === 0 ? (
-          <EmptyState
-            title="No vouchers yet"
-            description="Prepare a voucher from a monthly file to post it to the general ledger."
-          />
+          <EmptyState title={t("journal.emptyTitle")} description={t("journal.emptyDescription")} />
         ) : (
-          <Table caption="Journal vouchers">
+          <Table caption={t("journal.tableCaption")}>
             <thead>
               <tr>
-                <Th>Voucher</Th>
-                <Th>Month</Th>
-                <Th>Status</Th>
-                <Th numeric>Total debits</Th>
-                <Th>Prepared by</Th>
+                <Th>{t("journal.col.voucher")}</Th>
+                <Th>{t("journal.col.month")}</Th>
+                <Th>{tc("word.status")}</Th>
+                <Th numeric>{t("journal.col.totalDebits")}</Th>
+                <Th>{t("journal.col.preparedBy")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -84,7 +86,7 @@ export default async function JournalPage() {
                       {v.number}
                     </Link>
                   </Td>
-                  <Td>{periodLabel(v.periodYear, v.periodMonth)}</Td>
+                  <Td>{periodLabel(v.periodYear, v.periodMonth, t.locale)}</Td>
                   <Td>
                     <VoucherStatusBadge status={v.status} />
                   </Td>
@@ -92,8 +94,7 @@ export default async function JournalPage() {
                     <Money cents={v.debitCents} />
                   </Td>
                   <Td className="text-muted">
-                    {v.preparedBy ?? "—"} ·{" "}
-                    {v.createdAt.toLocaleDateString("en-US", { timeZone: "America/New_York" })}
+                    {v.preparedBy ?? "—"} · {f.dateTime(v.createdAt)}
                   </Td>
                 </Tr>
               ))}

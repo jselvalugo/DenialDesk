@@ -3,9 +3,10 @@ import type { TenantTx } from "@/db/tenant";
 import { claims, denials, glAccounts, payerClasses, payers, rcmClaimLines, rcmFiles } from "@/db/schema";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { audit } from "@/lib/audit";
+import { englishRevenue, type RevenueT } from "./i18n";
 import { periodFiles } from "./periods";
 import { receivablesReport } from "./receivables";
-import { denialsByClass, incomeStatement, kpis, type AccountTotal } from "./statements";
+import { denialsByClass, incomeStatement, kpis, unknownAccountName, type AccountTotal } from "./statements";
 import type { Actor } from "./vouchers";
 
 // Statements and dashboard queries (docs/specs/revenue-cycle-accounting.md, B5). Totals only,
@@ -30,7 +31,7 @@ async function recordView(
   });
 }
 
-export async function statementsReport(tx: TenantTx, actor: Actor) {
+export async function statementsReport(tx: TenantTx, actor: Actor, t: RevenueT = englishRevenue) {
   const periods = await recentPeriods(tx);
   if (periods.length === 0) return null;
   const fileIds = periods.map((p) => p.fileId);
@@ -80,9 +81,9 @@ export async function statementsReport(tx: TenantTx, actor: Actor) {
   const shown = new Set(months.map((m) => `${m.periodYear}-${m.periodMonth}`));
   await recordView(tx, actor, "statements", months.length);
   return {
-    income: incomeStatement(months, toTotals(chargeRows), toTotals(adjustmentRows), names),
+    income: incomeStatement(months, toTotals(chargeRows), toTotals(adjustmentRows), names, t),
     receivables: arRows
-      .map((r) => ({ ...r, name: names.get(r.account) ?? "Not in the chart of accounts" }))
+      .map((r) => ({ ...r, name: names.get(r.account) ?? unknownAccountName(t) }))
       .sort((a, b) => (a.account < b.account ? -1 : 1)),
     asOf: receivables!.asOf,
     cash: receivables!.reconciliation.filter((r) => shown.has(`${r.periodYear}-${r.periodMonth}`)),

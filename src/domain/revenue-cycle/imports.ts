@@ -1,28 +1,38 @@
 import { and, asc, count, desc, eq, sql, type SQL } from "drizzle-orm";
 import type { TenantTx } from "@/db/tenant";
 import { rcmClaimLines, rcmFiles, rcmSites, users } from "@/db/schema";
+import { INTL_TAGS, type Locale } from "@/i18n/config";
+import type { MessageKey } from "@/i18n/messages/types";
 import { audit } from "@/lib/audit";
 import { CPT_FORMAT, prepareEngine } from "./engine";
+import { englishRevenue, type RevenueT } from "./i18n";
 import { periodEnd, type MonthlyLine } from "./monthly-file";
 import { loadEngineConfig } from "./setup";
 
-/** "March 2026" for a file's accounting period. */
-export const periodLabel = (year: number, month: number) =>
-  new Date(Date.UTC(year, month - 1, 1)).toLocaleString("en-US", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+const periodFormats = new Map<Locale, Intl.DateTimeFormat>();
 
-/** Why a line needs a person to look at it (stored on the line, shown on the file page). */
-export const REVIEW_REASONS = {
-  no_activity: "No charges, payments, adjustments, or balance",
-  blank_code: "Blank procedure code",
-  invalid_code: "Procedure code isn't five letters or digits",
-  after_period: "Service date after the period",
-  credit_balance: "Credit balance: a refund may be due (refund deadlines aren't tracked here)",
-} as const;
-export type ReviewReason = keyof typeof REVIEW_REASONS;
+/** "March 2026" for a file's accounting period, in the given language. */
+export function periodLabel(year: number, month: number, locale: Locale = "en"): string {
+  let format = periodFormats.get(locale);
+  if (!format) {
+    format = new Intl.DateTimeFormat(INTL_TAGS[locale], { month: "long", year: "numeric", timeZone: "UTC" });
+    periodFormats.set(locale, format);
+  }
+  return format.format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+/**
+ * Why a line needs a person to look at it (stored on the line, shown on the file page). The stored
+ * value is the reason code (`ReviewReason`); the label is only for display.
+ */
+export const REVIEW_REASON_LABEL_KEYS = {
+  no_activity: "file.reviewReason.noActivity",
+  blank_code: "file.reviewReason.blankCode",
+  invalid_code: "file.reviewReason.invalidCode",
+  after_period: "file.reviewReason.afterPeriod",
+  credit_balance: "file.reviewReason.creditBalance",
+} as const satisfies Record<string, MessageKey<"revenue">>;
+export type ReviewReason = keyof typeof REVIEW_REASON_LABEL_KEYS;
 
 export function reviewReasons(line: MonthlyLine, lastDay: string): ReviewReason[] {
   const reasons: ReviewReason[] = [];
@@ -70,13 +80,17 @@ export const CURRENT_FORMAT_VERSION = 2;
  * Routes every line with the practice's rules and stores the file and its lines in the
  * caller's transaction: all or nothing. Audited with IDs and counts only.
  */
-export async function importMonthlyFile(tx: TenantTx, input: ImportInput): Promise<string> {
+export async function importMonthlyFile(
+  tx: TenantTx,
+  input: ImportInput,
+  t: RevenueT = englishRevenue,
+): Promise<string> {
   for (const line of input.lines) {
     const amounts = [line.billedCents, line.paymentCents, line.adjustmentCents, line.balanceCents];
     if (!amounts.every(Number.isSafeInteger))
       throw new Error(`Row ${line.rowNumber}: amounts must be whole cents`);
   }
-  const classify = prepareEngine(await loadEngineConfig(tx));
+  const classify = prepareEngine(await loadEngineConfig(tx, t), t);
   const sites = await tx.select({ id: rcmSites.id, name: rcmSites.name }).from(rcmSites);
   if (input.defaultSiteId && !sites.some((s) => s.id === input.defaultSiteId)) {
     // FKs bypass RLS, so a site ID from a form is checked against this tenant's sites.
