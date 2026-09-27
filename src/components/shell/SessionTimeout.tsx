@@ -4,10 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { keepSessionAlive, signOut } from "@/auth/actions";
 import { SESSION_IDLE_MS, SESSION_TOUCH_MS, SESSION_WARNING_MS } from "@/auth/policy";
+import { Button } from "@/components/ui/Button";
+import { useT } from "@/i18n/client";
 
 // Sign out before the server could, given its activity clock may lag by up to SESSION_TOUCH_MS.
 const CLIENT_IDLE_MS = SESSION_IDLE_MS - SESSION_TOUCH_MS;
-import { Button } from "@/components/ui/Button";
 
 /**
  * Warns before the 15-minute idle timeout (R-7.2.7, DESIGN.md §12). The server enforces the
@@ -25,6 +26,7 @@ export function SessionTimeout({
 } = {}) {
   const router = useRouter();
   const pathname = usePathname();
+  const t = useT("shell");
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const lastActive = useRef(0); // set on mount by the pathname effect
   const stayButton = useRef<HTMLButtonElement>(null);
@@ -78,10 +80,10 @@ export function SessionTimeout({
         className="w-[420px] rounded-panel border border-border bg-surface p-6 shadow-lg"
       >
         <h2 id="timeout-title" className="text-heading font-semibold text-text">
-          Your session is about to end
+          {t("timeout.title")}
         </h2>
         <p id="timeout-body" className="mt-2 text-body text-muted">
-          For security, you&apos;ll be signed out after 15 minutes without activity. Time remaining:{" "}
+          {t("timeout.body")}{" "}
           <span className="tabular font-medium text-text">
             {minutes}:{seconds}
           </span>
@@ -89,7 +91,7 @@ export function SessionTimeout({
         <div className="mt-5 flex justify-end gap-2">
           <form action={signOutAction}>
             <Button type="submit" variant="ghost">
-              Sign out
+              {t("timeout.signOut")}
             </Button>
           </form>
           <Button
@@ -97,7 +99,7 @@ export function SessionTimeout({
             variant="primary"
             onClick={async () => ((await keepAlive()) ? reset() : router.push(timeoutHref))}
           >
-            Stay signed in
+            {t("timeout.stay")}
           </Button>
         </div>
       </div>

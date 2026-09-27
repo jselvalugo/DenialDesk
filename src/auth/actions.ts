@@ -5,6 +5,8 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { systemDb } from "@/db/client";
 import { memberships, tenants, users } from "@/db/schema";
+import { setLocaleCookie } from "@/i18n/actions";
+import { isLocale } from "@/i18n/config";
 import { auditSystem } from "@/lib/audit";
 import { limitCurrentRequest } from "@/lib/rate-limit";
 import {
@@ -111,6 +113,8 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
 
   await replacePreviousSession(user.id);
   await createSession(user.id);
+  // The language the account last chose follows the user to this browser (spec: internationalization).
+  if (isLocale(user.locale)) await setLocaleCookie(user.locale);
   redirect(
     user.mustChangePassword ? "/login/password" : user.mfaEnrolledAt ? "/login/mfa" : "/login/mfa/setup",
   );

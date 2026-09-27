@@ -52,6 +52,40 @@ test("the preview operator status endpoint rejects requests without the secret t
 test.describe("shell chrome", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
+  test("the user menu switches the language and back (spec: internationalization)", async ({ page }) => {
+    await page.goto("/overview");
+    const userMenu = page.getByRole("button", { name: /Riley Worker/ });
+    await userMenu.click();
+    const language = page.getByRole("group", { name: "Language" });
+    await expect(language.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+    try {
+      await language.getByRole("button", { name: "Español" }).click();
+      // The whole page re-renders in Spanish: tab bar, header field, and <html lang>.
+      await expect(page.locator("html")).toHaveAttribute("lang", "es");
+      await expect(
+        page.getByRole("navigation", { name: "Principal" }).getByRole("link", { name: "Cola de denegaciones" }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: /, cambiar de módulo$/ })).toBeVisible();
+      await expect(page.getByRole("note", { name: "Aviso de entorno" })).toContainText("Solo datos sintéticos");
+      // The choice is stored on the account and applied at the next sign-in; the cookie carries it now.
+      await page.goto("/settings");
+      await expect(page.locator("html")).toHaveAttribute("lang", "es");
+      await userMenu.click();
+      const idioma = page.getByRole("group", { name: "Idioma" });
+      await expect(idioma.getByRole("button", { name: "Español" })).toHaveAttribute("aria-pressed", "true");
+      await idioma.getByRole("button", { name: "Português" }).click();
+      await expect(page.locator("html")).toHaveAttribute("lang", "pt");
+      await expect(page.getByRole("navigation", { name: "Principal" })).toBeVisible();
+    } finally {
+      // Leave the shared worker account in English for the other tests.
+      await page.goto("/overview");
+      await userMenu.click();
+      await page.getByRole("group", { name: /Language|Idioma/ }).getByRole("button", { name: "English" }).click();
+      await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    }
+    await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Denial queue" })).toBeVisible();
+  });
+
   test("skip link moves focus to the main content", async ({ page }) => {
     await page.goto("/overview");
     await page.keyboard.press("Tab");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CARC, CATEGORY_LABELS, categorize } from "./carc";
+import { CARC, CATEGORY_LABEL_KEYS, categorize } from "./carc";
 
 describe("categorize", () => {
   it("maps known CARCs to work-queue categories", () => {
@@ -13,6 +13,6 @@ describe("categorize", () => {
   });
 
   it("labels every category used by the reference", () => {
-    for (const { category } of Object.values(CARC)) expect(CATEGORY_LABELS[category]).toBeTruthy();
+    for (const { category } of Object.values(CARC)) expect(CATEGORY_LABEL_KEYS[category]).toBeTruthy();
   });
 });

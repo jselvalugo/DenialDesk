@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { eq, sql } from "drizzle-orm";
 import { systemDb } from "@/db/client";
 import { users } from "@/db/schema";
+import { setLocaleCookie } from "@/i18n/actions";
+import { isLocale } from "@/i18n/config";
 import { auditSystem } from "@/lib/audit";
 import { limitCurrentRequest } from "@/lib/rate-limit";
 import {
@@ -139,6 +141,7 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
   }
 
   await replacePreviousOperatorSession(user.id);
+  if (isLocale(user.locale)) await setLocaleCookie(user.locale);
   if (operatorMfaSkipped()) {
     // Owner decision (2026-09-26): password alone outside production while the console is set up.
     await createSession(user.id, { authMethod: "operator", mfaVerified: true });

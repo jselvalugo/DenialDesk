@@ -3,6 +3,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
   customType,
   date,
   foreignKey,
@@ -77,9 +78,14 @@ export const users = pgTable(
     failedLoginCount: integer("failed_login_count").notNull().default(0),
     lockedUntil: timestamp("locked_until", { withTimezone: true }),
     disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    /** UI language the user chose ("en" | "es" | "pt"); null until they pick one (spec: internationalization). */
+    locale: text("locale"),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("users_email_key").on(sql`lower(${t.email})`)],
+  (t) => [
+    uniqueIndex("users_email_key").on(sql`lower(${t.email})`),
+    check("users_locale_check", sql`${t.locale} is null or ${t.locale} in ('en', 'es', 'pt')`),
+  ],
 );
 
 export const memberships = pgTable(

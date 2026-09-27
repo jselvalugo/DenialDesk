@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { useT } from "@/i18n/client";
 import { locate, navApps, type NavVisibility } from "./navigation";
 
 const ShellContext = createContext<NavVisibility | null>(null);
@@ -15,9 +16,10 @@ export function ShellProvider({ visibility, children }: { visibility: NavVisibil
 export function useShellLocation() {
   const visibility = useContext(ShellContext);
   const pathname = usePathname();
+  const t = useT("shell");
   return useMemo(() => {
     if (!visibility) return null;
-    const apps = navApps(visibility);
+    const apps = navApps(visibility, t);
     return { apps, ...locate(apps, pathname) };
-  }, [visibility, pathname]);
+  }, [visibility, pathname, t]);
 }

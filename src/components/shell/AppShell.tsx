@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
+import { getT } from "@/i18n/server";
 import { GlobalHeader, type ShellUser } from "./GlobalHeader";
 import { SessionTimeout } from "./SessionTimeout";
 import { ShellProvider } from "./ShellContext";
 
-export function AppShell({
+export async function AppShell({
   user,
   showRevenueCycle = false,
   children,
@@ -12,6 +13,7 @@ export function AppShell({
   showRevenueCycle?: boolean;
   children: ReactNode;
 }) {
+  const t = await getT("shell");
   return (
     <ShellProvider visibility={{ showRevenueCycle, showSettings: user !== null }}>
       <div className="flex min-h-0 flex-1 flex-col">
@@ -19,7 +21,7 @@ export function AppShell({
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded-control focus:bg-surface focus:px-3 focus:py-2 focus:shadow-sm"
         >
-          Skip to content
+          {t("skipToContent")}
         </a>
         <GlobalHeader user={user} />
         <main

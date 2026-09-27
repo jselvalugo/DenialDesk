@@ -1,10 +1,23 @@
+import { INTL_TAGS, type Locale } from "@/i18n/config";
+
+// Money is USD in U.S. form in every language (ADR 0009): amounts match payer paperwork and the
+// dollars-and-cents entry format, and a Brazilian-style "1.234,56" beside "1,234.56" invites misreads.
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-const usDate = new Intl.DateTimeFormat("en-US", {
-  month: "2-digit",
-  day: "2-digit",
-  year: "numeric",
-  timeZone: "UTC",
-});
+
+const dateFormats = new Map<Locale, Intl.DateTimeFormat>();
+function dateFormat(locale: Locale): Intl.DateTimeFormat {
+  let format = dateFormats.get(locale);
+  if (!format) {
+    format = new Intl.DateTimeFormat(INTL_TAGS[locale], {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+    dateFormats.set(locale, format);
+  }
+  return format;
+}
 
 /** Money is stored as integer cents (never floats). Formats as $1,234.56 / -$1,234.56. */
 export function formatCents(cents: number): string {
@@ -27,25 +40,36 @@ export function parseDollarsToCents(text: string): number | null {
   return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
 }
 
-/** Formats a calendar date (YYYY-MM-DD, no time zone shift) as MM/DD/YYYY. */
-export function formatDate(isoDate: string): string {
+/**
+ * Formats a calendar date (YYYY-MM-DD, no time zone shift) in the language's order: MM/DD/YYYY in
+ * English, DD/MM/YYYY in Spanish and Portuguese. Pages get the language from getFormat()/useFormat().
+ */
+export function formatDate(isoDate: string, locale: Locale = "en"): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
     throw new Error("formatDate expects YYYY-MM-DD");
   }
-  return usDate.format(new Date(`${isoDate}T00:00:00Z`));
+  return dateFormat(locale).format(new Date(`${isoDate}T00:00:00Z`));
 }
 
-const dateTimeFormat = new Intl.DateTimeFormat("en-US", {
-  month: "2-digit",
-  day: "2-digit",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  timeZone: "America/New_York",
-  timeZoneName: "short",
-});
+const dateTimeFormats = new Map<Locale, Intl.DateTimeFormat>();
+function dateTimeFormat(locale: Locale): Intl.DateTimeFormat {
+  let format = dateTimeFormats.get(locale);
+  if (!format) {
+    format = new Intl.DateTimeFormat(INTL_TAGS[locale], {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "America/New_York",
+      timeZoneName: "short",
+    });
+    dateTimeFormats.set(locale, format);
+  }
+  return format;
+}
 
-/** Timestamp for history panels: `10/14/2026, 5:00 PM EDT` (DESIGN.md §10). */
-export function formatDateTime(at: Date): string {
-  return dateTimeFormat.format(at);
+/** Timestamp for history panels: `10/14/2026, 5:00 PM EDT` (DESIGN.md §10), in the language's form. */
+export function formatDateTime(at: Date, locale: Locale = "en"): string {
+  return dateTimeFormat(locale).format(at);
 }

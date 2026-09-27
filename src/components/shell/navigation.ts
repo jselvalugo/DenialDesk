@@ -18,6 +18,14 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { en } from "@/i18n/messages/en";
+import type { MessageKey } from "@/i18n/messages/types";
+import { createTranslator } from "@/i18n/translate";
+
+type ShellKey = MessageKey<"shell">;
+/** Resolves a shell message key to text in the user's language; English when none is given (tests). */
+export type NavLabels = (key: ShellKey) => string;
+const englishLabels: NavLabels = createTranslator(en.shell, "en");
 
 export interface NavItem {
   label: string;
@@ -44,78 +52,84 @@ export interface NavVisibility {
   showSettings?: boolean;
 }
 
-/** What the menus show. Not access control: every page still enforces its own permission on the server. */
-export function navApps({ showRevenueCycle, showSettings = false }: NavVisibility): NavApp[] {
+/**
+ * What the menus show, in the user's language (`t` from the shell namespace; English by default).
+ * Not access control: every page still enforces its own permission on the server.
+ */
+export function navApps(
+  { showRevenueCycle, showSettings = false }: NavVisibility,
+  t: NavLabels = englishLabels,
+): NavApp[] {
   const apps: NavApp[] = [
     {
       id: "denials",
-      label: "Denials",
-      description: "Open denials, appeal deadlines, and the work queue.",
+      label: t("module.denials"),
+      description: t("module.denials.description"),
       icon: ShieldAlert,
       tone: "teal",
       items: [
-        { label: "Overview", href: "/overview", icon: LayoutDashboard, available: true },
-        { label: "Denial queue", href: "/denials", icon: Inbox, available: true },
-        { label: "Appeals", href: "/appeals", icon: Gavel, available: true },
+        { label: t("page.overview"), href: "/overview", icon: LayoutDashboard, available: true },
+        { label: t("page.denialQueue"), href: "/denials", icon: Inbox, available: true },
+        { label: t("page.appeals"), href: "/appeals", icon: Gavel, available: true },
       ],
     },
     {
       id: "patients",
-      label: "Patients",
-      description: "Patient records: demographics, insurance, and every claim and denial.",
+      label: t("module.patients"),
+      description: t("module.patients.description"),
       icon: Users,
       tone: "slate",
-      items: [{ label: "Patients", href: "/patients", icon: Users, available: true }],
+      items: [{ label: t("page.patients"), href: "/patients", icon: Users, available: true }],
     },
     {
       id: "claims",
-      label: "Claims",
-      description: "Claims, corrections, remittances, and prompt-pay tracking.",
+      label: t("module.claims"),
+      description: t("module.claims.description"),
       icon: FileText,
       tone: "blue",
       items: [
-        { label: "Claims", href: "/claims", icon: FileText, available: true },
-        { label: "Remittances", href: "/remittances", icon: Receipt, available: true },
-        { label: "Prompt pay", href: "/prompt-pay", icon: Scale, available: true },
+        { label: t("page.claims"), href: "/claims", icon: FileText, available: true },
+        { label: t("page.remittances"), href: "/remittances", icon: Receipt, available: true },
+        { label: t("page.promptPay"), href: "/prompt-pay", icon: Scale, available: true },
       ],
     },
   ];
   if (showRevenueCycle) {
     apps.push({
       id: "revenue-cycle",
-      label: "Revenue cycle",
-      description: "Monthly files, journal vouchers, A/R aging, deposits, and the ledger.",
+      label: t("module.revenueCycle"),
+      description: t("module.revenueCycle.description"),
       icon: Landmark,
       tone: "navy",
       items: [
-        { label: "Monthly files", href: "/revenue-cycle/files", icon: FileSpreadsheet, available: true },
-        { label: "Journal vouchers", href: "/revenue-cycle/journal", icon: NotebookPen, available: true },
-        { label: "A/R aging", href: "/revenue-cycle/ar-aging", icon: Hourglass, available: true },
-        { label: "Deposits", href: "/revenue-cycle/deposits", icon: Landmark, available: true },
-        { label: "Rules and ledger", href: "/revenue-cycle/rules", icon: BookOpenCheck, available: true },
-        { label: "RCM dashboard", href: "/revenue-cycle/dashboard", icon: LineChart, available: true },
-        { label: "Statements", href: "/revenue-cycle/statements", icon: PieChart, available: true },
+        { label: t("page.monthlyFiles"), href: "/revenue-cycle/files", icon: FileSpreadsheet, available: true },
+        { label: t("page.journalVouchers"), href: "/revenue-cycle/journal", icon: NotebookPen, available: true },
+        { label: t("page.arAging"), href: "/revenue-cycle/ar-aging", icon: Hourglass, available: true },
+        { label: t("page.deposits"), href: "/revenue-cycle/deposits", icon: Landmark, available: true },
+        { label: t("page.rulesAndLedger"), href: "/revenue-cycle/rules", icon: BookOpenCheck, available: true },
+        { label: t("page.rcmDashboard"), href: "/revenue-cycle/dashboard", icon: LineChart, available: true },
+        { label: t("page.statements"), href: "/revenue-cycle/statements", icon: PieChart, available: true },
       ],
     });
   }
   apps.push({
     id: "insight",
-    label: "Insight",
-    description: "Reports on denial trends, recovery, and payer performance.",
+    label: t("module.insight"),
+    description: t("module.insight.description"),
     icon: BarChart3,
     tone: "amber",
-    items: [{ label: "Reports", href: "/insight", icon: BarChart3, available: true }],
+    items: [{ label: t("page.reports"), href: "/insight", icon: BarChart3, available: true }],
   });
   const settings: NavItem[] = [];
   // The platform console isn't linked from practices: it has its own sign-in (/operator/login).
   if (showSettings) {
-    settings.push({ label: "Settings", href: "/settings", icon: Settings2, available: true });
+    settings.push({ label: t("page.settings"), href: "/settings", icon: Settings2, available: true });
   }
   if (settings.length > 0) {
     apps.push({
       id: "settings",
-      label: "Settings",
-      description: "Practice profile, custom fields, and access.",
+      label: t("module.settings"),
+      description: t("module.settings.description"),
       icon: Settings2,
       tone: "slate",
       items: settings,

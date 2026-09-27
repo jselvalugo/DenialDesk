@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
+import { useT } from "@/i18n/client";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "./BrandMark";
 import { ModuleSwitcher } from "./ModuleSwitcher";
@@ -19,6 +20,7 @@ export type { ShellUser };
  */
 export function GlobalHeader({ user }: { user: ShellUser | null }) {
   const location = useShellLocation();
+  const t = useT("shell");
   const [switcherOpen, setSwitcherOpen] = useState(false);
 
   // Ctrl+K / ⌘K opens "Go to" from anywhere.
@@ -43,7 +45,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
   return (
     <header className="shrink-0">
       <div className="flex h-14 items-center gap-6 border-b border-border bg-surface px-4">
-        <Link href="/" aria-label="DenialDesk home" className="shrink-0">
+        <Link href="/" aria-label={t("brand.home")} className="shrink-0">
           <Image src="/brand/denialdesk-logo.png" alt="DenialDesk" width={140} height={33} priority />
         </Link>
 
@@ -54,7 +56,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
           className="group flex h-9 w-full min-w-40 max-w-xs items-center gap-2.5 rounded-control border border-border bg-surface-muted px-3 text-left text-body text-subtle transition-colors duration-100 hover:border-border-strong hover:bg-surface"
         >
           <Search aria-hidden="true" className="size-4 shrink-0" />
-          <span className="flex-1 truncate">Go to a module or page</span>
+          <span className="flex-1 truncate">{t("header.goTo")}</span>
           <kbd
             aria-hidden="true"
             className="rounded-[3px] border border-border bg-surface px-1.5 font-mono text-[0.6875rem] leading-4 text-muted"
@@ -66,10 +68,10 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
         <div className="ml-auto flex shrink-0 items-center gap-4">
           <div className="hidden min-w-0 flex-col items-end leading-tight lg:flex">
             <span className="text-[0.6875rem] font-semibold tracking-wider text-subtle uppercase">
-              Practice
+              {t("header.practice")}
             </span>
             <span className="max-w-36 truncate text-body font-medium text-text xl:max-w-56">
-              {user?.tenantName ?? "Style guide"}
+              {user?.tenantName ?? t("header.styleGuide")}
             </span>
           </div>
           {user && <UserMenu user={user} />}
@@ -81,14 +83,14 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
           type="button"
           onClick={() => setSwitcherOpen(true)}
           aria-haspopup="dialog"
-          aria-label={`${app.label}, switch module`}
-          title={`${app.label} · switch module`}
+          aria-label={t("tabBar.switchModule", { module: app.label })}
+          title={t("tabBar.switchModuleTitle", { module: app.label })}
           className="flex shrink-0 items-center gap-1.5 border-r border-sidebar-border px-3.5 text-white transition-colors duration-100 hover:bg-sidebar-active focus-visible:-outline-offset-2"
         >
           <BrandMark className="size-6" />
           <ChevronDown aria-hidden="true" className="size-3.5 text-sidebar-muted" strokeWidth={2} />
         </button>
-        <nav aria-label="Primary" className="flex min-w-0 flex-1 overflow-x-auto">
+        <nav aria-label={t("nav.primary")} className="flex min-w-0 flex-1 overflow-x-auto">
           <ul className="flex items-stretch">
             {tabs.map((item) => {
               const Icon = item.icon;

@@ -18,6 +18,9 @@ track outcomes. Product brief: `docs/PRODUCT_BRIEF.md`. Requirements baseline: `
 - Legal rules: `rules/` (versioned, effective-dated). **Never hard-code a statutory deadline, rate, or threshold anywhere else.**
 - How agents collaborate: `docs/AGENT_WORKFLOW.md`.
 - UI and visual design: `docs/DESIGN.md` (read before any UI work).
+- UI text: every user-visible string is a message key in English, Spanish, and Portuguese
+  (`src/i18n/README.md`, `docs/specs/internationalization.md`). No English literals in JSX or in
+  strings returned to the user; add the key to all three dictionaries in the same PR.
 - External data sources to connect (clearinghouse, bank, code sets): `docs/data-sources.xlsx` — update it in the PR that adds or changes an integration.
 - Current status, decisions, and open questions: `docs/PROJECT_STATE.md` — read at session start, update at session end.
 - Owner action items: `docs/OWNER_ACTIONS.md` — read every session. Anything you need from the owner

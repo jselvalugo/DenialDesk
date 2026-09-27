@@ -2,18 +2,19 @@ import { daysUntil, timelyFilingDeadline, type Deadline } from "@rules/deadlines
 import type { Regime } from "@rules/types";
 import type { Tone } from "@/components/ui/Badge";
 import type { claimStatusEnum } from "@/db/schema";
+import type { MessageKey } from "@/i18n/messages/types";
 
 export type ClaimStatus = (typeof claimStatusEnum.enumValues)[number];
 
-export const CLAIM_STATUSES: Record<ClaimStatus, { label: string; tone: Tone }> = {
-  draft: { label: "Draft", tone: "neutral" },
-  submitted: { label: "Submitted", tone: "info" },
-  acknowledged: { label: "Accepted by payer", tone: "info" },
-  rejected: { label: "Rejected", tone: "danger" },
-  paid: { label: "Paid", tone: "success" },
-  partially_paid: { label: "Partially paid", tone: "warning" },
-  denied: { label: "Denied", tone: "danger" },
-  closed: { label: "Closed", tone: "neutral" },
+export const CLAIM_STATUSES: Record<ClaimStatus, { labelKey: MessageKey<"common">; tone: Tone }> = {
+  draft: { labelKey: "claimStatus.draft", tone: "neutral" },
+  submitted: { labelKey: "claimStatus.submitted", tone: "info" },
+  acknowledged: { labelKey: "claimStatus.acknowledged", tone: "info" },
+  rejected: { labelKey: "claimStatus.rejected", tone: "danger" },
+  paid: { labelKey: "claimStatus.paid", tone: "success" },
+  partially_paid: { labelKey: "claimStatus.partially_paid", tone: "warning" },
+  denied: { labelKey: "claimStatus.denied", tone: "danger" },
+  closed: { labelKey: "claimStatus.closed", tone: "neutral" },
 };
 
 /** Not yet accepted by the payer: the timely-filing clock still matters, and the claim can be corrected. */

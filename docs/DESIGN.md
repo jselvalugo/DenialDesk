@@ -133,7 +133,10 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 - **App shell (ERP layout, `specs/erp-shell.md`, ADR 0005):**
   - *Global header*, 56px white: logo, then the "Go to a module or page" field beside it (opens the
     module switcher; Ctrl/⌘ K); practice name, demo badge, and the user menu (name, role, practice,
-    sign out) on the right.
+    a language group listing English / Español / Português with the current one marked, sign out)
+    on the right. Every string on every screen comes from `src/i18n/` in all three languages
+    (`specs/internationalization.md`, `src/i18n/README.md`); dates follow the language, money stays
+    `$1,234.56`.
   - *Tab bar*, 44px navy: the white DenialDesk mark (logo icon, teal cross) with a chevron as the
     first control (accessible name "<Module>, switch module"; opens the switcher; the module name is
     carried by the tabs and the page-header eyebrow), then the module's shipped pages as tabs (`nav`

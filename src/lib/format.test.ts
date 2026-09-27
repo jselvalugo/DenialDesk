@@ -46,3 +46,11 @@ describe("parseDollarsToCents", () => {
     expect(parseDollarsToCents(text)).toBeNull();
   });
 });
+
+describe("formatDate in other languages", () => {
+  it("uses day-first order for Spanish and Portuguese and keeps month-first for English", () => {
+    expect(formatDate("2026-12-31", "en")).toBe("12/31/2026");
+    expect(formatDate("2026-12-31", "es")).toBe("31/12/2026");
+    expect(formatDate("2026-12-31", "pt")).toBe("31/12/2026");
+  });
+});
