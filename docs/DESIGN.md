@@ -47,9 +47,11 @@ ADR 0004 amendment; ERP shell (global header, tab bar, module switcher) 2026-09-
 `specs/erp-shell.md`, differentiated from any vendor's shell in ADR 0005.
 The practice sign-in pages (`/login` and its MFA and password steps) also carry the reception image
 (`public/brand/denialdesk-reception.jpg`, provenance in `public/brand/README.md`) in a matted frame
-beside the card (above it under 1024px): hairline, canvas gap, navy line, white mat, hairline. It is
-the one place a picture appears in the product; working screens never use imagery. The product line
-next to it is Inter, not serif: Playfair stays reserved for page titles (§6).
+beside the card (above it under 1024px): hairline, canvas gap, navy line, white mat, hairline. It and
+the "DenialDesk Wiki" wordmark (`public/brand/denialdesk-wiki.png`, owner-supplied 2026-09-27; the
+Wiki button in the global header and on the welcome page) are the only pictures in the product;
+working screens never use imagery. The product line next to the reception image is Inter, not serif:
+Playfair stays reserved for page titles (§6).
 
 | Token | Hex | Use |
 |---|---|---|

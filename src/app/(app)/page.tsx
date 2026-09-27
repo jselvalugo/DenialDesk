@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -168,6 +169,13 @@ export default async function HomePage() {
         <div className="flex items-center gap-4">
           <Link href="/university" className="text-body font-medium text-link hover:underline">
             New here? Start with DenialDesk University
+          </Link>
+          <Link
+            href="/university/wiki"
+            title="DenialDesk Wiki"
+            className="inline-flex h-12 items-center rounded-control border border-border bg-surface px-3 hover:bg-surface-muted"
+          >
+            <Image src="/brand/denialdesk-wiki.png" alt="DenialDesk Wiki" width={140} height={42} />
           </Link>
           <Link href="/denials" className={primaryLinkButtonClass}>
             Open denial queue

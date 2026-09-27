@@ -14,7 +14,7 @@ import { UserMenu, type ShellUser } from "./UserMenu";
 export type { ShellUser };
 
 /**
- * DenialDesk chrome (DESIGN.md §8): a white global header (logo, "Go to" field, University link,
+ * DenialDesk chrome (DESIGN.md §8): a white global header (logo, "Go to" field, University link, Wiki wordmark button,
  * practice, user) over
  * a navy tab bar whose first control is the white brand mark (accessible name
  * "<Module>, switch module"); it opens the module switcher.
@@ -75,6 +75,16 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
             >
               <GraduationCap aria-hidden="true" className="size-4 text-accent" strokeWidth={1.75} />
               University
+            </Link>
+          )}
+          {user && (
+            <Link
+              href="/university/wiki"
+              aria-current={pathname.startsWith("/university/wiki") ? "page" : undefined}
+              title="DenialDesk Wiki"
+              className="inline-flex h-11 items-center rounded-control px-2 hover:bg-surface-muted"
+            >
+              <Image src="/brand/denialdesk-wiki.png" alt="DenialDesk Wiki" width={120} height={36} />
             </Link>
           )}
           <div className="hidden min-w-0 flex-col items-end leading-tight lg:flex">

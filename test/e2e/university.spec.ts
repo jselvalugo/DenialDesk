@@ -18,6 +18,15 @@ test.describe("university", () => {
     await expect(page.getByRole("link", { name: "Open course: Florida prompt pay" })).toBeVisible();
   });
 
+  test("the wordmark buttons in the header and on the welcome page open the wiki", async ({ page }) => {
+    await page.goto("/overview");
+    await page.getByRole("banner").getByRole("link", { name: "DenialDesk Wiki" }).click();
+    await expect(page).toHaveURL(/\/university\/wiki$/);
+    await page.goto("/");
+    await page.getByRole("main").getByRole("link", { name: "DenialDesk Wiki" }).click();
+    await expect(page).toHaveURL(/\/university\/wiki$/);
+  });
+
   test("the user menu links to the University", async ({ page }) => {
     await page.goto("/overview");
     await page.getByRole("button", { name: /Riley Worker/ }).click();
