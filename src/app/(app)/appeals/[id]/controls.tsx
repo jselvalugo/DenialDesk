@@ -2,6 +2,13 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import {
+  APPEAL_DECISION_OUTCOME_LABEL_KEYS,
+  APPEAL_SUBMITTED_METHOD_LABEL_KEYS,
+  type AppealDecisionOutcome,
+  type AppealSubmittedMethod,
+} from "@/domain/appeals/status";
+import { useT } from "@/i18n/client";
 import { addAppealNote, recordAppealDecision, recordAppealSubmission, type ActionState } from "./actions";
 
 const fieldClass =
@@ -26,21 +33,24 @@ export function SubmissionForm({
   disabled: boolean;
 }) {
   const [state, action] = useActionState<ActionState, FormData>(recordAppealSubmission, {});
+  const t = useT("appeals");
+  const tc = useT("common");
   return (
     <form action={action} className="flex flex-col gap-3">
       <input type="hidden" name="appealId" value={appealId} />
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-label font-medium text-muted">
-          Method
+          {t("field.method")}
           <select name="method" defaultValue="portal" disabled={disabled} className={fieldClass}>
-            <option value="portal">Payer portal</option>
-            <option value="fax">Fax</option>
-            <option value="mail">Mail</option>
-            <option value="electronic">Electronic (clearinghouse)</option>
+            {(Object.keys(APPEAL_SUBMITTED_METHOD_LABEL_KEYS) as AppealSubmittedMethod[]).map((method) => (
+              <option key={method} value={method}>
+                {t(APPEAL_SUBMITTED_METHOD_LABEL_KEYS[method])}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-label font-medium text-muted">
-          Submitted date
+          {t("field.submittedDate")}
           <input
             type="date"
             name="submittedOn"
@@ -51,14 +61,14 @@ export function SubmissionForm({
           />
         </label>
         <label className="col-span-2 flex flex-col gap-1 text-label font-medium text-muted">
-          Tracking / reference number (optional)
+          {t("field.trackingReferenceOptional")}
           <input type="text" name="trackingReference" disabled={disabled} className={fieldClass} />
         </label>
       </div>
       <InlineError state={state} />
       <div>
-        <SubmitButton variant="primary" pendingLabel="Saving…" disabled={disabled}>
-          Record submission
+        <SubmitButton variant="primary" pendingLabel={tc("action.saving")} disabled={disabled}>
+          {t("panel.recordSubmission")}
         </SubmitButton>
       </div>
     </form>
@@ -80,12 +90,14 @@ export function DecisionForm({
 }) {
   const [state, action] = useActionState<ActionState, FormData>(recordAppealDecision, {});
   const outcomeRef = useRef<HTMLSelectElement>(null);
+  const t = useT("appeals");
+  const tc = useT("common");
   return (
     <form action={action} className="flex flex-col gap-3">
       <input type="hidden" name="appealId" value={appealId} />
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-label font-medium text-muted">
-          Outcome
+          {t("field.outcome")}
           <select
             ref={outcomeRef}
             name="outcome"
@@ -93,15 +105,15 @@ export function DecisionForm({
             disabled={disabled}
             className={fieldClass}
           >
-            <option value="overturned_full">Overturned in full</option>
-            <option value="overturned_partial">Partially overturned</option>
-            <option value="upheld">Upheld</option>
-            <option value="withdrawn">Withdrawn</option>
-            <option value="dismissed">Dismissed</option>
+            {(Object.keys(APPEAL_DECISION_OUTCOME_LABEL_KEYS) as AppealDecisionOutcome[]).map((outcome) => (
+              <option key={outcome} value={outcome}>
+                {t(APPEAL_DECISION_OUTCOME_LABEL_KEYS[outcome])}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex flex-col gap-1 text-label font-medium text-muted">
-          Decision date
+          {t("field.decisionDate")}
           <input
             type="date"
             name="decisionOn"
@@ -113,18 +125,18 @@ export function DecisionForm({
           />
         </label>
         <label className="flex flex-col gap-1 text-label font-medium text-muted">
-          Recovered amount ($, overturned only)
+          {t("field.recoveredAmount")}
           <input
             type="text"
             inputMode="decimal"
             name="recoveredDollars"
-            placeholder={`Up to ${(deniedCents / 100).toFixed(2)}`}
+            placeholder={t("field.recoveredPlaceholder", { amount: (deniedCents / 100).toFixed(2) })}
             disabled={disabled}
             className={fieldClass}
           />
         </label>
         <label className="col-span-2 flex flex-col gap-1 text-label font-medium text-muted">
-          Reason (required to withdraw or dismiss)
+          {t("field.closeReason")}
           <textarea
             name="closeReason"
             rows={2}
@@ -135,8 +147,8 @@ export function DecisionForm({
       </div>
       <InlineError state={state} />
       <div>
-        <SubmitButton variant="primary" pendingLabel="Saving…" disabled={disabled}>
-          Record decision
+        <SubmitButton variant="primary" pendingLabel={tc("action.saving")} disabled={disabled}>
+          {t("panel.recordDecision")}
         </SubmitButton>
       </div>
     </form>
@@ -146,6 +158,8 @@ export function DecisionForm({
 export function AppealNoteForm({ appealId, disabled }: { appealId: string; disabled: boolean }) {
   const [state, action] = useActionState<ActionState, FormData>(addAppealNote, {});
   const formRef = useRef<HTMLFormElement>(null);
+  const t = useT("appeals");
+  const tc = useT("common");
   useEffect(() => {
     if (state.ok) formRef.current?.reset();
   }, [state]);
@@ -153,7 +167,7 @@ export function AppealNoteForm({ appealId, disabled }: { appealId: string; disab
     <form ref={formRef} action={action} className="flex flex-col gap-2">
       <input type="hidden" name="appealId" value={appealId} />
       <label htmlFor="appeal-note-body" className="text-label font-medium text-text">
-        Add a note
+        {t("field.addNote")}
       </label>
       <textarea
         id="appeal-note-body"
@@ -161,13 +175,13 @@ export function AppealNoteForm({ appealId, disabled }: { appealId: string; disab
         rows={3}
         maxLength={4000}
         disabled={disabled}
-        placeholder="What you did, what's next, who you spoke with."
+        placeholder={t("note.placeholder")}
         className="rounded-control border border-border-strong bg-surface px-3 py-2 text-body text-text placeholder:text-subtle focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus"
       />
       <InlineError state={state} />
       <div>
-        <SubmitButton pendingLabel="Saving…" disabled={disabled}>
-          Save note
+        <SubmitButton pendingLabel={tc("action.saving")} disabled={disabled}>
+          {t("action.saveNote")}
         </SubmitButton>
       </div>
     </form>

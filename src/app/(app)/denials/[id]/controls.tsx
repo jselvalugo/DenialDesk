@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { useT } from "@/i18n/client";
 import { addNote, assignDenial, changeStatus, type ActionState } from "./actions";
 
 const fieldClass =
@@ -28,12 +29,14 @@ export function StatusControl({
   disabled: boolean;
 }) {
   const [state, action] = useActionState<ActionState, FormData>(changeStatus, {});
+  const t = useT("denials");
+  const tc = useT("common");
   return (
     <form action={action} className="flex flex-col gap-1">
       <input type="hidden" name="denialId" value={denialId} />
       <div className="flex items-end gap-2">
         <label className="flex flex-col gap-1 text-label font-medium text-muted">
-          Status
+          {tc("word.status")}
           <select name="status" defaultValue={current} disabled={disabled} className={fieldClass}>
             {options.map((o) => (
               <option key={o.value} value={o.value}>
@@ -42,8 +45,8 @@ export function StatusControl({
             ))}
           </select>
         </label>
-        <SubmitButton variant="primary" pendingLabel="Saving…" disabled={disabled}>
-          Update status
+        <SubmitButton variant="primary" pendingLabel={tc("action.saving")} disabled={disabled}>
+          {t("action.updateStatus")}
         </SubmitButton>
       </div>
       <InlineError state={state} />
@@ -63,14 +66,16 @@ export function AssignControl({
   disabled: boolean;
 }) {
   const [state, action] = useActionState<ActionState, FormData>(assignDenial, {});
+  const t = useT("denials");
+  const tc = useT("common");
   return (
     <form action={action} className="flex flex-col gap-1">
       <input type="hidden" name="denialId" value={denialId} />
       <div className="flex items-end gap-2">
         <label className="flex flex-col gap-1 text-label font-medium text-muted">
-          Assignee
+          {t("field.assignee")}
           <select name="assigneeId" defaultValue={current ?? ""} disabled={disabled} className={fieldClass}>
-            <option value="">Unassigned</option>
+            <option value="">{t("assignee.unassigned")}</option>
             {team.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.displayName}
@@ -78,8 +83,8 @@ export function AssignControl({
             ))}
           </select>
         </label>
-        <SubmitButton pendingLabel="Saving…" disabled={disabled}>
-          Assign
+        <SubmitButton pendingLabel={tc("action.saving")} disabled={disabled}>
+          {t("action.assign")}
         </SubmitButton>
       </div>
       <InlineError state={state} />
@@ -90,6 +95,8 @@ export function AssignControl({
 export function NoteForm({ denialId, disabled }: { denialId: string; disabled: boolean }) {
   const [state, action] = useActionState<ActionState, FormData>(addNote, {});
   const formRef = useRef<HTMLFormElement>(null);
+  const t = useT("denials");
+  const tc = useT("common");
   useEffect(() => {
     if (state.ok) formRef.current?.reset();
   }, [state]);
@@ -97,7 +104,7 @@ export function NoteForm({ denialId, disabled }: { denialId: string; disabled: b
     <form ref={formRef} action={action} className="flex flex-col gap-2">
       <input type="hidden" name="denialId" value={denialId} />
       <label htmlFor="note-body" className="text-label font-medium text-text">
-        Add a note
+        {t("field.addNote")}
       </label>
       <textarea
         id="note-body"
@@ -105,13 +112,13 @@ export function NoteForm({ denialId, disabled }: { denialId: string; disabled: b
         rows={3}
         maxLength={4000}
         disabled={disabled}
-        placeholder="What you did, what's next, who you spoke with."
+        placeholder={t("note.placeholder")}
         className="rounded-control border border-border-strong bg-surface px-3 py-2 text-body text-text placeholder:text-subtle focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus"
       />
       <InlineError state={state} />
       <div>
-        <SubmitButton pendingLabel="Saving…" disabled={disabled}>
-          Save note
+        <SubmitButton pendingLabel={tc("action.saving")} disabled={disabled}>
+          {t("action.saveNote")}
         </SubmitButton>
       </div>
     </form>

@@ -10,6 +10,7 @@ import { claims, denialNotes, denials, memberships, patients } from "@/db/schema
 import { withTenant } from "@/db/tenant";
 import { denialStatusEnum } from "@/db/schema";
 import { nextAppealSubmittedOn } from "@/domain/denial-status";
+import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
 
@@ -18,7 +19,6 @@ export interface ActionState {
   ok?: boolean;
 }
 
-const NOT_ALLOWED = "Your role can view denials but not change them.";
 const denialId = z.uuid();
 
 async function authorize() {
@@ -28,11 +28,12 @@ async function authorize() {
 
 export async function changeStatus(_: ActionState, formData: FormData): Promise<ActionState> {
   const { auth, allowed } = await authorize();
-  if (!allowed) return { error: NOT_ALLOWED };
+  const t = await getT("denials");
+  if (!allowed) return { error: t("error.notAllowedChange") };
   const parsed = z
     .object({ denialId, status: z.enum(denialStatusEnum.enumValues) })
     .safeParse({ denialId: formData.get("denialId"), status: formData.get("status") });
-  if (!parsed.success) return { error: "Choose a valid status." };
+  if (!parsed.success) return { error: t("error.invalidStatus") };
 
   const result = await withTenant(auth, async (tx) => {
     // Lock the row so concurrent edits record the correct "from" status in the audit trail.
@@ -41,7 +42,7 @@ export async function changeStatus(_: ActionState, formData: FormData): Promise<
       .from(denials)
       .where(eq(denials.id, parsed.data.denialId))
       .for("update");
-    if (!current) return { error: "This denial no longer exists." };
+    if (!current) return { error: t("error.notFound") };
     if (current.status === parsed.data.status) return { ok: true };
     const stamped = nextAppealSubmittedOn(parsed.data.status, current.appealSubmittedOn, todayIn());
     await tx
@@ -75,11 +76,12 @@ export async function changeStatus(_: ActionState, formData: FormData): Promise<
 
 export async function assignDenial(_: ActionState, formData: FormData): Promise<ActionState> {
   const { auth, allowed } = await authorize();
-  if (!allowed) return { error: NOT_ALLOWED };
+  const t = await getT("denials");
+  if (!allowed) return { error: t("error.notAllowedChange") };
   const parsed = z
     .object({ denialId, assigneeId: z.union([z.uuid(), z.literal("")]) })
     .safeParse({ denialId: formData.get("denialId"), assigneeId: formData.get("assigneeId") });
-  if (!parsed.success) return { error: "Choose a team member." };
+  if (!parsed.success) return { error: t("error.invalidAssignee") };
   const assigneeId = parsed.data.assigneeId || null;
 
   const result = await withTenant(auth, async (tx) => {
@@ -89,14 +91,14 @@ export async function assignDenial(_: ActionState, formData: FormData): Promise<
         .select({ id: memberships.id })
         .from(memberships)
         .where(and(eq(memberships.tenantId, auth.tenantId), eq(memberships.userId, assigneeId)));
-      if (!member) return { error: "That person isn't on this practice's team." };
+      if (!member) return { error: t("error.assigneeNotOnTeam") };
     }
     const updated = await tx
       .update(denials)
       .set({ assigneeId, updatedAt: new Date() })
       .where(eq(denials.id, parsed.data.denialId))
       .returning({ id: denials.id });
-    if (updated.length === 0) return { error: "This denial no longer exists." };
+    if (updated.length === 0) return { error: t("error.notFound") };
     await audit(tx, {
       action: "denial.assigned",
       actorUserId: auth.userId,
@@ -113,18 +115,19 @@ export async function assignDenial(_: ActionState, formData: FormData): Promise<
 
 export async function addNote(_: ActionState, formData: FormData): Promise<ActionState> {
   const { auth, allowed } = await authorize();
-  if (!allowed) return { error: NOT_ALLOWED };
+  const t = await getT("denials");
+  if (!allowed) return { error: t("error.notAllowedChange") };
   const parsed = z
     .object({ denialId, body: z.string().trim().min(1).max(4000) })
     .safeParse({ denialId: formData.get("denialId"), body: formData.get("body") });
-  if (!parsed.success) return { error: "Write a note of up to 4,000 characters." };
+  if (!parsed.success) return { error: t("error.invalidNote") };
 
   const result = await withTenant(auth, async (tx) => {
     const [exists] = await tx
       .select({ id: denials.id })
       .from(denials)
       .where(eq(denials.id, parsed.data.denialId));
-    if (!exists) return { error: "This denial no longer exists." };
+    if (!exists) return { error: t("error.notFound") };
     const [note] = await tx
       .insert(denialNotes)
       .values({
@@ -155,11 +158,12 @@ export async function revealMemberId(
 ): Promise<{ value?: string; error?: string }> {
   // Minimum necessary (R-5.1.2): only people who work denials need the full member ID.
   const { auth, allowed } = await authorize();
-  if (!allowed) return { error: NOT_ALLOWED };
+  const t = await getT("denials");
+  if (!allowed) return { error: t("error.notAllowedChange") };
   const parsed = z
     .object({ denial: denialId, reason: z.enum(["appeal", "eligibility", "payer_call", "other"]) })
     .safeParse({ denial, reason });
-  if (!parsed.success) return { error: "Choose a reason." };
+  if (!parsed.success) return { error: t("error.invalidRevealReason") };
   return withTenant(auth, async (tx) => {
     const [row] = await tx
       .select({ patientId: patients.id, memberIdEnc: patients.memberIdEnc })
@@ -167,7 +171,7 @@ export async function revealMemberId(
       .innerJoin(claims, eq(claims.id, denials.claimId))
       .innerJoin(patients, eq(patients.id, claims.patientId))
       .where(eq(denials.id, parsed.data.denial));
-    if (!row) return { error: "Not found." };
+    if (!row) return { error: t("error.revealNotFound") };
     await audit(tx, {
       action: "patient.member_id_revealed",
       actorUserId: auth.userId,

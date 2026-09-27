@@ -13,33 +13,27 @@ import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
 import { Money } from "@/components/ui/Money";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
-import { CARC, CATEGORY_LABELS } from "@/domain/carc";
+import { CARC, CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { ACTION_STATUSES, DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { DUE_SOON_DAYS, getDenial, teamMembers } from "@/domain/denials/queries";
 import { openAppealsForDenial } from "@/domain/appeals/queries";
+import { getFormat, getT } from "@/i18n/server";
+import type { MessageKey } from "@/i18n/messages/types";
 import { audit } from "@/lib/audit";
-import { formatDate } from "@/lib/format";
 import { MaskedMemberId } from "@/components/patients/MaskedMemberId";
 import { revealMemberId } from "./actions";
 import { AssignControl, NoteForm, StatusControl } from "./controls";
 
 // The title never includes patient data (DESIGN.md §12).
-export const metadata: Metadata = { title: "Denial" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("denials");
+  return { title: t("detail.title") };
+}
 
-const dateTime = new Intl.DateTimeFormat("en-US", {
-  month: "2-digit",
-  day: "2-digit",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  timeZone: "America/New_York",
-  timeZoneName: "short",
-});
-
-const ACTIVITY_LABELS: Record<string, string> = {
-  "denial.status_changed": "Changed status",
-  "denial.assigned": "Changed assignee",
-  "denial.note_added": "Added a note",
+const ACTIVITY_KEYS: Record<string, MessageKey<"denials">> = {
+  "denial.status_changed": "activity.statusChanged",
+  "denial.assigned": "activity.assigned",
+  "denial.note_added": "activity.noteAdded",
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -56,6 +50,9 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
   if (!z.uuid().safeParse(id).success) notFound();
   const auth = await requireAuth();
   const today = todayIn();
+  const t = await getT("denials");
+  const tc = await getT("common");
+  const f = await getFormat();
 
   const data = await withTenant(auth, async (tx) => {
     const detail = await getDenial(tx, id);
@@ -99,9 +96,9 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href="/denials" className="font-medium text-link hover:underline">
-          Denial queue
+          {t("detail.breadcrumb")}
         </Link>{" "}
         <span aria-hidden>/</span>{" "}
         <Link href={`/claims/${claim.id}`} className="font-mono font-medium text-link hover:underline">
@@ -117,11 +114,14 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                 {claim.claimNumber}
               </Link>
             </h1>
-            <Badge tone={status.tone}>{status.label}</Badge>
+            <Badge tone={status.tone}>{tc(status.labelKey)}</Badge>
           </div>
           <p className="mt-1 text-body text-muted">
-            {CATEGORY_LABELS[denial.category]} denial · {payer.name} · notice dated{" "}
-            {formatDate(denial.noticeDate)}
+            {t("detail.subtitle", {
+              category: tc(CATEGORY_LABEL_KEYS[denial.category]),
+              payer: payer.name,
+              date: f.date(denial.noticeDate),
+            })}
             {denial.remittanceId && (
               <>
                 {" · "}
@@ -129,9 +129,9 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                   href={`/remittances/${denial.remittanceId}`}
                   className="font-medium text-link hover:underline"
                 >
-                  captured from remittance
+                  {t("detail.remittanceLink")}
                 </Link>{" "}
-                <Badge tone="warning">Category unverified</Badge>
+                <Badge tone="warning">{t("detail.categoryUnverifiedBadge")}</Badge>
               </>
             )}
           </p>
@@ -142,7 +142,7 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
               href={`/appeals/new?denialId=${denial.id}`}
               className="inline-flex h-8 items-center rounded-control bg-primary px-3 text-body font-medium text-on-primary hover:opacity-90"
             >
-              Start appeal
+              {t("action.startAppeal")}
             </Link>
           )}
           {openAppeals.length > 0 && (
@@ -150,7 +150,7 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
               href={`/appeals/${openAppeals[0]!.id}`}
               className="inline-flex h-8 items-center rounded-control border border-border-strong bg-surface px-3 text-body font-medium text-link hover:bg-surface-muted"
             >
-              View appeal
+              {t("action.viewAppeal")}
             </Link>
           )}
           <AssignControl denialId={denial.id} current={denial.assigneeId} team={team} disabled={!canWork} />
@@ -158,7 +158,7 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
             denialId={denial.id}
             current={denial.status}
             disabled={!canWork}
-            options={Object.entries(DENIAL_STATUSES).map(([value, s]) => ({ value, label: s.label }))}
+            options={Object.entries(DENIAL_STATUSES).map(([value, s]) => ({ value, label: tc(s.labelKey) }))}
           />
         </div>
       </header>
@@ -167,28 +167,28 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
           role="note"
           className="rounded-control border border-info-border bg-info-bg px-3 py-2 text-body text-info-fg"
         >
-          You have read-only access to denials.
+          {t("detail.readOnlyNotice")}
         </p>
       )}
 
       <div className="grid grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] items-start gap-6">
         <div className="flex min-w-0 flex-col gap-6">
-          <Panel title="Denial">
+          <Panel title={t("panel.denial")}>
             <dl className="grid grid-cols-3 gap-x-6 gap-y-4">
               <div className="col-span-3 flex flex-col gap-1">
-                <dt className="text-label font-medium text-muted">Reason</dt>
+                <dt className="text-label font-medium text-muted">{tc("word.reason")}</dt>
                 <dd className="flex items-start gap-2 text-body text-text">
                   <Code>CARC {denial.carc}</Code>
                   <span>
-                    {carc?.summary ?? "Code not in DenialDesk's reference list yet."}
-                    {carc && <span className="ml-1 text-label text-subtle">(summary)</span>}
+                    {carc?.summary ?? t("detail.carcUnknown")}
+                    {carc && <span className="ml-1 text-label text-subtle">{t("detail.summaryTag")}</span>}
                   </span>
                 </dd>
               </div>
-              <Field label="Group code">
+              <Field label={t("field.groupCode")}>
                 <Code>{denial.groupCode}</Code>
               </Field>
-              <Field label="Remark codes">
+              <Field label={t("field.remarkCodes")}>
                 {denial.rarcs.length ? (
                   <span className="flex gap-1">
                     {denial.rarcs.map((r) => (
@@ -196,48 +196,52 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                     ))}
                   </span>
                 ) : (
-                  <span className="text-subtle">None</span>
+                  <span className="text-subtle">{tc("word.none")}</span>
                 )}
               </Field>
-              <Field label="Denied amount">
+              <Field label={t("field.deniedAmount")}>
                 <Money cents={denial.deniedCents} className="font-semibold" />
               </Field>
-              <Field label="Applies to">
-                {deniedLine ? `Line ${deniedLine.lineNumber} · ${deniedLine.procedureCode}` : "Whole claim"}
+              <Field label={t("field.appliesTo")}>
+                {deniedLine
+                  ? t("field.line", { number: deniedLine.lineNumber, code: deniedLine.procedureCode })
+                  : t("field.wholeClaim")}
               </Field>
-              <Field label="Category">{CATEGORY_LABELS[denial.category]}</Field>
-              <Field label="Assignee">
-                {detail.assigneeName ?? <span className="text-subtle">Unassigned</span>}
+              <Field label={tc("word.category")}>{tc(CATEGORY_LABEL_KEYS[denial.category])}</Field>
+              <Field label={t("field.assignee")}>
+                {detail.assigneeName ?? <span className="text-subtle">{t("assignee.unassigned")}</span>}
               </Field>
             </dl>
           </Panel>
 
-          <Panel title="Claim" flush>
+          <Panel title={tc("word.claim")} flush>
             <dl className="grid grid-cols-4 gap-x-6 gap-y-4 p-4">
-              <Field label="Date of service">
-                <span className="tabular">{formatDate(claim.serviceDate)}</span>
+              <Field label={t("field.dateOfService")}>
+                <span className="tabular">{f.date(claim.serviceDate)}</span>
               </Field>
-              <Field label="Provider">
+              <Field label={t("field.provider")}>
                 {detail.providerName}
-                <span className="block font-mono text-label text-muted">NPI {detail.providerNpi}</span>
-              </Field>
-              <Field label="Location">{detail.locationName}</Field>
-              <Field label="Payer">
-                {payer.name}
-                <span className="block text-label text-muted">{regimeLabel(payer.regime)}</span>
-              </Field>
-              <Field label="Billed">
-                <Money cents={claim.billedCents} />
-              </Field>
-              <Field label="Paid">
-                <Money cents={claim.paidCents} />
-              </Field>
-              <Field label="Payer received">
-                <span className="tabular">
-                  {claim.payerReceivedDate ? formatDate(claim.payerReceivedDate) : "—"}
+                <span className="block font-mono text-label text-muted">
+                  {t("field.npi", { npi: detail.providerNpi })}
                 </span>
               </Field>
-              <Field label="Diagnosis">
+              <Field label={t("field.location")}>{detail.locationName}</Field>
+              <Field label={tc("word.payer")}>
+                {payer.name}
+                <span className="block text-label text-muted">{regimeLabel(payer.regime, tc)}</span>
+              </Field>
+              <Field label={t("field.billed")}>
+                <Money cents={claim.billedCents} />
+              </Field>
+              <Field label={t("field.paid")}>
+                <Money cents={claim.paidCents} />
+              </Field>
+              <Field label={t("field.payerReceived")}>
+                <span className="tabular">
+                  {claim.payerReceivedDate ? f.date(claim.payerReceivedDate) : "—"}
+                </span>
+              </Field>
+              <Field label={t("field.diagnosis")}>
                 <span className="flex flex-wrap gap-1">
                   {claim.diagnosisCodes.map((code) => (
                     <Code key={code}>{code}</Code>
@@ -246,14 +250,14 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
               </Field>
             </dl>
             <div className="border-t border-border">
-              <Table caption="Claim lines">
+              <Table caption={t("claimLine.tableCaption")}>
                 <thead>
                   <tr>
-                    <Th>Line</Th>
-                    <Th>Procedure</Th>
-                    <Th>Modifiers</Th>
-                    <Th numeric>Units</Th>
-                    <Th numeric>Charge</Th>
+                    <Th>{t("claimLine.line")}</Th>
+                    <Th>{t("claimLine.procedure")}</Th>
+                    <Th>{t("claimLine.modifiers")}</Th>
+                    <Th numeric>{t("claimLine.units")}</Th>
+                    <Th numeric>{t("claimLine.charge")}</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -263,7 +267,9 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                       <Td>
                         <Code>{line.procedureCode}</Code>
                         {line.id === denial.claimLineId && (
-                          <span className="ml-2 text-label font-medium text-danger-fg">Denied line</span>
+                          <span className="ml-2 text-label font-medium text-danger-fg">
+                            {t("claimLine.deniedLine")}
+                          </span>
                         )}
                       </Td>
                       <Td className="text-muted">{line.modifiers.join(", ") || "—"}</Td>
@@ -278,18 +284,18 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
             </div>
           </Panel>
 
-          <Panel title="Notes" description="Visible to everyone on this practice's team.">
+          <Panel title={t("panel.notesTitle")} description={t("panel.notesDescription")}>
             <div className="flex flex-col gap-5">
               <NoteForm denialId={denial.id} disabled={!canWork} />
               {detail.notes.length === 0 ? (
-                <p className="text-body text-muted">No notes yet.</p>
+                <p className="text-body text-muted">{t("notesEmpty")}</p>
               ) : (
                 <ol className="flex flex-col divide-y divide-border border-t border-border">
                   {detail.notes.map((note) => (
                     <li key={note.id} className="py-3">
                       <p className="text-label text-muted">
                         <span className="font-medium text-text">{note.author}</span> ·{" "}
-                        {dateTime.format(note.createdAt)}
+                        {f.dateTime(note.createdAt)}
                       </p>
                       <p className="mt-1 text-body whitespace-pre-wrap text-text">{note.body}</p>
                     </li>
@@ -301,16 +307,16 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div className="flex flex-col gap-6">
-          <Panel title="Appeal deadline">
+          <Panel title={t("field.appealDeadline")}>
             {denial.appealDeadline ? (
               <div className="flex flex-col gap-3">
                 {denial.appealSubmittedOn && (
                   <p className="flex items-center gap-2 text-body text-text">
-                    Appeal filed {formatDate(denial.appealSubmittedOn)}
+                    {t("detail.appealFiled", { date: f.date(denial.appealSubmittedOn) })}
                     {denial.appealSubmittedOn <= denial.appealDeadline ? (
-                      <Badge tone="success">On time</Badge>
+                      <Badge tone="success">{t("badge.onTime")}</Badge>
                     ) : (
-                      <Badge tone="danger">After deadline</Badge>
+                      <Badge tone="danger">{t("badge.afterDeadline")}</Badge>
                     )}
                   </p>
                 )}
@@ -321,29 +327,40 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                     dueSoonDays={DUE_SOON_DAYS}
                   />
                 ) : (
-                  <span className="tabular text-body">{formatDate(denial.appealDeadline)}</span>
+                  <span className="tabular text-body">{f.date(denial.appealDeadline)}</span>
                 )}
                 <p className="text-label text-muted">
                   {denial.appealDeadlineBasis === "payer_contract"
-                    ? `From the payer contract: ${payer.appealWindowDays} days after the notice date${payer.appealWindowSource ? ` (${payer.appealWindowSource})` : ""}.`
+                    ? t("deadline.fromContract", {
+                        days: payer.appealWindowDays ?? 0,
+                        source: payer.appealWindowSource ? ` (${payer.appealWindowSource})` : "",
+                      })
                     : basisRules
-                        .map((rule) => `${rule.title}: ${rule.value} days (${rule.citation}).`)
+                        .map((rule) =>
+                          t("deadline.ruleLine", {
+                            title: rule.title,
+                            days: rule.value,
+                            citation: rule.citation,
+                          }),
+                        )
                         .join(" ")}
                 </p>
-                {deadlineVerify && <Badge tone="warning">Pending counsel verification</Badge>}
+                {deadlineVerify && <Badge tone="warning">{t("badge.pendingVerification")}</Badge>}
               </div>
             ) : (
               <p className="text-body text-warning-fg">
-                No appeal window is configured for {payer.name}. Add it from the payer contract so this denial
-                can be prioritized.
+                {t("deadline.notConfigured", { payer: payer.name })}
               </p>
             )}
           </Panel>
 
           {milestones && (
             <Panel
-              title="Florida prompt pay"
-              description={`Counted from payer receipt (${formatDate(claim.payerReceivedDate!)}); compared with the denial notice (${formatDate(denial.noticeDate)}).`}
+              title={t("promptPay.title")}
+              description={t("promptPay.description", {
+                received: f.date(claim.payerReceivedDate!),
+                notice: f.date(denial.noticeDate),
+              })}
             >
               <ol className="flex flex-col gap-3">
                 {milestones.map(({ rule, date }) => {
@@ -354,16 +371,18 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                       <div className="min-w-0">
                         <p className="text-body text-text">{rule.title}</p>
                         <p className="text-label text-muted">
-                          Day {rule.value} · {rule.citation}
+                          {t("promptPay.dayLine", { day: rule.value, citation: rule.citation })}
                         </p>
                       </div>
                       <span className="shrink-0 text-right">
-                        <span className="tabular block text-body">{formatDate(date)}</span>
+                        <span className="tabular block text-body">{f.date(date)}</span>
                         {response.met ? (
-                          <span className="block text-label font-medium text-success-fg">Met</span>
+                          <span className="block text-label font-medium text-success-fg">
+                            {t("promptPay.met")}
+                          </span>
                         ) : (
                           <span className="tabular block text-label font-medium text-danger-fg">
-                            Payer late by {response.daysLate} {response.daysLate === 1 ? "day" : "days"}
+                            {t("promptPay.lateBy", { count: response.daysLate })}
                           </span>
                         )}
                       </span>
@@ -372,26 +391,26 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                 })}
               </ol>
               <p className="mt-4 border-t border-border pt-3 text-label text-muted">
-                Deadlines are payer obligations under Florida law.
-                {milestonesVerify && " Values are pending counsel verification."}
+                {t("promptPay.footer")}
+                {milestonesVerify && ` ${t("promptPay.footerVerify")}`}
               </p>
             </Panel>
           )}
 
-          <Panel title="Patient">
+          <Panel title={t("panel.patient")}>
             <dl className="flex flex-col gap-3">
-              <Field label="Name">
+              <Field label={tc("word.name")}>
                 <Link href={`/patients/${patient.id}`} className="font-medium text-link hover:underline">
                   {patient.lastName}, {patient.firstName}
                 </Link>
               </Field>
-              <Field label="Date of birth">
-                <span className="tabular">{formatDate(patient.birthDate)}</span>
+              <Field label={t("field.dob")}>
+                <span className="tabular">{f.date(patient.birthDate)}</span>
               </Field>
-              <Field label="MRN">
+              <Field label={t("field.mrn")}>
                 <span className="font-mono">{patient.mrn}</span>
               </Field>
-              <Field label="Member ID">
+              <Field label={t("field.memberId")}>
                 {canWork ? (
                   <MaskedMemberId
                     last4={patient.memberIdLast4}
@@ -404,23 +423,34 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
             </dl>
           </Panel>
 
-          <Panel title="Activity">
+          <Panel title={t("panel.activity")}>
             {detail.activity.length === 0 ? (
-              <p className="text-body text-muted">No changes yet.</p>
+              <p className="text-body text-muted">{t("activityEmpty")}</p>
             ) : (
               <ol className="flex flex-col gap-3">
-                {detail.activity.map((event) => (
-                  <li key={event.id} className="text-body">
-                    <p className="text-text">
-                      <span className="font-medium">{event.actor ?? "System"}</span>{" "}
-                      {ACTIVITY_LABELS[event.action]?.toLowerCase() ?? event.action}
-                      {event.action === "denial.status_changed" && event.metadata?.to
-                        ? ` to ${DENIAL_STATUSES[event.metadata.to as keyof typeof DENIAL_STATUSES]?.label ?? event.metadata.to}`
-                        : ""}
-                    </p>
-                    <p className="text-label text-muted">{dateTime.format(event.occurredAt)}</p>
-                  </li>
-                ))}
+                {detail.activity.map((event) => {
+                  const toStatus =
+                    event.action === "denial.status_changed" && event.metadata?.to
+                      ? DENIAL_STATUSES[event.metadata.to as keyof typeof DENIAL_STATUSES]
+                      : undefined;
+                  const description =
+                    event.action === "denial.status_changed" && event.metadata?.to
+                      ? t("activity.statusChangedTo", {
+                          status: toStatus ? tc(toStatus.labelKey) : String(event.metadata.to),
+                        })
+                      : ACTIVITY_KEYS[event.action]
+                        ? t(ACTIVITY_KEYS[event.action]!)
+                        : event.action;
+                  return (
+                    <li key={event.id} className="text-body">
+                      <p className="text-text">
+                        <span className="font-medium">{event.actor ?? t("activity.actorSystem")}</span>{" "}
+                        {description}
+                      </p>
+                      <p className="text-label text-muted">{f.dateTime(event.occurredAt)}</p>
+                    </li>
+                  );
+                })}
               </ol>
             )}
           </Panel>
