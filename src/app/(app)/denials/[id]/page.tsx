@@ -14,8 +14,9 @@ import { Money } from "@/components/ui/Money";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { CARC, CATEGORY_LABELS } from "@/domain/carc";
-import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
+import { ACTION_STATUSES, DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { DUE_SOON_DAYS, getDenial, teamMembers } from "@/domain/denials/queries";
+import { openAppealsForDenial } from "@/domain/appeals/queries";
 import { audit } from "@/lib/audit";
 import { formatDate } from "@/lib/format";
 import { MaskedMemberId } from "@/components/patients/MaskedMemberId";
@@ -60,6 +61,7 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
     const detail = await getDenial(tx, id);
     if (!detail) return null;
     const team = await teamMembers(tx, auth.tenantId);
+    const openAppeals = await openAppealsForDenial(tx, id);
     await audit(tx, {
       action: "denial.viewed",
       actorUserId: auth.userId,
@@ -67,11 +69,11 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
       entityType: "denial",
       entityId: id,
     });
-    return { detail, team };
+    return { detail, team, openAppeals };
   });
   if (!data) notFound();
 
-  const { detail, team } = data;
+  const { detail, team, openAppeals } = data;
   const { denial, claim, patient, payer } = detail;
   const status = DENIAL_STATUSES[denial.status];
   const carc = CARC[denial.carc];
@@ -135,6 +137,22 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-4">
+          {canWork && openAppeals.length === 0 && ACTION_STATUSES.includes(denial.status) && (
+            <Link
+              href={`/appeals/new?denialId=${denial.id}`}
+              className="inline-flex h-8 items-center rounded-control bg-primary px-3 text-body font-medium text-on-primary hover:opacity-90"
+            >
+              Start appeal
+            </Link>
+          )}
+          {openAppeals.length > 0 && (
+            <Link
+              href={`/appeals/${openAppeals[0]!.id}`}
+              className="inline-flex h-8 items-center rounded-control border border-border-strong bg-surface px-3 text-body font-medium text-link hover:bg-surface-muted"
+            >
+              View appeal
+            </Link>
+          )}
           <AssignControl denialId={denial.id} current={denial.assigneeId} team={team} disabled={!canWork} />
           <StatusControl
             denialId={denial.id}

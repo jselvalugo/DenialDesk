@@ -6,6 +6,20 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-26_
 
 ## Where we are
+- Appeals A1 (`specs/appeals.md`): `appeals` + `appeal_notes` tables (tenant RLS, isolation test,
+  a DB trigger enforcing the status lifecycle draft → in_review → ready → submitted →
+  awaiting_decision → decided, with withdrawn/dismissed reachable from submitted/awaiting_decision).
+  `/appeals` work list (level/payer/status filters, deadline/amount sort, totals row); "Start
+  appeal" on the denial detail page opens `/appeals/new?denialId=<id>` (own create page, deadline
+  computed fresh from the rules engine, never guessed); `/appeals/[id]` records the submission
+  (method, date, tracking ref) and the decision (outcome, date, recovered amount, close reason),
+  syncing the linked denial's status. "Appeals" is now a live item in the Denials module switcher.
+  A practice-configurable appeal follow-up-day default lives in a new small `practice_settings`
+  key/value table (no admin UI yet to edit it in A1 — it always reads the built-in 30-day default
+  until one is set directly in the table). Next: A2 letter templates, A3 escalation/Medicare
+  5-level ladder, A4 overturn-rate analytics, A5 attachment storage. Open questions from the spec
+  (late-filing blocking, appeal version history, withdrawn/dismissed → denial status mapping,
+  amount-in-controversy source) are added to `docs/owner/OWNER_ACTION_ITEMS.xlsx`.
 - Remittances and prompt pay R1/PP1 (`specs/remittances-and-prompt-pay.md`): 835 upload (parser in
   `src/edi/x12/`), `/remittances` table and record page with balance check, post (claim version +
   prompt-pay response per claim) and void with reason; `/prompt-pay` table and clock record page
@@ -141,6 +155,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 ## Open questions for humans
 - Month-end clamping of the 6- and 12-month timely-filing windows (billing-structure review §3.4,
   §8 item 3): being researched separately; not yet decided.
+- Appeals A1 (`specs/appeals.md`): late-filing blocking (OA-023), withdrawn/dismissed → denial
+  status mapping (OA-024), appeal version history before A2 (OA-025), Medicare amount-in-controversy
+  thresholds source (OA-026), tracking/recovered-amount field masking (OA-027), abandoning a draft
+  appeal (OA-028), compliance member-ID reveal on appeals (OA-029), counsel sign-off on the level
+  2–5 Medicare rules added in this review round (OA-030), sensitivity-tag masking timing (OA-031),
+  appeal record retention (OA-032).
 - Budget, timeline, team, success targets (`PRODUCT_BRIEF.md` TODOs).
 - Regulatory role memo, counsel, clearinghouse choice (ROADMAP Phase 0, human items).
 - Confirm Azure regions at cutover.

@@ -65,8 +65,8 @@ test.describe("shell chrome", () => {
     await page.goto("/overview");
     await page.getByRole("button", { name: /, switch module$/ }).click();
     const switcher = page.getByRole("dialog", { name: "Go to" });
-    await expect(switcher.getByText("Appeals")).toBeVisible();
-    await expect(page.getByRole("link", { name: /^Appeals/ })).toHaveCount(0);
+    await expect(switcher.getByText("Reports", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Reports/ })).toHaveCount(0);
     await expect(switcher.getByRole("link", { name: "Denial queue" })).toBeVisible();
     // A planned module (Insight) is listed as a heading, never a link.
     await expect(switcher.getByRole("heading", { level: 3, name: /^Insight/ })).toBeVisible();
