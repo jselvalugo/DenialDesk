@@ -6,19 +6,17 @@ import { systemDb } from "@/db/client";
 import { users } from "@/db/schema";
 import { setLocaleCookie } from "@/i18n/actions";
 import { isLocale } from "@/i18n/config";
+import { getT } from "@/i18n/server";
 import { auditSystem } from "@/lib/audit";
 import { limitCurrentRequest } from "@/lib/rate-limit";
 import {
   claimTotp,
   clearFailures,
-  CODE_MISMATCH,
-  CODE_REUSED,
   codeSchema,
   loginSchema,
   rateLimited,
   recordFailure,
   reserveAttempt,
-  SIGN_IN_FAILED,
   type FormState,
 } from "./credentials";
 import { log } from "@/lib/log";
@@ -101,10 +99,11 @@ function refusalStatus(
 }
 
 export async function signInOperator(_: FormState, formData: FormData): Promise<FormState> {
+  const t = await getT("auth");
   const parsed = loginSchema.safeParse({ email: formData.get("email"), password: formData.get("password") });
-  if (!parsed.success) return { error: "Enter your email and password." };
+  if (!parsed.success) return { error: t("error.enterEmailPassword") };
   const limited = await limitCurrentRequest("sign_in");
-  if (!limited.allowed) return rateLimited("sign_in", "sign-in attempts", limited);
+  if (!limited.allowed) return rateLimited("sign_in", limited);
 
   // The operator account exists only as provisioned from infrastructure configuration.
   const sync = await syncOperatorAccount("sign_in");
@@ -121,7 +120,7 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing
     await auditSystem({ action: "operator.login_failed", ipAddress: await clientIp() });
     log.warn("operator.sign_in_refused", { status: refusalStatus(sync, user) });
-    return { error: SIGN_IN_FAILED };
+    return { error: t("error.signInFailed") };
   }
   if (!(await reserveAttempt(user.id))) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing while locked
@@ -132,12 +131,12 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
       metadata: { locked: true },
     });
     log.warn("operator.sign_in_refused", { status: "locked" });
-    return { error: SIGN_IN_FAILED };
+    return { error: t("error.signInFailed") };
   }
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
     await recordFailure(user.id, "operator.login_failed");
     log.warn("operator.sign_in_refused", { status: "wrong_password" });
-    return { error: SIGN_IN_FAILED };
+    return { error: t("error.signInFailed") };
   }
 
   await replacePreviousOperatorSession(user.id);
@@ -167,10 +166,11 @@ async function checkOperatorCode(formData: FormData, enrolling: boolean): Promis
   if (!session) redirect("/operator/login");
   if (session.mfaVerified) redirect("/operator");
 
+  const t = await getT("auth");
   const limited = await limitCurrentRequest("mfa");
-  if (!limited.allowed) return rateLimited("mfa", "verification attempts", limited);
+  if (!limited.allowed) return rateLimited("mfa", limited);
   const parsed = codeSchema.safeParse({ code: formData.get("code") });
-  if (!parsed.success) return { error: "Enter the 6-digit code from your authenticator app." };
+  if (!parsed.success) return { error: t("error.enterCode") };
 
   const [user] = await systemDb().select().from(users).where(eq(users.id, session.userId)).limit(1);
   if (!user?.totpSecretEnc || (enrolling ? user.mfaEnrolledAt !== null : user.mfaEnrolledAt === null)) {
@@ -195,7 +195,7 @@ async function checkOperatorCode(formData: FormData, enrolling: boolean): Promis
   );
   if (result !== "ok") {
     await recordFailure(user.id, "operator.mfa_failed");
-    return { error: result === "mismatch" ? CODE_MISMATCH : CODE_REUSED };
+    return { error: result === "mismatch" ? t("error.codeMismatch") : t("error.codeReused") };
   }
   await completeMfa(session.sessionId, "operator");
   const event = {

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { signIn, type FormState } from "@/auth/actions";
+import { useT } from "@/i18n/client";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
@@ -11,6 +12,7 @@ type SignInAction = (state: FormState, formData: FormData) => Promise<FormState>
 /** Practice sign-in by default; the operator console passes its own server action. */
 export function SignInForm({ notice, submit }: { notice?: string; submit?: SignInAction }) {
   const [state, action] = useActionState<FormState, FormData>(submit ?? signIn, {});
+  const t = useT("auth");
   return (
     <form action={action} className="flex flex-col gap-5" noValidate>
       <FormAlert message={state.error} />
@@ -22,10 +24,23 @@ export function SignInForm({ notice, submit }: { notice?: string; submit?: SignI
           {notice}
         </p>
       )}
-      <TextField label="Work email" name="email" type="email" autoComplete="username" required autoFocus />
-      <TextField label="Password" name="password" type="password" autoComplete="current-password" required />
-      <SubmitButton variant="primary" pendingLabel="Signing in…" className="h-9 w-full">
-        Sign in
+      <TextField
+        label={t("signIn.emailLabel")}
+        name="email"
+        type="email"
+        autoComplete="username"
+        required
+        autoFocus
+      />
+      <TextField
+        label={t("signIn.passwordLabel")}
+        name="password"
+        type="password"
+        autoComplete="current-password"
+        required
+      />
+      <SubmitButton variant="primary" pendingLabel={t("signIn.submitting")} className="h-9 w-full">
+        {t("signIn.submit")}
       </SubmitButton>
     </form>
   );

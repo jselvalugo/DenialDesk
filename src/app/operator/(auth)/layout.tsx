@@ -1,6 +1,8 @@
 import { AuthCard } from "@/components/auth/AuthCard";
+import { getT } from "@/i18n/server";
 
 /** The platform console's own sign-in pages, separate from practice sign-in. */
-export default function OperatorAuthLayout({ children }: { children: React.ReactNode }) {
-  return <AuthCard label="Platform console">{children}</AuthCard>;
+export default async function OperatorAuthLayout({ children }: { children: React.ReactNode }) {
+  const t = await getT("auth");
+  return <AuthCard label={t("operator.consoleLabel")}>{children}</AuthCard>;
 }

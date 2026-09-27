@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { getT } from "@/i18n/server";
 
 /**
  * Brand image framed for the practice sign-in page: hairline, canvas gap, navy line, white mat,
@@ -30,7 +31,7 @@ function AuthHero() {
  * With `hero`, wide screens show the framed brand image and a product line beside the card;
  * narrow screens stack the image above the card and drop the line. Without it, the card is alone.
  */
-export function AuthCard({
+export async function AuthCard({
   label,
   hero = false,
   children,
@@ -39,6 +40,7 @@ export function AuthCard({
   hero?: boolean;
   children: React.ReactNode;
 }) {
+  const t = await getT("auth");
   return (
     // `my-auto` on the child (not `justify-center` here) keeps the top reachable when the page scrolls.
     <main id="main" className="flex flex-1 flex-col items-center overflow-y-auto bg-canvas px-4 py-10">
@@ -55,13 +57,8 @@ export function AuthCard({
               <>
                 <AuthHero />
                 <div className="mt-6 hidden lg:block">
-                  <p className="text-title font-semibold text-primary">
-                    Claims and denial management for Florida physician practices.
-                  </p>
-                  <p className="mt-2 max-w-[52ch] text-body text-muted">
-                    Classify denials, prioritize by value and deadline, draft appeals, and keep every
-                    prompt-pay and appeal clock in view.
-                  </p>
+                  <p className="text-title font-semibold text-primary">{t("hero.tagline")}</p>
+                  <p className="mt-2 max-w-[52ch] text-body text-muted">{t("hero.description")}</p>
                 </div>
               </>
             )}
@@ -72,9 +69,7 @@ export function AuthCard({
             </div>
           </div>
         </div>
-        <p className="mt-6 text-center text-label text-muted">
-          Authorized use only. Access to this system is monitored and logged.
-        </p>
+        <p className="mt-6 text-center text-label text-muted">{t("footer.monitored")}</p>
       </div>
     </main>
   );

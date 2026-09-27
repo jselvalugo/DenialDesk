@@ -3,9 +3,12 @@ import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { systemDb } from "@/db/client";
 import { users } from "@/db/schema";
+import { getT } from "@/i18n/server";
+import { auth as enAuth } from "@/i18n/messages/en/auth";
+import type { MessageKey } from "@/i18n/messages/types";
 import { auditSystem, type AuditAction } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
-import { retryMessage, type Bucket, type RateLimitResult } from "@/lib/rate-limit";
+import type { RateLimitResult } from "@/lib/rate-limit";
 import { LOCKOUT_MS, MAX_FAILED_ATTEMPTS } from "./policy";
 import { clientIp } from "./session";
 import { verifyTotp } from "./totp";
@@ -19,8 +22,9 @@ export interface FormState {
 
 // One message for wrong password, unknown account, and locked account, so responses never reveal
 // which accounts exist (security review finding 3). Locked users are told how to recover.
-export const SIGN_IN_FAILED =
-  "Email or password is incorrect, or the account is temporarily locked. Try again in 15 minutes or contact your administrator.";
+// English text (used by tests that run in the default locale); actions.ts and operator-actions.ts
+// show the translated form via `getT("auth")("error.signInFailed")` (spec: internationalization).
+export const SIGN_IN_FAILED = enAuth["error.signInFailed"];
 
 export const loginSchema = z.object({
   email: z.email().max(254),
@@ -34,9 +38,16 @@ export const codeSchema = z.object({
     .regex(/^\d{6}$/),
 });
 
-export async function rateLimited(bucket: Bucket, what: string, result: RateLimitResult): Promise<FormState> {
+const RATE_LIMIT_WHAT: Record<"sign_in" | "mfa", MessageKey<"auth">> = {
+  sign_in: "rateLimit.signInAttempts",
+  mfa: "rateLimit.mfaAttempts",
+};
+
+export async function rateLimited(bucket: "sign_in" | "mfa", result: RateLimitResult): Promise<FormState> {
   await auditSystem({ action: "security.rate_limited", ipAddress: await clientIp(), metadata: { bucket } });
-  return { error: retryMessage(what, result) };
+  const t = await getT("auth");
+  const minutes = Math.max(1, Math.ceil(result.retryAfterSeconds / 60));
+  return { error: t("rateLimit.tooMany", { what: t(RATE_LIMIT_WHAT[bucket]), minutes }) };
 }
 
 /**
@@ -111,5 +122,6 @@ export async function claimTotp(
   return claimed.length === 0 ? "reused" : "ok";
 }
 
-export const CODE_MISMATCH = "That code didn't match. Check your authenticator app and try again.";
-export const CODE_REUSED = "That code was already used. Wait for the next code and try again.";
+// English text; actions.ts and operator-actions.ts show the translated form via `getT("auth")`.
+export const CODE_MISMATCH = enAuth["error.codeMismatch"];
+export const CODE_REUSED = enAuth["error.codeReused"];
