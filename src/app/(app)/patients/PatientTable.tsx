@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
+import { Code } from "@/components/ui/Code";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import type { ListColumnDefinition } from "@/domain/custom-fields/list-values";
-import type { CustomFieldType } from "@/domain/settings/custom-fields";
 import type { PatientListRow } from "@/domain/patients/queries";
-import { patientName } from "@/domain/patients/record";
+import type { CustomFieldType } from "@/domain/settings/custom-fields";
+import { ageOn, patientName, sexLabel } from "@/domain/patients/record";
 import { useFormat, useT } from "@/i18n/client";
 
 /** A custom field value's typed cell, formatted plainly (dates and numbers follow the locale, a
@@ -24,16 +25,21 @@ function ListCell({ type, value }: { type: CustomFieldType; value: string | numb
   return <span>{String(value)}</span>;
 }
 
-/** Patient rows for the list and search results, plus up to 5 non-sensitive custom field columns
- * marked "Show in list" (docs/specs/settings-and-custom-fields.md, S2 table-column addendum). */
+/**
+ * Patient rows for the list and search results, plus up to 5 non-sensitive custom field columns
+ * marked "Show in list" (docs/specs/settings-and-custom-fields.md, S2 table-column addendum).
+ * `today` (YYYY-MM-DD) comes from the server for ages.
+ */
 export function PatientTable({
   rows,
   caption,
+  today,
   listColumns = [],
   listValues = {},
 }: {
   rows: PatientListRow[];
   caption: string;
+  today: string;
   listColumns?: ListColumnDefinition[];
   listValues?: Record<string, Record<string, string | number | boolean>>;
 }) {
@@ -47,35 +53,61 @@ export function PatientTable({
           <Th>{tc("word.patient")}</Th>
           <Th>{t("field.mrn")}</Th>
           <Th>{t("field.birthDate")}</Th>
-          <Th>{t("field.primaryPayer")}</Th>
+          <Th>{t("field.sex")}</Th>
+          <Th>{t("field.location")}</Th>
+          <Th>{t("field.coverage")}</Th>
           {listColumns.map((col) => (
             <Th key={col.fieldId}>{col.label}</Th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <Tr key={row.id}>
-            <Td>
-              <Link href={`/patients/${row.id}`} className="font-medium text-link hover:underline">
-                {patientName(row)}
-              </Link>
-              {row.sensitivityTags.length > 0 && (
-                <span className="ml-2">
-                  <Badge tone="warning">{t("badge.restricted")}</Badge>
+        {rows.map((row) => {
+          const age = ageOn(row.birthDate, today);
+          // A restricted (sensitivity-tagged) record shows only what identifies it in a list; sex
+          // and location wait for the chart (minimum necessary, OA-043).
+          const restricted = row.sensitivityTags.length > 0;
+          const location = restricted ? "" : [row.city, row.state].filter(Boolean).join(", ");
+          return (
+            <Tr key={row.id}>
+              <Td className="font-medium">
+                <span className="flex items-center gap-2">
+                  <Link href={`/patients/${row.id}`} className="text-link hover:underline">
+                    {patientName(row)}
+                  </Link>
+                  {restricted && <Badge tone="warning">{t("badge.restricted")}</Badge>}
                 </span>
-              )}
-            </Td>
-            <Td className="font-mono text-label">{row.mrn}</Td>
-            <Td className="tabular">{f.date(row.birthDate)}</Td>
-            <Td>{row.payerName ?? <span className="text-muted">{t("badge.selfPay")}</span>}</Td>
-            {listColumns.map((col) => (
-              <Td key={col.fieldId}>
-                <ListCell type={col.type} value={listValues[row.id]?.[col.key]} />
               </Td>
-            ))}
-          </Tr>
-        ))}
+              <Td>
+                <Code>{row.mrn}</Code>
+              </Td>
+              <Td className="tabular whitespace-nowrap">
+                {f.date(row.birthDate)}
+                {age !== null && <span className="ml-2 text-muted">{t("field.age", { years: age })}</span>}
+              </Td>
+              <Td>{restricted ? <span className="text-subtle">—</span> : sexLabel(row.sex, t)}</Td>
+              <Td>
+                {location ? (
+                  location
+                ) : (
+                  <span className="text-subtle">{restricted ? "—" : t("detail.notOnFile")}</span>
+                )}
+              </Td>
+              <Td>
+                {row.payerName ?? (
+                  <Badge tone="neutral" dot={false}>
+                    {t("badge.selfPay")}
+                  </Badge>
+                )}
+              </Td>
+              {listColumns.map((col) => (
+                <Td key={col.fieldId}>
+                  <ListCell type={col.type} value={listValues[row.id]?.[col.key]} />
+                </Td>
+              ))}
+            </Tr>
+          );
+        })}
       </tbody>
     </Table>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { eyebrowText } from "./eyebrow";
 import { ModuleIcon } from "./ModuleSwitcher";
 import { useShellLocation } from "./ShellContext";
 
@@ -10,10 +11,9 @@ export function PageIcon() {
 }
 
 /** "Module · Page" line above a page title, so a detail page still says where it lives. */
-export function PageEyebrow({ title }: { title: string }) {
+export function PageEyebrow({ title, page }: { title?: string; page?: string }) {
   const location = useShellLocation();
   if (!location) return null;
-  const { app, item } = location;
-  const text = item && item.label !== title ? `${app.label} · ${item.label}` : app.label;
+  const text = eyebrowText(location.app.label, location.item?.label, title, page);
   return <p className="text-label font-semibold tracking-wider text-muted uppercase">{text}</p>;
 }

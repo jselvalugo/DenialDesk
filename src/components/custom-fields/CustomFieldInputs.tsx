@@ -156,8 +156,11 @@ export function CustomFieldInputs({
   fields,
   values = [],
   errorFor,
+  bare = false,
 }: {
   fields: CustomFieldOption[];
+  /** Render only the fields, for a caller that supplies its own titled section (FormSection). */
+  bare?: boolean;
   values?: LoadedCustomFieldValue[];
   /** Keyed by the field's stable `key` (`cf.<key>` is what a save error's `field` carries), not
    * its id, since a `CustomFieldValueError` never carries the id. */
@@ -167,36 +170,40 @@ export function CustomFieldInputs({
   if (fields.length === 0) return null;
   const byField = new Map(values.map((v) => [v.fieldId, v]));
 
+  const grid = (
+    <div className="grid grid-cols-2 gap-4">
+      {fields.map((field) => {
+        const loaded = byField.get(field.fieldId);
+        const error = errorFor?.(field.key);
+        const masked = loaded?.masked ?? false;
+        return (
+          <div key={field.fieldId} className="flex flex-col gap-1.5">
+            <label htmlFor={`field-cf.${field.fieldId}`} className="text-label font-medium text-text">
+              {field.label}
+              {field.required && (
+                <span aria-hidden className="ml-1 text-danger-fg">
+                  *
+                </span>
+              )}
+              {field.required && <span className="sr-only"> ({t("input.required")})</span>}
+            </label>
+            {masked ? (
+              <LockedFieldInput field={field} error={error} />
+            ) : (
+              <TypedInput field={field} defaultValue={loaded?.value} error={error} />
+            )}
+            {field.helpText && <p className="text-label text-muted">{field.helpText}</p>}
+            {error && <p className="text-label font-medium text-danger-fg">{error}</p>}
+          </div>
+        );
+      })}
+    </div>
+  );
+  if (bare) return grid;
   return (
     <fieldset className="flex flex-col gap-4">
       <legend className="mb-3 text-heading font-semibold text-text">{t("section.title")}</legend>
-      <div className="grid grid-cols-2 gap-4">
-        {fields.map((field) => {
-          const loaded = byField.get(field.fieldId);
-          const error = errorFor?.(field.key);
-          const masked = loaded?.masked ?? false;
-          return (
-            <div key={field.fieldId} className="flex flex-col gap-1.5">
-              <label htmlFor={`field-cf.${field.fieldId}`} className="text-label font-medium text-text">
-                {field.label}
-                {field.required && (
-                  <span aria-hidden className="ml-1 text-danger-fg">
-                    *
-                  </span>
-                )}
-                {field.required && <span className="sr-only"> ({t("input.required")})</span>}
-              </label>
-              {masked ? (
-                <LockedFieldInput field={field} error={error} />
-              ) : (
-                <TypedInput field={field} defaultValue={loaded?.value} error={error} />
-              )}
-              {field.helpText && <p className="text-label text-muted">{field.helpText}</p>}
-              {error && <p className="text-label font-medium text-danger-fg">{error}</p>}
-            </div>
-          );
-        })}
-      </div>
+      {grid}
     </fieldset>
   );
 }

@@ -67,6 +67,11 @@ denials, and balances.
       `patient.created`, `patient.updated` (IDs, counts, field names; never values).
 - [x] Tenant isolation: another practice's patient returns 404; tests cover create, update, and read.
 
+- [x] 2026-09-27: all four screens rebuilt on the record pattern (`specs/record-pages.md`): list
+      toolbar with count, MRN chip, age beside the date of birth, sex, location, and coverage
+      columns; chart with a record header (tags, MRN, birth date, sex, coverage), claim and denial
+      counts, and a Record panel (created / updated); sectioned register and edit forms.
+
 ## Data / API changes
 Migration `0018_patients_record`:
 - `patients`: `sex` (F/M/U, default U), `address_line1`, `city`, `state` (2 letters), `postal_code`
