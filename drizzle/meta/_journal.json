@@ -232,6 +232,20 @@
       "when": 1790475142091,
       "tag": "0032_purge_demo_practices",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790476667542,
+      "tag": "0033_university_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790476668542,
+      "tag": "0034_purge_university_progress",
+      "breakpoints": true
     }
   ]
 }

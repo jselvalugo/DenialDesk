@@ -132,8 +132,10 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 ## 8. Layout
 - **App shell (ERP layout, `specs/erp-shell.md`, ADR 0005):**
   - *Global header*, 56px white: logo, then the "Go to a module or page" field beside it (opens the
-    module switcher; Ctrl/⌘ K); practice name, demo badge, and the user menu (name, role, practice,
-    sign out) on the right.
+    module switcher; Ctrl/⌘ K); a "University" link (graduation-cap glyph, text label), practice
+    name, and the user menu (name, role, practice, DenialDesk University, sign out) on the right.
+    The University (`specs/denialdesk-university.md`) is not a module: it has its own teal tile and
+    "DenialDesk University" eyebrow, and the tab bar keeps the current module's tabs.
   - *Tab bar*, 44px navy: the white DenialDesk mark (logo icon, teal cross) with a chevron as the
     first control (accessible name "<Module>, switch module"; opens the switcher; the module name is
     carried by the tabs and the page-header eyebrow), then the module's shipped pages as tabs (`nav`
@@ -193,7 +195,7 @@ styled with our tokens (ADR 0004).
 ## 12. PHI-safe UI (REQUIREMENTS §7.4.8)
 - No PHI in URLs (use opaque IDs), page titles, browser notifications, or client logs.
 - Mask high-risk identifiers by default (`MaskedValue`).
-- Session timeout warning at 13 minutes idle, logout at 15 (R-7.2.7).
+- Session ends after 15 minutes idle with a warning shortly before (values in `src/auth/policy.ts` and `SessionTimeout.tsx`, R-7.2.7).
 - Print and export are explicit, audited actions.
 
 ## 13. Themes
