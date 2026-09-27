@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ChevronDown, LogOut } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, GraduationCap, LogOut } from "lucide-react";
 import { signOut } from "@/auth/actions";
 
 /** Workforce display fields only; this reaches the browser, so never add patient or contact data. */
@@ -23,7 +24,7 @@ function initials(name: string) {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts.at(-1)?.[0] ?? "") : "")).toUpperCase();
 }
 
-/** Signed-in user, role, and practice, with sign-out. A disclosure: Escape or an outside click closes it. */
+/** Signed-in user, role, and practice, a link to DenialDesk University, and sign-out. A disclosure: Escape or an outside click closes it. */
 export function UserMenu({ user }: { user: ShellUser }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -89,6 +90,16 @@ export function UserMenu({ user }: { user: ShellUser }) {
             <p className="text-label text-muted">{role}</p>
             <p className="mt-2 text-label text-subtle">Practice</p>
             <p className="text-body text-text">{user.tenantName}</p>
+          </div>
+          <div className="border-b border-border p-1.5">
+            <Link
+              href="/university"
+              onClick={() => setOpen(false)}
+              className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body font-medium text-text hover:bg-surface-muted"
+            >
+              <GraduationCap aria-hidden="true" className="size-4 text-subtle" />
+              DenialDesk University
+            </Link>
           </div>
           <form action={signOut} className="p-1.5">
             <button

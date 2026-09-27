@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, GraduationCap, Search } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "./BrandMark";
 import { ModuleSwitcher } from "./ModuleSwitcher";
@@ -13,7 +13,8 @@ import { UserMenu, type ShellUser } from "./UserMenu";
 export type { ShellUser };
 
 /**
- * DenialDesk chrome (DESIGN.md §8): a white global header (logo, "Go to" field, practice, user) over
+ * DenialDesk chrome (DESIGN.md §8): a white global header (logo, "Go to" field, University link,
+ * practice, user) over
  * a navy tab bar whose first control is the white brand mark (accessible name
  * "<Module>, switch module"); it opens the module switcher.
  */
@@ -64,6 +65,15 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
         </button>
 
         <div className="ml-auto flex shrink-0 items-center gap-4">
+          {user && (
+            <Link
+              href="/university"
+              className="inline-flex h-9 items-center gap-1.5 rounded-control px-2.5 text-body font-medium text-text hover:bg-surface-muted"
+            >
+              <GraduationCap aria-hidden="true" className="size-4 text-accent" strokeWidth={1.75} />
+              University
+            </Link>
+          )}
           <div className="hidden min-w-0 flex-col items-end leading-tight lg:flex">
             <span className="text-[0.6875rem] font-semibold tracking-wider text-subtle uppercase">
               Practice

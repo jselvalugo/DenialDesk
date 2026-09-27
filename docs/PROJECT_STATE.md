@@ -3,9 +3,19 @@
 Read this at the start of every session, after `CLAUDE.md`. Update it at the end of every session
 that changes decisions, status, or open questions. Keep it short: facts and links, not narrative.
 
-_Last updated: 2026-09-26_
+_Last updated: 2026-09-27_
 
 ## Where we are
+- DenialDesk University U1 (`specs/denialdesk-university.md`, owner request 2026-09-27): in-app
+  courses at `/university`, reached from a "University" link in the global header and a "DenialDesk
+  University" item in the user menu (not a module in the switcher). Five courses (getting started,
+  reading a denial, Florida prompt pay, appeals and deadlines, protecting patient data) authored in
+  `src/domain/university/catalog.ts` as typed blocks; every legal value is a `rules` block resolved
+  from `rules/catalog.ts` at render time with its citation and "Pending counsel verification" badge
+  (a unit test rejects statutory numbers typed in prose), CARC meanings come from
+  `src/domain/carc.ts`. Per-user completions in `university_progress` (migration 0033; RLS; app role
+  SELECT/INSERT only, append-only; member FK) audited as `university.lesson_completed`. Next: U2
+  knowledge checks, U3 practice training record/export (OA-034), U4 more courses.
 - Appeals A1 (`specs/appeals.md`): `appeals` + `appeal_notes` tables (tenant RLS, isolation test,
   a DB trigger enforcing the status lifecycle draft → in_review → ready → submitted →
   awaiting_decision → decided, with withdrawn/dismissed reachable from submitted/awaiting_decision).
@@ -166,6 +176,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Insight standard reports: all roles view, export limited to admin/manager/compliance, aggregate-only (no drill-down), primary export is a formatted .xlsx workbook (not CSV); `exceljs` added | `specs/insight-standard-reports.md` |
 | 2026-09-26 | Insight small-cell suppression (R-8.7): rows tied to a sensitivity-tagged patient with a count under 11 (config, ⚠️ VERIFY) show "Suppressed (<11)" instead of values on-screen and in exports, with complementary suppression to prevent back-calculation | `specs/insight-standard-reports.md` |
 | 2026-09-26 | ERP shell: global header, navy tab bar, module switcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
+| 2026-09-27 | DenialDesk University lives outside the module switcher (header link + user-menu item); content is code-reviewed catalog data, never retyped statutory values; completions are append-only training records | `specs/denialdesk-university.md` |
 | 2026-09-26 | Operator two-step is off on the Netlify console for now (`PLATFORM_OPERATOR_MFA=off`; ignored in production); unset the variable to turn it back on | `specs/operator-login.md` |
 | 2026-09-26 | No self-service sign-up; the operator creates practices after the BAA is signed, and records the BAA on the practice page | `specs/practice-agreements.md` |
 | 2026-09-26 | BAA handling is manual by design: no sign-in blocking without a BAA, no template version, corrections via "recorded in error", nothing automatic at termination | `specs/practice-agreements.md` (Decisions) |
@@ -192,11 +203,15 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 6. Custom field values on records, settings S2 (MVP): ADR 0007 and threat model accepted; PR 1
    (encrypted storage, value history, role-gated reveal) merged as #53. Next: PR 2 patient form,
    PR 3 claims/denials, PR 4 payers.
-7. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
+7. DenialDesk University U2–U3 (`specs/denialdesk-university.md`): knowledge checks; per-user
+   training record under Settings with .xlsx export once OA-034 is answered.
+8. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
+- DenialDesk University: should lesson completions serve as the practice's HIPAA training evidence,
+  and in what form (U3)? `OA-034`.
 - Month-end clamping of the 6- and 12-month timely-filing windows (billing-structure review §3.4,
   §8 item 3): being researched separately; not yet decided.
 - Appeals A1 (`specs/appeals.md`): late-filing blocking (OA-023), withdrawn/dismissed → denial
