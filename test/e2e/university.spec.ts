@@ -9,7 +9,7 @@ test.describe("university", () => {
 
   test("the header link opens the course catalog", async ({ page }) => {
     await page.goto("/overview");
-    await page.getByRole("link", { name: "University" }).click();
+    await page.getByRole("link", { name: "University of DenialDesk" }).click();
     await expect(page).toHaveURL(/\/university$/);
     await expect(page.getByRole("heading", { level: 1, name: "Courses" })).toBeVisible();
     await expect(
@@ -34,9 +34,9 @@ test.describe("university", () => {
     await expect(page).toHaveURL(/\/university\/wiki$/);
     // Only the Wiki button is current here, not the University link beside it.
     await expect(headerButton).toHaveAttribute("aria-current", "page");
-    await expect(page.getByRole("banner").getByRole("link", { name: "University" })).not.toHaveAttribute(
-      "aria-current",
-    );
+    await expect(
+      page.getByRole("banner").getByRole("link", { name: "University of DenialDesk" }),
+    ).not.toHaveAttribute("aria-current");
     await page.goto("/university/wiki/glossary");
     await expect(headerButton).toHaveAttribute("aria-current", "true");
 
@@ -54,7 +54,7 @@ test.describe("university", () => {
 
   test("the welcome page points new users at the University", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: "New here? Start with DenialDesk University" }).click();
+    await page.getByRole("main").getByRole("link", { name: "University of DenialDesk" }).click();
     await expect(page).toHaveURL(/\/university$/);
   });
 

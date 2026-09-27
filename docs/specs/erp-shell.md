@@ -18,8 +18,8 @@ expression is DenialDesk's own and does not reproduce any vendor's shell (ADR 00
 
 ## Acceptance criteria
 - [x] Global header: logo (home link), "Go to a module or page" button beside it that opens the
-      switcher, "University" link and the "DenialDesk Wiki" wordmark button (2026-09-27,
-      `specs/university-wiki.md`), practice name, user menu (name truncated to keep the header
+      switcher, the "University of DenialDesk" logo button and the "DenialDesk Wiki" wordmark button (2026-09-27,
+      `specs/university-wiki.md`), practice name (shown from 1280px; in the user menu below that), user menu (name truncated to keep the header
       inside 1024px, role, practice, Sign out). (The demo badge was removed with the demo,
       2026-09-26.)
 - [x] Navy tab bar: the white DenialDesk mark with a chevron as its first control (changed from the

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ChevronDown, GraduationCap, Search } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "./BrandMark";
 import { ModuleSwitcher } from "./ModuleSwitcher";
@@ -75,10 +75,15 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
                   ? "page"
                   : undefined
               }
-              className="inline-flex h-9 items-center gap-1.5 rounded-control px-2.5 text-body font-medium text-text hover:bg-surface-muted"
+              title="University of DenialDesk"
+              className="inline-flex h-9 items-center rounded-control px-1.5 hover:bg-surface-muted"
             >
-              <GraduationCap aria-hidden="true" className="size-4 text-accent" strokeWidth={1.75} />
-              University
+              <Image
+                src="/brand/university-of-denialdesk.png"
+                alt="University of DenialDesk"
+                width={125}
+                height={29}
+              />
             </Link>
           )}
           {user && (
@@ -97,7 +102,8 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
               <Image src="/brand/denialdesk-wiki.png" alt="DenialDesk Wiki" width={100} height={30} />
             </Link>
           )}
-          <div className="hidden min-w-0 flex-col items-end leading-tight lg:flex">
+          {/* Below 1280px the practice name lives in the user menu only, so both logo buttons fit at 1024px. */}
+          <div className="hidden min-w-0 flex-col items-end leading-tight xl:flex">
             <span className="text-[0.6875rem] font-semibold tracking-wider text-subtle uppercase">
               Practice
             </span>

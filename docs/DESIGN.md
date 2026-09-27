@@ -48,10 +48,11 @@ ADR 0004 amendment; ERP shell (global header, tab bar, module switcher) 2026-09-
 The practice sign-in pages (`/login` and its MFA and password steps) also carry the reception image
 (`public/brand/denialdesk-reception.jpg`, provenance in `public/brand/README.md`) in a matted frame
 beside the card (above it under 1024px): hairline, canvas gap, navy line, white mat, hairline. It is
-the one picture in the product apart from the "DenialDesk Wiki" wordmark
-(`public/brand/denialdesk-wiki.png`, an owner-approved variant of the logo mark supplied 2026-09-27,
-background removed): that wordmark is the Wiki button in the global header and on the welcome page,
-always on a white surface, never recolored, and never anywhere else. Working screens use no other
+the one picture in the product apart from the "University of DenialDesk" logo
+(`public/brand/university-of-denialdesk.png`) and the "DenialDesk Wiki" wordmark
+(`public/brand/denialdesk-wiki.png`), both owner-approved variants of the logo mark supplied
+2026-09-27 with the background removed: they are the University and Wiki buttons in the global
+header and on the welcome page, always on a white surface, never recolored, and never anywhere else. Working screens use no other
 imagery. The product line next to the reception image is Inter, not serif: Playfair stays reserved
 for page titles (§6).
 
@@ -136,9 +137,10 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 ## 8. Layout
 - **App shell (ERP layout, `specs/erp-shell.md`, ADR 0005):**
   - *Global header*, 56px white: logo, then the "Go to a module or page" field beside it (opens the
-    module switcher; Ctrl/⌘ K); a "University" link (graduation-cap glyph, text label), the
-    "DenialDesk Wiki" wordmark button (§4), practice name, and the user menu (name truncated so the
-    header fits 1024px, role, practice, DenialDesk University, sign out) on the right.
+    module switcher; Ctrl/⌘ K); the "University of DenialDesk" logo button and the
+    "DenialDesk Wiki" wordmark button (§4), practice name (from 1280px; below that it is in the user
+    menu only), and the user menu (name truncated so the header fits 1024px, role, practice,
+    DenialDesk University, sign out) on the right.
     The University (`specs/denialdesk-university.md`) is not a module: it has its own teal tile and
     "DenialDesk University" eyebrow, and the tab bar keeps the current module's tabs.
   - *Tab bar*, 44px navy: the white DenialDesk mark (logo icon, teal cross) with a chevron as the

@@ -167,8 +167,17 @@ export default async function HomePage() {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="/university" className="text-body font-medium text-link hover:underline">
-            New here? Start with DenialDesk University
+          <Link
+            href="/university"
+            title="University of DenialDesk"
+            className="inline-flex h-9 items-center rounded-control border border-border px-2 hover:bg-surface-muted"
+          >
+            <Image
+              src="/brand/university-of-denialdesk.png"
+              alt="University of DenialDesk"
+              width={125}
+              height={29}
+            />
           </Link>
           <Link
             href="/university/wiki"
