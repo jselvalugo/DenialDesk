@@ -61,11 +61,37 @@ Requirement IDs: R-15.6, R-3.1.1, R-3.1.3, R-3.1.5, R-3.1.6, R-3.6.2, R-4.2.1, �
   ⚠️ Current claim detail copy says the deadline is "met once the payer confirms receipt"
   (`src/app/(app)/claims/[id]/page.tsx`); not changed here (review D2), listed for a builder PR.
 - Late-payment interest accrues from the **first calendar day after** the prompt-pay deadline
-  (the rolled due date). Matches current code (days late = payment date − due date).
+  (superseded 2026-09-27: from the day after the UNROLLED due date until counsel confirms roll-forward).
 - Medicare Advantage is **not** under Florida prompt pay; timing follows the plan contract.
   Note: 42 CFR § 422.520 requires MA plans to pay clean claims from non-contracted providers in
   30 days ⚠️ VERIFY; not encoded.
-- Weekend/holiday roll-forward: yes (basis above).
+- Weekend/holiday roll-forward: yes (basis above) — but see option 1 below: it does not govern
+  until counsel confirms it.
+
+### Owner decision 2026-09-27 (option 1) — conservative date until counsel confirms (OA-023)
+Requirement IDs: R-15.6, R-3.1.1, R-3.1.3, R-3.1.5, R-4.2.1.
+- [x] One mechanism in `rules/`: `ROLL_FORWARD_POLICY` (`rules/roll-forward.ts`) is an
+      effective-dated list; roll-forward governs only where a version has `confirmed: true` **and**
+      a human-recorded `confirmedBy`. Today it has one unconfirmed version. Flipping it after
+      counsel confirms = close that version and add a confirmed one (one-line, effective-dated).
+- [x] Every rule has `side: "provider" | "payer"`. Provider: timely filing (initial, secondary),
+      35-day provider response, overpayment response, patient refund, Medicare filing and appeal
+      levels. Payer: prompt-pay acknowledgment/pay-or-contest/pay-or-deny/uncontestable, interest
+      rate, payer look-back, retroactive-denial limit.
+- [x] Until confirmed, the UNROLLED date is the governing date for both sides: provider deadlines
+      alert, sort, show "past deadline" and block on it; payer milestones are late the day after it
+      and interest accrues from the day after it.
+- [x] The rolled date is still computed and exposed (`Deadline.rolledDate`, `Milestone.rolledDate`,
+      `ClockMilestone.rolledDue`, `paymentDueRolled`, `providerResponseDueRolled`,
+      `pendingRolledDate` for stored appeal deadlines); null when it equals the governing date.
+- [x] UI: claim timely filing, denial appeal deadline and prompt-pay milestones, prompt-pay
+      milestones / payment due / provider response show the governing date first and
+      "(pending counsel: <date>)" beneath it.
+- [x] Tests: day before / of / after for both the conservative and the rolled date (weekend,
+      Florida-only holiday, federal holiday, month-end); policy switchover by effective date;
+      confirmed without `confirmedBy` does not roll; interest start under both policies.
+- [ ] Payer-contract appeal windows are never rolled (unchanged); stored `denials.appeal_deadline`
+      rows written before this change hold the rolled date until re-seeded/recomputed (synthetic only).
 
 ## Open questions for counsel (carried from REQUIREMENTS §13)
 - Whether Rule 2.514 governs statutory clocks outside court; § 110.117 vs § 683.01 holiday list;
