@@ -7,6 +7,7 @@ import type { Messages } from "@/i18n/messages/types";
 import { createTranslator, type Translator } from "@/i18n/translate";
 import {
   MAX_FIELDS_PER_ENTITY,
+  MAX_LIST_COLUMNS,
   type CustomFieldChanges,
   type CustomFieldEntity,
   type NewCustomField,
@@ -71,6 +72,31 @@ async function assertRoomFor(tx: TenantTx, entity: CustomFieldEntity, t: Setting
   }
 }
 
+/** At most `MAX_LIST_COLUMNS` active fields per entity may be marked "Show in list" (spec
+ * addendum), so the list stays scannable. `excludeFieldId` lets an edit re-check without counting
+ * the field's own current row twice. */
+async function assertRoomInList(
+  tx: TenantTx,
+  entity: CustomFieldEntity,
+  excludeFieldId: string | undefined,
+  t: SettingsT = englishSettingsT,
+) {
+  const [{ shown } = { shown: 0 }] = await tx
+    .select({ shown: count() })
+    .from(customFields)
+    .where(
+      and(
+        eq(customFields.entity, entity),
+        eq(customFields.active, true),
+        eq(customFields.showInList, true),
+        excludeFieldId ? sql`${customFields.id} <> ${excludeFieldId}` : sql`true`,
+      ),
+    );
+  if (shown >= MAX_LIST_COLUMNS) {
+    throw new CustomFieldError(t("error.tooManyListColumns", { max: MAX_LIST_COLUMNS }), "showInList");
+  }
+}
+
 export async function createCustomField(
   tx: TenantTx,
   actor: Actor,
@@ -89,6 +115,7 @@ export async function createCustomField(
     .where(and(eq(customFields.entity, input.entity), eq(customFields.key, input.key)))
     .limit(1);
   if (taken) throw new CustomFieldError(t("error.duplicateKey"), "key");
+  if (input.showInList) await assertRoomInList(tx, input.entity, undefined, t);
 
   const [row] = await tx
     .insert(customFields)
@@ -102,6 +129,7 @@ export async function createCustomField(
       required: input.required,
       helpText: input.helpText,
       sensitivity: input.sensitivity,
+      showInList: input.showInList,
       position: (existing?.last ?? -1) + 1,
       createdBy: actor.userId,
     })
@@ -117,6 +145,7 @@ export async function createCustomField(
       fieldType: input.fieldType,
       required: input.required,
       sensitivity: input.sensitivity,
+      showInList: input.showInList,
     },
   });
   return row!.id;
@@ -157,7 +186,11 @@ export async function updateCustomField(
   if (current.required !== changes.required) changed.push("required");
   if (current.options.join("\n") !== changes.options.join("\n")) changed.push("options");
   if ((current.sensitivity ?? null) !== changes.sensitivity) changed.push("sensitivity");
+  if (current.showInList !== changes.showInList) changed.push("showInList");
   if (changed.length === 0) return [];
+  if (changes.showInList && !current.showInList) {
+    await assertRoomInList(tx, current.entity as CustomFieldEntity, fieldId, t);
+  }
   await tx
     .update(customFields)
     .set({ ...changes, updatedAt: new Date() })

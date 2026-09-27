@@ -42,6 +42,9 @@ export function customFieldTypeLabel(type: CustomFieldType, t: SettingsT = engli
 /** Per record type, so a practice can't bury its forms under hundreds of fields. */
 export const MAX_FIELDS_PER_ENTITY = 50;
 export const MAX_OPTIONS = 50;
+/** At most this many non-sensitive fields marked "Show in list" appear as columns per record type
+ * (spec addendum, S2): the list stays scannable and the query stays bounded. */
+export const MAX_LIST_COLUMNS = 5;
 
 const KEY = /^[a-z][a-z0-9_]{0,39}$/;
 
@@ -118,9 +121,16 @@ export function newCustomFieldSchema(t: SettingsT = englishSettingsT) {
       required: z.boolean(),
       helpText,
       sensitivity,
+      showInList: z.boolean(),
     })
     .superRefine(checkOptions(t))
-    .transform((value) => ({ ...value, options: value.fieldType === "select" ? value.options : [] }));
+    .transform((value) => ({
+      ...value,
+      options: value.fieldType === "select" ? value.options : [],
+      // A sensitive field's values are never listed (spec addendum): the checkbox is hidden/disabled
+      // in the form, but the server never trusts that alone.
+      showInList: value.sensitivity ? false : value.showInList,
+    }));
 }
 export type NewCustomField = z.output<ReturnType<typeof newCustomFieldSchema>>;
 
@@ -149,11 +159,13 @@ export function customFieldChangesSchema(t: SettingsT = englishSettingsT) {
       required: z.boolean(),
       helpText,
       sensitivity,
+      showInList: z.boolean(),
     })
     .superRefine(checkOptions(t))
     .transform(({ fieldType, ...value }) => ({
       ...value,
       options: fieldType === "select" ? value.options : [],
+      showInList: value.sensitivity ? false : value.showInList,
     }));
 }
 export type CustomFieldChanges = z.output<ReturnType<typeof customFieldChangesSchema>>;

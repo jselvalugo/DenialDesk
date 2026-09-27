@@ -8,6 +8,13 @@ import { canEditPatients, canTagSensitivity, canWorkDenials } from "@/auth/permi
 import { requireAuth } from "@/auth/session";
 import { type DatabaseError, isUniqueViolation } from "@/db/errors";
 import { withTenant } from "@/db/tenant";
+import { activeCustomFields } from "@/domain/settings/queries";
+import {
+  CustomFieldValueError,
+  revealCustomFieldValue,
+  saveValuesForRecord,
+} from "@/domain/custom-fields/values";
+import { parseCustomFieldInputs } from "@/domain/custom-fields/form-inputs";
 import {
   createPatient,
   PatientRecordError,
@@ -21,6 +28,18 @@ import { getT } from "@/i18n/server";
 import type { Messages } from "@/i18n/messages/types";
 import type { Translator } from "@/i18n/translate";
 import { syntheticDataOnly } from "@/lib/env";
+
+/** Pulls `cf.<fieldId>` entries out of the submitted form into the map `saveValuesForRecord`
+ * expects, restricted to this record type's active fields (a stray `cf.` name for another entity,
+ * or one that doesn't exist, is silently ignored — never trusted as an id to write against). */
+async function readCustomFieldInputs(
+  tx: Parameters<typeof activeCustomFields>[0],
+  entity: "patient",
+  formData: FormData,
+): Promise<Map<string, unknown>> {
+  const fields = await activeCustomFields(tx, entity);
+  return parseCustomFieldInputs(fields, formData);
+}
 
 export interface PatientFormState {
   error?: string;
@@ -79,6 +98,7 @@ function isDuplicateMrn(error: unknown): boolean {
 export async function registerPatient(_: PatientFormState, formData: FormData): Promise<PatientFormState> {
   const auth = await requireAuth();
   const t = await getT("patients");
+  const settingsT = await getT("settings");
   if (!canEditPatients(auth.role)) return { error: t("error.roleReadOnly") };
   const unattested = missingAttestation(formData, t);
   if (unattested) return unattested;
@@ -86,20 +106,28 @@ export async function registerPatient(_: PatientFormState, formData: FormData): 
   if (!parsed.data) return parsed.state!;
 
   let id: string;
+  const actor = {
+    tenantId: auth.tenantId,
+    userId: auth.userId,
+    canTag: canTagSensitivity(auth.role),
+    syntheticOnly: syntheticDataOnly(),
+  };
   const register = () =>
-    withTenant(auth, (tx) =>
-      createPatient(
+    withTenant(auth, async (tx) => {
+      const created = await createPatient(tx, actor, parsed.data!, t);
+      // Same transaction as the patient create, so a rollback (a duplicate-key retry, a later
+      // failure) undoes the values too.
+      const inputs = await readCustomFieldInputs(tx, "patient", formData);
+      await saveValuesForRecord(
         tx,
-        {
-          tenantId: auth.tenantId,
-          userId: auth.userId,
-          canTag: canTagSensitivity(auth.role),
-          syntheticOnly: syntheticDataOnly(),
-        },
-        parsed.data!,
-        t,
-      ),
-    );
+        { tenantId: auth.tenantId, userId: auth.userId, role: auth.role },
+        "patient",
+        created.id,
+        inputs,
+        settingsT,
+      );
+      return created;
+    });
   try {
     try {
       ({ id } = await register());
@@ -110,6 +138,9 @@ export async function registerPatient(_: PatientFormState, formData: FormData): 
     }
   } catch (error) {
     if (error instanceof PatientRecordError) return { error: error.message, field: error.field };
+    if (error instanceof CustomFieldValueError) {
+      return { error: error.message, field: error.key ? `cf.${error.key}` : undefined };
+    }
     if (isDuplicateMrn(error)) return { error: t("error.duplicateMrn"), field: "mrn" };
     throw error;
   }
@@ -120,6 +151,7 @@ export async function registerPatient(_: PatientFormState, formData: FormData): 
 export async function savePatient(_: PatientFormState, formData: FormData): Promise<PatientFormState> {
   const auth = await requireAuth();
   const t = await getT("patients");
+  const settingsT = await getT("settings");
   if (!canEditPatients(auth.role)) return { error: t("error.roleReadOnly") };
   const ids = z.object({ patientId: z.uuid(), expectedUpdatedAt: z.iso.datetime() }).safeParse({
     patientId: formData.get("patientId"),
@@ -138,8 +170,8 @@ export async function savePatient(_: PatientFormState, formData: FormData): Prom
   if (!parsed.data) return parsed.state!;
 
   try {
-    await withTenant(auth, (tx) =>
-      updatePatient(
+    await withTenant(auth, async (tx) => {
+      await updatePatient(
         tx,
         {
           tenantId: auth.tenantId,
@@ -152,10 +184,23 @@ export async function savePatient(_: PatientFormState, formData: FormData): Prom
         parsed.data,
         reason,
         t,
-      ),
-    );
+      );
+      // Same transaction: if the patient's own stale-edit check above throws, these never run.
+      const inputs = await readCustomFieldInputs(tx, "patient", formData);
+      await saveValuesForRecord(
+        tx,
+        { tenantId: auth.tenantId, userId: auth.userId, role: auth.role },
+        "patient",
+        ids.data.patientId,
+        inputs,
+        settingsT,
+      );
+    });
   } catch (error) {
     if (error instanceof PatientRecordError) return { error: error.message, field: error.field };
+    if (error instanceof CustomFieldValueError) {
+      return { error: error.message, field: error.key ? `cf.${error.key}` : undefined };
+    }
     if (isDuplicateMrn(error)) return { error: t("error.duplicateMrn"), field: "mrn" };
     throw error;
   }
@@ -194,4 +239,40 @@ export async function revealPatientMemberId(
   return withTenant(auth, (tx) =>
     revealPatientMemberIdFor(tx, auth, parsed.data.patientId, parsed.data.reason, t),
   );
+}
+
+/** Reveals one custom field's value on a record and records who looked and why (R-7.5.1). Same
+ * minimum-necessary roles as `revealPatientMemberId`. */
+export async function revealCustomField(
+  fieldId: string,
+  recordId: string,
+  reason: string,
+): Promise<{ value?: string; error?: string }> {
+  const auth = await requireAuth();
+  const t = await getT("customFields");
+  if (!canWorkDenials(auth.role)) return { error: t("error.cantView") };
+  const parsed = z
+    .object({
+      fieldId: z.uuid(),
+      recordId: z.uuid(),
+      reason: z.enum(["appeal", "eligibility", "payer_call", "other"]),
+    })
+    .safeParse({ fieldId, recordId, reason });
+  if (!parsed.success) return { error: t("error.chooseReason") };
+  const settingsT = await getT("settings");
+  const result = await withTenant(auth, (tx) =>
+    revealCustomFieldValue(
+      tx,
+      { tenantId: auth.tenantId, userId: auth.userId, role: auth.role },
+      {
+        fieldId: parsed.data.fieldId,
+        entity: "patient",
+        recordId: parsed.data.recordId,
+        reason: parsed.data.reason,
+      },
+      settingsT,
+    ),
+  );
+  if (result.error) return { error: result.error };
+  return { value: String(result.value) };
 }

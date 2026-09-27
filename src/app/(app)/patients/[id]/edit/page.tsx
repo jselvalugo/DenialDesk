@@ -10,6 +10,9 @@ import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { payerOptions } from "@/domain/denials/queries";
 import { getPatientForEdit } from "@/domain/patients/queries";
+import { activeCustomFields } from "@/domain/settings/queries";
+import { loadValuesForRecord } from "@/domain/custom-fields/values";
+import { toCustomFieldOptions } from "@/components/custom-fields/CustomFieldInputs";
 import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
@@ -32,6 +35,7 @@ export default async function EditPatientPage({ params }: { params: Promise<{ id
     const patient = await getPatientForEdit(tx, id);
     if (!patient) return null;
     const payers = await payerOptions(tx);
+    const customFields = await activeCustomFields(tx, "patient");
     await audit(tx, {
       action: "patient.viewed",
       actorUserId: auth.userId,
@@ -40,10 +44,16 @@ export default async function EditPatientPage({ params }: { params: Promise<{ id
       entityId: id,
       metadata: { view: "edit" },
     });
-    return { patient, payers };
+    const customValues = await loadValuesForRecord(
+      tx,
+      { tenantId: auth.tenantId, userId: auth.userId, role: auth.role },
+      "patient",
+      id,
+    );
+    return { patient, payers, customFields, customValues };
   });
   if (!data) notFound();
-  const { patient, payers } = data;
+  const { patient, payers, customFields, customValues } = data;
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
@@ -64,6 +74,8 @@ export default async function EditPatientPage({ params }: { params: Promise<{ id
           payers={payers}
           syntheticOnly={syntheticDataOnly()}
           today={todayIn()}
+          customFields={toCustomFieldOptions(customFields)}
+          customValues={customValues}
         />
       </Panel>
     </div>

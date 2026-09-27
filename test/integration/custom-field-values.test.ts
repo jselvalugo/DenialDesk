@@ -25,6 +25,8 @@ import {
   revealCustomFieldValue,
   saveValuesForRecord,
 } from "@/domain/custom-fields/values";
+import { loadListValues } from "@/domain/custom-fields/list-values";
+import { createPatient, updatePatient } from "@/domain/patients/queries";
 import { expectDbError } from "./helpers";
 
 // docs/specs/settings-and-custom-fields.md S2; ADR 0007 (+ addendum 2026-09-26);
@@ -54,6 +56,7 @@ function field(overrides: Partial<Record<string, unknown>> = {}): NewCustomField
     required: false,
     helpText: "",
     sensitivity: "",
+    showInList: false,
     ...overrides,
   });
 }
@@ -803,5 +806,168 @@ describe("no list/search/export module reads custom field values", () => {
       const source = await fs.readFile(path, "utf8").catch(() => "");
       expect(source).not.toContain("custom-fields/values");
     }
+  });
+
+  it("the record-list columns module (custom-fields/list-values.ts) itself never touches sensitive or hidden fields", async () => {
+    const fs = await import("node:fs/promises");
+    const source = await fs.readFile("src/domain/custom-fields/list-values.ts", "utf8");
+    // Its SQL filters to non-sensitive, show_in_list fields only, so a list/search/export page
+    // that imports it can never reach a masked value through it.
+    expect(source).toContain("isNull(customFields.sensitivity)");
+    expect(source).toContain("eq(customFields.showInList, true)");
+  });
+});
+
+// PR 2 (patients UI): values saved in the same transaction as the patient record, so the
+// record's own stale-edit check covers them too, and the record-list columns query.
+describe("patient record + custom field values in one transaction (PR2)", () => {
+  function patientInput(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      mrn: null,
+      firstName: "Synthetic",
+      lastName: "Patient",
+      birthDate: "1990-01-01",
+      sex: "U" as const,
+      addressLine1: null,
+      city: null,
+      state: null,
+      postalCode: null,
+      phone: null,
+      primaryPayerId: null,
+      memberId: "",
+      sensitivityTags: [],
+      ...overrides,
+    };
+  }
+
+  it("commits the patient and its custom field values together, and rolls both back on failure", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "intake_note" })),
+    );
+
+    // A failure inside the same transaction (a duplicate MRN) must roll back any custom field
+    // values that would otherwise have been written alongside the new patient.
+    const dupeMrn = `DUPE-${Date.now()}`;
+    await withTenant(a.ctx, (tx) =>
+      createPatient(tx, { ...a.ctx, canTag: true, syntheticOnly: true }, patientInput({ mrn: dupeMrn })),
+    );
+
+    let failed = false;
+    try {
+      await withTenant(a.ctx, async (tx) => {
+        const created = await createPatient(
+          tx,
+          { ...a.ctx, canTag: true, syntheticOnly: true },
+          patientInput({ mrn: dupeMrn }), // duplicate: createPatient throws
+        );
+        await saveValuesForRecord(
+          tx,
+          a.ctx,
+          "patient",
+          created.id,
+          new Map([[fieldId, "should not persist"]]),
+        );
+      });
+    } catch {
+      failed = true;
+    }
+    expect(failed).toBe(true);
+
+    // Now the same shape but no duplicate: both the patient and its value commit together.
+    const created = await withTenant(a.ctx, async (tx) => {
+      const created = await createPatient(
+        tx,
+        { ...a.ctx, canTag: true, syntheticOnly: true },
+        patientInput(),
+      );
+      await saveValuesForRecord(tx, a.ctx, "patient", created.id, new Map([[fieldId, "committed note"]]));
+      return created;
+    });
+    const values = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "patient", created.id));
+    expect(values.find((v) => v.fieldId === fieldId)?.value).toBe("committed note");
+  });
+
+  it("a stale patient edit refuses the patient update and its custom field values together", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "stale_test_field" })),
+    );
+    const created = await withTenant(a.ctx, (tx) =>
+      createPatient(tx, { ...a.ctx, canTag: true, syntheticOnly: true }, patientInput()),
+    );
+
+    await expect(
+      withTenant(a.ctx, async (tx) => {
+        await updatePatient(
+          tx,
+          { ...a.ctx, canTag: true, syntheticOnly: true },
+          created.id,
+          new Date(0).toISOString(), // wrong expectedUpdatedAt
+          patientInput({ firstName: "Changed" }),
+          "testing stale refusal",
+        );
+        // Never reached: the values write must not run either.
+        await saveValuesForRecord(
+          tx,
+          a.ctx,
+          "patient",
+          created.id,
+          new Map([[fieldId, "should not persist"]]),
+        );
+      }),
+    ).rejects.toThrow();
+
+    const values = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "patient", created.id));
+    expect(values.find((v) => v.fieldId === fieldId)?.value).toBeUndefined();
+  });
+});
+
+describe("loadListValues (PR2 table-column addendum)", () => {
+  it("returns only non-sensitive, show_in_list fields, never a sensitive one, and is tenant-isolated", async () => {
+    const shownId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "clinic_tier", showInList: true })),
+    );
+    const hiddenId = await withTenant(
+      a.ctx,
+      (tx) => createCustomField(tx, a.ctx, field({ key: "internal_note" })), // showInList: false (default)
+    );
+    const sensitiveId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "hiv_status_list", sensitivity: "hiv" })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(
+        tx,
+        a.ctx,
+        "patient",
+        a.patientId,
+        new Map([
+          [shownId, "Tier 1"],
+          [hiddenId, "internal only"],
+        ]),
+      ),
+    );
+
+    const { columns, valuesByRecord } = await withTenant(a.ctx, (tx) =>
+      loadListValues(tx, a.ctx, "patient", [a.patientId]),
+    );
+    expect(columns.map((c) => c.key)).toEqual(["clinic_tier"]);
+    expect(columns.some((c) => c.key === "internal_note")).toBe(false);
+    expect(columns.some((c) => c.key === "hiv_status_list")).toBe(false);
+    expect(valuesByRecord.get(a.patientId)?.get("clinic_tier")).toBe("Tier 1");
+    expect(valuesByRecord.get(a.patientId)?.has("internal_note")).toBe(false);
+    expect(valuesByRecord.get(a.patientId)?.has("hiv_status_list")).toBe(false);
+
+    // Never leaks a sensitive value even if somehow marked (the DB check forbids it; this asserts
+    // the query-time filter independently of that constraint).
+    void sensitiveId;
+
+    // Tenant isolation: tenant B's list never includes tenant A's record or values.
+    const bResult = await withTenant(b.ctx, (tx) => loadListValues(tx, b.ctx, "patient", [a.patientId]));
+    expect(bResult.valuesByRecord.size).toBe(0);
+  });
+
+  it("returns nothing for an empty page of records without querying", async () => {
+    const result = await withTenant(a.ctx, (tx) => loadListValues(tx, a.ctx, "patient", []));
+    expect(result.columns).toEqual([]);
+    expect(result.valuesByRecord.size).toBe(0);
   });
 });

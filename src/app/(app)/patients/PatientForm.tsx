@@ -8,6 +8,8 @@ import { TextField } from "@/components/ui/TextField";
 import { useT } from "@/i18n/client";
 import { SEX_LABEL_KEYS, sexLabel } from "@/domain/patients/record";
 import { resolvePayerByName, type PayerOption } from "@/domain/payers/resolve";
+import { CustomFieldInputs, type CustomFieldOption } from "@/components/custom-fields/CustomFieldInputs";
+import type { LoadedCustomFieldValue } from "@/domain/custom-fields/values";
 import { registerPatient, savePatient, type PatientFormState } from "./actions";
 
 const selectClass =
@@ -125,11 +127,16 @@ export function PatientForm({
   payers,
   syntheticOnly,
   today,
+  customFields = [],
+  customValues = [],
 }: {
   patient?: PatientFormValues;
   payers: PayerOption[];
   syntheticOnly: boolean;
   today: string;
+  /** Active custom fields for patients (docs/specs/settings-and-custom-fields.md S2). */
+  customFields?: CustomFieldOption[];
+  customValues?: LoadedCustomFieldValue[];
 }) {
   const t = useT("patients");
   const tc = useT("common");
@@ -295,6 +302,12 @@ export function PatientForm({
       {patient?.sensitivityTags.map((tag) => (
         <input key={tag} type="hidden" name="sensitivityTags" value={tag} />
       ))}
+
+      <CustomFieldInputs
+        fields={customFields}
+        values={customValues}
+        errorFor={(key) => (state.field === `cf.${key}` ? state.error : undefined)}
+      />
 
       {editing && (
         <label className="flex flex-col gap-1.5 text-label font-medium text-text">

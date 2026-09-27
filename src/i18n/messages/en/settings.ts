@@ -92,6 +92,8 @@ export const settings = {
   "form.sensitivityHint":
     "A sensitive field is locked on every record: its value stays hidden until someone opens it with a reason, and each opening is recorded in the audit log.",
   "form.requiredLabel": "Required: the record can't be saved without it",
+  "form.showInListLabel": "Show in list: add a column for this field on the record list",
+  "form.showInListDisabledHint": "Sensitive fields never appear in lists, search, or exports.",
   "form.saveField": "Save field",
   "form.adding": "Adding…",
 
@@ -116,6 +118,8 @@ export const settings = {
   "error.tooManyFields":
     "This record type already has {max} active fields. Deactivate one you no longer use.",
   "error.staleField": "This field changed since you opened it. Reload and try again.",
+  "error.tooManyListColumns":
+    "At most {max} fields per record type can show in the list. Turn one off first.",
 
   // Custom field values (domain/custom-fields/values.ts)
   "error.required": "{field} is required.",
