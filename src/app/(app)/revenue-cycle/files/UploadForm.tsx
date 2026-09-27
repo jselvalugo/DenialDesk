@@ -4,22 +4,24 @@ import { useActionState } from "react";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { Select } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { useT } from "@/i18n/client";
+import type { MessageKey } from "@/i18n/messages/types";
 import { uploadMonthlyFile, type UploadState } from "./actions";
 
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
+const MONTH_KEYS = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+] as const;
 
 export function UploadForm({
   sites,
@@ -32,46 +34,53 @@ export function UploadForm({
   defaultMonth: number;
   syntheticOnly: boolean;
 }) {
+  const t = useT("revenue");
   const [state, action] = useActionState<UploadState, FormData>(uploadMonthlyFile, {});
   const years = [defaultYear - 1, defaultYear, defaultYear + 1];
   return (
     <form action={action} className="flex max-w-[720px] flex-col gap-4">
       <FormAlert message={state.error} />
       {state.problems && state.problems.length > 0 && (
-        <ul aria-label="Problems in the file" className="list-disc space-y-0.5 pl-5 text-body text-danger-fg">
+        <ul
+          aria-label={t("deposits.problemsAria")}
+          className="list-disc space-y-0.5 pl-5 text-body text-danger-fg"
+        >
           {state.problems.map((p) => (
             <li key={`${p.row}-${p.message}`}>
-              Row {p.row}: {p.message}
+              {t("deposits.rowProblem", { row: p.row, message: p.message })}
             </li>
           ))}
         </ul>
       )}
       <div className="grid grid-cols-2 gap-4">
         <Select
-          label="Month"
+          label={t("files.form.month")}
           name="periodMonth"
           defaultValue={String(defaultMonth)}
-          options={MONTHS.map((m, i) => ({ value: String(i + 1), label: m }))}
+          options={MONTH_KEYS.map((key, i) => ({
+            value: String(i + 1),
+            label: t(("files.month." + key) as MessageKey<"revenue">),
+          }))}
         />
         <Select
-          label="Year"
+          label={t("files.form.year")}
           name="periodYear"
           defaultValue={String(defaultYear)}
           options={years.map((y) => ({ value: String(y), label: String(y) }))}
         />
       </div>
       <Select
-        label="Site for lines whose facility doesn't name a site"
+        label={t("files.form.defaultSite")}
         name="defaultSiteId"
         defaultValue=""
         options={[
-          { value: "", label: "No site" },
+          { value: "", label: t("files.form.noSite") },
           ...sites.map((s) => ({ value: s.id, label: `${s.code} · ${s.name}` })),
         ]}
       />
       <div className="flex flex-col gap-1">
         <label htmlFor="file" className="text-label font-medium text-text">
-          Monthly file (CSV, up to 5 MB)
+          {t("files.form.fileLabel")}
         </label>
         <input
           id="file"
@@ -86,14 +95,14 @@ export function UploadForm({
         <label className="flex items-start gap-2 text-body text-text">
           <input type="checkbox" name="syntheticAttestation" required className="mt-0.5 size-4" />
           <span>
-            This file contains synthetic data only. Every account number starts with <code>SYN-</code>; real
-            patient files are rejected in this environment.
+            {t("files.form.syntheticAttestation.prefix")} <code>SYN-</code>
+            {t("files.form.syntheticAttestation.suffix")}
           </span>
         </label>
       )}
       <div>
-        <SubmitButton variant="primary" pendingLabel="Importing…">
-          Import file
+        <SubmitButton variant="primary" pendingLabel={t("files.importing")}>
+          {t("files.importAction")}
         </SubmitButton>
       </div>
     </form>

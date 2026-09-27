@@ -4,6 +4,7 @@ import { canViewUniversity } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { findCategory, WIKI_ARTICLES } from "@/domain/university/wiki/catalog";
 import { normalizeQuery, searchArticles } from "@/domain/university/wiki/search";
+import { getT } from "@/i18n/server";
 
 export interface WikiSearchResult {
   slug: string;
@@ -26,14 +27,15 @@ export interface WikiSearchState {
  */
 export async function searchWiki(_prev: WikiSearchState, formData: FormData): Promise<WikiSearchState> {
   const auth = await requireAuth();
-  if (!canViewUniversity(auth.role)) return { error: "Your role cannot read the wiki." };
+  const t = await getT("university");
+  if (!canViewUniversity(auth.role)) return { error: t("search.roleDenied") };
   const query = normalizeQuery(String(formData.get("q") ?? "")).trim();
   if (!query) return {};
   const results = searchArticles(WIKI_ARTICLES, query).map((article) => ({
     slug: article.slug,
     title: article.title,
     summary: article.summary,
-    categoryLabel: findCategory(article.category).label,
+    categoryLabel: t(findCategory(article.category).labelKey),
     tags: article.tags.slice(0, 5),
   }));
   return { query, results };

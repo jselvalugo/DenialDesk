@@ -4,6 +4,8 @@ import { useActionState, useEffect, useRef } from "react";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
+import { useT } from "@/i18n/client";
+import { rich } from "@/i18n/rich";
 import { recordAgreement, type RecordAgreementState } from "../../actions";
 
 /** Records a signed BAA for one practice; a new one supersedes the current active agreement. */
@@ -19,6 +21,7 @@ export function RecordAgreementForm({
 }) {
   const [state, action] = useActionState<RecordAgreementState, FormData>(recordAgreement, {});
   const formRef = useRef<HTMLFormElement>(null);
+  const t = useT("operator");
   useEffect(() => {
     if (state.recorded) formRef.current?.reset();
   }, [state]);
@@ -30,22 +33,21 @@ export function RecordAgreementForm({
           role="status"
           className="rounded-panel border border-success-border bg-success-bg p-3 text-body text-success-fg"
         >
-          {state.recorded.filename} recorded as the active agreement
-          {state.recorded.supersededPrevious ? "; the previous agreement is kept as superseded." : "."}
+          {t(
+            state.recorded.supersededPrevious ? "agreementForm.recordedSuperseded" : "agreementForm.recorded",
+            {
+              filename: state.recorded.filename,
+            },
+          )}
         </p>
       )}
       <form ref={formRef} action={action} className="flex flex-col gap-4">
         <input type="hidden" name="tenantId" value={tenantId} />
         <FormAlert message={state.error} />
-        {hasActive && (
-          <p className="text-body text-muted">
-            Recording a new agreement replaces the current active one. The current one stays on file as
-            superseded.
-          </p>
-        )}
+        {hasActive && <p className="text-body text-muted">{t("agreementForm.replacesActive")}</p>}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="agreement-file" className="text-label font-medium text-text">
-            Signed agreement (PDF, up to 5 MB)
+            {t("agreementForm.fileLabel")}
           </label>
           <input
             id="agreement-file"
@@ -57,44 +59,55 @@ export function RecordAgreementForm({
           />
         </div>
         <div className="grid grid-cols-3 gap-4">
-          <TextField label="Effective date" name="effectiveDate" type="date" required />
           <TextField
-            label="Expires on"
+            label={t("agreementForm.effectiveDateLabel")}
+            name="effectiveDate"
+            type="date"
+            required
+          />
+          <TextField
+            label={t("agreementForm.expiresOnLabel")}
             name="expiresOn"
             type="date"
-            hint="Leave blank if it runs until terminated."
+            hint={t("agreementForm.expiresOnHint")}
           />
-          <TextField label="Date signed" name="signedOn" type="date" required />
+          <TextField label={t("agreementForm.signedOnLabel")} name="signedOn" type="date" required />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <TextField
-            label="Signed for the practice by"
+            label={t("agreementForm.practiceSignerLabel")}
             name="practiceSigner"
             required
             maxLength={160}
-            hint="Name and title."
+            hint={t("agreementForm.nameAndTitleHint")}
           />
           <TextField
-            label="Signed for DenialDesk by"
+            label={t("agreementForm.ourSignerLabel")}
             name="ourSigner"
             required
             maxLength={160}
-            hint="Name and title."
+            hint={t("agreementForm.nameAndTitleHint")}
           />
         </div>
-        <TextField label="Note" name="note" maxLength={500} hint="Optional. No patient information." />
+        <TextField
+          label={t("agreementForm.noteLabel")}
+          name="note"
+          maxLength={500}
+          hint={t("agreementForm.noteHint")}
+        />
         {syntheticOnly && (
           <label className="flex items-start gap-2 text-body text-text">
             <input type="checkbox" name="syntheticAttestation" required className="mt-0.5 size-4" />
             <span>
-              This is a synthetic test document, not a real agreement. Its file name starts with{" "}
-              <code>SYN-</code>; real agreements are rejected in this environment.
+              {rich(t("agreementForm.syntheticAttestation", { prefix: "SYN-" }), {
+                code: (chunks) => <code>{chunks}</code>,
+              })}
             </span>
           </label>
         )}
         <div>
-          <SubmitButton variant="primary" pendingLabel="Recording…">
-            Record agreement
+          <SubmitButton variant="primary" pendingLabel={t("agreementForm.recording")}>
+            {t("agreementForm.submit")}
           </SubmitButton>
         </div>
       </form>

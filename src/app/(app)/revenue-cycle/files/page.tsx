@@ -12,16 +12,24 @@ import { Panel } from "@/components/ui/Panel";
 import { rcmSites } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { CURRENT_FORMAT_VERSION, listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
+import { MONTHLY_FILE_HEADER } from "@/domain/revenue-cycle/monthly-file";
+import { rich } from "@/i18n/rich";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
 import { Badge } from "@/components/ui/Badge";
 import { UploadForm } from "./UploadForm";
 
-export const metadata: Metadata = { title: "Monthly files" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("revenue");
+  return { title: t("files.title") };
+}
 
 export default async function FilesPage() {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
+  const t = await getT("revenue");
+  const f = await getFormat();
   const { files, sites } = await withTenant(auth, async (tx) => {
     const files = await listFiles(tx);
     const sites = await tx
@@ -51,78 +59,72 @@ export default async function FilesPage() {
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="Monthly files"
-        description="Each month's charges, payments, adjustments, and open balances from the practice-management system, classified line by line with the practice's accounting rules."
-      />
+      <PageHeader title={t("files.title")} description={t("files.description")} />
 
-      <Panel title="Imported files" description={`${files.length} files, newest period first`} flush>
+      <Panel
+        title={t("files.importedTitle")}
+        description={t("files.importedDescription", { count: files.length })}
+        flush
+      >
         {files.length === 0 ? (
-          <EmptyState
-            title="No files imported yet"
-            description="Import last month's practice-management export below to classify it and prepare the journal voucher."
-          />
+          <EmptyState title={t("files.emptyTitle")} description={t("files.emptyDescription")} />
         ) : (
-          <Table caption="Imported monthly files">
+          <Table caption={t("files.tableCaption")}>
             <thead>
               <tr>
-                <Th>Period</Th>
-                <Th>File</Th>
-                <Th numeric>Lines</Th>
-                <Th numeric>Charges</Th>
-                <Th numeric>Adjustments</Th>
-                <Th numeric>Net revenue</Th>
-                <Th numeric>Payments</Th>
-                <Th numeric>Open balance</Th>
-                <Th numeric>Needs review</Th>
-                <Th>Imported by</Th>
+                <Th>{t("files.col.period")}</Th>
+                <Th>{t("files.col.file")}</Th>
+                <Th numeric>{t("files.col.lines")}</Th>
+                <Th numeric>{t("files.col.charges")}</Th>
+                <Th numeric>{t("files.col.adjustments")}</Th>
+                <Th numeric>{t("files.col.netRevenue")}</Th>
+                <Th numeric>{t("files.col.payments")}</Th>
+                <Th numeric>{t("files.col.openBalance")}</Th>
+                <Th numeric>{t("files.col.needsReview")}</Th>
+                <Th>{t("files.col.importedBy")}</Th>
               </tr>
             </thead>
             <tbody>
-              {files.map((f) => (
-                <Tr key={f.id}>
+              {files.map((row) => (
+                <Tr key={row.id}>
                   <Td>
                     <Link
-                      href={`/revenue-cycle/files/${f.id}`}
+                      href={`/revenue-cycle/files/${row.id}`}
                       className="font-medium text-link hover:underline"
                     >
-                      {periodLabel(f.periodYear, f.periodMonth)}
+                      {periodLabel(row.periodYear, row.periodMonth, t.locale)}
                     </Link>
-                    {(perPeriod.get(`${f.periodYear}-${f.periodMonth}`) ?? 0) > 1 && (
+                    {(perPeriod.get(`${row.periodYear}-${row.periodMonth}`) ?? 0) > 1 && (
                       <span className="ml-2">
-                        <Badge tone="warning">Period imported more than once</Badge>
+                        <Badge tone="warning">{t("files.periodDuplicate")}</Badge>
                       </span>
                     )}
-                    {f.formatVersion !== CURRENT_FORMAT_VERSION && (
-                      <span
-                        className="ml-2"
-                        title="Imported before the month-end activity layout; not used for vouchers or aging. Import the month again."
-                      >
-                        <Badge tone="neutral">Earlier layout</Badge>
+                    {row.formatVersion !== CURRENT_FORMAT_VERSION && (
+                      <span className="ml-2" title={t("files.earlierLayoutHint")}>
+                        <Badge tone="neutral">{t("files.earlierLayout")}</Badge>
                       </span>
                     )}
                   </Td>
-                  <Td className="max-w-64 truncate text-muted">{f.filename}</Td>
-                  <Td numeric>{f.rowCount.toLocaleString("en-US")}</Td>
+                  <Td className="max-w-64 truncate text-muted">{row.filename}</Td>
+                  <Td numeric>{f.number(row.rowCount)}</Td>
                   <Td numeric>
-                    <Money cents={f.billedCents} />
+                    <Money cents={row.billedCents} />
                   </Td>
                   <Td numeric>
-                    <Money cents={f.adjustmentCents} />
+                    <Money cents={row.adjustmentCents} />
                   </Td>
                   <Td numeric className="font-medium">
-                    <Money cents={f.netCents} />
+                    <Money cents={row.netCents} />
                   </Td>
                   <Td numeric>
-                    <Money cents={f.paymentCents} />
+                    <Money cents={row.paymentCents} />
                   </Td>
                   <Td numeric>
-                    <Money cents={f.balanceCents} />
+                    <Money cents={row.balanceCents} />
                   </Td>
-                  <Td numeric>{f.flaggedCount}</Td>
+                  <Td numeric>{row.flaggedCount}</Td>
                   <Td className="text-muted">
-                    {f.uploadedBy ?? "—"} ·{" "}
-                    {f.createdAt.toLocaleDateString("en-US", { timeZone: "America/New_York" })}
+                    {row.uploadedBy ?? "—"} · {f.dateOf(row.createdAt)}
                   </Td>
                 </Tr>
               ))}
@@ -133,8 +135,11 @@ export default async function FilesPage() {
 
       {canRunRevenueCycle(auth.role) && (
         <Panel
-          title="Import a monthly file"
-          description="Month-end activity CSV: every charge line with activity in the month or still open at month-end. Columns: Patient name, Account number, Service date, Procedure code, Description, Facility, Payer, Financial class, Status, Charges, Payments, Adjustments (posted in the month), and Balance (open at month-end)."
+          title={t("files.importTitle")}
+          description={t("files.importDescription", {
+            // The CSV header names are an English file-format contract (monthly-file.ts), quoted as-is.
+            columns: MONTHLY_FILE_HEADER.join(", "),
+          })}
         >
           <UploadForm
             sites={sites}
@@ -144,15 +149,17 @@ export default async function FilesPage() {
           />
           {syntheticDataOnly() && (
             <p className="mt-4 text-label text-muted">
-              Need a file to try?{" "}
-              <a
-                href="/api/revenue-cycle/sample-file"
-                download
-                className="font-medium text-link hover:underline"
-              >
-                Download a synthetic sample file
-              </a>{" "}
-              for this practice&apos;s sites.
+              {rich(t("files.sampleFilePrompt"), {
+                a: (chunks) => (
+                  <a
+                    href="/api/revenue-cycle/sample-file"
+                    download
+                    className="font-medium text-link hover:underline"
+                  >
+                    {chunks}
+                  </a>
+                ),
+              })}
             </p>
           )}
         </Panel>

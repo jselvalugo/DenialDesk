@@ -17,25 +17,49 @@ import {
 import { snapshotOf } from "@/domain/claims/correction";
 import { isUnsubmitted } from "@/domain/claims/status";
 import type { Remittance835 } from "@/edi/x12/835";
+import type { MessageKey } from "@/i18n/messages/types";
 import { audit } from "@/lib/audit";
 import { CARC } from "@/domain/carc";
 import { isExpected, postedClaimStatus } from "./status";
+import { en } from "@/i18n/messages/en";
+import { createTranslator } from "@/i18n/translate";
+
+/**
+ * Carries a message key (remittances namespace) instead of English text. A value that's a list
+ * (e.g. claim numbers) is joined and translated by the caller (`joinNamed` in the server action),
+ * not here: this module never imports `@/i18n/server`.
+ */
+const english = createTranslator(en.remittances, "en");
+/** Claim-number lists are capped in the message: an escaped error must never carry a whole 835's accounts. */
+const MAX_NAMED_IN_MESSAGE = 5;
+function englishMessage(
+  key: MessageKey<"remittances">,
+  params?: Record<string, string | number | string[]>,
+): string {
+  const named = (list: string[]) =>
+    list.length > MAX_NAMED_IN_MESSAGE
+      ? `${list.slice(0, MAX_NAMED_IN_MESSAGE).join(", ")} (+${list.length - MAX_NAMED_IN_MESSAGE})`
+      : list.join(", ");
+  return english(
+    key,
+    params &&
+      Object.fromEntries(Object.entries(params).map(([k, v]) => [k, Array.isArray(v) ? named(v) : v])),
+  );
+}
 
 export class RemittanceError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(
+    public readonly key: MessageKey<"remittances">,
+    public readonly data?: Record<string, string | number | string[]>,
+  ) {
+    // The message is the English text, so logs and tests read it directly; server actions translate
+    // `key`/`data` for the user instead of showing `message`.
+    super(englishMessage(key, data));
     this.name = "RemittanceError";
   }
 }
 
 export const MAX_REASON_LENGTH = 500;
-/** Claim numbers named in an error message; the rest are counted. */
-const MAX_NAMED = 5;
-
-function nameSome(values: string[]): string {
-  const shown = values.slice(0, MAX_NAMED).join(", ");
-  return values.length > MAX_NAMED ? `${shown} and ${values.length - MAX_NAMED} more` : shown;
-}
 
 /**
  * Stores a parsed 835 as a remittance ready to post (R1). Nothing on a claim changes until it is
@@ -47,9 +71,7 @@ export async function loadRemittance(
 ): Promise<{ id: string }> {
   const { parsed } = input;
   if (!parsed.payer.ediPayerId) {
-    throw new RemittanceError(
-      "The file doesn't identify the payer (N1*PR payer ID). Ask the payer for a corrected file.",
-    );
+    throw new RemittanceError("error.noPayerId");
   }
   const matches = await tx
     .select({ id: payers.id })
@@ -57,38 +79,30 @@ export async function loadRemittance(
     .where(eq(payers.ediPayerId, parsed.payer.ediPayerId))
     .limit(2);
   if (matches.length > 1) {
-    throw new RemittanceError(
-      `More than one payer has EDI payer ID ${parsed.payer.ediPayerId}. Fix the payer setup, then upload again.`,
-    );
+    throw new RemittanceError("error.duplicatePayerId", { ediPayerId: parsed.payer.ediPayerId });
   }
   const payer = matches[0];
   if (!payer) {
-    throw new RemittanceError(
-      `No payer in this practice has EDI payer ID ${parsed.payer.ediPayerId}. Add the payer first, then upload again.`,
-    );
+    throw new RemittanceError("error.unknownPayerId", { ediPayerId: parsed.payer.ediPayerId });
   }
   const emptyReversals = parsed.claims.filter((c) => c.statusCode === "22" && c.paidCents === 0);
   if (emptyReversals.length > 0) {
-    throw new RemittanceError(
-      `Reversals must take back a payment: ${nameSome(emptyReversals.map((c) => c.claimNumber))} reverse $0.`,
-    );
+    throw new RemittanceError("error.emptyReversals", {
+      claims: emptyReversals.map((c) => c.claimNumber),
+    });
   }
   const badReversals = parsed.claims.filter(
     (c) => (c.statusCode === "22") !== c.paidCents < 0 && c.paidCents !== 0,
   );
   if (badReversals.length > 0) {
-    throw new RemittanceError(
-      `Negative payments must be reversals (CLP02 22) and reversals must be negative: ${nameSome(badReversals.map((c) => c.claimNumber))}.`,
-    );
+    throw new RemittanceError("error.badReversals", { claims: badReversals.map((c) => c.claimNumber) });
   }
   const numbers = parsed.claims.map((c) => c.claimNumber);
   // A reversal and its corrected claim share a claim number; anything else repeated is an error.
   const keys = parsed.claims.map((c) => `${c.claimNumber}|${c.statusCode === "22" ? "R" : "P"}`);
   const repeated = keys.filter((k, i) => keys.indexOf(k) !== i).map((k) => k.split("|")[0]!);
   if (repeated.length > 0) {
-    throw new RemittanceError(
-      `Claims appear more than once in this file: ${nameSome([...new Set(repeated)])}.`,
-    );
+    throw new RemittanceError("error.duplicateClaims", { claims: [...new Set(repeated)] });
   }
   const [duplicate] = await tx
     .select({ id: remittances.id })
@@ -96,9 +110,7 @@ export async function loadRemittance(
     .where(and(eq(remittances.payerId, payer.id), eq(remittances.traceNumber, parsed.payment.traceNumber)))
     .limit(1);
   if (duplicate) {
-    throw new RemittanceError(
-      `Trace number ${parsed.payment.traceNumber} from this payer is already on file.`,
-    );
+    throw new RemittanceError("error.duplicateTrace", { traceNumber: parsed.payment.traceNumber });
   }
 
   const found = await tx
@@ -108,13 +120,11 @@ export async function loadRemittance(
   const byNumber = new Map(found.map((c) => [c.claimNumber, c]));
   const missing = [...new Set(numbers)].filter((n) => !byNumber.has(n));
   if (missing.length > 0) {
-    throw new RemittanceError(`No claim to this payer matches ${nameSome(missing)}. Nothing was loaded.`);
+    throw new RemittanceError("error.noMatchingClaims", { claims: missing });
   }
   const notSent = found.filter((c) => isUnsubmitted(c.status) || c.status === "closed");
   if (notSent.length > 0) {
-    throw new RemittanceError(
-      `These claims are draft, rejected, or closed and can't take a payment: ${nameSome(notSent.map((c) => c.claimNumber))}.`,
-    );
+    throw new RemittanceError("error.notPayable", { claims: notSent.map((c) => c.claimNumber) });
   }
 
   const claimsPaid = parsed.claims.reduce((sum, c) => sum + c.paidCents, 0);
@@ -180,11 +190,9 @@ export async function postRemittance(
     .where(eq(remittances.id, input.remittanceId))
     .for("update")
     .limit(1);
-  if (!remittance) throw new RemittanceError("Remittance not found.");
+  if (!remittance) throw new RemittanceError("error.notFound");
   if (remittance.status !== "received") {
-    throw new RemittanceError(
-      `This remittance is already ${remittance.status === "void" ? "void" : "posted"}.`,
-    );
+    throw new RemittanceError(remittance.status === "void" ? "error.alreadyVoid" : "error.alreadyPosted");
   }
   const payments = await tx
     .select()
@@ -196,14 +204,14 @@ export async function postRemittance(
   const reason = `Posted from remittance ${remittance.traceNumber}`;
   const claimsPaid = payments.reduce((sum, p) => sum + p.paidCents, 0);
   if (claimsPaid - remittance.providerAdjustmentCents !== remittance.totalPaidCents) {
-    throw new RemittanceError("This remittance doesn't balance, so it can't be posted.");
+    throw new RemittanceError("error.notBalanced");
   }
   const [payer] = await tx
     .select({ regime: payers.regime, appealWindowDays: payers.appealWindowDays })
     .from(payers)
     .where(eq(payers.id, remittance.payerId))
     .limit(1);
-  if (!payer) throw new RemittanceError("The payer on this remittance is no longer available.");
+  if (!payer) throw new RemittanceError("error.payerUnavailable");
   let captured = 0;
 
   for (const payment of payments) {
@@ -213,15 +221,16 @@ export async function postRemittance(
       .where(eq(claims.id, payment.claimId))
       .for("update")
       .limit(1);
-    if (!claim) throw new RemittanceError("A claim on this remittance is no longer available.");
+    if (!claim) throw new RemittanceError("error.claimUnavailable");
     if (isUnsubmitted(claim.status) || claim.status === "closed") {
-      throw new RemittanceError(`Claim ${claim.claimNumber} is ${claim.status} and can't take a payment.`);
+      throw new RemittanceError("error.claimNotPayable", {
+        claimNumber: claim.claimNumber,
+        status: claim.status,
+      });
     }
     const paidTotal = claim.paidCents + payment.paidCents;
     if (paidTotal < 0) {
-      throw new RemittanceError(
-        `Claim ${claim.claimNumber}: the reversal takes back more than was paid. Nothing was posted.`,
-      );
+      throw new RemittanceError("error.reversalExceedsPaid", { claimNumber: claim.claimNumber });
     }
     // A reversal takes the claim back to "accepted" until the payer's corrected claim posts.
     const status =
@@ -323,9 +332,9 @@ export async function voidRemittance(
   input: { tenantId: string; userId: string; remittanceId: string; reason: string },
 ): Promise<void> {
   const reason = input.reason.trim();
-  if (reason.length < 5) throw new RemittanceError("Say why this remittance is being voided.");
+  if (reason.length < 5) throw new RemittanceError("error.voidReasonRequired");
   if (reason.length > MAX_REASON_LENGTH) {
-    throw new RemittanceError(`Keep the reason under ${MAX_REASON_LENGTH} characters.`);
+    throw new RemittanceError("error.reasonTooLong", { max: MAX_REASON_LENGTH });
   }
   const [remittance] = await tx
     .select({ id: remittances.id, status: remittances.status })
@@ -333,9 +342,9 @@ export async function voidRemittance(
     .where(eq(remittances.id, input.remittanceId))
     .for("update")
     .limit(1);
-  if (!remittance) throw new RemittanceError("Remittance not found.");
+  if (!remittance) throw new RemittanceError("error.notFound");
   if (remittance.status !== "received") {
-    throw new RemittanceError("Only a remittance that hasn't been posted can be voided.");
+    throw new RemittanceError("error.onlyUnposted");
   }
   await tx.insert(remittanceEvents).values({
     tenantId: input.tenantId,
@@ -384,9 +393,7 @@ async function recordReversal(
   const target = open.find((r) => r.cents === input.reversedCents);
   if (!target) {
     // Don't guess which payment is being taken back: a person reconciles it (nothing is posted).
-    throw new RemittanceError(
-      "A reversal on this remittance doesn't match an earlier payment of the same amount. Post it by hand after checking with the payer.",
-    );
+    throw new RemittanceError("error.reversalMismatch");
   }
   const [row] = await tx
     .insert(promptPayResponses)

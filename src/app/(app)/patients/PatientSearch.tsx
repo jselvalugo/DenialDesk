@@ -3,18 +3,22 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/Button";
 import { FormAlert } from "@/components/ui/FormAlert";
+import { useT } from "@/i18n/client";
 import { findPatients, type SearchState } from "./actions";
 import { PatientTable } from "./PatientTable";
 
 /** Search runs as a POST server action: names and MRNs never appear in the URL (CLAUDE.md #4). */
 export function PatientSearch() {
   const [state, action, pending] = useActionState<SearchState, FormData>(findPatients, {});
+  const t = useT("patients");
+  const tc = useT("common");
+  const count = state.results?.length ?? 0;
   return (
     <div className="flex flex-col">
       <form action={action} role="search" className="flex items-end gap-2 border-b border-border px-4 py-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="patient-search" className="text-label font-medium text-muted">
-            Find a patient
+            {t("search.label")}
           </label>
           <input
             id="patient-search"
@@ -24,12 +28,12 @@ export function PatientSearch() {
             maxLength={100}
             required
             autoComplete="off"
-            placeholder="Last, First · name · MRN"
+            placeholder={t("search.placeholder")}
             className="h-8 w-80 rounded-control border border-border-strong bg-surface px-2.5 text-body text-text placeholder:text-subtle focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus"
           />
         </div>
         <Button type="submit" disabled={pending} aria-disabled={pending}>
-          {pending ? "Searching…" : "Search"}
+          {pending ? t("search.searching") : tc("action.search")}
         </Button>
       </form>
       {state.error && (
@@ -38,13 +42,13 @@ export function PatientSearch() {
         </div>
       )}
       {state.results && (
-        <section aria-label="Search results" className="border-b border-border">
+        <section aria-label={t("search.resultsLabel")} className="border-b border-border">
           <p role="status" className="px-4 py-2 text-label text-muted">
-            {state.results.length === 0
-              ? "No patients match."
-              : `${state.results.length} match${state.results.length === 1 ? "" : "es"}${state.results.length >= 25 ? " (first 25; refine the search)" : ""}.`}
+            {count === 0
+              ? t("search.noMatches")
+              : `${t("search.matchCount", { count })}${count >= 25 ? ` ${t("search.truncatedHint")}` : ""}.`}
           </p>
-          {state.results.length > 0 && <PatientTable rows={state.results} caption="Patient search results" />}
+          {count > 0 && <PatientTable rows={state.results!} caption={t("search.resultsCaption")} />}
         </section>
       )}
     </div>

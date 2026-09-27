@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { en } from "@/i18n/messages/en";
+import { createTranslator } from "@/i18n/translate";
 import { applySmallCellSuppression, isSuppressedCell, SUPPRESSED_CELL, suppressedLabel } from "./suppression";
 import { SMALL_CELL_SUPPRESSION_THRESHOLD } from "./suppression-config";
+
+const t = createTranslator(en.insight, "en");
 
 describe("applySmallCellSuppression", () => {
   it("suppresses a sensitive row at the threshold boundary: 10 suppressed, 11 shown", () => {
@@ -86,14 +90,14 @@ describe("applySmallCellSuppression", () => {
 
 describe("suppressedLabel / isSuppressedCell", () => {
   it("labels the suppression marker with the configured threshold", () => {
-    expect(suppressedLabel()).toBe("Suppressed (<11)");
+    expect(suppressedLabel(t)).toBe("Suppressed (<11)");
   });
 
   it("recognizes only the typed suppressed-cell marker, never a string comparison", () => {
     expect(isSuppressedCell(SUPPRESSED_CELL)).toBe(true);
     expect(isSuppressedCell({ suppressed: true })).toBe(true);
     // A genuine value that happens to read like the label is never mistaken for the marker.
-    expect(isSuppressedCell(suppressedLabel())).toBe(false);
+    expect(isSuppressedCell(suppressedLabel(t))).toBe(false);
     expect(isSuppressedCell(11)).toBe(false);
     expect(isSuppressedCell("Suppressed")).toBe(false);
     expect(isSuppressedCell(null)).toBe(false);

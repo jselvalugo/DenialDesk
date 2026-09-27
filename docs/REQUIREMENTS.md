@@ -586,6 +586,7 @@ Information Security Policy · Acceptable Use · Access Control · Encryption & 
 | Time zone | All legal clocks computed in **America/New_York** (with Central time for the Florida panhandle practices configurable), with business-day and state/federal holiday calendars |
 | Data accuracy | Processing-integrity controls: batch totals, control counts, reconciliation between submitted and acknowledged claims |
 | Observability | Metrics, traces, logs with PHI redaction |
+| Language (**R-11.1**) | The user interface (every screen, menu, message, page title, and export label) is available in English, Spanish, and Portuguese. Each user chooses a language from the user menu; the choice applies at once, is stored on the account, and follows the user to any device. Codes and their official descriptions, statutes, and data the practice entered are not translated. Spec: `docs/specs/internationalization.md` |
 
 ---
 

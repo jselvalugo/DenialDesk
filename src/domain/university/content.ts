@@ -1,3 +1,6 @@
+import type { Messages } from "@/i18n/messages/types";
+import type { Translator } from "@/i18n/translate";
+
 /**
  * DenialDesk University content model (docs/specs/denialdesk-university.md U1).
  *
@@ -6,6 +9,8 @@
  * ⚠️ VERIFY status). A `carcs` block names codes from `src/domain/carc.ts`. Course and lesson
  * IDs are URL slugs: no PHI, ever (R-7.4.8).
  */
+
+type UniversityT = Translator<Messages["university"]>;
 
 export type Block =
   | { kind: "p"; text: string }
@@ -94,8 +99,9 @@ export function courseProgress(course: Course, completedKeys: ReadonlySet<string
   return { completed, total: course.lessons.length, done: completed === course.lessons.length };
 }
 
-export function progressLabel({ completed, total, done }: CourseProgress): string {
-  if (done) return "Complete";
-  if (completed === 0) return "Not started";
-  return `${completed} of ${total} lessons`;
+/** `t` is the university-namespace translator: `progressLabel(progress, await getT("university"))`. */
+export function progressLabel({ completed, total, done }: CourseProgress, t: UniversityT): string {
+  if (done) return t("progress.complete");
+  if (completed === 0) return t("progress.notStarted");
+  return t("progress.ofLessons", { completed, total });
 }

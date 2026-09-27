@@ -10,7 +10,7 @@ describe("parseFilters", () => {
 
   it("rejects an end date before the start date without throwing", () => {
     const result = parseFilters({ dateFrom: "2026-09-01", dateTo: "2026-08-01" });
-    expect(result.error).toMatch(/end date/i);
+    expect(result.error).toBe("filters.error.endBeforeStart");
   });
 
   it("accepts an equal start and end date", () => {
@@ -31,17 +31,17 @@ describe("parseFilters", () => {
 
   it("rejects a date that doesn't exist (Feb 31) with a visible error", () => {
     const result = parseFilters({ dateFrom: "2026-02-31", dateTo: "2026-03-01" });
-    expect(result.error).toMatch(/doesn't exist/i);
+    expect(result.error).toBe("filters.error.invalidStartDate");
   });
 
   it("rejects a malformed end date with a visible error", () => {
     const result = parseFilters({ dateFrom: "2026-01-01", dateTo: "not-a-date" });
-    expect(result.error).toMatch(/doesn't exist/i);
+    expect(result.error).toBe("filters.error.invalidEndDate");
   });
 
   it("caps the range at 3 years", () => {
     const result = parseFilters({ dateFrom: "2020-01-01", dateTo: "2026-01-01" });
-    expect(result.error).toMatch(/3 years/i);
+    expect(result.error).toBe("filters.error.rangeTooLong");
   });
 
   it("accepts a range just under 3 years", () => {

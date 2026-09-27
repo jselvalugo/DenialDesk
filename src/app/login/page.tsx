@@ -1,18 +1,14 @@
 import type { Metadata } from "next";
+import { LOCKOUT_MS, SESSION_IDLE_MS } from "@/auth/policy";
 import { redirect } from "next/navigation";
 import { getSession } from "@/auth/session";
+import { getT } from "@/i18n/server";
 import { SignInForm } from "./SignInForm";
 
-export const metadata: Metadata = { title: "Sign in" };
-
-const notices: Record<string, string> = {
-  timeout: "You were signed out after 15 minutes without activity.",
-  locked: "Too many attempts. Try again in 15 minutes or contact your administrator.",
-};
-const errors: Record<string, string> = {
-  "no-practice": "Your account isn't linked to a practice yet. Contact your administrator.",
-  suspended: "This practice's access is suspended. Contact DenialDesk support.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("auth");
+  return { title: t("signIn.title") };
+}
 
 // Own keys only: `?reason=constructor` must not pick up an Object.prototype function.
 const lookup = (table: Record<string, string>, key: string | undefined) =>
@@ -28,12 +24,20 @@ export default async function SignInPage({
   // A leftover demo session (the demo was removed) isn't a sign-in: show the form.
   if (session?.mfaVerified && session.tenantId && session.authMethod !== "demo") redirect("/");
 
+  const t = await getT("auth");
+  const notices: Record<string, string> = {
+    timeout: t("notice.timeout", { minutes: SESSION_IDLE_MS / 60_000 }),
+    locked: t("notice.locked", { minutes: LOCKOUT_MS / 60_000 }),
+  };
+  const errors: Record<string, string> = {
+    "no-practice": t("error.noPractice"),
+    suspended: t("error.practiceSuspended"),
+  };
+
   return (
     <>
-      <h1 className="font-serif text-[1.375rem] leading-8 font-bold text-primary">Sign in</h1>
-      <p className="mt-1 mb-6 text-body text-muted">
-        Use your practice account. You&apos;ll confirm with your authenticator app next.
-      </p>
+      <h1 className="font-serif text-[1.375rem] leading-8 font-bold text-primary">{t("signIn.title")}</h1>
+      <p className="mt-1 mb-6 text-body text-muted">{t("signIn.subtitle")}</p>
       <SignInForm notice={lookup(notices, params.reason) ?? lookup(errors, params.error)} />
     </>
   );

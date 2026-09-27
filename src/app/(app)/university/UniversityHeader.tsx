@@ -8,12 +8,12 @@ import { cn } from "@/lib/cn";
  * module, so it carries its own tile and eyebrow instead of the shell's current-module ones.
  */
 export function UniversityHeader({
-  eyebrow = "DenialDesk University",
+  eyebrow,
   title,
   description,
   actions,
 }: {
-  eyebrow?: string;
+  eyebrow: string;
   title: string;
   description?: string;
   actions?: ReactNode;

@@ -6,6 +6,7 @@ import { isAvailableReportId } from "@/domain/insight/catalog";
 import { parseFilters } from "@/domain/insight/filters";
 import { recordReportExported } from "@/domain/insight/queries";
 import { buildSingleReportWorkbook } from "@/domain/insight/report";
+import { getFormat, getT } from "@/i18n/server";
 import { isSameOrigin } from "@/lib/same-origin";
 
 const XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -15,11 +16,12 @@ const XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreads
  * pattern. Exporting is limited to admin/manager/compliance (owner decision 2026-09-26).
  */
 export async function POST(request: Request, { params }: { params: Promise<{ reportId: string }> }) {
-  if (!isSameOrigin(request)) return new NextResponse("Forbidden", { status: 403 });
+  const t = await getT("insight");
+  if (!isSameOrigin(request)) return new NextResponse(t("error.forbidden"), { status: 403 });
   const { reportId } = await params;
-  if (!isAvailableReportId(reportId)) return new NextResponse("Not found", { status: 404 });
+  if (!isAvailableReportId(reportId)) return new NextResponse(t("error.notFound"), { status: 404 });
   const auth = await requireAuth();
-  if (!canExportInsight(auth.role)) return new NextResponse("Forbidden", { status: 403 });
+  if (!canExportInsight(auth.role)) return new NextResponse(t("error.forbidden"), { status: 403 });
 
   const form = await request.formData();
   const filters = parseFilters({
@@ -27,14 +29,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ rep
     dateTo: form.get("dateTo")?.toString() ?? null,
     payerId: form.get("payerId")?.toString() ?? null,
   });
-  if (filters.error) return new NextResponse(filters.error, { status: 400 });
+  if (filters.error) return new NextResponse(t(filters.error), { status: 400 });
 
+  const tc = await getT("common");
+  const f = await getFormat();
   const route = `/insight/${reportId}/export`;
   const { buffer, filename, rowCount } = await withTenant(auth, async (tx) => {
-    const result = await buildSingleReportWorkbook(tx, reportId, filters, {
-      practiceName: auth.tenantName,
-      userId: auth.userId,
-    });
+    const result = await buildSingleReportWorkbook(
+      tx,
+      reportId,
+      filters,
+      { practiceName: auth.tenantName, userId: auth.userId },
+      t,
+      tc,
+      f,
+    );
     await recordReportExported(tx, auth, reportId, filters, result.rowCount, route);
     return result;
   });

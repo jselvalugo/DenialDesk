@@ -11,6 +11,7 @@ import {
   type RecordOutcome,
 } from "@/domain/platform/agreements";
 import { createPractice as create, PracticeError, setPracticeSuspended } from "@/domain/platform/practices";
+import { getT } from "@/i18n/server";
 import { syntheticDataOnly } from "@/lib/env";
 
 export interface CreateState {
@@ -26,12 +27,13 @@ const createSchema = z.object({
 
 export async function createPractice(_: CreateState, formData: FormData): Promise<CreateState> {
   const operator = await requireOperator();
+  const t = await getT("operator");
   const parsed = createSchema.safeParse({
     name: formData.get("name"),
     adminName: formData.get("adminName"),
     adminEmail: formData.get("adminEmail"),
   });
-  if (!parsed.success) return { error: "Enter a practice name, the admin's name, and a valid email." };
+  if (!parsed.success) return { error: t("errors.createFormInvalid") };
   try {
     const { tenantId, temporaryPassword } = await create(parsed.data, operator);
     if (passwordProblem(temporaryPassword)) throw new Error("Generated password failed policy");
@@ -40,7 +42,7 @@ export async function createPractice(_: CreateState, formData: FormData): Promis
       created: { tenantId, name: parsed.data.name, adminEmail: parsed.data.adminEmail, temporaryPassword },
     };
   } catch (error) {
-    if (error instanceof PracticeError) return { error: error.message };
+    if (error instanceof PracticeError) return { error: t(error.key, error.params) };
     throw error;
   }
 }
@@ -51,14 +53,15 @@ export interface ActionState {
 
 export async function toggleSuspended(_: ActionState, formData: FormData): Promise<ActionState> {
   const operator = await requireOperator();
+  const t = await getT("operator");
   const parsed = z
     .object({ tenantId: z.uuid(), suspend: z.enum(["true", "false"]) })
     .safeParse({ tenantId: formData.get("tenantId"), suspend: formData.get("suspend") });
-  if (!parsed.success) return { error: "Invalid request." };
+  if (!parsed.success) return { error: t("errors.invalidRequest") };
   try {
     await setPracticeSuspended(parsed.data.tenantId, parsed.data.suspend === "true", operator);
   } catch (error) {
-    if (error instanceof PracticeError) return { error: error.message };
+    if (error instanceof PracticeError) return { error: t(error.key, error.params) };
     throw error;
   }
   revalidatePath("/operator");
@@ -93,6 +96,7 @@ export async function recordAgreement(
   formData: FormData,
 ): Promise<RecordAgreementState> {
   const operator = await requireOperator();
+  const t = await getT("operator");
   const parsed = agreementSchema.safeParse({
     tenantId: formData.get("tenantId"),
     effectiveDate: formData.get("effectiveDate"),
@@ -103,10 +107,10 @@ export async function recordAgreement(
     note: formData.get("note") ?? "",
   });
   if (!parsed.success) {
-    return { error: "Enter the effective and signed dates and both signers." };
+    return { error: t("errors.agreementFormInvalid") };
   }
   const file = formData.get("file");
-  if (!(file instanceof File)) return { error: "Choose the signed agreement as a PDF file." };
+  if (!(file instanceof File)) return { error: t("errors.chooseFile") };
   const syntheticOnly = syntheticDataOnly();
   const attestedSynthetic = formData.get("syntheticAttestation") === "on";
   const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
@@ -117,7 +121,7 @@ export async function recordAgreement(
     syntheticOnly,
     attestedSynthetic,
   });
-  if (!check.ok) return { error: check.error };
+  if (!check.ok) return { error: t(check.error, check.params) };
   try {
     const { supersededId, outcome } = await record(
       {
@@ -133,7 +137,7 @@ export async function recordAgreement(
     revalidatePath(`/operator/practices/${parsed.data.tenantId}`);
     return { recorded: { filename: file.name, outcome, supersededPrevious: supersededId !== null } };
   } catch (error) {
-    if (error instanceof PracticeError) return { error: error.message };
+    if (error instanceof PracticeError) return { error: t(error.key, error.params) };
     throw error;
   }
 }
@@ -146,6 +150,7 @@ export interface VoidAgreementState {
 /** Marks an agreement as recorded in error (kept on file, no longer counted). */
 export async function voidAgreement(_: VoidAgreementState, formData: FormData): Promise<VoidAgreementState> {
   const operator = await requireOperator();
+  const t = await getT("operator");
   const parsed = z
     .object({ tenantId: z.uuid(), agreementId: z.uuid(), reason: z.string().trim().min(5).max(500) })
     .safeParse({
@@ -153,11 +158,11 @@ export async function voidAgreement(_: VoidAgreementState, formData: FormData): 
       agreementId: formData.get("agreementId"),
       reason: formData.get("reason"),
     });
-  if (!parsed.success) return { error: "Choose the agreement and say why it was recorded in error." };
+  if (!parsed.success) return { error: t("errors.voidFormInvalid") };
   try {
     await markVoid(parsed.data, operator);
   } catch (error) {
-    if (error instanceof PracticeError) return { error: error.message };
+    if (error instanceof PracticeError) return { error: t(error.key, error.params) };
     throw error;
   }
   revalidatePath("/operator");

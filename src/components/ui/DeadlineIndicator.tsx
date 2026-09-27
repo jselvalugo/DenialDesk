@@ -1,5 +1,7 @@
-import { deadlineTone, describeDaysRemaining } from "@/lib/deadline";
-import { formatDate } from "@/lib/format";
+"use client";
+
+import { useFormat, useT } from "@/i18n/client";
+import { deadlineTone } from "@/lib/deadline";
 import { cn } from "@/lib/cn";
 
 const toneText = {
@@ -18,12 +20,20 @@ export function DeadlineIndicator({
   daysRemaining: number;
   dueSoonDays?: number;
 }) {
+  const t = useT("common");
+  const f = useFormat();
   const tone = deadlineTone(daysRemaining, dueSoonDays);
+  const remaining =
+    daysRemaining < 0
+      ? t("deadline.overdue", { count: Math.abs(daysRemaining) })
+      : daysRemaining === 0
+        ? t("deadline.dueToday")
+        : t("deadline.left", { count: daysRemaining });
   return (
     <span className="inline-flex flex-col leading-tight whitespace-nowrap">
-      <span className="tabular text-text">{formatDate(dueDate)}</span>
+      <span className="tabular text-text">{f.date(dueDate)}</span>
       <span className={cn("tabular text-label", toneText[tone], tone !== "neutral" && "font-medium")}>
-        {describeDaysRemaining(daysRemaining)}
+        {remaining}
       </span>
     </span>
   );

@@ -1,6 +1,13 @@
 import { z } from "zod";
 import type { ClaimSnapshot } from "@/db/schema";
+import type { MessageKey, Messages } from "@/i18n/messages/types";
+import type { Translator } from "@/i18n/translate";
+import { formatCents } from "@/lib/format";
 import { CLAIM_STATUSES, type ClaimStatus } from "./status";
+
+type ClaimsKey = MessageKey<"claims">;
+type ClaimsT = Translator<Messages["claims"]>;
+type CommonT = Translator<Messages["common"]>;
 
 // Format checks only. Validity against licensed code sets (AMA CPT, CMS ICD-10-CM) is out of scope
 // until those files are licensed and loaded (docs/specs/claims.md).
@@ -125,21 +132,30 @@ export function changedFields(before: ClaimSnapshot, after: ClaimSnapshot): stri
   return changes;
 }
 
-/** Plain-language label for a changed-field name. */
-export function describeChange(field: string): string {
-  const labels: Record<string, string> = {
-    serviceDate: "date of service",
-    diagnosisCodes: "diagnosis codes",
-    procedureCode: "procedure",
-    modifiers: "modifiers",
-    units: "units",
-    chargeCents: "charge",
-    status: "status",
-    paidCents: "paid",
-  };
-  const line = /^line (\d+)(?: (\w+))?$/.exec(field);
-  if (line) return `line ${line[1]}${line[2] ? ` ${labels[line[2]] ?? line[2]}` : ""}`;
-  return labels[field] ?? field;
+const FIELD_LABEL_KEYS: Record<string, ClaimsKey> = {
+  serviceDate: "correction.field.serviceDate",
+  diagnosisCodes: "correction.field.diagnosisCodes",
+  procedureCode: "correction.field.procedureCode",
+  modifiers: "correction.field.modifiers",
+  units: "correction.field.units",
+  chargeCents: "correction.field.chargeCents",
+  status: "correction.field.status",
+  paidCents: "correction.field.paidCents",
+};
+
+const LINE_FIELD = /^line (\d+)(?: (\w+))?$/;
+
+/** Plain-language label for a changed-field name, in the claim history (claims namespace). */
+export function describeChange(field: string, t: ClaimsT): string {
+  const line = LINE_FIELD.exec(field);
+  if (line) {
+    const [, number, sub] = line;
+    if (!sub) return t("correction.field.line", { number: number! });
+    const subKey = FIELD_LABEL_KEYS[sub];
+    return t("correction.field.lineSub", { number: number!, field: subKey ? t(subKey) : sub });
+  }
+  const key = FIELD_LABEL_KEYS[field];
+  return key ? t(key) : field;
 }
 
 export interface SnapshotChange {
@@ -148,34 +164,99 @@ export interface SnapshotChange {
   to: string;
 }
 
-const money = (cents: number) =>
-  (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
-
-/** What changed between two versions, for the claim history (R-3.10.3). */
-export function diffSnapshots(before: ClaimSnapshot, after: ClaimSnapshot): SnapshotChange[] {
-  const list = (codes: string[]) => codes.join(", ") || "none";
+/**
+ * What changed between two versions, for the claim history (R-3.10.3). `t` labels the fields
+ * (claims namespace); `tc` names the shared claim-status words (common namespace).
+ */
+export function diffSnapshots(
+  before: ClaimSnapshot,
+  after: ClaimSnapshot,
+  t: ClaimsT,
+  tc: CommonT,
+): SnapshotChange[] {
+  const list = (codes: string[]) => codes.join(", ") || tc("word.none");
   return changedFields(before, after).map((field) => {
-    const label = describeChange(field);
+    const label = describeChange(field, t);
     if (field === "serviceDate") return { label, from: before.serviceDate, to: after.serviceDate };
     if (field === "diagnosisCodes")
       return { label, from: list(before.diagnosisCodes), to: list(after.diagnosisCodes) };
     if (field === "status") {
-      const name = (status: string) => CLAIM_STATUSES[status as ClaimStatus]?.label ?? status;
+      const name = (status: string) =>
+        status in CLAIM_STATUSES ? tc(CLAIM_STATUSES[status as ClaimStatus].labelKey) : status;
       return { label, from: name(before.status), to: name(after.status) };
     }
     if (field === "paidCents")
-      return { label, from: money(before.paidCents ?? 0), to: money(after.paidCents ?? 0) };
-    const [, n, key] = /^line (\d+)(?: (\w+))?$/.exec(field)!;
+      return { label, from: formatCents(before.paidCents ?? 0), to: formatCents(after.paidCents ?? 0) };
+    const [, n, key] = LINE_FIELD.exec(field)!;
     const old = before.lines.find((l) => l.lineNumber === Number(n));
     const now = after.lines.find((l) => l.lineNumber === Number(n))!;
     const show = (line: ClaimSnapshot["lines"][number] | undefined): string => {
-      if (!line) return "none";
+      if (!line) return tc("word.none");
       if (key === "modifiers") return list(line.modifiers);
       if (key === "units") return String(line.units);
-      if (key === "chargeCents") return money(line.chargeCents);
+      if (key === "chargeCents") return formatCents(line.chargeCents);
       if (key === "procedureCode") return line.procedureCode;
       return `${line.procedureCode} × ${line.units}`;
     };
     return { label, from: show(old), to: show(now) };
   });
+}
+
+export interface CorrectionIssue {
+  message: string;
+  /** 1-based line number the issue applies to, when it's on a claim line. */
+  line?: number;
+}
+
+/**
+ * Translates one Zod issue from `correctionSchema` into a message to show the user. Keyed by the
+ * issue's field path and check (not its English `.message`), per the i18n rule for form schemas.
+ */
+export function correctionIssueMessage(
+  issue: { path: PropertyKey[]; code: string },
+  t: ClaimsT,
+): CorrectionIssue {
+  const [top, second, third] = issue.path;
+  if (top === "serviceDate") return { message: t("correction.error.serviceDate") };
+  if (top === "diagnosisCodes") {
+    if (issue.code === "too_small") return { message: t("correction.error.diagnosisRequired") };
+    if (issue.code === "too_big") {
+      return { message: t("correction.error.diagnosisMax", { max: MAX_DIAGNOSES }) };
+    }
+    return { message: t("correction.error.diagnosisFormat") };
+  }
+  if (top === "lines") {
+    const line = typeof second === "number" ? second + 1 : undefined;
+    if (third === "procedureCode") return { message: t("correction.error.procedureCode"), line };
+    if (third === "modifiers") {
+      if (issue.code === "too_big") {
+        return { message: t("correction.error.modifierMax", { max: MAX_MODIFIERS }), line };
+      }
+      return { message: t("correction.error.modifierFormat"), line };
+    }
+    if (third === "units") {
+      return {
+        message:
+          issue.code === "invalid_type"
+            ? t("correction.error.unitsInvalid")
+            : t("correction.error.unitsRange"),
+        line,
+      };
+    }
+    if (third === "chargeCents") {
+      const message =
+        issue.code === "invalid_type"
+          ? t("correction.error.chargeInvalid")
+          : issue.code === "too_small"
+            ? t("correction.error.chargeMin")
+            : t("correction.error.chargeMax");
+      return { message, line };
+    }
+    return { message: t("correction.error.linesRequired") };
+  }
+  if (top === "reason") {
+    if (issue.code === "too_small") return { message: t("correction.error.reasonRequired") };
+    return { message: t("correction.error.reasonMax", { max: MAX_REASON_LENGTH }) };
+  }
+  return { message: t("correction.error.generic") };
 }

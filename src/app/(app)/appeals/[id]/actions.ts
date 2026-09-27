@@ -10,6 +10,7 @@ import { appealNotes, appeals, appealSubmittedMethodEnum, claims, denials, patie
 import { withTenant } from "@/db/tenant";
 import { recordSubmission } from "@/domain/appeals/actions";
 import { denialStatusForDecision, isCloseOutcome } from "@/domain/appeals/status";
+import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
 import { parseDollarsToCents } from "@/lib/format";
@@ -19,7 +20,6 @@ export interface ActionState {
   ok?: boolean;
 }
 
-const NOT_ALLOWED = "Your role can view appeals but not change them.";
 const appealId = z.uuid();
 
 async function authorize() {
@@ -29,7 +29,8 @@ async function authorize() {
 
 export async function recordAppealSubmission(_: ActionState, formData: FormData): Promise<ActionState> {
   const { auth, allowed } = await authorize();
-  if (!allowed) return { error: NOT_ALLOWED };
+  const t = await getT("appeals");
+  if (!allowed) return { error: t("error.notAllowedChange") };
   const parsed = z
     .object({
       appealId,
@@ -45,9 +46,9 @@ export async function recordAppealSubmission(_: ActionState, formData: FormData)
       trackingReference: formData.get("trackingReference") || undefined,
       followUpOn: formData.get("followUpOn") || undefined,
     });
-  if (!parsed.success) return { error: "Choose a method and a valid submitted date." };
+  if (!parsed.success) return { error: t("error.invalidSubmission") };
 
-  const result = await withTenant(auth, (tx) =>
+  const outcome = await withTenant(auth, (tx) =>
     recordSubmission(tx, auth, {
       appealId: parsed.data.appealId,
       method: parsed.data.method,
@@ -57,12 +58,14 @@ export async function recordAppealSubmission(_: ActionState, formData: FormData)
     }),
   );
   revalidatePath(`/appeals/${parsed.data.appealId}`);
+  const result: ActionState = outcome.errorKey ? { error: t(outcome.errorKey) } : { ok: outcome.ok };
   return result;
 }
 
 export async function recordAppealDecision(_: ActionState, formData: FormData): Promise<ActionState> {
   const { auth, allowed } = await authorize();
-  if (!allowed) return { error: NOT_ALLOWED };
+  const t = await getT("appeals");
+  if (!allowed) return { error: t("error.notAllowedChange") };
   const parsed = z
     .object({
       appealId,
@@ -80,13 +83,13 @@ export async function recordAppealDecision(_: ActionState, formData: FormData): 
       recoveredDollars: formData.get("recoveredDollars") ?? "",
       closeReason: formData.get("closeReason") || undefined,
     });
-  if (!parsed.success) return { error: "Choose an outcome and a valid decision date." };
+  if (!parsed.success) return { error: t("error.invalidDecision") };
   const today = todayIn();
-  if (parsed.data.decisionOn > today) return { error: "The decision date can't be in the future." };
+  if (parsed.data.decisionOn > today) return { error: t("error.decisionInFuture") };
 
   const needsClose = isCloseOutcome(parsed.data.outcome);
   if (needsClose && !parsed.data.closeReason) {
-    return { error: "A reason is required to withdraw or dismiss an appeal." };
+    return { error: t("error.reasonRequired") };
   }
   const needsRecovered =
     parsed.data.outcome === "overturned_full" || parsed.data.outcome === "overturned_partial";
@@ -94,14 +97,14 @@ export async function recordAppealDecision(_: ActionState, formData: FormData): 
   let recoveredCents: number | undefined;
   if (recoveredText !== "") {
     const cents = parseDollarsToCents(recoveredText);
-    if (cents === null) return { error: "Enter the recovered amount as a plain dollar figure, e.g. 125.00." };
+    if (cents === null) return { error: t("error.invalidRecoveredAmount") };
     recoveredCents = cents;
   }
   if (needsRecovered && recoveredCents === undefined) {
-    return { error: "Enter the recovered amount for an overturned appeal." };
+    return { error: t("error.recoveredAmountRequired") };
   }
   if (!needsRecovered && recoveredCents !== undefined) {
-    return { error: "A recovered amount only applies to an overturned appeal." };
+    return { error: t("error.recoveredAmountNotApplicable") };
   }
 
   const result = await withTenant(auth, async (tx) => {
@@ -115,20 +118,20 @@ export async function recordAppealDecision(_: ActionState, formData: FormData): 
       .from(appeals)
       .where(eq(appeals.id, parsed.data.appealId))
       .for("update");
-    if (!current) return { error: "This appeal no longer exists." };
+    if (!current) return { error: t("error.notFound") };
     if (!["submitted", "awaiting_decision"].includes(current.status)) {
-      return { error: "This appeal isn't awaiting a decision." };
+      return { error: t("error.notAwaitingDecision") };
     }
     if (current.submittedOn && parsed.data.decisionOn < current.submittedOn) {
-      return { error: "The decision date can't be before the appeal was submitted." };
+      return { error: t("error.decisionBeforeSubmitted") };
     }
     const [denial] = await tx
       .select({ deniedCents: denials.deniedCents, status: denials.status })
       .from(denials)
       .where(eq(denials.id, current.denialId));
-    if (!denial) return { error: "The linked denial no longer exists." };
+    if (!denial) return { error: t("error.denialGone") };
     if (recoveredCents !== undefined && recoveredCents > denial.deniedCents) {
-      return { error: "The recovered amount can't exceed the denied amount." };
+      return { error: t("error.recoveredExceedsDenied") };
     }
 
     const newStatus: "decided" | "withdrawn" | "dismissed" =
@@ -181,11 +184,12 @@ export async function revealMemberId(
   reason: string,
 ): Promise<{ value?: string; error?: string }> {
   const { auth, allowed } = await authorize();
-  if (!allowed) return { error: NOT_ALLOWED };
+  const t = await getT("appeals");
+  if (!allowed) return { error: t("error.notAllowedChange") };
   const parsed = z
     .object({ appeal: appealId, reason: z.enum(["appeal", "eligibility", "payer_call", "other"]) })
     .safeParse({ appeal, reason });
-  if (!parsed.success) return { error: "Choose a reason." };
+  if (!parsed.success) return { error: t("error.invalidRevealReason") };
   return withTenant(auth, async (tx) => {
     const [row] = await tx
       .select({ patientId: patients.id, memberIdEnc: patients.memberIdEnc })
@@ -193,7 +197,7 @@ export async function revealMemberId(
       .innerJoin(claims, eq(claims.id, appeals.claimId))
       .innerJoin(patients, eq(patients.id, claims.patientId))
       .where(eq(appeals.id, parsed.data.appeal));
-    if (!row) return { error: "Not found." };
+    if (!row) return { error: t("error.revealNotFound") };
     await audit(tx, {
       action: "patient.member_id_revealed",
       actorUserId: auth.userId,
@@ -209,18 +213,19 @@ export async function revealMemberId(
 
 export async function addAppealNote(_: ActionState, formData: FormData): Promise<ActionState> {
   const { auth, allowed } = await authorize();
-  if (!allowed) return { error: NOT_ALLOWED };
+  const t = await getT("appeals");
+  if (!allowed) return { error: t("error.notAllowedChange") };
   const parsed = z
     .object({ appealId, body: z.string().trim().min(1).max(4000) })
     .safeParse({ appealId: formData.get("appealId"), body: formData.get("body") });
-  if (!parsed.success) return { error: "Write a note of up to 4,000 characters." };
+  if (!parsed.success) return { error: t("error.invalidNote") };
 
   const result = await withTenant(auth, async (tx) => {
     const [exists] = await tx
       .select({ id: appeals.id })
       .from(appeals)
       .where(eq(appeals.id, parsed.data.appealId));
-    if (!exists) return { error: "This appeal no longer exists." };
+    if (!exists) return { error: t("error.notFound") };
     const [note] = await tx
       .insert(appealNotes)
       .values({

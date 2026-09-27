@@ -1,4 +1,7 @@
 import { z } from "zod";
+import type { MessageKey } from "@/i18n/messages/types";
+import type { Params } from "@/i18n/translate";
+import { englishRevenue, type RevenueT } from "./i18n";
 
 /**
  * Revenue cycle accounting rules engine (docs/specs/revenue-cycle-accounting.md).
@@ -86,7 +89,20 @@ export interface Classification {
   adjustmentGl: string;
 }
 
-export class EngineConfigError extends Error {}
+/**
+ * A refused engine configuration. `message` is rendered eagerly (English by default) so it reads
+ * on its own wherever it surfaces (logs, `.toThrow()` in tests); `key`/`params` let the catching
+ * server action re-render it in the request's language.
+ */
+export class EngineConfigError extends Error {
+  constructor(
+    readonly key: MessageKey<"revenue">,
+    readonly params?: Params,
+    t: RevenueT = englishRevenue,
+  ) {
+    super(t(key, params));
+  }
+}
 
 /** A CPT/HCPCS code is exactly five letters or digits. */
 export const CPT_FORMAT = /^[A-Za-z0-9]{5}$/;
@@ -128,27 +144,27 @@ export function ruleMatches(match: RuleMatch, line: LineInput): boolean {
 }
 
 /** Sorted, validated view of a config; call once per import, then route every line. */
-export function prepareEngine(config: EngineConfig) {
+export function prepareEngine(config: EngineConfig, t: RevenueT = englishRevenue) {
   const rules = config.rules
     .filter((rule) => rule.active)
     .sort((a, b) => a.priority - b.priority || (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
   if (!rules.some((rule) => "always" in rule.match)) {
-    throw new EngineConfigError("The active rule set needs a fallback rule that matches every line.");
+    throw new EngineConfigError("rule.error.needsFallback", undefined, t);
   }
   const payerClassAr = new Map(config.payerClasses.map((pc) => [pc.code, pc.arGl]));
   const arAccounts = new Map(config.arAccounts.map((account) => [account.number, account]));
   if (!arAccounts.has(config.defaultArGl)) {
-    throw new EngineConfigError("The default AR account isn't set up.");
+    throw new EngineConfigError("rule.error.defaultArNotSetUp", undefined, t);
   }
   // Fail before any line is classified, never partway through a file.
   for (const [owner, arGl] of [
-    ...rules.map((rule) => [`Rule ${rule.code}`, rule.arGl] as const),
-    ...config.payerClasses.map((pc) => [`Payer class ${pc.code}`, pc.arGl] as const),
+    ...rules.map((rule) => [t("rule.error.ownerRule", { code: rule.code }), rule.arGl] as const),
+    ...config.payerClasses.map(
+      (pc) => [t("rule.error.ownerPayerClass", { code: pc.code }), pc.arGl] as const,
+    ),
   ]) {
     if (arGl !== null && !arAccounts.has(arGl)) {
-      throw new EngineConfigError(
-        `${owner} posts to AR account ${arGl}, which isn't set up as an AR account.`,
-      );
+      throw new EngineConfigError("rule.error.postsToUnknownAr", { owner, arGl }, t);
     }
   }
 
@@ -156,7 +172,7 @@ export function prepareEngine(config: EngineConfig) {
     const rule = rules.find((candidate) => ruleMatches(candidate.match, line))!;
     const arGl = rule.arGl ?? payerClassAr.get(line.payerClass) ?? config.defaultArGl;
     const account = arAccounts.get(arGl);
-    if (!account) throw new EngineConfigError(`AR account ${arGl} isn't set up.`);
+    if (!account) throw new EngineConfigError("rule.error.arNotSetUp", { arGl }, t);
     return {
       ruleCode: rule.code,
       arGl,
@@ -166,31 +182,31 @@ export function prepareEngine(config: EngineConfig) {
   };
 }
 
-const fieldLabels: Record<RuleField, string> = {
-  status: "Status",
-  payer_class: "Payer class",
-  cpt: "CPT/HCPCS",
-  description: "Description",
-  facility: "Facility",
+const fieldLabelKeys: Record<RuleField, MessageKey<"revenue">> = {
+  status: "rule.field.status",
+  payer_class: "rule.field.payerClass",
+  cpt: "rule.field.cpt",
+  description: "rule.field.description",
+  facility: "rule.field.facility",
 };
 
-/** Plain-English rendering of a rule's conditions for the Rules page. */
-export function describeMatch(match: RuleMatch): string[] {
-  if ("always" in match) return ["Every line not matched by an earlier rule"];
+/** Plain-language rendering of a rule's conditions for the Rules page. */
+export function describeMatch(match: RuleMatch, t: RevenueT = englishRevenue): string[] {
+  if ("always" in match) return [t("rule.condition.fallback")];
   return match.any.map((c) => {
-    if (c.op === "invalid_cpt") return "CPT/HCPCS isn't exactly 5 letters or digits";
-    const label = fieldLabels[c.field];
+    if (c.op === "invalid_cpt") return t("rule.condition.invalidCpt");
+    const field = t(fieldLabelKeys[c.field]);
     switch (c.op) {
       case "equals":
-        return `${label} is ${c.value}`;
+        return t("rule.condition.equals", { field, value: c.value });
       case "in":
-        return `${label} is one of ${c.values.join(", ")}`;
+        return t("rule.condition.in", { field, values: c.values.join(", ") });
       case "contains":
-        return `${label} contains "${c.value}"`;
+        return t("rule.condition.contains", { field, value: c.value });
       case "starts_with":
-        return `${label} starts with ${c.value}`;
+        return t("rule.condition.startsWith", { field, value: c.value });
       case "ends_with":
-        return `${label} ends with ${c.value}`;
+        return t("rule.condition.endsWith", { field, value: c.value });
     }
   });
 }

@@ -1,5 +1,6 @@
 import { addCalendarDays, daysBetween, isValidIsoDate, todayIn } from "@rules/calendar";
 import { z } from "zod";
+import type { MessageKey } from "@/i18n/messages/types";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID = z.uuid();
@@ -9,7 +10,11 @@ export interface ParsedFilters {
   dateFrom: string;
   dateTo: string;
   payerId: string | null;
-  error: string | null;
+  /**
+   * A message key (insight namespace), never English text — this is pure domain code and never
+   * imports `@/i18n/server`. The caller translates it with `t(filters.error)`.
+   */
+  error: MessageKey<"insight"> | null;
 }
 
 /** Default range: the last 90 days, ending today (Eastern — legal-clock time zone, rules/calendar.ts). */
@@ -41,7 +46,7 @@ export function parseFilters(input: {
       dateFrom: defaults.dateFrom,
       dateTo: defaults.dateTo,
       payerId,
-      error: "That start date doesn't exist.",
+      error: "filters.error.invalidStartDate",
     };
   }
   if (input.dateTo != null && input.dateTo !== "" && !isRealDate(input.dateTo)) {
@@ -49,7 +54,7 @@ export function parseFilters(input: {
       dateFrom: defaults.dateFrom,
       dateTo: defaults.dateTo,
       payerId,
-      error: "That end date doesn't exist.",
+      error: "filters.error.invalidEndDate",
     };
   }
 
@@ -57,10 +62,10 @@ export function parseFilters(input: {
   const dateTo = isRealDate(input.dateTo) ? input.dateTo : defaults.dateTo;
 
   if (dateTo < dateFrom) {
-    return { dateFrom, dateTo, payerId, error: "The end date must be on or after the start date." };
+    return { dateFrom, dateTo, payerId, error: "filters.error.endBeforeStart" };
   }
   if (daysBetween(dateFrom, dateTo) > MAX_RANGE_DAYS) {
-    return { dateFrom, dateTo, payerId, error: "The date range cannot be more than 3 years." };
+    return { dateFrom, dateTo, payerId, error: "filters.error.rangeTooLong" };
   }
   return { dateFrom, dateTo, payerId, error: null };
 }

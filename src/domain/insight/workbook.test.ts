@@ -1,5 +1,7 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
+import { en } from "@/i18n/messages/en";
+import { createTranslator } from "@/i18n/translate";
 import {
   buildAllReportsWorkbook,
   buildReportWorkbook,
@@ -8,6 +10,9 @@ import {
   type SheetSpec,
   type WorkbookAbout,
 } from "./workbook";
+
+const t = createTranslator(en.insight, "en");
+const tc = createTranslator(en.common, "en");
 
 const about: WorkbookAbout = {
   reportName: "Denial summary by category and CARC",
@@ -47,7 +52,7 @@ describe("sanitizeCellText", () => {
 
 describe("buildReportWorkbook", () => {
   it("produces a workbook with an About sheet and a data sheet, readable back by exceljs", async () => {
-    const buffer = await buildReportWorkbook(about, [sheet]);
+    const buffer = await buildReportWorkbook(about, [sheet], t, tc);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
 
@@ -100,7 +105,7 @@ describe("buildReportWorkbook", () => {
 
   it("truncates a sheet name to Excel's 31-character limit", async () => {
     const longSheet: SheetSpec = { ...sheet, name: "A".repeat(50) };
-    const buffer = await buildReportWorkbook(about, [longSheet]);
+    const buffer = await buildReportWorkbook(about, [longSheet], t, tc);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
     expect(workbook.worksheets[1]!.name.length).toBeLessThanOrEqual(31);
@@ -113,7 +118,7 @@ describe("buildReportWorkbook", () => {
       totals: undefined,
       emptyMessage: "No decided appeals in this period",
     };
-    const buffer = await buildReportWorkbook(about, [emptySheet]);
+    const buffer = await buildReportWorkbook(about, [emptySheet], t, tc);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
     const dataSheet = workbook.getWorksheet("Denials by category")!;
@@ -148,7 +153,7 @@ describe("buildAllReportsWorkbook", () => {
   it("builds a workbook with a unique sheet per report plus About", async () => {
     const sheetA: SheetSpec = { ...sheet, name: "appeal-outcomes - Appeal outcomes by payer" };
     const sheetB: SheetSpec = { ...sheet, name: "appeal-outcomes - Appeal outcomes by category" };
-    const buffer = await buildAllReportsWorkbook(about, [sheetA, sheetB]);
+    const buffer = await buildAllReportsWorkbook(about, [sheetA, sheetB], t, tc);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
     const names = workbook.worksheets.map((w) => w.name);

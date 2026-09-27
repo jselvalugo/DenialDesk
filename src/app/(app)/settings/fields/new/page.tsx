@@ -3,10 +3,14 @@ import { notFound } from "next/navigation";
 import { canConfigureSettings } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { Panel } from "@/components/ui/Panel";
+import { getT } from "@/i18n/server";
 import { CustomFieldForm } from "../CustomFieldForm";
 import { recordsParam } from "../records";
 
-export const metadata: Metadata = { title: "Add custom field" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("settings");
+  return { title: t("fields.newMetaTitle") };
+}
 
 export default async function NewCustomFieldPage({
   searchParams,
@@ -15,8 +19,9 @@ export default async function NewCustomFieldPage({
 }) {
   const auth = await requireAuth();
   if (!canConfigureSettings(auth.role)) notFound();
+  const t = await getT("settings");
   return (
-    <Panel title="Add a custom field" description="The field appears on every record of the chosen type.">
+    <Panel title={t("fields.newTitle")} description={t("fields.newDescription")}>
       <CustomFieldForm entity={recordsParam((await searchParams).records)} />
     </Panel>
   );

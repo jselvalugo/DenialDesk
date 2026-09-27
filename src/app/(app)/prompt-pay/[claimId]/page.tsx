@@ -13,21 +13,25 @@ import { Panel } from "@/components/ui/Panel";
 import { primaryLinkButtonClass } from "@/components/ui/linkButton";
 import { withTenant } from "@/db/tenant";
 import { CLAIM_STATUSES } from "@/domain/claims/status";
-import { REGIME_LABELS } from "@/domain/denial-status";
-import { clockDay, CLOCK_STATES, RESPONSE_KIND_LABELS } from "@/domain/prompt-pay/clock";
+import { regimeLabel } from "@/domain/denial-status";
+import { clockDay, CLOCK_STATES, RESPONSE_KIND_LABEL_KEYS } from "@/domain/prompt-pay/clock";
 import { getPromptPayClock } from "@/domain/prompt-pay/queries";
+import type { MessageKey } from "@/i18n/messages/types";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
-import { formatDate, formatDateTime } from "@/lib/format";
 import { VoidResponseForm } from "./VoidResponseForm";
 
 // The title never includes patient data (DESIGN.md §12).
-export const metadata: Metadata = { title: "Prompt-pay clock" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("promptPay");
+  return { title: t("detail.pageTitle") };
+}
 
-const MILESTONE_STATES: Record<MilestoneState, { label: string; tone: Tone }> = {
-  met: { label: "Met", tone: "success" },
-  late: { label: "Met late", tone: "warning" },
-  open: { label: "Open", tone: "info" },
-  overdue: { label: "Missed", tone: "danger" },
+const MILESTONE_STATE_KEYS: Record<MilestoneState, { key: MessageKey<"promptPay">; tone: Tone }> = {
+  met: { key: "milestoneState.met", tone: "success" },
+  late: { key: "milestoneState.late", tone: "warning" },
+  open: { key: "milestoneState.open", tone: "info" },
+  overdue: { key: "milestoneState.overdue", tone: "danger" },
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -44,6 +48,9 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
   if (!z.uuid().safeParse(claimId).success) notFound();
   const auth = await requireAuth();
   const today = todayIn();
+  const t = await getT("promptPay");
+  const tc = await getT("common");
+  const f = await getFormat();
 
   const detail = await withTenant(auth, async (tx) => {
     const detail = await getPromptPayClock(tx, claimId, today);
@@ -66,11 +73,18 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
   const state = clock?.applies ? CLOCK_STATES[clock.state] : null;
   const day = clock?.applies ? clockDay(clock.receivedDate, today, clock.state !== "met") : null;
 
+  const subtitleParts = [
+    claim.payerName,
+    t("detail.claimLabel", { kind: claim.electronic ? t("detail.kind.electronic") : t("detail.kind.paper") }),
+    claim.receivedDate ? t("detail.received", { date: f.date(claim.receivedDate) }) : null,
+    day ? t("detail.day", { day: day.day }) : null,
+  ].filter((part): part is string => Boolean(part));
+
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href="/prompt-pay" className="font-medium text-link hover:underline">
-          Prompt pay
+          {t("detail.breadcrumbPromptPay")}
         </Link>{" "}
         <span aria-hidden>/</span> <span className="font-mono">{claim.claimNumber}</span>
       </nav>
@@ -79,24 +93,20 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <h1 className="font-mono text-[1.5rem] leading-8 font-bold text-primary">{claim.claimNumber}</h1>
-            {state && <Badge tone={state.tone}>{state.label}</Badge>}
+            {state && <Badge tone={state.tone}>{t(state.labelKey)}</Badge>}
           </div>
-          <p className="mt-1 text-body text-muted">
-            {claim.payerName} · {claim.electronic ? "electronic" : "paper"} claim
-            {claim.receivedDate ? ` · received ${formatDate(claim.receivedDate)}` : ""}
-            {day ? ` · day ${day.day}` : ""}
-          </p>
+          <p className="mt-1 text-body text-muted">{subtitleParts.join(" · ")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href={`/claims/${claim.id}`}
             className="inline-flex h-8 items-center rounded-control border border-border-strong bg-surface px-3 text-body font-medium text-text hover:bg-surface-muted"
           >
-            Open claim
+            {t("detail.openClaim")}
           </Link>
           {canRecord && (
             <Link href={`/prompt-pay/${claim.id}/responses/new`} className={primaryLinkButtonClass}>
-              Record contest
+              {t("detail.recordContest")}
             </Link>
           )}
         </div>
@@ -106,10 +116,10 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
         <Panel>
           <p className="text-body text-muted">
             {!claim.regime
-              ? "This payer's regulatory regime hasn't been verified, so DenialDesk doesn't run a prompt-pay clock for it. An administrator can verify the payer."
+              ? t("detail.noRegime")
               : claim.receivedDate
-                ? `Florida prompt pay doesn't cover ${REGIME_LABELS[claim.regime]} claims, so this claim has no clock.`
-                : "The payer hasn't confirmed receipt of this claim, so its prompt-pay clock hasn't started."}
+                ? t("detail.notCovered", { regime: regimeLabel(claim.regime, tc) })
+                : t("detail.notReceived")}
           </p>
         </Panel>
       ) : (
@@ -120,23 +130,22 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                 role="alert"
                 className="rounded-panel border border-danger-border bg-danger-bg px-4 py-3 text-body text-danger-fg"
               >
-                The payer neither paid nor denied this claim by the uncontestable milestone. Payment may now
-                be an uncontestable obligation (R-3.1.4). Confirm with counsel before sending a demand.
+                {t("detail.uncontestableAlert")}
               </p>
             )}
             <Panel
-              title="Milestones"
-              description="Counted in calendar days from the payer's receipt date."
+              title={t("detail.milestones.title")}
+              description={t("detail.milestones.description")}
               flush
             >
-              <Table caption="Prompt-pay milestones">
+              <Table caption={t("detail.milestones.caption")}>
                 <thead>
                   <tr>
-                    <Th>Milestone</Th>
-                    <Th>Due</Th>
-                    <Th>Met on</Th>
-                    <Th numeric>Days late</Th>
-                    <Th>State</Th>
+                    <Th>{t("table.milestone")}</Th>
+                    <Th>{t("table.due")}</Th>
+                    <Th>{t("table.metOn")}</Th>
+                    <Th numeric>{t("table.daysLate")}</Th>
+                    <Th>{t("table.state")}</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -147,25 +156,29 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                         <span className="block text-label text-muted">{m.citation}</span>
                         {m.verify && (
                           <span className="mt-1 inline-block">
-                            <Badge tone="warning">Pending counsel verification</Badge>
+                            <Badge tone="warning">{t("detail.milestones.pendingVerification")}</Badge>
                           </span>
                         )}
                       </Td>
                       <Td className="tabular">
-                        {formatDate(m.due)}
+                        {f.date(m.due)}
                         {m.rolledDue && (
                           <span className="block text-label text-muted">
-                            (pending counsel: {formatDate(m.rolledDue)})
+                            {tc("deadline.pendingCounsel", { date: f.date(m.rolledDue) })}
                           </span>
                         )}
                         {m.daysRemaining !== null && m.state === "open" && (
-                          <span className="block text-label text-muted">{m.daysRemaining} days left</span>
+                          <span className="block text-label text-muted">
+                            {tc("deadline.left", { count: m.daysRemaining })}
+                          </span>
                         )}
                       </Td>
-                      <Td className="tabular">{m.metOn ? formatDate(m.metOn) : "—"}</Td>
+                      <Td className="tabular">{m.metOn ? f.date(m.metOn) : "—"}</Td>
                       <Td numeric>{m.daysLate > 0 ? m.daysLate : "—"}</Td>
                       <Td>
-                        <Badge tone={MILESTONE_STATES[m.state].tone}>{MILESTONE_STATES[m.state].label}</Badge>
+                        <Badge tone={MILESTONE_STATE_KEYS[m.state].tone}>
+                          {t(MILESTONE_STATE_KEYS[m.state].key)}
+                        </Badge>
                       </Td>
                     </Tr>
                   ))}
@@ -173,39 +186,44 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
               </Table>
             </Panel>
 
-            <Panel
-              title="Interest worksheet"
-              description="Simple interest on each payment made after payment was due (R-3.1.3)."
-              flush
-            >
+            <Panel title={t("detail.interest.title")} description={t("detail.interest.description")} flush>
               {clock.interest.length === 0 ? (
                 <p className="p-4 text-body text-muted">
                   {clock.paymentDue
-                    ? `No late payments. Payment is due by ${formatDate(clock.paymentDue)}${clock.paymentDueRolled ? ` (pending counsel: ${formatDate(clock.paymentDueRolled)})` : ""}.`
-                    : "No payments yet."}
+                    ? [
+                        t("detail.interest.noneWithDue", { date: f.date(clock.paymentDue) }),
+                        clock.paymentDueRolled
+                          ? tc("deadline.pendingCounsel", { date: f.date(clock.paymentDueRolled) })
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")
+                    : t("detail.interest.noneNoDue")}
                 </p>
               ) : (
-                <Table caption="Interest worksheet">
+                <Table caption={t("detail.interest.title")}>
                   <thead>
                     <tr>
-                      <Th>Payment date</Th>
-                      <Th>Due date</Th>
-                      <Th numeric>Days late</Th>
-                      <Th numeric>Paid</Th>
-                      <Th numeric>Rate</Th>
-                      <Th numeric>Interest</Th>
+                      <Th>{t("table.paymentDate")}</Th>
+                      <Th>{t("table.dueDate")}</Th>
+                      <Th numeric>{t("table.daysLate")}</Th>
+                      <Th numeric>{t("table.paid")}</Th>
+                      <Th numeric>{t("table.rate")}</Th>
+                      <Th numeric>{t("table.interest")}</Th>
                     </tr>
                   </thead>
                   <tbody>
                     {clock.interest.map((line) => (
                       <Tr key={`${line.paymentDate}-${line.paidCents}`}>
-                        <Td className="tabular">{formatDate(line.paymentDate)}</Td>
-                        <Td className="tabular">{formatDate(line.dueDate)}</Td>
+                        <Td className="tabular">{f.date(line.paymentDate)}</Td>
+                        <Td className="tabular">{f.date(line.dueDate)}</Td>
                         <Td numeric>{line.daysLate}</Td>
                         <Td numeric>
                           <Money cents={line.paidCents} />
                         </Td>
-                        <Td numeric>{line.ratePercent}% / yr</Td>
+                        <Td numeric>
+                          {t("detail.interest.ratePerYear", { rate: f.decimal(line.ratePercent, 1) })}
+                        </Td>
                         <Td numeric className="font-medium">
                           <Money cents={line.interestCents} />
                         </Td>
@@ -213,7 +231,7 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                     ))}
                     <Tr>
                       <Td colSpan={5} className="text-right font-medium">
-                        Total interest owed
+                        {t("detail.interest.totalOwed")}
                       </Td>
                       <Td numeric className="font-bold">
                         <Money cents={clock.interestCents} />
@@ -223,16 +241,15 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                 </Table>
               )}
               <p className="border-t border-border px-4 py-2 text-label text-muted">
-                Interest starts the day after payment was due (the pay-or-contest date, or the pay-or-deny
-                date once the payer contests). Pending counsel verification.
+                {t("detail.interest.footnote")}
               </p>
             </Panel>
           </div>
 
           <div className="flex flex-col gap-6">
-            <Panel title="Claim">
+            <Panel title={t("detail.claim.title")}>
               <dl className="flex flex-col gap-3">
-                <Field label="Patient">
+                <Field label={tc("word.patient")}>
                   <Link
                     href={`/patients/${claim.patientId}`}
                     className="font-medium text-link hover:underline"
@@ -241,24 +258,24 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                   </Link>
                   <span className="block font-mono text-label text-muted">{claim.mrn}</span>
                 </Field>
-                <Field label="Payer">
+                <Field label={tc("word.payer")}>
                   {claim.payerName}
-                  <span className="block text-label text-muted">
-                    {claim.regime ? REGIME_LABELS[claim.regime] : "Regime not verified"}
-                  </span>
+                  <span className="block text-label text-muted">{regimeLabel(claim.regime, tc)}</span>
                 </Field>
-                <Field label="Status">
-                  <Badge tone={CLAIM_STATUSES[claim.status].tone}>{CLAIM_STATUSES[claim.status].label}</Badge>
+                <Field label={tc("word.status")}>
+                  <Badge tone={CLAIM_STATUSES[claim.status].tone}>
+                    {tc(CLAIM_STATUSES[claim.status].labelKey)}
+                  </Badge>
                 </Field>
-                <Field label="Billed / paid">
+                <Field label={t("detail.claim.billedPaid")}>
                   <Money cents={claim.billedCents} /> / <Money cents={claim.paidCents} />
                 </Field>
                 {clock.providerResponseDue && (
-                  <Field label="Your response to the contest is due">
-                    <span className="tabular">{formatDate(clock.providerResponseDue)}</span>
+                  <Field label={t("detail.claim.contestResponseDue")}>
+                    <span className="tabular">{f.date(clock.providerResponseDue)}</span>
                     {clock.providerResponseDueRolled && (
                       <span className="block text-label text-muted">
-                        (pending counsel: {formatDate(clock.providerResponseDueRolled)})
+                        {tc("deadline.pendingCounsel", { date: f.date(clock.providerResponseDueRolled) })}
                       </span>
                     )}
                   </Field>
@@ -266,14 +283,11 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
               </dl>
             </Panel>
 
-            <Panel
-              title="Payer responses"
-              description="Every response on this clock. Entries are never edited or deleted."
-            >
+            <Panel title={t("detail.responses.title")} description={t("detail.responses.description")}>
               {history.length === 0 ? (
-                <p className="text-body text-muted">No payment, denial, or contest recorded yet.</p>
+                <p className="text-body text-muted">{t("detail.responses.none")}</p>
               ) : (
-                <ol className="flex flex-col divide-y divide-border" aria-label="Payer responses">
+                <ol className="flex flex-col divide-y divide-border" aria-label={t("detail.responses.title")}>
                   {history.map((entry) => {
                     const struck = voided.has(entry.id);
                     return (
@@ -284,10 +298,10 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                               struck ? "font-medium text-muted line-through" : "font-medium text-text"
                             }
                           >
-                            {entry.voidsResponseId ? "Recorded in error: " : ""}
-                            {RESPONSE_KIND_LABELS[entry.kind]}
+                            {entry.voidsResponseId ? t("detail.responses.recordedInError") : ""}
+                            {t(RESPONSE_KIND_LABEL_KEYS[entry.kind])}
                           </span>
-                          <span className="tabular text-muted">{formatDate(entry.responseDate)}</span>
+                          <span className="tabular text-muted">{f.date(entry.responseDate)}</span>
                           {entry.kind === "payment" && !entry.voidsResponseId && (
                             <Money cents={entry.cents} />
                           )}
@@ -295,7 +309,7 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                         <p className="mt-0.5 text-label text-muted">
                           {entry.remittanceId ? (
                             <>
-                              From remittance{" "}
+                              {t("detail.responses.fromRemittance")}{" "}
                               <Link
                                 href={`/remittances/${entry.remittanceId}`}
                                 className="font-mono text-link hover:underline"
@@ -305,8 +319,11 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                               ·{" "}
                             </>
                           ) : null}
-                          {entry.recordedByName ?? (entry.recordedBy ? "Former team member" : "System")} ·{" "}
-                          {formatDateTime(entry.createdAt)}
+                          {entry.recordedByName ??
+                            (entry.recordedBy
+                              ? t("detail.responses.formerTeamMember")
+                              : t("detail.responses.system"))}{" "}
+                          · {f.dateTime(entry.createdAt)}
                         </p>
                         {entry.note && (
                           <p className="mt-1 text-body whitespace-pre-wrap text-text">{entry.note}</p>

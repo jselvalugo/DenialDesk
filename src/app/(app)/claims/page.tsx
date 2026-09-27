@@ -9,22 +9,24 @@ import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Money } from "@/components/ui/Money";
+import { Pagination } from "@/components/ui/Pagination";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Select } from "@/components/ui/Select";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
 import { CLAIMS_PAGE_SIZE, claimsOverview, UNSUBMITTED_LIMIT } from "@/domain/claims/queries";
-import { CLAIM_STATUSES, FILING_WARNING_DAYS } from "@/domain/claims/status";
+import { CLAIM_STATUSES, FILING_STATE_LABEL_KEYS, FILING_WARNING_DAYS } from "@/domain/claims/status";
 import { regimeLabel } from "@/domain/denial-status";
 import { payerOptions } from "@/domain/denials/queries";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
-import { formatCents, formatDate } from "@/lib/format";
 import { claimFiltersToQuery, parseClaimFilters } from "./filters";
 
-export const metadata: Metadata = { title: "Claims" };
-
-const GROUP_LABELS = { unsubmitted: "unsubmitted", in_process: "sent to payer", all: "all" } as const;
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("claims");
+  return { title: t("list.title") };
+}
 
 export default async function ClaimsPage({
   searchParams,
@@ -34,6 +36,9 @@ export default async function ClaimsPage({
   const auth = await requireAuth();
   const filters = parseClaimFilters(await searchParams);
   const today = todayIn();
+  const t = await getT("claims");
+  const tc = await getT("common");
+  const f = await getFormat();
 
   const { rows, total, truncated, summary, payers } = await withTenant(auth, async (tx) => {
     const list = await claimsOverview(tx, filters, today);
@@ -55,44 +60,61 @@ export default async function ClaimsPage({
 
   const pages = Math.max(1, Math.ceil(total / CLAIMS_PAGE_SIZE));
   if (total > 0 && filters.page > pages) redirect(`/claims${claimFiltersToQuery(filters, { page: pages })}`);
-  const first = total === 0 ? 0 : (filters.page - 1) * CLAIMS_PAGE_SIZE + 1;
-  const last = Math.min(filters.page * CLAIMS_PAGE_SIZE, total);
+
+  const filtered = Boolean(filters.payerId || filters.filing);
+  const emptyTitleKey =
+    filters.group === "unsubmitted"
+      ? filtered
+        ? "list.empty.title.unsubmittedFiltered"
+        : "list.empty.title.unsubmitted"
+      : filters.group === "in_process"
+        ? filtered
+          ? "list.empty.title.inProcessFiltered"
+          : "list.empty.title.inProcess"
+        : filtered
+          ? "list.empty.title.allFiltered"
+          : "list.empty.title.all";
+  const captionKey =
+    filters.group === "unsubmitted"
+      ? "list.table.captionUnsubmitted"
+      : filters.group === "in_process"
+        ? "list.table.captionInProcess"
+        : "list.table.captionAll";
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="Claims"
-        description="Unsubmitted claims first, the ones closest to losing their filing window at the top."
-      />
+      <PageHeader title={t("list.title")} description={t("list.description")} />
 
-      <section aria-label="Unsubmitted claim totals" className="grid grid-cols-4 gap-4">
+      <section aria-label={t("list.stat.sectionLabel")} className="grid grid-cols-4 gap-4">
         <StatTile
-          label="Unsubmitted"
-          value={summary.unsubmitted.toLocaleString("en-US")}
-          detail="Draft or rejected by the payer"
+          label={t("list.stat.unsubmitted")}
+          value={f.number(summary.unsubmitted)}
+          detail={t("list.stat.unsubmittedDetail")}
         />
-        <StatTile label="Unsubmitted billed" value={formatCents(summary.unsubmittedCents)} />
+        <StatTile label={t("list.stat.unsubmittedBilled")} value={f.cents(summary.unsubmittedCents)} />
         <StatTile
-          label={`Filing due in ${FILING_WARNING_DAYS} days`}
+          label={t("list.stat.dueSoon", { days: FILING_WARNING_DAYS })}
           value={summary.dueSoon}
           emphasis={summary.dueSoon > 0 ? "warning" : undefined}
-          detail="Timely-filing window closing"
+          detail={t("list.stat.dueSoonDetail")}
         />
         <StatTile
-          label="Past filing deadline"
+          label={t("list.stat.pastDeadline")}
           value={summary.pastDeadline}
           emphasis={summary.pastDeadline > 0 ? "danger" : undefined}
           detail={
             summary.notConfigured > 0 || summary.payerUnverified > 0
               ? [
                   summary.notConfigured > 0
-                    ? `${summary.notConfigured} with no filing rule configured`
+                    ? t("list.stat.notConfiguredDetail", { count: summary.notConfigured })
                     : null,
-                  summary.payerUnverified > 0 ? `${summary.payerUnverified} with an unverified payer` : null,
+                  summary.payerUnverified > 0
+                    ? t("list.stat.payerUnverifiedDetail", { count: summary.payerUnverified })
+                    : null,
                 ]
                   .filter(Boolean)
                   .join(", ")
-              : "Likely denied as untimely"
+              : t("list.stat.pastDeadlineDetail")
           }
         />
       </section>
@@ -100,45 +122,45 @@ export default async function ClaimsPage({
       <Panel flush>
         <form method="get" className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
           <Select
-            label="Claims"
+            label={t("list.filter.claims")}
             name="group"
             defaultValue={filters.group}
             options={[
-              { value: "unsubmitted", label: "Unsubmitted" },
-              { value: "in_process", label: "Sent to payer" },
-              { value: "all", label: "All" },
+              { value: "unsubmitted", label: t("list.filter.unsubmitted") },
+              { value: "in_process", label: t("list.filter.inProcess") },
+              { value: "all", label: tc("word.all") },
             ]}
           />
           <Select
-            label="Payer"
+            label={tc("word.payer")}
             name="payer"
             defaultValue={filters.payerId ?? ""}
             options={[
-              { value: "", label: "All payers" },
+              { value: "", label: t("list.filter.allPayers") },
               ...payers.map((p) => ({ value: p.id, label: p.name })),
             ]}
           />
           <Select
-            label="Filing deadline"
+            label={t("list.filter.filingDeadline")}
             name="filing"
             defaultValue={filters.filing ?? ""}
             options={[
-              { value: "", label: "Any" },
-              { value: "due_soon", label: `Due in ${FILING_WARNING_DAYS} days` },
-              { value: "past_deadline", label: "Past deadline" },
-              { value: "not_configured", label: "Not configured" },
-              { value: "payer_unverified", label: "Payer not verified" },
+              { value: "", label: tc("word.any") },
+              { value: "due_soon", label: t("list.filter.dueSoon", { days: FILING_WARNING_DAYS }) },
+              { value: "past_deadline", label: t(FILING_STATE_LABEL_KEYS.past_deadline) },
+              { value: "not_configured", label: t(FILING_STATE_LABEL_KEYS.not_configured) },
+              { value: "payer_unverified", label: t(FILING_STATE_LABEL_KEYS.payer_unverified) },
             ]}
           />
           <div className="flex gap-2">
             <Button type="submit" size="md">
-              Apply
+              {tc("action.apply")}
             </Button>
             <Link
               href="/claims"
               className="inline-flex h-8 items-center rounded-control px-3 text-body font-medium text-muted hover:bg-surface-muted hover:text-text"
             >
-              Reset
+              {tc("action.reset")}
             </Link>
           </div>
         </form>
@@ -148,31 +170,32 @@ export default async function ClaimsPage({
             role="note"
             className="border-b border-border bg-warning-bg px-4 py-2 text-label text-warning-fg"
           >
-            More than {UNSUBMITTED_LIMIT.toLocaleString("en-US")} unsubmitted claims: the list, filters, and
-            totals cover the oldest {UNSUBMITTED_LIMIT.toLocaleString("en-US")} by date of service only.
+            {t("list.truncated", { limit: f.number(UNSUBMITTED_LIMIT) })}
           </p>
         )}
 
         {rows.length === 0 ? (
           <EmptyState
-            title={`No ${GROUP_LABELS[filters.group]} claims${filters.payerId || filters.filing ? " match these filters" : ""}`}
+            title={t(emptyTitleKey)}
             description={
               filters.group === "unsubmitted"
-                ? "Draft and rejected claims appear here until the payer accepts them."
-                : "Claims appear here once they are created or imported."
+                ? t("list.empty.descriptionUnsubmitted")
+                : t("list.empty.descriptionOther")
             }
           />
         ) : (
-          <Table caption={`Claims: ${GROUP_LABELS[filters.group]}`}>
+          <Table caption={t(captionKey)}>
             <thead>
               <tr>
-                <Th>Claim</Th>
-                <Th>Patient</Th>
-                <Th>Payer</Th>
-                <Th>Date of service</Th>
-                <Th numeric>Billed</Th>
-                <Th aria-sort={filters.group === "unsubmitted" ? "ascending" : undefined}>Filing deadline</Th>
-                <Th>Status</Th>
+                <Th>{tc("word.claim")}</Th>
+                <Th>{tc("word.patient")}</Th>
+                <Th>{tc("word.payer")}</Th>
+                <Th>{t("list.table.dateOfService")}</Th>
+                <Th numeric>{t("detail.field.billed")}</Th>
+                <Th aria-sort={filters.group === "unsubmitted" ? "ascending" : undefined}>
+                  {t("list.table.filingDeadline")}
+                </Th>
+                <Th>{tc("word.status")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -199,9 +222,9 @@ export default async function ClaimsPage({
                     </Td>
                     <Td>
                       <span className="block">{row.payerName}</span>
-                      <span className="block text-label text-muted">{regimeLabel(row.regime)}</span>
+                      <span className="block text-label text-muted">{regimeLabel(row.regime, tc)}</span>
                     </Td>
-                    <Td className="tabular">{formatDate(row.serviceDate)}</Td>
+                    <Td className="tabular">{f.date(row.serviceDate)}</Td>
                     <Td numeric className="font-medium">
                       <Money cents={row.billedCents} />
                     </Td>
@@ -216,14 +239,16 @@ export default async function ClaimsPage({
                         />
                       ) : row.filing.state === "payer_unverified" ? (
                         <span className="text-label font-medium text-warning-fg">
-                          No deadline — payer not verified
+                          {t("list.table.noDeadlinePayerUnverified")}
                         </span>
                       ) : (
-                        <span className="text-label font-medium text-warning-fg">Not configured</span>
+                        <span className="text-label font-medium text-warning-fg">
+                          {t(FILING_STATE_LABEL_KEYS.not_configured)}
+                        </span>
                       )}
                     </Td>
                     <Td>
-                      <Badge tone={status.tone}>{status.label}</Badge>
+                      <Badge tone={status.tone}>{tc(status.labelKey)}</Badge>
                     </Td>
                   </Tr>
                 );
@@ -232,59 +257,13 @@ export default async function ClaimsPage({
           </Table>
         )}
 
-        <nav
-          aria-label="Pagination"
-          className="flex items-center justify-between border-t border-border px-4 py-2.5 text-label text-muted"
-        >
-          <span className="tabular">
-            {total === 0 ? "No results" : `Showing ${first}–${last} of ${total.toLocaleString("en-US")}`}
-          </span>
-          <span className="flex items-center gap-2">
-            <PageLink
-              disabled={filters.page <= 1}
-              href={`/claims${claimFiltersToQuery(filters, { page: filters.page - 1 })}`}
-            >
-              Previous
-            </PageLink>
-            <span className="tabular">
-              Page {filters.page} of {pages}
-            </span>
-            <PageLink
-              disabled={filters.page >= pages}
-              href={`/claims${claimFiltersToQuery(filters, { page: filters.page + 1 })}`}
-            >
-              Next
-            </PageLink>
-          </span>
-        </nav>
+        <Pagination
+          page={filters.page}
+          pageSize={CLAIMS_PAGE_SIZE}
+          total={total}
+          hrefFor={(page) => `/claims${claimFiltersToQuery(filters, { page })}`}
+        />
       </Panel>
     </div>
-  );
-}
-
-function PageLink({
-  href,
-  disabled,
-  children,
-}: {
-  href: string;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  const className = "inline-flex h-7 items-center rounded-control border px-2.5 font-medium";
-  if (disabled) {
-    return (
-      <span aria-disabled="true" className={`${className} border-border text-subtle`}>
-        {children}
-      </span>
-    );
-  }
-  return (
-    <Link
-      href={href}
-      className={`${className} border-border-strong bg-surface text-text hover:bg-surface-muted`}
-    >
-      {children}
-    </Link>
   );
 }

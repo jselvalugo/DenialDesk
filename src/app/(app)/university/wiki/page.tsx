@@ -7,10 +7,14 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Panel } from "@/components/ui/Panel";
 import { articlesInCategory, WIKI_CATEGORIES } from "@/domain/university/wiki/catalog";
 import type { WikiArticle } from "@/domain/university/wiki/types";
+import { getT } from "@/i18n/server";
 import { UniversityHeader } from "../UniversityHeader";
 import { WikiSearch } from "./WikiSearch";
 
-export const metadata: Metadata = { title: "University — Wiki" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("university");
+  return { title: t("wiki.metaTitle") };
+}
 
 function ArticleRow({ article }: { article: WikiArticle }) {
   return (
@@ -30,25 +34,26 @@ function ArticleRow({ article }: { article: WikiArticle }) {
 export default async function WikiIndexPage() {
   const auth = await requireAuth();
   if (!canViewUniversity(auth.role)) notFound();
+  const t = await getT("university");
 
   return (
     <div className="flex flex-col gap-4">
       <UniversityHeader
-        eyebrow="DenialDesk University"
-        title="Wiki"
-        description="Reference articles on how denials, claims, appeals, and Florida payment rules work in DenialDesk. Legal values are read from the rules engine, never typed in."
+        eyebrow={t("wiki.eyebrow")}
+        title={t("wiki.title")}
+        description={t("wiki.description")}
         actions={
           <Link
             href="/university"
             className="inline-flex h-8 items-center rounded-control border border-border-strong bg-surface px-3 text-body font-medium text-text hover:bg-surface-muted"
           >
-            Courses
+            {t("catalog.title")}
           </Link>
         }
       />
       <WikiSearch />
       <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
-        <nav aria-label="Categories" className="lg:sticky lg:top-4 lg:self-start">
+        <nav aria-label={t("wiki.categoriesAria")} className="lg:sticky lg:top-4 lg:self-start">
           <ul className="flex flex-col gap-0.5">
             {WIKI_CATEGORIES.map((category) => (
               <li key={category.id}>
@@ -56,7 +61,7 @@ export default async function WikiIndexPage() {
                   href={`#${category.id}`}
                   className="flex items-center justify-between rounded-control px-2 py-1.5 text-body text-text hover:bg-surface-muted"
                 >
-                  <span>{category.label}</span>
+                  <span>{t(category.labelKey)}</span>
                   <span className="font-mono text-label text-subtle">
                     {articlesInCategory(category.id).length}
                   </span>
@@ -78,14 +83,14 @@ export default async function WikiIndexPage() {
                 <Panel flush>
                   <div className="border-b border-border px-5 py-3">
                     <h2 id={`${category.id}-title`} className="text-heading font-semibold text-primary">
-                      {category.label}
+                      {t(category.labelKey)}
                     </h2>
-                    <p className="text-label text-muted">{category.description}</p>
+                    <p className="text-label text-muted">{t(category.descriptionKey)}</p>
                   </div>
                   {articles.length === 0 ? (
                     <EmptyState
-                      title="No articles yet"
-                      description="Articles for this category are still being written."
+                      title={t("wiki.emptyCategoryTitle")}
+                      description={t("wiki.emptyCategoryDescription")}
                     />
                   ) : (
                     <ul className="divide-y divide-border">

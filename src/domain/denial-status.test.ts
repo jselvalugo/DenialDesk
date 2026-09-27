@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { en } from "@/i18n/messages/en";
+import { createTranslator } from "@/i18n/translate";
 import { ACTION_STATUSES, nextAppealSubmittedOn, OPEN_STATUSES, regimeLabel } from "./denial-status";
+
+const t = createTranslator(en.common, "en");
 
 describe("denial statuses", () => {
   it("keeps submitted appeals open but off the deadline clock", () => {
@@ -30,10 +34,10 @@ describe("nextAppealSubmittedOn (F5)", () => {
 
 describe("regimeLabel (spec: payer-catalog P1)", () => {
   it("labels a known regime", () => {
-    expect(regimeLabel("fl_insurer")).toBe("FL commercial");
+    expect(regimeLabel("fl_insurer", t)).toBe("FL commercial");
   });
 
   it("labels a null regime as not verified rather than throwing", () => {
-    expect(regimeLabel(null)).toBe("Regime not verified");
+    expect(regimeLabel(null, t)).toBe("Regime not verified");
   });
 });

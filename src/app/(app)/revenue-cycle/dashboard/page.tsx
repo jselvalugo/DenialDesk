@@ -15,31 +15,29 @@ import { withTenant } from "@/db/tenant";
 import { over90Cents, over90ShareBps, OVER_90_WARNING_SHARE_BPS } from "@/domain/revenue-cycle/aging";
 import { periodLabel } from "@/domain/revenue-cycle/imports";
 import { dashboardReport } from "@/domain/revenue-cycle/reporting";
+import { getT } from "@/i18n/server";
 import { formatCents } from "@/lib/format";
 
-export const metadata: Metadata = { title: "RCM dashboard" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("revenue");
+  return { title: t("dashboard.title") };
+}
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const percent = (bps: number) => `${(bps / 100).toFixed(1)}%`;
 
 export default async function RcmDashboardPage() {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
+  const t = await getT("revenue");
   // The report records the view (R-7.5.1).
   const report = await withTenant(auth, (tx) => dashboardReport(tx, auth));
 
   if (!report) {
     return (
       <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-        <PageHeader
-          title="RCM dashboard"
-          description="Revenue, collections, receivables, and denials at a glance."
-        />
+        <PageHeader title={t("dashboard.title")} description={t("dashboard.description")} />
         <Panel>
-          <EmptyState
-            title="No activity files yet"
-            description="Import a month-end activity file on the Monthly files page to fill the dashboard."
-          />
+          <EmptyState title={t("dashboard.emptyTitle")} description={t("dashboard.emptyDescription")} />
         </Panel>
       </div>
     );
@@ -49,37 +47,50 @@ export default async function RcmDashboardPage() {
   const over90 = over90Cents(aging.totals.buckets);
   const openAr = kpis.openArCents;
   const over90Bps = over90ShareBps(over90, openAr);
-  const trailing = `last ${kpis.trailingMonths} month${kpis.trailingMonths === 1 ? "" : "s"}`;
+  const trailing = t("dashboard.trailingMonths", { count: kpis.trailingMonths });
   const maxRevenue = Math.max(1, ...report.months.map((m) => m.netRevenueCents));
   const clearing = report.reconciliation.at(-1);
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <PageHeader
-        title="RCM dashboard"
-        description={`${periodLabel(kpis.latest.periodYear, kpis.latest.periodMonth)}, from the month-end activity files and DenialDesk denials. Totals only. ⚠️ Management view: confirm the net-revenue presentation with the practice's accountant.`}
+        title={t("dashboard.title")}
+        description={t("dashboard.pageDescription", {
+          period: periodLabel(kpis.latest.periodYear, kpis.latest.periodMonth, t.locale),
+        })}
       />
 
-      <section aria-label="Key figures" className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+      <section
+        aria-label={t("dashboard.keyFigures")}
+        className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6"
+      >
         <StatTile
-          label="Net revenue"
+          label={t("dashboard.netRevenue")}
           value={formatCents(kpis.netRevenueCents)}
-          detail="Charges less write-offs, last month"
+          detail={t("dashboard.netRevenueDetail")}
         />
-        <StatTile label="Payments" value={formatCents(kpis.paymentsCents)} detail="Posted last month" />
-        <StatTile label="Open A/R" value={formatCents(openAr)} detail="At month-end, credits excluded" />
         <StatTile
-          label="Days in A/R"
+          label={t("arAging.col.payments")}
+          value={formatCents(kpis.paymentsCents)}
+          detail={t("dashboard.paymentsDetail")}
+        />
+        <StatTile
+          label={t("arAging.openAr")}
+          value={formatCents(openAr)}
+          detail={t("dashboard.openArDetail")}
+        />
+        <StatTile
+          label={t("dashboard.daysInAr")}
           value={kpis.daysInAr === null ? "—" : kpis.daysInAr.toFixed(1)}
-          detail={`Open A/R ÷ average daily net revenue, ${trailing}`}
+          detail={t("dashboard.daysInArDetail", { trailing })}
         />
         <StatTile
-          label="Net collection rate"
+          label={t("dashboard.netCollectionRate")}
           value={kpis.netCollectionBps === null ? "—" : percent(kpis.netCollectionBps)}
-          detail={`Payments ÷ net revenue, ${trailing}`}
+          detail={t("dashboard.netCollectionRateDetail", { trailing })}
         />
         <StatTile
-          label="Over 90 days"
+          label={t("arAging.over90")}
           value={over90Bps === null ? "—" : percent(over90Bps)}
           detail={formatCents(over90)}
           emphasis={over90Bps !== null && over90Bps > OVER_90_WARNING_SHARE_BPS ? "warning" : undefined}
@@ -88,30 +99,30 @@ export default async function RcmDashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel
-          title="Net revenue by month"
-          description={`${report.months.length} months with activity files`}
+          title={t("dashboard.netRevenueByMonth")}
+          description={t("dashboard.monthsWithFiles", { count: report.months.length })}
         >
           <BarList
-            label="Net revenue by month"
+            label={t("dashboard.netRevenueByMonth")}
             rows={report.months.map((m) => ({
               key: `${m.periodYear}-${m.periodMonth}`,
-              label: `${MONTHS[m.periodMonth - 1]} ${m.periodYear}`,
+              label: periodLabel(m.periodYear, m.periodMonth, t.locale),
               value: Math.max(0, m.netRevenueCents),
               display: formatCents(m.netRevenueCents),
             }))}
           />
           <p className="mt-3 text-label text-muted">
-            Bars scale to the largest month ({formatCents(maxRevenue)}).
+            {t("dashboard.barsScale", { amount: formatCents(maxRevenue) })}
           </p>
         </Panel>
 
-        <Panel title="Payments by month" description="Posted in the practice-management system">
+        <Panel title={t("dashboard.paymentsByMonth")} description={t("dashboard.postedInPm")}>
           <BarList
-            label="Payments by month"
+            label={t("dashboard.paymentsByMonth")}
             tone="chart-4"
             rows={report.months.map((m) => ({
               key: `${m.periodYear}-${m.periodMonth}`,
-              label: `${MONTHS[m.periodMonth - 1]} ${m.periodYear}`,
+              label: periodLabel(m.periodYear, m.periodMonth, t.locale),
               value: Math.max(0, m.paymentsCents),
               display: formatCents(m.paymentsCents),
             }))}
@@ -119,10 +130,10 @@ export default async function RcmDashboardPage() {
           {clearing && (
             <p className="mt-3 text-label text-muted">
               {clearing.clearingCents >= 0
-                ? `${formatCents(clearing.clearingCents)} posted but not yet deposited.`
-                : `${formatCents(-clearing.clearingCents)} deposited but not yet posted.`}{" "}
+                ? t("dashboard.postedNotDeposited", { amount: formatCents(clearing.clearingCents) })
+                : t("dashboard.depositedNotPosted", { amount: formatCents(-clearing.clearingCents) })}{" "}
               <Link href="/revenue-cycle/ar-aging" className="font-medium text-link hover:underline">
-                Reconciliation
+                {t("dashboard.reconciliation")}
               </Link>
             </p>
           )}
@@ -130,25 +141,28 @@ export default async function RcmDashboardPage() {
       </div>
 
       <Panel
-        title="Open denials by financial class"
-        description="Denied dollars still being worked in DenialDesk, matched to classes through each payer's regulatory regime (the first class by code when several share one)"
+        title={t("dashboard.openDenialsTitle")}
+        description={t("dashboard.openDenialsDescription")}
         actions={
           <Link href="/denials?status=open" className="text-label font-medium text-link hover:underline">
-            Denial queue
+            {t("dashboard.denialQueue")}
           </Link>
         }
         flush
       >
         {denials.count === 0 ? (
-          <EmptyState title="No open denials" description="Nothing in the denial queue is still open." />
+          <EmptyState
+            title={t("dashboard.noOpenDenialsTitle")}
+            description={t("dashboard.noOpenDenialsDescription")}
+          />
         ) : (
           <>
-            <Table caption="Open denied dollars by financial class">
+            <Table caption={t("dashboard.openDenialsTableCaption")}>
               <thead>
                 <tr>
-                  <Th>Class</Th>
-                  <Th numeric>Open denials</Th>
-                  <Th numeric>Denied</Th>
+                  <Th>{t("arAging.col.class")}</Th>
+                  <Th numeric>{t("dashboard.openDenials")}</Th>
+                  <Th numeric>{t("dashboard.denied")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -156,7 +170,7 @@ export default async function RcmDashboardPage() {
                   <Tr key={d.payerClass}>
                     <Td>
                       {d.payerClass === "Unmapped" ? (
-                        <span className="text-muted">No matching class</span>
+                        <span className="text-muted">{t("dashboard.noMatchingClass")}</span>
                       ) : (
                         <Code>{d.payerClass}</Code>
                       )}
@@ -170,9 +184,11 @@ export default async function RcmDashboardPage() {
               </tbody>
             </Table>
             <p className="border-t border-border px-4 py-2.5 text-label text-muted">
-              {formatCents(denials.deniedCents)} in open denials
+              {t("dashboard.openDenialsSummary", { amount: formatCents(denials.deniedCents) })}
               {openAr > 0
-                ? `, ${percent(Math.round((denials.deniedCents * 10_000) / openAr))} of open A/R. The two come from different sources (denials from remittances, A/R from the monthly file), so treat the share as an indicator.`
+                ? t("dashboard.openDenialsShare", {
+                    percent: percent(Math.round((denials.deniedCents * 10_000) / openAr)),
+                  })
                 : "."}
             </p>
           </>

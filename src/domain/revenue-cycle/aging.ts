@@ -1,4 +1,5 @@
 import { CsvError, parseCsv } from "@/lib/csv/parse";
+import { englishRevenue, type RevenueT, csvProblemMessage } from "./i18n";
 import { parseMoney, parseServiceDate } from "./monthly-file";
 
 /**
@@ -7,11 +8,11 @@ import { parseMoney, parseServiceDate } from "./monthly-file";
  */
 
 export const AGING_BUCKETS = [
-  { key: "0_30", label: "0–30 days", maxDays: 30 },
-  { key: "31_60", label: "31–60", maxDays: 60 },
-  { key: "61_90", label: "61–90", maxDays: 90 },
-  { key: "91_120", label: "91–120", maxDays: 120 },
-  { key: "over_120", label: "Over 120", maxDays: Infinity },
+  { key: "0_30", labelKey: "aging.bucket.0_30", maxDays: 30 },
+  { key: "31_60", labelKey: "aging.bucket.31_60", maxDays: 60 },
+  { key: "61_90", labelKey: "aging.bucket.61_90", maxDays: 90 },
+  { key: "91_120", labelKey: "aging.bucket.91_120", maxDays: 120 },
+  { key: "over_120", labelKey: "aging.bucket.over120", maxDays: Infinity },
 ] as const;
 export type BucketKey = (typeof AGING_BUCKETS)[number]["key"];
 
@@ -65,10 +66,10 @@ export function over90ShareBps(over90: number, openCents: number): number | null
 }
 
 /** Open balances by financial class and age; credit balances are listed apart, never netted. */
-export function ageReceivables(totals: AgingTotal[]): Aging {
+export function ageReceivables(totals: AgingTotal[], translate: RevenueT = englishRevenue): Aging {
   const byClass = new Map<string, AgingRow>();
   const credits = new Map<string, { payerClass: string; lines: number; totalCents: number }>();
-  const all: AgingRow = { payerClass: "All classes", buckets: emptyBuckets(), totalCents: 0 };
+  const all: AgingRow = { payerClass: translate("aging.allClasses"), buckets: emptyBuckets(), totalCents: 0 };
   for (const t of totals) {
     if (t.bucket === null) {
       const credit = credits.get(t.payerClass) ?? { payerClass: t.payerClass, lines: 0, totalCents: 0 };
@@ -245,16 +246,23 @@ const MARKER_HEADERS = ["synthetic marker"];
  * account numbers) is ignored and never stored (bank data needs field-level encryption,
  * CLAUDE.md #6). The whole file is rejected on any bad row; messages never echo values.
  */
-export function parseDepositFile(text: string, options: { syntheticOnly: boolean }): DepositParse {
+export function parseDepositFile(
+  text: string,
+  options: { syntheticOnly: boolean },
+  t: RevenueT = englishRevenue,
+): DepositParse {
   let rows;
   try {
     rows = parseCsv(text, { maxRows: DEPOSIT_MAX_ROWS, maxColumns: 50, headerRows: 1 });
   } catch (error) {
     if (error instanceof CsvError)
-      return { ok: false, problems: [{ row: error.row, message: error.message }] };
+      return {
+        ok: false,
+        problems: [{ row: error.row, message: csvProblemMessage(error, t) }],
+      };
     throw error;
   }
-  if (rows.length < 2) return { ok: false, problems: [{ row: 1, message: "The file has no data rows." }] };
+  if (rows.length < 2) return { ok: false, problems: [{ row: 1, message: t("import.error.noDataRows") }] };
   const header = rows[0]!.cells.map(normalize);
   const find = (names: string[]) => header.flatMap((h, i) => (names.includes(h) ? [i] : []));
   const dateCols = find(DATE_HEADERS);
@@ -262,9 +270,7 @@ export function parseDepositFile(text: string, options: { syntheticOnly: boolean
   if (dateCols.length !== 1 || amountCols.length !== 1) {
     return {
       ok: false,
-      problems: [
-        { row: rows[0]!.line, message: "The file needs exactly one Date column and one Amount column." },
-      ],
+      problems: [{ row: rows[0]!.line, message: t("deposits.error.columns") }],
     };
   }
   const markerCols = find(MARKER_HEADERS);
@@ -274,7 +280,7 @@ export function parseDepositFile(text: string, options: { syntheticOnly: boolean
       problems: [
         {
           row: rows[0]!.line,
-          message: `This environment accepts synthetic deposit files only: add a "Synthetic marker" column with ${SYNTHETIC_DEPOSIT_MARKER} on every row.`,
+          message: t("deposits.error.syntheticColumnRequired", { marker: SYNTHETIC_DEPOSIT_MARKER }),
         },
       ],
     };
@@ -286,16 +292,18 @@ export function parseDepositFile(text: string, options: { syntheticOnly: boolean
     const rawAmount = (cells[amountCols[0]!] ?? "").trim();
     const amount = rawAmount === "" ? null : parseMoney(rawAmount);
     if (options.syntheticOnly && (cells[markerCols[0]!] ?? "").trim() !== SYNTHETIC_DEPOSIT_MARKER) {
-      problems.push({ row: line, message: `Synthetic marker isn't ${SYNTHETIC_DEPOSIT_MARKER}.` });
+      problems.push({
+        row: line,
+        message: t("deposits.error.syntheticMarkerMismatch", { marker: SYNTHETIC_DEPOSIT_MARKER }),
+      });
     }
-    if (!date) problems.push({ row: line, message: "Date isn't a valid date (use MM/DD/YYYY)." });
+    if (!date) problems.push({ row: line, message: t("deposits.error.invalidDate") });
     else if (date < "2000-01-01" || date > "2100-12-31") {
-      problems.push({ row: line, message: "Date is outside 2000–2100." });
+      problems.push({ row: line, message: t("deposits.error.dateOutOfRange") });
     }
-    if (rawAmount === "") problems.push({ row: line, message: "Amount is blank." });
-    else if (amount === null)
-      problems.push({ row: line, message: "Amount isn't a valid dollar amount (up to $10,000,000)." });
-    else if (amount === 0) problems.push({ row: line, message: "Amount is zero." });
+    if (rawAmount === "") problems.push({ row: line, message: t("deposits.error.amountBlank") });
+    else if (amount === null) problems.push({ row: line, message: t("deposits.error.invalidAmount") });
+    else if (amount === 0) problems.push({ row: line, message: t("deposits.error.amountZero") });
     if (problems.length >= 20) break;
     if (date && amount) deposits.push({ rowNumber: line, depositDate: date, amountCents: amount });
   }

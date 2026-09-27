@@ -2,18 +2,19 @@ import { daysUntil, timelyFilingDeadline, type Deadline } from "@rules/deadlines
 import type { Regime } from "@rules/types";
 import type { Tone } from "@/components/ui/Badge";
 import type { claimStatusEnum } from "@/db/schema";
+import type { MessageKey } from "@/i18n/messages/types";
 
 export type ClaimStatus = (typeof claimStatusEnum.enumValues)[number];
 
-export const CLAIM_STATUSES: Record<ClaimStatus, { label: string; tone: Tone }> = {
-  draft: { label: "Draft", tone: "neutral" },
-  submitted: { label: "Submitted", tone: "info" },
-  acknowledged: { label: "Accepted by payer", tone: "info" },
-  rejected: { label: "Rejected", tone: "danger" },
-  paid: { label: "Paid", tone: "success" },
-  partially_paid: { label: "Partially paid", tone: "warning" },
-  denied: { label: "Denied", tone: "danger" },
-  closed: { label: "Closed", tone: "neutral" },
+export const CLAIM_STATUSES: Record<ClaimStatus, { labelKey: MessageKey<"common">; tone: Tone }> = {
+  draft: { labelKey: "claimStatus.draft", tone: "neutral" },
+  submitted: { labelKey: "claimStatus.submitted", tone: "info" },
+  acknowledged: { labelKey: "claimStatus.acknowledged", tone: "info" },
+  rejected: { labelKey: "claimStatus.rejected", tone: "danger" },
+  paid: { labelKey: "claimStatus.paid", tone: "success" },
+  partially_paid: { labelKey: "claimStatus.partially_paid", tone: "warning" },
+  denied: { labelKey: "claimStatus.denied", tone: "danger" },
+  closed: { labelKey: "claimStatus.closed", tone: "neutral" },
 };
 
 /** Not yet accepted by the payer: the timely-filing clock still matters, and the claim can be corrected. */
@@ -27,6 +28,16 @@ export function isUnsubmitted(status: ClaimStatus): boolean {
 export const FILING_WARNING_DAYS = 30;
 
 export type FilingState = "open" | "due_soon" | "past_deadline" | "not_configured" | "payer_unverified";
+
+/** Message key (claims namespace) for the filing states shown as a plain label (not paired with a day count). */
+export const FILING_STATE_LABEL_KEYS: Record<
+  Exclude<FilingState, "open" | "due_soon">,
+  MessageKey<"claims">
+> = {
+  past_deadline: "filing.state.pastDeadline",
+  not_configured: "filing.state.notConfigured",
+  payer_unverified: "filing.state.payerUnverified",
+};
 
 export interface FilingStatus {
   state: FilingState;

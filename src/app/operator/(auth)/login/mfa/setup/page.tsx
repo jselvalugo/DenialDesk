@@ -3,9 +3,13 @@ import { redirect } from "next/navigation";
 import { pendingEnrollmentSecret } from "@/auth/enrollment";
 import { confirmOperatorMfaEnrollment } from "@/auth/operator-actions";
 import { getOperatorSession } from "@/auth/session";
+import { getT } from "@/i18n/server";
 import { TotpEnrollment } from "@/components/auth/TotpEnrollment";
 
-export const metadata: Metadata = { title: "Set up operator two-step verification" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("auth");
+  return { title: t("operatorMfaSetup.pageTitle") };
+}
 
 export default async function OperatorMfaSetupPage() {
   const session = await getOperatorSession();

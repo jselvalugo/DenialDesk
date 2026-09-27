@@ -11,24 +11,24 @@ import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Money } from "@/components/ui/Money";
+import { Pagination } from "@/components/ui/Pagination";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Select } from "@/components/ui/Select";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
-import { CATEGORY_LABELS } from "@/domain/carc";
+import { CATEGORY_LABEL_KEYS, CATEGORY_ORDER } from "@/domain/carc";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { DUE_SOON_DAYS, listDenials, PAGE_SIZE, payerOptions, queueSummary } from "@/domain/denials/queries";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { formatCents } from "@/lib/format";
 import { filtersToQuery, parseFilters } from "./filters";
 
-export const metadata: Metadata = { title: "Denial queue" };
-
-const categoryOptions = [
-  { value: "", label: "All categories" },
-  ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label })),
-];
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("denials");
+  return { title: t("queue.title") };
+}
 
 export default async function DenialQueuePage({
   searchParams,
@@ -38,6 +38,19 @@ export default async function DenialQueuePage({
   const auth = await requireAuth();
   const filters = parseFilters(await searchParams);
   const today = todayIn();
+  const t = await getT("denials");
+  const tc = await getT("common");
+  const f = await getFormat();
+  const categoryOptions = [
+    { value: "", label: t("filter.allCategories") },
+    ...CATEGORY_ORDER.map((value) => ({ value, label: tc(CATEGORY_LABEL_KEYS[value]) })),
+  ];
+  const sortLabel =
+    filters.sort === "deadline"
+      ? t("sortLabel.deadline")
+      : filters.sort === "amount"
+        ? t("sortLabel.amount")
+        : t("sortLabel.notice");
 
   const { rows, total, summary, payers } = await withTenant(auth, async (tx) => {
     const [list, summary, payers] = await Promise.all([
@@ -63,38 +76,32 @@ export default async function DenialQueuePage({
   if (total > 0 && filters.page > Math.ceil(total / PAGE_SIZE)) {
     redirect(`/denials${filtersToQuery(filters, { page: Math.ceil(total / PAGE_SIZE) })}`);
   }
-  const first = total === 0 ? 0 : (filters.page - 1) * PAGE_SIZE + 1;
-  const last = Math.min(filters.page * PAGE_SIZE, total);
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="Denial queue"
-        description="Open denials, most urgent appeal deadline first. Work from the top."
-      />
+      <PageHeader title={t("queue.title")} description={t("queue.description")} />
 
-      <section aria-label="Open denial totals" className="grid grid-cols-4 gap-4">
-        <StatTile label="Open denials" value={summary.open.toLocaleString("en-US")} />
+      <section aria-label={t("overview.totalsAriaLabel")} className="grid grid-cols-4 gap-4">
+        <StatTile label={t("stat.openDenials")} value={f.number(summary.open)} />
         <StatTile
-          label="Amount at risk"
+          label={t("stat.amountAtRisk")}
           value={formatCents(summary.atRiskCents)}
-          detail="Denied amount on open denials"
+          detail={t("stat.amountAtRiskDetail")}
         />
         <StatTile
-          label={`Due in ${DUE_SOON_DAYS} days`}
-          value={summary.dueSoon}
+          label={t("stat.dueInDays", { count: DUE_SOON_DAYS })}
+          value={f.number(summary.dueSoon)}
           emphasis={summary.dueSoon > 0 ? "warning" : undefined}
-          detail="Appeal deadline this week"
+          detail={t("stat.dueSoonDetail")}
         />
         <StatTile
-          label="Past deadline"
-          value={summary.overdue}
+          label={t("stat.pastDeadline")}
+          value={f.number(summary.overdue)}
           emphasis={summary.overdue > 0 ? "danger" : undefined}
           detail={
             summary.noDeadline > 0
-              ? `${summary.noDeadline} with no deadline configured`
-              : "Open with deadline passed"
+              ? t("stat.pastDeadlineDetailNoDeadline", { count: summary.noDeadline })
+              : t("stat.pastDeadlineDetailDefault")
           }
         />
       </section>
@@ -102,59 +109,59 @@ export default async function DenialQueuePage({
       <Panel flush>
         <form method="get" className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
           <Select
-            label="Status"
+            label={tc("word.status")}
             name="status"
             defaultValue={filters.status}
             options={[
-              { value: "open", label: "Open" },
-              { value: "closed", label: "Closed" },
-              { value: "all", label: "All" },
+              { value: "open", label: t("filter.statusOpen") },
+              { value: "closed", label: t("filter.statusClosed") },
+              { value: "all", label: tc("word.all") },
             ]}
           />
           <Select
-            label="Payer"
+            label={tc("word.payer")}
             name="payer"
             defaultValue={filters.payerId ?? ""}
             options={[
-              { value: "", label: "All payers" },
+              { value: "", label: t("filter.allPayers") },
               ...payers.map((p) => ({ value: p.id, label: p.name })),
             ]}
           />
           <Select
-            label="Category"
+            label={tc("word.category")}
             name="category"
             defaultValue={filters.category ?? ""}
             options={categoryOptions}
           />
           <Select
-            label="Assignee"
+            label={t("field.assignee")}
             name="assignee"
             defaultValue={filters.assignee ?? ""}
             options={[
-              { value: "", label: "Anyone" },
-              { value: "me", label: "Assigned to me" },
-              { value: "unassigned", label: "Unassigned" },
+              { value: "", label: t("filter.anyone") },
+              { value: "me", label: t("filter.assignedToMe") },
+              { value: "unassigned", label: t("assignee.unassigned") },
             ]}
           />
           <Select
-            label="Sort by"
+            label={t("field.sortBy")}
             name="sort"
             defaultValue={filters.sort}
             options={[
-              { value: "deadline", label: "Appeal deadline" },
-              { value: "amount", label: "Denied amount" },
-              { value: "notice", label: "Newest notice" },
+              { value: "deadline", label: t("field.appealDeadline") },
+              { value: "amount", label: t("field.deniedAmount") },
+              { value: "notice", label: t("sort.newestNotice") },
             ]}
           />
           <div className="flex gap-2">
             <Button type="submit" size="md">
-              Apply
+              {tc("action.apply")}
             </Button>
             <Link
               href="/denials"
               className="inline-flex h-8 items-center rounded-control px-3 text-body font-medium text-muted hover:bg-surface-muted hover:text-text"
             >
-              Reset
+              {tc("action.reset")}
             </Link>
           </div>
         </form>
@@ -162,31 +169,31 @@ export default async function DenialQueuePage({
         {rows.length === 0 ? (
           filtersToQuery(filters, { page: 1 }) === "" && summary.open === 0 ? (
             <EmptyState
-              title="No open denials"
-              description="Denials are captured from payer remittances (835 ERAs). Choose status “All” to see closed denials."
+              title={t("queue.emptyDefaultTitle")}
+              description={t("queue.emptyDefaultDescription")}
             />
           ) : (
             <EmptyState
-              title="No denials match these filters"
-              description="Try a different status or payer, or reset the filters to see every open denial."
+              title={t("queue.emptyFilteredTitle")}
+              description={t("queue.emptyFilteredDescription")}
             />
           )
         ) : (
-          <Table
-            caption={`Denials, sorted by ${filters.sort === "deadline" ? "appeal deadline" : filters.sort}`}
-          >
+          <Table caption={t("queue.tableCaption", { sort: sortLabel })}>
             <thead>
               <tr>
-                <Th>Claim</Th>
-                <Th>Patient</Th>
-                <Th>Payer</Th>
-                <Th>Reason</Th>
+                <Th>{tc("word.claim")}</Th>
+                <Th>{tc("word.patient")}</Th>
+                <Th>{tc("word.payer")}</Th>
+                <Th>{tc("word.reason")}</Th>
                 <Th numeric aria-sort={filters.sort === "amount" ? "descending" : undefined}>
-                  Denied
+                  {t("field.denied")}
                 </Th>
-                <Th aria-sort={filters.sort === "deadline" ? "ascending" : undefined}>Appeal deadline</Th>
-                <Th>Status</Th>
-                <Th>Assignee</Th>
+                <Th aria-sort={filters.sort === "deadline" ? "ascending" : undefined}>
+                  {t("field.appealDeadline")}
+                </Th>
+                <Th>{tc("word.status")}</Th>
+                <Th>{t("field.assignee")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -210,14 +217,14 @@ export default async function DenialQueuePage({
                     </Td>
                     <Td>
                       <span className="block">{row.payerName}</span>
-                      <span className="block text-label text-muted">{regimeLabel(row.regime)}</span>
+                      <span className="block text-label text-muted">{regimeLabel(row.regime, tc)}</span>
                     </Td>
                     <Td>
                       <span className="inline-flex items-center gap-2">
                         <Code>
                           {row.groupCode}-{row.carc}
                         </Code>
-                        <span className="text-muted">{CATEGORY_LABELS[row.category]}</span>
+                        <span className="text-muted">{tc(CATEGORY_LABEL_KEYS[row.category])}</span>
                       </span>
                     </Td>
                     <Td numeric className="font-medium">
@@ -228,13 +235,13 @@ export default async function DenialQueuePage({
                         row.appealDeadline ? (
                           row.appealSubmittedOn > row.appealDeadline ? (
                             <span className="text-label font-medium text-danger-fg">
-                              Filed after deadline
+                              {t("appealFiled.late")}
                             </span>
                           ) : (
-                            <span className="text-label text-muted">Appeal filed on time</span>
+                            <span className="text-label text-muted">{t("appealFiled.onTime")}</span>
                           )
                         ) : (
-                          <span className="text-label text-muted">Appeal filed · no deadline configured</span>
+                          <span className="text-label text-muted">{t("appealFiled.noDeadline")}</span>
                         )
                       ) : row.appealDeadline ? (
                         status.awaitingAction ? (
@@ -247,14 +254,16 @@ export default async function DenialQueuePage({
                           <span className="text-muted">—</span>
                         )
                       ) : (
-                        <span className="text-label font-medium text-warning-fg">Not configured</span>
+                        <span className="text-label font-medium text-warning-fg">
+                          {t("deadlineNotConfigured")}
+                        </span>
                       )}
                     </Td>
                     <Td>
-                      <Badge tone={status.tone}>{status.label}</Badge>
+                      <Badge tone={status.tone}>{tc(status.labelKey)}</Badge>
                     </Td>
                     <Td className={row.assigneeName ? "" : "text-subtle"}>
-                      {row.assigneeName ?? "Unassigned"}
+                      {row.assigneeName ?? t("assignee.unassigned")}
                     </Td>
                   </Tr>
                 );
@@ -263,59 +272,13 @@ export default async function DenialQueuePage({
           </Table>
         )}
 
-        <nav
-          aria-label="Pagination"
-          className="flex items-center justify-between border-t border-border px-4 py-2.5 text-label text-muted"
-        >
-          <span className="tabular">
-            {total === 0 ? "No results" : `Showing ${first}–${last} of ${total.toLocaleString("en-US")}`}
-          </span>
-          <span className="flex items-center gap-2">
-            <PageLink
-              disabled={filters.page <= 1}
-              href={`/denials${filtersToQuery(filters, { page: filters.page - 1 })}`}
-            >
-              Previous
-            </PageLink>
-            <span className="tabular">
-              Page {filters.page} of {pages}
-            </span>
-            <PageLink
-              disabled={filters.page >= pages}
-              href={`/denials${filtersToQuery(filters, { page: filters.page + 1 })}`}
-            >
-              Next
-            </PageLink>
-          </span>
-        </nav>
+        <Pagination
+          page={filters.page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          hrefFor={(page) => `/denials${filtersToQuery(filters, { page })}`}
+        />
       </Panel>
     </div>
-  );
-}
-
-function PageLink({
-  href,
-  disabled,
-  children,
-}: {
-  href: string;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  const className = "inline-flex h-7 items-center rounded-control border px-2.5 font-medium";
-  if (disabled) {
-    return (
-      <span aria-disabled="true" className={`${className} border-border text-subtle`}>
-        {children}
-      </span>
-    );
-  }
-  return (
-    <Link
-      href={href}
-      className={`${className} border-border-strong bg-surface text-text hover:bg-surface-muted`}
-    >
-      {children}
-    </Link>
   );
 }

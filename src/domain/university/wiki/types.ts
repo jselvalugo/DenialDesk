@@ -1,3 +1,5 @@
+import type { MessageKey } from "@/i18n/messages/types";
+
 /** Wiki content model (docs/specs/university-wiki.md). Articles are code: reviewed in PRs, no PHI. */
 
 export type WikiCategoryId =
@@ -8,10 +10,11 @@ export type WikiCategoryId =
   | "data-safety"
   | "glossary";
 
+/** `label`/`description` are UI chrome, not article content, so they are message keys (university namespace). */
 export interface WikiCategory {
   id: WikiCategoryId;
-  label: string;
-  description: string;
+  labelKey: MessageKey<"university">;
+  descriptionKey: MessageKey<"university">;
 }
 
 export interface WikiSource {

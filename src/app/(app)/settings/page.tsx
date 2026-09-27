@@ -3,16 +3,21 @@ import { canConfigureSettings } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Panel } from "@/components/ui/Panel";
+import { getT } from "@/i18n/server";
+import type { MessageKey } from "@/i18n/messages/types";
 import { isProduction, syntheticDataOnly } from "@/lib/env";
 
-export const metadata: Metadata = { title: "Settings" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("settings");
+  return { title: t("page.title") };
+}
 
-const roleLabels = {
-  admin: "Administrator",
-  manager: "Manager",
-  specialist: "Billing specialist",
-  compliance: "Compliance",
-} as const;
+const roleKeys: Record<string, MessageKey<"common">> = {
+  admin: "role.admin",
+  manager: "role.manager",
+  specialist: "role.specialist",
+  compliance: "role.compliance",
+};
 
 function Row({ term, children }: { term: string; children: React.ReactNode }) {
   return (
@@ -25,30 +30,37 @@ function Row({ term, children }: { term: string; children: React.ReactNode }) {
 
 export default async function GeneralSettingsPage() {
   const auth = await requireAuth();
+  const t = await getT("settings");
+  const tc = await getT("common");
+  const roleKey = roleKeys[auth.role];
+  const role = roleKey ? tc(roleKey) : auth.role;
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <Panel title="Practice profile" description="Set when DenialDesk created your practice.">
+      <Panel title={t("general.profileTitle")} description={t("general.profileDescription")}>
         <dl>
-          <Row term="Practice name">{auth.tenantName}</Row>
-          <Row term="Environment">
+          <Row term={t("general.practiceName")}>{auth.tenantName}</Row>
+          <Row term={t("general.environment")}>
             {isProduction() ? (
-              "Production"
+              t("general.production")
             ) : (
               <Badge tone="warning">
-                Pre-production{syntheticDataOnly() ? " · synthetic data only" : ""}
+                {t("general.preProduction")}
+                {syntheticDataOnly() ? ` · ${t("general.syntheticDataOnly")}` : ""}
               </Badge>
             )}
           </Row>
-          <Row term="Data residency">United States only</Row>
+          <Row term={t("general.dataResidency")}>{t("general.dataResidencyValue")}</Row>
         </dl>
-        <p className="mt-3 text-label text-muted">To change the practice name, contact DenialDesk support.</p>
+        <p className="mt-3 text-label text-muted">{t("general.contactSupport")}</p>
       </Panel>
-      <Panel title="Your account" description="The user you are signed in as.">
+      <Panel title={t("general.accountTitle")} description={t("general.accountDescription")}>
         <dl>
-          <Row term="Name">{auth.displayName}</Row>
-          <Row term="Email">{auth.email}</Row>
-          <Row term="Role">{roleLabels[auth.role]}</Row>
-          <Row term="Can change settings">{canConfigureSettings(auth.role) ? "Yes" : "No: view only"}</Row>
+          <Row term={tc("word.name")}>{auth.displayName}</Row>
+          <Row term={tc("word.email")}>{auth.email}</Row>
+          <Row term={tc("word.role")}>{role}</Row>
+          <Row term={t("general.canChangeSettings")}>
+            {canConfigureSettings(auth.role) ? tc("word.yes") : t("general.viewOnly")}
+          </Row>
         </dl>
       </Panel>
     </div>

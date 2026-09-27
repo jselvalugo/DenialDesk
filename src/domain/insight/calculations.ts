@@ -13,12 +13,10 @@
  * will actually share one totals row, and back-calculation from that total can't slip through a
  * category-sized blind spot.
  */
-import type { DenialCategory } from "@/domain/carc";
-import { CATEGORY_LABELS } from "@/domain/carc";
+import { CATEGORY_ORDER, type DenialCategory } from "@/domain/carc";
 import { type DeadlineBucket, DEADLINE_BUCKET_ORDER, deadlineBucket } from "./buckets";
 
 // Category enum order, used to break ties when picking a payer's "top category" (spec #2).
-const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS) as DenialCategory[];
 
 function sumBy<T>(rows: T[], get: (row: T) => number): number {
   return rows.reduce((total, row) => total + get(row), 0);

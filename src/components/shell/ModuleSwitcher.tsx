@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { ArrowRight, Search, X } from "lucide-react";
+import { useT } from "@/i18n/client";
 import { cn } from "@/lib/cn";
 import { appHome, filterModules, type NavApp } from "./navigation";
 import { toneClasses } from "./tones";
@@ -44,11 +45,14 @@ function Highlight({ text, query }: { text: string; query: string }) {
   );
 }
 
-const plannedTag = (
-  <span className="rounded-[3px] border border-neutral-border bg-neutral-bg px-1 text-[0.6875rem] leading-4 font-medium text-neutral-fg">
-    Planned
-  </span>
-);
+function PlannedTag() {
+  const t = useT("common");
+  return (
+    <span className="rounded-[3px] border border-neutral-border bg-neutral-bg px-1 text-[0.6875rem] leading-4 font-medium text-neutral-fg">
+      {t("word.planned")}
+    </span>
+  );
+}
 
 /**
  * "Go to": one searchable table of every module and page this user can open: modules down the left
@@ -72,6 +76,8 @@ export function ModuleSwitcher({
   const search = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const titleId = useId();
+  const t = useT("shell");
+  const tc = useT("common");
 
   useEffect(() => {
     const el = dialog.current;
@@ -106,16 +112,16 @@ export function ModuleSwitcher({
         <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border pr-3 pl-5 focus-within:shadow-[inset_0_-2px_0_var(--color-focus)]">
           <Search aria-hidden="true" className="size-5 shrink-0 text-subtle" />
           <h2 id={titleId} className="sr-only">
-            Go to
+            {t("switcher.title")}
           </h2>
           <label className="flex-1">
-            <span className="sr-only">Search modules and pages</span>
+            <span className="sr-only">{t("switcher.searchLabel")}</span>
             <input
               ref={search}
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Go to a module or page…"
+              placeholder={t("switcher.placeholder")}
               autoComplete="off"
               className="h-10 w-full bg-transparent text-title text-text outline-none placeholder:text-subtle"
             />
@@ -123,7 +129,7 @@ export function ModuleSwitcher({
           <button
             type="button"
             onClick={close}
-            aria-label="Close"
+            aria-label={t("switcher.close")}
             className="inline-flex size-8 items-center justify-center rounded-control text-muted hover:bg-surface-muted hover:text-text"
           >
             <X aria-hidden="true" className="size-4" />
@@ -134,14 +140,14 @@ export function ModuleSwitcher({
           aria-hidden="true"
           className="hidden shrink-0 grid-cols-[19rem_1fr] border-b border-border bg-surface-muted px-5 py-1.5 text-[0.6875rem] font-semibold tracking-wider text-subtle uppercase sm:grid"
         >
-          <span>Module</span>
-          <span className="pl-5">Pages</span>
+          <span>{t("switcher.columnModule")}</span>
+          <span className="pl-5">{t("switcher.columnPages")}</span>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {groups.length === 0 ? (
             <p role="status" className="px-5 py-8 text-body text-muted">
-              Nothing matches “{query.trim()}”. Try a module or page name, like “Denial queue”.
+              {t("switcher.noMatch", { query: query.trim(), example: t("page.denialQueue") })}
             </p>
           ) : (
             <ul className="divide-y divide-border">
@@ -163,10 +169,10 @@ export function ModuleSwitcher({
                         <span id={`${titleId}-${app.id}-name`}>
                           <Highlight text={app.label} query={query} />
                         </span>
-                        {!home && plannedTag}
+                        {!home && <PlannedTag />}
                         {current && (
                           <span className="rounded-[3px] border border-tile-teal-border bg-tile-teal-bg px-1 text-[0.6875rem] leading-4 font-medium text-tile-teal-fg">
-                            Current
+                            {tc("word.current")}
                           </span>
                         )}
                       </span>
@@ -189,7 +195,7 @@ export function ModuleSwitcher({
                         <Link
                           href={home}
                           onClick={close}
-                          aria-label={`${app.label} module`}
+                          aria-label={t("switcher.moduleLink", { module: app.label })}
                           aria-describedby={`${titleId}-${app.id}`}
                           className="flex items-start gap-3 rounded-control px-2 py-1.5 transition-colors duration-100 hover:bg-surface-muted"
                         >
@@ -237,7 +243,9 @@ export function ModuleSwitcher({
                                 <span className="truncate">
                                   <Highlight text={item.label} query={query} />
                                 </span>
-                                <span className="ml-auto">{plannedTag}</span>
+                                <span className="ml-auto">
+                                  <PlannedTag />
+                                </span>
                               </span>
                             )}
                           </li>
@@ -252,19 +260,16 @@ export function ModuleSwitcher({
         </div>
 
         <div className="flex h-9 shrink-0 items-center justify-between gap-4 border-t border-border bg-surface-muted px-5 text-label text-subtle">
-          <span>
-            {groups.length} {groups.length === 1 ? "module" : "modules"} · {pageCount}{" "}
-            {pageCount === 1 ? "page" : "pages"}
-          </span>
+          <span>{t("switcher.count", { modules: groups.length, pages: pageCount })}</span>
           <span aria-hidden="true" className="hidden items-center gap-3 sm:flex">
             <span>
-              <kbd className="font-mono">Tab</kbd> move
+              <kbd className="font-mono">Tab</kbd> {t("switcher.hintMove")}
             </span>
             <span>
-              <kbd className="font-mono">Enter</kbd> open
+              <kbd className="font-mono">Enter</kbd> {t("switcher.hintOpen")}
             </span>
             <span>
-              <kbd className="font-mono">Esc</kbd> close
+              <kbd className="font-mono">Esc</kbd> {t("switcher.hintClose")}
             </span>
           </span>
         </div>

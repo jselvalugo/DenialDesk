@@ -9,21 +9,31 @@
  * that will actually share one totals row. Whenever any row in a sheet ends up suppressed, the
  * sheet's own totals row is suppressed too (its count/$/rate cells), because otherwise Total minus
  * every visible row would reconstruct the hidden value(s) exactly.
+ *
+ * Pure domain code: never imports `@/i18n/server`. Every sheet builder takes an insight-namespace
+ * translator (`t`) and a common-namespace translator (`tc`) — the route/action that calls it gets
+ * them from `getT("insight")` / `getT("common")` and passes them straight through.
  */
-import { CATEGORY_LABELS } from "@/domain/carc";
-import { DEADLINE_BUCKET_LABELS } from "./buckets";
+import { CATEGORY_LABEL_KEYS, type DenialCategory } from "@/domain/carc";
+import { CLAIM_STATUSES } from "@/domain/claims/status";
+import type { Messages } from "@/i18n/messages/types";
+import type { Translator } from "@/i18n/translate";
+import { DEADLINE_BUCKET_LABEL_KEYS } from "./buckets";
 import type {
   BucketGroup,
   CategoryGroup,
-  ClaimStatus,
   DenialRateResult,
   OutcomeGroup,
   PayerGroup,
   StatusGroup,
 } from "./calculations";
 import type { CellValue, SheetSpec } from "./workbook";
-import { catalogEntry, type ReportId } from "./catalog";
+import type { ReportId } from "./catalog";
 import { applySmallCellSuppression, SUPPRESSED_CELL, type SuppressibleGroup } from "./suppression";
+import { SMALL_CELL_SUPPRESSION_THRESHOLD } from "./suppression-config";
+
+type InsightT = Translator<Messages["insight"]>;
+type CommonT = Translator<Messages["common"]>;
 
 interface SuppressibleRow<T> extends SuppressibleGroup {
   values: T;
@@ -66,15 +76,11 @@ function suppressTotals<T extends Record<string, CellValue>>(
   return next;
 }
 
-export function reportTitle(reportId: ReportId): string {
-  return catalogEntry(reportId)?.title ?? reportId;
-}
-
 export function filenameFor(reportId: string, dateFrom: string, dateTo: string): string {
   return `${reportId}_${dateFrom}_${dateTo}.xlsx`;
 }
 
-export function denialsByCategorySheet(groups: CategoryGroup[]): SheetSpec {
+export function denialsByCategorySheet(groups: CategoryGroup[], t: InsightT, tc: CommonT): SheetSpec {
   // Flattened across every category first: suppression must see the whole sheet's sibling rows,
   // not just one category's CARC breakdown, or a category-sized blind spot could let a reader
   // back-calculate a hidden row from a category total this sheet doesn't even display but the
@@ -82,7 +88,7 @@ export function denialsByCategorySheet(groups: CategoryGroup[]): SheetSpec {
   const items = groups.flatMap((group) =>
     group.carcs.map((carc) => ({
       values: {
-        category: CATEGORY_LABELS[group.category],
+        category: tc(CATEGORY_LABEL_KEYS[group.category]),
         carc: carc.carc,
         count: carc.count,
         sumCents: carc.sumCents,
@@ -93,53 +99,53 @@ export function denialsByCategorySheet(groups: CategoryGroup[]): SheetSpec {
     })),
   );
   const { rows, anySuppressed } = buildSuppressedRows(items, ["count", "sumCents", "avgCents"]);
-  const totalCount = groups.reduce((t, g) => t + g.count, 0);
-  const totalSum = groups.reduce((t, g) => t + g.sumCents, 0);
+  const totalCount = groups.reduce((sum, g) => sum + g.count, 0);
+  const totalSum = groups.reduce((sum, g) => sum + g.sumCents, 0);
   return {
-    name: "Denials by category",
+    name: t("sheet.denialsByCategory"),
     columns: [
-      { header: "Category", key: "category", type: "text", width: 24 },
-      { header: "CARC", key: "carc", type: "text", width: 12 },
-      { header: "Count", key: "count", type: "number", width: 10 },
-      { header: "Denied ($)", key: "sumCents", type: "currency", width: 16 },
-      { header: "Average denied ($)", key: "avgCents", type: "currency", width: 18 },
+      { header: tc("word.category"), key: "category", type: "text", width: 24 },
+      { header: t("columns.carc"), key: "carc", type: "text", width: 12 },
+      { header: t("columns.count"), key: "count", type: "number", width: 10 },
+      { header: t("columns.deniedAmount"), key: "sumCents", type: "currency", width: 16 },
+      { header: t("columns.averageDeniedAmount"), key: "avgCents", type: "currency", width: 18 },
     ],
     rows,
     totals: suppressTotals(
-      { category: "Total", carc: "", count: totalCount, sumCents: totalSum, avgCents: null },
+      { category: tc("word.total"), carc: "", count: totalCount, sumCents: totalSum, avgCents: null },
       anySuppressed,
       ["count", "sumCents", "avgCents"],
     ),
   };
 }
 
-export function denialsByPayerSheet(groups: PayerGroup[]): SheetSpec {
+export function denialsByPayerSheet(groups: PayerGroup[], t: InsightT, tc: CommonT): SheetSpec {
   const items = groups.map((g) => ({
     values: {
       payerName: g.payerName,
-      verified: g.verified ? "Verified" : "Unverified",
+      verified: g.verified ? t("value.verified") : t("value.unverified"),
       count: g.count,
       sumCents: g.sumCents,
-      topCategory: CATEGORY_LABELS[g.topCategory],
+      topCategory: tc(CATEGORY_LABEL_KEYS[g.topCategory]),
     } satisfies Record<string, CellValue>,
     count: g.count,
     sensitive: g.sensitive,
   }));
   const { rows, anySuppressed } = buildSuppressedRows(items, ["count", "sumCents"]);
-  const totalCount = groups.reduce((t, g) => t + g.count, 0);
-  const totalSum = groups.reduce((t, g) => t + g.sumCents, 0);
+  const totalCount = groups.reduce((sum, g) => sum + g.count, 0);
+  const totalSum = groups.reduce((sum, g) => sum + g.sumCents, 0);
   return {
-    name: "Denials by payer",
+    name: t("sheet.denialsByPayer"),
     columns: [
-      { header: "Payer", key: "payerName", type: "text", width: 28 },
-      { header: "Verified", key: "verified", type: "text", width: 12 },
-      { header: "Count", key: "count", type: "number", width: 10 },
-      { header: "Denied ($)", key: "sumCents", type: "currency", width: 16 },
-      { header: "Top category", key: "topCategory", type: "text", width: 20 },
+      { header: tc("word.payer"), key: "payerName", type: "text", width: 28 },
+      { header: t("columns.verified"), key: "verified", type: "text", width: 12 },
+      { header: t("columns.count"), key: "count", type: "number", width: 10 },
+      { header: t("columns.deniedAmount"), key: "sumCents", type: "currency", width: 16 },
+      { header: t("columns.topCategory"), key: "topCategory", type: "text", width: 20 },
     ],
     rows,
     totals: suppressTotals(
-      { payerName: "Total", verified: "", count: totalCount, sumCents: totalSum, topCategory: "" },
+      { payerName: tc("word.total"), verified: "", count: totalCount, sumCents: totalSum, topCategory: "" },
       anySuppressed,
       ["count", "sumCents"],
     ),
@@ -155,26 +161,26 @@ export function denialsByPayerSheet(groups: PayerGroup[]): SheetSpec {
  * not a breakdown into sibling rows a reader could differentially compare (see the About sheet's
  * residual-risk caveat on this report).
  */
-export function denialRateSheet(result: DenialRateResult): SheetSpec {
+export function denialRateSheet(result: DenialRateResult, t: InsightT): SheetSpec {
   const columns: SheetSpec["columns"] = [
-    { header: "Claims submitted in range", key: "submitted", type: "number", width: 24 },
-    { header: "Claims with a denial (by notice date)", key: "denied", type: "number", width: 30 },
-    { header: "Denial rate", key: "rate", type: "percent", width: 16 },
+    { header: t("columns.claimsSubmittedInRange"), key: "submitted", type: "number", width: 24 },
+    { header: t("columns.claimsWithDenial"), key: "denied", type: "number", width: 30 },
+    { header: t("columns.denialRate"), key: "rate", type: "percent", width: 16 },
   ];
   if (result.submittedClaims === 0) {
-    return { name: "Denial rate", columns, rows: [], emptyMessage: "No claims submitted in this period" };
+    return { name: t("sheet.denialRate"), columns, rows: [], emptyMessage: t("empty.noClaimsSubmitted") };
   }
   return {
-    name: "Denial rate",
+    name: t("sheet.denialRate"),
     columns,
     rows: [{ submitted: result.submittedClaims, denied: result.deniedClaims, rate: result.rate }],
   };
 }
 
-export function denialsByDeadlineBucketSheet(groups: BucketGroup[]): SheetSpec {
+export function denialsByDeadlineBucketSheet(groups: BucketGroup[], t: InsightT, tc: CommonT): SheetSpec {
   const items = groups.map((g) => ({
     values: {
-      bucket: DEADLINE_BUCKET_LABELS[g.bucket],
+      bucket: t(DEADLINE_BUCKET_LABEL_KEYS[g.bucket]),
       count: g.count,
       sumCents: g.sumCents,
     } satisfies Record<string, CellValue>,
@@ -182,38 +188,28 @@ export function denialsByDeadlineBucketSheet(groups: BucketGroup[]): SheetSpec {
     sensitive: g.sensitive,
   }));
   const { rows, anySuppressed } = buildSuppressedRows(items, ["count", "sumCents"]);
-  const totalCount = groups.reduce((t, g) => t + g.count, 0);
-  const totalSum = groups.reduce((t, g) => t + g.sumCents, 0);
+  const totalCount = groups.reduce((sum, g) => sum + g.count, 0);
+  const totalSum = groups.reduce((sum, g) => sum + g.sumCents, 0);
   return {
-    name: "Open denials by deadline",
+    name: t("sheet.denialsByDeadlineBucket"),
     columns: [
-      { header: "Bucket", key: "bucket", type: "text", width: 24 },
-      { header: "Count", key: "count", type: "number", width: 10 },
-      { header: "Denied ($)", key: "sumCents", type: "currency", width: 16 },
+      { header: t("columns.deadlineBucket"), key: "bucket", type: "text", width: 24 },
+      { header: t("columns.count"), key: "count", type: "number", width: 10 },
+      { header: t("columns.deniedAmount"), key: "sumCents", type: "currency", width: 16 },
     ],
     rows,
-    totals: suppressTotals({ bucket: "Total", count: totalCount, sumCents: totalSum }, anySuppressed, [
-      "count",
-      "sumCents",
-    ]),
+    totals: suppressTotals(
+      { bucket: tc("word.total"), count: totalCount, sumCents: totalSum },
+      anySuppressed,
+      ["count", "sumCents"],
+    ),
   };
 }
 
-const STATUS_LABELS: Record<ClaimStatus, string> = {
-  draft: "Draft",
-  submitted: "Submitted",
-  acknowledged: "Acknowledged",
-  rejected: "Rejected",
-  paid: "Paid",
-  partially_paid: "Partially paid",
-  denied: "Denied",
-  closed: "Closed",
-};
-
-export function claimsByStatusSheet(groups: StatusGroup[]): SheetSpec {
+export function claimsByStatusSheet(groups: StatusGroup[], t: InsightT, tc: CommonT): SheetSpec {
   const items = groups.map((g) => ({
     values: {
-      status: STATUS_LABELS[g.status],
+      status: tc(CLAIM_STATUSES[g.status].labelKey),
       count: g.count,
       billedCents: g.billedCents,
       paidCents: g.paidCents,
@@ -224,23 +220,23 @@ export function claimsByStatusSheet(groups: StatusGroup[]): SheetSpec {
   }));
   const numericKeys = ["count", "billedCents", "paidCents", "outstandingCents"] as const;
   const { rows, anySuppressed } = buildSuppressedRows(items, [...numericKeys]);
-  const totalCount = groups.reduce((t, g) => t + g.count, 0);
-  const totalBilled = groups.reduce((t, g) => t + g.billedCents, 0);
-  const totalPaid = groups.reduce((t, g) => t + g.paidCents, 0);
-  const totalOutstanding = groups.reduce((t, g) => t + g.outstandingCents, 0);
+  const totalCount = groups.reduce((sum, g) => sum + g.count, 0);
+  const totalBilled = groups.reduce((sum, g) => sum + g.billedCents, 0);
+  const totalPaid = groups.reduce((sum, g) => sum + g.paidCents, 0);
+  const totalOutstanding = groups.reduce((sum, g) => sum + g.outstandingCents, 0);
   return {
-    name: "Claims by status",
+    name: t("sheet.claimsByStatus"),
     columns: [
-      { header: "Status", key: "status", type: "text", width: 18 },
-      { header: "Count", key: "count", type: "number", width: 10 },
-      { header: "Billed ($)", key: "billedCents", type: "currency", width: 16 },
-      { header: "Paid ($)", key: "paidCents", type: "currency", width: 16 },
-      { header: "Outstanding ($)", key: "outstandingCents", type: "currency", width: 18 },
+      { header: tc("word.status"), key: "status", type: "text", width: 18 },
+      { header: t("columns.count"), key: "count", type: "number", width: 10 },
+      { header: t("columns.billedAmount"), key: "billedCents", type: "currency", width: 16 },
+      { header: t("columns.paidAmount"), key: "paidCents", type: "currency", width: 16 },
+      { header: t("columns.outstandingAmount"), key: "outstandingCents", type: "currency", width: 18 },
     ],
     rows,
     totals: suppressTotals(
       {
-        status: "Total",
+        status: tc("word.total"),
         count: totalCount,
         billedCents: totalBilled,
         paidCents: totalPaid,
@@ -257,6 +253,7 @@ function outcomeSheet(
   name: string,
   emptyMessage: string,
   columns: SheetSpec["columns"],
+  totalLabel: string,
 ) {
   const items = groups.map((g) => ({
     values: {
@@ -273,15 +270,15 @@ function outcomeSheet(
   }));
   const numericKeys = ["overturned", "upheld", "overturnRate", "reversedCents"] as const;
   const { rows, anySuppressed } = buildSuppressedRows(items, [...numericKeys]);
-  const totalOverturned = groups.reduce((t, g) => t + g.overturned, 0);
-  const totalUpheld = groups.reduce((t, g) => t + g.upheld, 0);
+  const totalOverturned = groups.reduce((sum, g) => sum + g.overturned, 0);
+  const totalUpheld = groups.reduce((sum, g) => sum + g.upheld, 0);
   const totalDecided = totalOverturned + totalUpheld;
-  const totalReversed = groups.reduce((t, g) => t + g.reversedCents, 0);
+  const totalReversed = groups.reduce((sum, g) => sum + g.reversedCents, 0);
   const rawTotals =
     groups.length === 0
       ? undefined
       : {
-          group: "Total",
+          group: totalLabel,
           overturned: totalOverturned,
           upheld: totalUpheld,
           overturnRate: totalDecided === 0 ? null : totalOverturned / totalDecided,
@@ -296,25 +293,39 @@ function outcomeSheet(
  * totals were suppressed, the other sheet's visible totals would reveal it, so both sheets'
  * totals rows are suppressed together whenever either sheet has a suppressed row.
  */
-export function appealOutcomesSheets(byPayer: OutcomeGroup[], byCategory: OutcomeGroup[]): SheetSpec[] {
+export function appealOutcomesSheets(
+  byPayer: OutcomeGroup[],
+  byCategory: OutcomeGroup[],
+  t: InsightT,
+  tc: CommonT,
+): SheetSpec[] {
   const columns: SheetSpec["columns"] = [
-    { header: "Group", key: "group", type: "text", width: 24 },
-    { header: "Overturned", key: "overturned", type: "number", width: 14 },
-    { header: "Upheld", key: "upheld", type: "number", width: 12 },
-    { header: "Overturn rate", key: "overturnRate", type: "percent", width: 16 },
-    { header: "Denied amount reversed ($)", key: "reversedCents", type: "currency", width: 24 },
+    { header: t("columns.group"), key: "group", type: "text", width: 24 },
+    { header: t("columns.overturned"), key: "overturned", type: "number", width: 14 },
+    { header: t("columns.upheld"), key: "upheld", type: "number", width: 12 },
+    { header: t("columns.overturnRate"), key: "overturnRate", type: "percent", width: 16 },
+    { header: t("columns.deniedAmountReversed"), key: "reversedCents", type: "currency", width: 24 },
   ];
-  const NO_DECIDED_APPEALS = "No decided appeals in this period";
-  const byCategoryLabeled = byCategory.map((g) => ({
-    ...g,
-    label: CATEGORY_LABELS[g.label as never] ?? g.label,
-  }));
-  const payerSheet = outcomeSheet(byPayer, "Appeal outcomes by payer", NO_DECIDED_APPEALS, columns);
+  const noDecidedAppeals = t("empty.noDecidedAppeals");
+  const totalLabel = tc("word.total");
+  const byCategoryLabeled = byCategory.map((g) => {
+    const key = CATEGORY_LABEL_KEYS[g.label as DenialCategory] as
+      (typeof CATEGORY_LABEL_KEYS)[DenialCategory] | undefined;
+    return { ...g, label: key ? tc(key) : g.label };
+  });
+  const payerSheet = outcomeSheet(
+    byPayer,
+    t("sheet.appealOutcomesByPayer"),
+    noDecidedAppeals,
+    columns,
+    totalLabel,
+  );
   const categorySheet = outcomeSheet(
     byCategoryLabeled,
-    "Appeal outcomes by category",
-    NO_DECIDED_APPEALS,
+    t("sheet.appealOutcomesByCategory"),
+    noDecidedAppeals,
     columns,
+    totalLabel,
   );
   const anySuppressed = payerSheet.anySuppressed || categorySheet.anySuppressed;
   return [payerSheet, categorySheet].map((sheetResult) => {
@@ -327,106 +338,61 @@ export function appealOutcomesSheets(byPayer: OutcomeGroup[], byCategory: Outcom
   });
 }
 
-export const METRIC_DEFINITIONS: Record<ReportId, { term: string; definition: string }[]> = {
-  "denials-by-category": [
-    {
-      term: "Category",
-      definition: "DenialDesk's work-queue classification for the denial's CARC (REQUIREMENTS §8.3).",
-    },
-    { term: "Denied ($)", definition: "Sum of the denied amount (denials.deniedCents) for the group." },
-    { term: "Average denied ($)", definition: "Denied ($) divided by count, for the group." },
-  ],
-  "denials-by-payer": [
-    { term: "Verified", definition: "Whether the payer has a confirmed EDI payer ID and regulatory regime." },
-    {
-      term: "Top category",
-      definition:
-        "The category with the largest sum of denied dollars for that payer; ties broken by category enum order.",
-    },
-  ],
-  "denial-rate": [
-    {
-      term: "Claims submitted in range",
-      definition:
-        "Claims with status other than draft, whose submission date (or service date, if not yet submitted) falls in the selected range.",
-    },
-    {
-      term: "Denial rate",
-      definition:
-        "Distinct claims with at least one denial in range, divided by distinct claims submitted in range.",
-    },
-  ],
-  "denials-by-deadline-bucket": [
-    {
-      term: "Bucket",
-      definition:
-        "Days remaining to the appeal deadline, computed the same way as the denial queue (rules/deadlines.ts); never re-derived.",
-    },
-    {
-      term: "No deadline configured",
-      definition: "The payer is unverified or has no configured appeal window; never guessed.",
-    },
-  ],
-  "claims-by-status": [{ term: "Outstanding ($)", definition: "Billed ($) minus paid ($) for the group." }],
-  "appeal-outcomes": [
-    {
-      term: "Overturn rate",
-      definition:
-        "Overturned divided by (overturned + upheld) for the group; blank when there are no decided appeals in range.",
-    },
-    {
-      term: "Denied amount reversed ($)",
-      definition:
-        "Sum of denied dollars on overturned rows only — an upper bound, not a captured payment (no remittances table yet).",
-    },
-  ],
-};
+/** Metric definitions shown on the About sheet, per report. The term reuses the column-header text. */
+export function metricDefinitions(
+  reportId: ReportId,
+  t: InsightT,
+  tc: CommonT,
+): { term: string; definition: string }[] {
+  switch (reportId) {
+    case "denials-by-category":
+      return [
+        { term: tc("word.category"), definition: t("definitions.category") },
+        { term: t("columns.deniedAmount"), definition: t("definitions.deniedAmount") },
+        { term: t("columns.averageDeniedAmount"), definition: t("definitions.averageDeniedAmount") },
+      ];
+    case "denials-by-payer":
+      return [
+        { term: t("columns.verified"), definition: t("definitions.verified") },
+        { term: t("columns.topCategory"), definition: t("definitions.topCategory") },
+      ];
+    case "denial-rate":
+      return [
+        { term: t("columns.claimsSubmittedInRange"), definition: t("definitions.claimsSubmittedInRange") },
+        { term: t("columns.denialRate"), definition: t("definitions.denialRate") },
+      ];
+    case "denials-by-deadline-bucket":
+      return [
+        { term: t("columns.deadlineBucket"), definition: t("definitions.deadlineBucket") },
+        { term: t("bucket.noDeadline"), definition: t("definitions.noDeadlineConfigured") },
+      ];
+    case "claims-by-status":
+      return [{ term: t("columns.outstandingAmount"), definition: t("definitions.outstandingAmount") }];
+    case "appeal-outcomes":
+      return [
+        { term: t("columns.overturnRate"), definition: t("definitions.overturnRate") },
+        { term: t("columns.deniedAmountReversed"), definition: t("definitions.deniedAmountReversed") },
+      ];
+  }
+}
 
-const SMALL_CELL_SUPPRESSION_CAVEAT =
-  "Small-cell suppression (R-8.7): a row that includes a claim for a patient carrying a " +
-  "sensitivity tag (R-3.5.1) and whose count is under the suppression threshold shows " +
-  '"Suppressed (<11)" instead of its count and dollar amounts/rates, to avoid identifying that ' +
-  "patient. When exactly one row in the sheet would be suppressed, the next-smallest row with a " +
-  "nonzero count is also suppressed so the hidden value can't be inferred from the others. " +
-  "Whenever any row in a sheet is suppressed, that sheet's own totals row is suppressed too — " +
-  "otherwise Total minus the visible rows would reconstruct the hidden value(s) exactly. " +
-  "Accepted residual risk (⚠️ VERIFY with counsel): this suppression is per report and per date " +
-  "range — comparing two overlapping date ranges of the same report, or two different reports " +
-  "covering the same claims, can still let a determined reader difference out a suppressed cell; " +
-  "no cross-report or cross-range differencing guard exists in this slice. ⚠️ VERIFY: the " +
-  "threshold (11) follows CMS's public-use-file cell-size suppression convention as a policy " +
-  "baseline, not a Florida statute — confirm with counsel.";
-
-const DENIAL_RATE_RESIDUAL_RISK_CAVEAT =
-  "This report is one tenant-wide rate for the whole date range, not a row-by-row breakdown, so " +
-  "small-cell suppression (R-8.7) does not apply to it the same way. Accepted residual risk " +
-  "(⚠️ VERIFY with counsel): the denied-claims count is a tenant-wide total, not suppressed even " +
-  "when small, and a narrow enough date range or payer filter could still make it identify a " +
-  "single sensitive-tagged patient's claim.";
-
-export const DATA_CAVEATS: Record<ReportId, string[]> = {
-  "denials-by-category": [
-    "A CARC code outside the reference list (src/domain/carc.ts) is shown by its raw code with no description.",
-    SMALL_CELL_SUPPRESSION_CAVEAT,
-  ],
-  "denials-by-payer": [
-    "The payer filter is not applicable to this report — it is the payer breakdown.",
-    SMALL_CELL_SUPPRESSION_CAVEAT,
-  ],
-  "denial-rate": [
-    "Submission-date tracking (C3 837P) is not yet built; falls back to service date when submittedAt is null.",
-    DENIAL_RATE_RESIDUAL_RISK_CAVEAT,
-  ],
-  "denials-by-deadline-bucket": [
-    '"No deadline configured" includes unverified payers and payers with no configured appeal window.',
-    SMALL_CELL_SUPPRESSION_CAVEAT,
-  ],
-  "claims-by-status": [
-    "Paid amounts are recorded only where captured — 835 remittance posting is not yet built.",
-    SMALL_CELL_SUPPRESSION_CAVEAT,
-  ],
-  "appeal-outcomes": [
-    "Reports on current denial status only; there is no appeals history table yet, so a denial that flipped status is shown by its latest outcome.",
-    SMALL_CELL_SUPPRESSION_CAVEAT,
-  ],
-};
+/** Data caveats shown on the About sheet, per report; the small-cell-suppression note is shared. */
+export function dataCaveats(reportId: ReportId, t: InsightT): string[] {
+  const smallCellSuppression = t("caveats.smallCellSuppression", {
+    threshold: SMALL_CELL_SUPPRESSION_THRESHOLD,
+  });
+  switch (reportId) {
+    case "denials-by-category":
+      return [t("caveats.unknownCarc"), smallCellSuppression];
+    case "denials-by-payer":
+      return [t("caveats.payerFilterNotApplicable"), smallCellSuppression];
+    case "denial-rate":
+      return [t("caveats.denialRateFallback"), t("caveats.denialRateResidualRisk")];
+    case "denials-by-deadline-bucket":
+      return [t("caveats.noDeadlineConfiguredExplain"), smallCellSuppression];
+    case "claims-by-status":
+      return [t("caveats.paidAmountsPartial"), smallCellSuppression];
+    case "appeal-outcomes":
+      return [t("caveats.latestOutcomeOnly"), smallCellSuppression];
+  }
+}

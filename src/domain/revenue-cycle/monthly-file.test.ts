@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { es } from "@/i18n/messages/es";
+import { createTranslator } from "@/i18n/translate";
 import {
   checkUpload,
   decodeUpload,
@@ -158,5 +160,24 @@ describe("upload checks", () => {
     expect(periodEnd(2026, 2)).toBe("2026-02-28");
     expect(periodEnd(2028, 2)).toBe("2028-02-29");
     expect(periodEnd(2026, 12)).toBe("2026-12-31");
+  });
+});
+
+describe("parseMonthlyFile in another language", () => {
+  it("translates the problem but names the CSV headers in English, since those are the file contract", () => {
+    const t = createTranslator(es.revenue, "es");
+    const result = parseMonthlyFile("Patient,CPT\nx,99213", { syntheticOnly: false }, t);
+    expect(result.ok).toBe(false);
+    const message = !result.ok ? result.problems[0]!.message : "";
+    expect(message).toMatch(/^Faltan/);
+    expect(message).toContain("Account number");
+    expect(message).toContain("Service date");
+  });
+
+  it("translates CSV syntax problems", () => {
+    const t = createTranslator(es.revenue, "es");
+    const result = parseMonthlyFile('"unclosed,CPT\nx,99213', { syntheticOnly: false }, t);
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.problems[0]!.message).toBe("Un campo entre comillas nunca se cierra.");
   });
 });

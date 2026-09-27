@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { useT } from "@/i18n/client";
 import { toggleSuspended, type ActionState } from "./actions";
 
 export function SuspendToggle({
@@ -14,6 +15,8 @@ export function SuspendToggle({
   name: string;
 }) {
   const [state, action] = useActionState<ActionState, FormData>(toggleSuspended, {});
+  const t = useT("operator");
+  const tc = useT("common");
   return (
     <form action={action} className="flex items-center justify-end gap-2">
       <input type="hidden" name="tenantId" value={tenantId} />
@@ -26,10 +29,10 @@ export function SuspendToggle({
       <SubmitButton
         size="sm"
         variant={suspended ? "secondary" : "danger"}
-        pendingLabel="Saving…"
-        aria-label={`${suspended ? "Reactivate" : "Suspend"} ${name}`}
+        pendingLabel={tc("action.saving")}
+        aria-label={t(suspended ? "list.reactivateAria" : "list.suspendAria", { name })}
       >
-        {suspended ? "Reactivate" : "Suspend"}
+        {t(suspended ? "list.reactivate" : "list.suspend")}
       </SubmitButton>
     </form>
   );

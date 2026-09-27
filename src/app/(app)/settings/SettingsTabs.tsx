@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useT } from "@/i18n/client";
 import { cn } from "@/lib/cn";
 
 export interface SettingsTab {
@@ -14,11 +15,13 @@ export interface SettingsTab {
 /** Section tabs under the Settings header (docs/specs/settings-and-custom-fields.md). */
 export function SettingsTabs({ tabs }: { tabs: SettingsTab[] }) {
   const pathname = usePathname();
+  const t = useT("settings");
+  const tc = useT("common");
   const current = tabs
     .filter((tab) => tab.available && (pathname === tab.href || pathname.startsWith(`${tab.href}/`)))
     .sort((a, b) => b.href.length - a.href.length)[0];
   return (
-    <nav aria-label="Settings sections" className="border-b border-border">
+    <nav aria-label={t("tabs.sectionsLabel")} className="border-b border-border">
       <ul className="-mb-px flex flex-wrap gap-x-1">
         {tabs.map((tab) => (
           <li key={tab.href}>
@@ -38,11 +41,11 @@ export function SettingsTabs({ tabs }: { tabs: SettingsTab[] }) {
             ) : (
               <span
                 className="inline-flex h-10 cursor-default items-center gap-1.5 border-b-2 border-transparent px-3 text-body text-subtle"
-                title="Planned"
+                title={tc("word.planned")}
               >
                 {tab.label}
                 <span className="rounded-control border border-dashed border-border-strong px-1 text-label">
-                  Planned
+                  {tc("word.planned")}
                 </span>
               </span>
             )}

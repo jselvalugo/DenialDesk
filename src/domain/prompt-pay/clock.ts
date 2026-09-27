@@ -2,21 +2,22 @@ import { daysBetween } from "@rules/calendar";
 import { evaluatePromptPay, type PayerResponse, type PromptPayClock } from "@rules/prompt-pay";
 import type { Regime } from "@rules/types";
 import type { Tone } from "@/components/ui/Badge";
+import type { MessageKey } from "@/i18n/messages/types";
 
 export type ClockState = PromptPayClock["state"];
 
-export const CLOCK_STATES: Record<ClockState, { label: string; tone: Tone }> = {
-  open: { label: "Open", tone: "info" },
-  met: { label: "Met", tone: "success" },
-  late: { label: "Payer late", tone: "warning" },
-  uncontestable: { label: "Uncontestable", tone: "danger" },
+export const CLOCK_STATES: Record<ClockState, { labelKey: MessageKey<"promptPay">; tone: Tone }> = {
+  open: { labelKey: "clockState.open", tone: "info" },
+  met: { labelKey: "clockState.met", tone: "success" },
+  late: { labelKey: "clockState.late", tone: "warning" },
+  uncontestable: { labelKey: "clockState.uncontestable", tone: "danger" },
 };
 
-export const RESPONSE_KIND_LABELS = {
-  payment: "Payment",
-  denial: "Denial",
-  contest: "Contest or request for information",
-} as const;
+export const RESPONSE_KIND_LABEL_KEYS: Record<PayerResponse["kind"], MessageKey<"promptPay">> = {
+  payment: "responseKind.payment",
+  denial: "responseKind.denial",
+  contest: "responseKind.contest",
+};
 
 /** "Milestone due soon" highlight: a display setting, not a legal value. */
 export const PROMPT_PAY_DUE_SOON_DAYS = 5;

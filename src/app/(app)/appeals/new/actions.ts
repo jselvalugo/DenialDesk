@@ -10,20 +10,20 @@ import { withTenant } from "@/db/tenant";
 import { firstLevelDeadline } from "@/domain/appeals/deadline";
 import { openAppealsForDenial } from "@/domain/appeals/queries";
 import { ACTION_STATUSES } from "@/domain/denial-status";
+import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 
 export interface CreateAppealState {
   error?: string;
 }
 
-const NOT_ALLOWED = "Your role can view appeals but not start one.";
-
 /** Starts a first-level appeal from a denial and redirects to it (spec: appeals.md A1). */
 export async function createAppeal(_: CreateAppealState, formData: FormData): Promise<CreateAppealState> {
   const auth = await requireAuth();
-  if (!canWorkAppeals(auth.role)) return { error: NOT_ALLOWED };
+  const t = await getT("appeals");
+  if (!canWorkAppeals(auth.role)) return { error: t("error.notAllowedStart") };
   const parsed = z.object({ denialId: z.uuid() }).safeParse({ denialId: formData.get("denialId") });
-  if (!parsed.success) return { error: "Choose a denial to appeal." };
+  if (!parsed.success) return { error: t("error.invalidDenial") };
 
   const result = await withTenant(auth, async (tx) => {
     const [row] = await tx
@@ -33,12 +33,12 @@ export async function createAppeal(_: CreateAppealState, formData: FormData): Pr
       .innerJoin(payers, eq(payers.id, claims.payerId))
       .where(eq(denials.id, parsed.data.denialId))
       .for("update");
-    if (!row) return { error: "This denial no longer exists." };
+    if (!row) return { error: t("error.denialNotFound") };
     if (!ACTION_STATUSES.includes(row.denial.status)) {
-      return { error: "This denial isn't awaiting action, so no new appeal can be started from it." };
+      return { error: t("error.notEligible") };
     }
     const open = await openAppealsForDenial(tx, parsed.data.denialId);
-    if (open.length > 0) return { error: "This denial already has an open appeal." };
+    if (open.length > 0) return { error: t("error.alreadyOpen") };
 
     const deadline = firstLevelDeadline({
       regime: row.payer.regime,

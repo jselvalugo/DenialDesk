@@ -6,6 +6,7 @@ import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
 import { findLesson } from "@/domain/university/catalog";
 import { recordLessonCompleted } from "@/domain/university/queries";
+import { getT } from "@/i18n/server";
 
 export interface CompleteLessonState {
   error?: string;
@@ -23,7 +24,10 @@ export async function completeLesson(
   const auth = await requireAuth();
   const parsed = input.safeParse({ courseId: formData.get("courseId"), lessonId: formData.get("lessonId") });
   const found = parsed.success ? findLesson(parsed.data.courseId, parsed.data.lessonId) : undefined;
-  if (!found) return { error: "This lesson no longer exists." };
+  if (!found) {
+    const t = await getT("university");
+    return { error: t("complete.lessonGone") };
+  }
 
   const { completedAt } = await withTenant(auth, (tx) =>
     recordLessonCompleted(tx, {

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { confirmMfaEnrollment, verifyMfa, type FormState } from "@/auth/actions";
+import { useT } from "@/i18n/client";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
@@ -14,11 +15,12 @@ export function CodeForm({ mode, submit }: { mode: "verify" | "enroll"; submit?:
     submit ?? (mode === "enroll" ? confirmMfaEnrollment : verifyMfa),
     {},
   );
+  const t = useT("auth");
   return (
     <form action={action} className="flex flex-col gap-5" noValidate>
       <FormAlert message={state.error} />
       <TextField
-        label="6-digit code"
+        label={t("mfa.codeLabel")}
         name="code"
         inputMode="numeric"
         autoComplete="one-time-code"
@@ -28,8 +30,8 @@ export function CodeForm({ mode, submit }: { mode: "verify" | "enroll"; submit?:
         autoFocus
         className="tabular font-mono tracking-[0.3em]"
       />
-      <SubmitButton variant="primary" pendingLabel="Verifying…" className="h-9 w-full">
-        {mode === "enroll" ? "Turn on two-step verification" : "Verify"}
+      <SubmitButton variant="primary" pendingLabel={t("mfa.verifying")} className="h-9 w-full">
+        {mode === "enroll" ? t("mfa.enrollSubmit") : t("mfa.verifySubmit")}
       </SubmitButton>
     </form>
   );

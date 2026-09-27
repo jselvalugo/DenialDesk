@@ -8,18 +8,15 @@ import { Panel } from "@/components/ui/Panel";
 import { primaryLinkButtonClass } from "@/components/ui/linkButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { listPractices } from "@/domain/platform/practices";
+import { getFormat, getT } from "@/i18n/server";
 import { auditSystem } from "@/lib/audit";
 import { AgreementStatusBadge } from "./AgreementStatusBadge";
 import { SuspendToggle } from "./controls";
 
-export const metadata: Metadata = { title: "Platform console" };
-
-const dateFormat = new Intl.DateTimeFormat("en-US", {
-  month: "2-digit",
-  day: "2-digit",
-  year: "numeric",
-  timeZone: "America/New_York",
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const tShell = await getT("shell");
+  return { title: tShell("operator.console") };
+}
 
 export default async function OperatorPage() {
   const operator = await requireOperator();
@@ -30,6 +27,10 @@ export default async function OperatorPage() {
     metadata: { count: practices.length },
   });
 
+  const t = await getT("operator");
+  const tc = await getT("common");
+  const f = await getFormat();
+
   const customers = practices.filter((p) => p.kind === "customer");
   const active = customers.filter((p) => !p.suspendedAt);
   const withoutBaa = customers.filter((p) => p.baa !== "active" && p.baa !== "expiring");
@@ -37,46 +38,46 @@ export default async function OperatorPage() {
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
       <PageHeader
-        title="Practices"
-        description="Every practice on this DenialDesk environment. Practice-level details only; patient data stays inside each practice."
+        title={t("list.title")}
+        description={t("list.description")}
         actions={
           <Link href="/operator/practices/new" className={primaryLinkButtonClass}>
-            New practice
+            {t("list.newPractice")}
           </Link>
         }
       />
 
-      <section aria-label="Platform totals" className="grid grid-cols-5 gap-4">
-        <StatTile label="Customer practices" value={customers.length} />
-        <StatTile label="Active" value={active.length} />
+      <section aria-label={t("list.totalsLabel")} className="grid grid-cols-5 gap-4">
+        <StatTile label={t("list.stat.customers")} value={f.number(customers.length)} />
+        <StatTile label={t("status.active")} value={f.number(active.length)} />
         <StatTile
-          label="Suspended"
-          value={customers.length - active.length}
+          label={t("status.suspended")}
+          value={f.number(customers.length - active.length)}
           emphasis={customers.length - active.length > 0 ? "warning" : undefined}
         />
         <StatTile
-          label="Without a current BAA"
-          value={withoutBaa.length}
+          label={t("list.stat.withoutBaa")}
+          value={f.number(withoutBaa.length)}
           emphasis={withoutBaa.length > 0 ? "warning" : undefined}
         />
         <StatTile
-          label="Open denials (all practices)"
-          value={practices.reduce((sum, p) => sum + p.openDenials, 0)}
+          label={t("list.stat.openDenials")}
+          value={f.number(practices.reduce((sum, p) => sum + p.openDenials, 0))}
         />
       </section>
 
-      <Panel title="All practices" flush>
-        <Table caption="All practices on this environment">
+      <Panel title={t("list.panelTitle")} flush>
+        <Table caption={t("list.tableCaption")}>
           <thead>
             <tr>
-              <Th>Practice</Th>
-              <Th>Type</Th>
-              <Th>Status</Th>
-              <Th>BAA</Th>
-              <Th numeric>Team</Th>
-              <Th numeric>Open denials</Th>
-              <Th>Created</Th>
-              <Th className="text-right">Actions</Th>
+              <Th>{tc("word.practice")}</Th>
+              <Th>{tc("word.type")}</Th>
+              <Th>{tc("word.status")}</Th>
+              <Th>{t("list.columns.baa")}</Th>
+              <Th numeric>{t("list.columns.team")}</Th>
+              <Th numeric>{t("list.columns.openDenials")}</Th>
+              <Th>{tc("word.created")}</Th>
+              <Th className="text-right">{tc("word.actions")}</Th>
             </tr>
           </thead>
           <tbody>
@@ -89,16 +90,16 @@ export default async function OperatorPage() {
                 </Td>
                 <Td>
                   <Badge tone={practice.kind === "demo" ? "info" : "neutral"} dot={false}>
-                    {practice.kind === "demo" ? "Demo" : "Customer"}
+                    {practice.kind === "demo" ? t("status.demo") : t("status.customer")}
                   </Badge>
                 </Td>
                 <Td>
                   {practice.suspendedAt ? (
                     <Badge tone={practice.kind === "demo" ? "neutral" : "danger"}>
-                      {practice.kind === "demo" ? "Archived" : "Suspended"}
+                      {practice.kind === "demo" ? t("status.archived") : t("status.suspended")}
                     </Badge>
                   ) : (
-                    <Badge tone="success">Active</Badge>
+                    <Badge tone="success">{t("status.active")}</Badge>
                   )}
                 </Td>
                 <Td>
@@ -108,9 +109,9 @@ export default async function OperatorPage() {
                     <span className="text-muted">—</span>
                   )}
                 </Td>
-                <Td numeric>{practice.teamSize}</Td>
-                <Td numeric>{practice.openDenials}</Td>
-                <Td className="tabular text-muted">{dateFormat.format(practice.createdAt)}</Td>
+                <Td numeric>{f.number(practice.teamSize)}</Td>
+                <Td numeric>{f.number(practice.openDenials)}</Td>
+                <Td className="tabular text-muted">{f.dateOf(practice.createdAt)}</Td>
                 <Td className="text-right">
                   {practice.kind === "customer" && (
                     <SuspendToggle

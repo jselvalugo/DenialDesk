@@ -7,18 +7,21 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { Panel } from "@/components/ui/Panel";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MAX_QUERY_LENGTH } from "@/domain/university/wiki/search";
+import { useT } from "@/i18n/client";
 import { searchWiki, type WikiSearchState } from "./actions";
 
 /** Wiki search: a POST server action, so what is typed never appears in the URL (CLAUDE.md #4). */
 export function WikiSearch() {
   const [state, action, pending] = useActionState<WikiSearchState, FormData>(searchWiki, {});
+  const t = useT("university");
+  const tc = useT("common");
   const results = state.results;
   return (
     <div className="flex flex-col gap-4">
       <form action={action} role="search" className="flex flex-wrap items-end gap-2">
         <div className="flex flex-col gap-1">
           <label htmlFor="wiki-q" className="text-label font-medium text-muted">
-            Search the wiki
+            {t("search.label")}
           </label>
           <input
             id="wiki-q"
@@ -26,31 +29,27 @@ export function WikiSearch() {
             type="search"
             maxLength={MAX_QUERY_LENGTH}
             autoComplete="off"
-            placeholder="Title, term, or code, e.g. prompt pay"
+            placeholder={t("search.placeholder")}
             className="h-8 w-80 max-w-full rounded-control border border-border-strong bg-surface px-2.5 text-body text-text placeholder:text-subtle focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus"
           />
         </div>
         <Button type="submit" disabled={pending} aria-disabled={pending}>
-          {pending ? "Searching…" : "Search"}
+          {pending ? t("search.searching") : tc("action.search")}
         </Button>
-        <p className="text-label text-subtle">Product terms only, never patient details.</p>
+        <p className="text-label text-subtle">{t("search.hint")}</p>
       </form>
       {state.error && <FormAlert message={state.error} />}
       {results && state.query && (
-        <section aria-label="Search results">
+        <section aria-label={t("search.resultsAria")}>
           <Panel flush>
             <p
               role="status"
               className="border-b border-border px-5 py-3 text-heading font-semibold text-primary"
             >
-              {results.length} {results.length === 1 ? "article matches" : "articles match"} &ldquo;
-              {state.query}&rdquo;
+              {t("search.resultCount", { count: results.length, query: state.query })}
             </p>
             {results.length === 0 ? (
-              <EmptyState
-                title="No article matches"
-                description="Try a shorter word or a code type such as CARC, or browse the categories below."
-              />
+              <EmptyState title={t("search.emptyTitle")} description={t("search.emptyDescription")} />
             ) : (
               <ul className="divide-y divide-border">
                 {results.map((article) => (

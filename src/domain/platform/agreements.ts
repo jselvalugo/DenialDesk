@@ -6,6 +6,7 @@ import type { OperatorContext } from "@/auth/operator";
 import { systemDb } from "@/db/client";
 import { tenantAgreements, tenants, type AgreementStatus as AgreementRecordStatus } from "@/db/schema";
 import { isUniqueViolation, sanitizeDatabaseError } from "@/db/errors";
+import type { MessageKey } from "@/i18n/messages/types";
 import { audit, auditSystem } from "@/lib/audit";
 import { PracticeError } from "./errors";
 
@@ -59,12 +60,14 @@ export function agreementStatus(agreements: readonly AgreementDates[], today: st
   return addCalendarDays(today, EXPIRING_SOON_DAYS) >= current.expiresOn ? "expiring" : "active";
 }
 
-export type FileCheck = { ok: true } | { ok: false; error: string };
+export type FileCheck =
+  { ok: true } | { ok: false; error: MessageKey<"operator">; params?: Record<string, string | number> };
 
 /**
  * A PDF by content (not just its name), non-empty, within the size cap, with a storable name. In
  * synthetic-only environments (ADR 0003) the name must carry the synthetic prefix and the operator
- * must attest that the file is synthetic.
+ * must attest that the file is synthetic. Errors are `operator` namespace message keys, translated
+ * by the caller (never English text: this module never imports `@/i18n/server`).
  */
 export function checkAgreementFile(file: {
   name: string;
@@ -73,26 +76,26 @@ export function checkAgreementFile(file: {
   syntheticOnly: boolean;
   attestedSynthetic: boolean;
 }): FileCheck {
-  if (file.size === 0) return { ok: false, error: "Choose the signed agreement as a PDF file." };
+  if (file.size === 0) return { ok: false, error: "errors.chooseFile" };
   if (file.size > MAX_AGREEMENT_BYTES) {
-    return { ok: false, error: "The file is larger than 5 MB. Export the signed PDF at a lower resolution." };
+    return { ok: false, error: "errors.fileTooLarge" };
   }
   if (file.name.length > MAX_FILENAME_LENGTH || /[\u0000-\u001f\u007f]/.test(file.name)) {
-    return { ok: false, error: "The file name is too long or contains unusual characters. Rename the file." };
+    return { ok: false, error: "errors.fileNameInvalid" };
   }
   const magic = Buffer.from(file.head.subarray(0, 5)).toString("latin1");
   if (magic !== "%PDF-" || !/\.pdf$/i.test(file.name)) {
-    return { ok: false, error: "The file isn't a PDF. Upload the signed agreement as a PDF." };
+    return { ok: false, error: "errors.fileNotPdf" };
   }
   if (file.syntheticOnly) {
     if (!file.name.toUpperCase().startsWith(SYNTHETIC_FILE_PREFIX)) {
       return {
         ok: false,
-        error: `This environment holds synthetic practices only. Name test files ${SYNTHETIC_FILE_PREFIX}… and never upload a real agreement here.`,
+        error: "errors.syntheticPrefixRequired",
+        params: { prefix: SYNTHETIC_FILE_PREFIX },
       };
     }
-    if (!file.attestedSynthetic)
-      return { ok: false, error: "Confirm that the file is a synthetic test document." };
+    if (!file.attestedSynthetic) return { ok: false, error: "errors.attestSyntheticRequired" };
   }
   return { ok: true };
 }
@@ -164,12 +167,12 @@ export async function recordAgreement(
     syntheticOnly: options.syntheticOnly,
     attestedSynthetic: input.attestedSynthetic,
   });
-  if (!check.ok) throw new PracticeError(check.error);
+  if (!check.ok) throw new PracticeError(check.error, check.params);
   const today = todayIn();
   if (input.expiresOn !== null && input.expiresOn < input.effectiveDate) {
-    throw new PracticeError("The expiration date can't be before the effective date.");
+    throw new PracticeError("errors.expiresBeforeEffective");
   }
-  if (input.signedOn > today) throw new PracticeError("The signed date can't be in the future.");
+  if (input.signedOn > today) throw new PracticeError("errors.signedInFuture");
 
   const agreementId = randomUUID();
   const sha256 = createHash("sha256").update(input.content).digest("hex");
@@ -179,7 +182,7 @@ export async function recordAgreement(
       .from(tenants)
       .where(and(eq(tenants.id, input.tenantId), eq(tenants.kind, "customer")))
       .limit(1);
-    if (!tenant) throw new PracticeError("That practice no longer exists or isn't a customer practice.");
+    if (!tenant) throw new PracticeError("errors.practiceNotFound");
 
     return await systemDb().transaction(async (tx) => {
       const activeFilter = and(
@@ -233,9 +236,7 @@ export async function recordAgreement(
   } catch (error) {
     // Two recordings racing for the same practice: the loser hits the one-active index.
     if (isUniqueViolation(error)) {
-      throw new PracticeError(
-        "Another agreement was just recorded for this practice. Reload the page to see it.",
-      );
+      throw new PracticeError("errors.agreementRace");
     }
     // Never rethrow raw: Drizzle's message would carry the query parameters (the PDF, signer names).
     throw sanitizeDatabaseError(error);
@@ -253,7 +254,7 @@ export async function voidAgreement(
 ): Promise<void> {
   const reason = input.reason.trim();
   if (reason.length < MIN_VOID_REASON_LENGTH) {
-    throw new PracticeError("Say why the agreement was recorded in error (at least a few words).");
+    throw new PracticeError("errors.voidReasonTooShort");
   }
   try {
     await systemDb().transaction(async (tx) => {
@@ -269,9 +270,7 @@ export async function voidAgreement(
         )
         .returning({ id: tenantAgreements.id });
       if (updated.length === 0) {
-        throw new PracticeError(
-          "That agreement isn't on file for this practice, or is already marked as recorded in error.",
-        );
+        throw new PracticeError("errors.agreementNotFound");
       }
       await audit(tx, {
         action: "operator.agreement_voided",

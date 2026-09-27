@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { en } from "@/i18n/messages/en";
+import { es } from "@/i18n/messages/es";
+import { createTranslator } from "@/i18n/translate";
 import {
   appealOutcomesSheets,
   claimsByStatusSheet,
@@ -8,6 +11,9 @@ import {
 } from "./report-sheets";
 import { isSuppressedCell } from "./suppression";
 import type { BucketGroup, CategoryGroup, OutcomeGroup, PayerGroup, StatusGroup } from "./calculations";
+
+const t = createTranslator(en.insight, "en");
+const tc = createTranslator(en.common, "en");
 
 /**
  * These tests exercise the actual sheet output (what both the on-screen table and the .xlsx
@@ -39,7 +45,7 @@ describe("denialsByPayerSheet — small-cell suppression (R-8.7)", () => {
         sensitive: true,
       },
     ];
-    const sheet = denialsByPayerSheet(groups);
+    const sheet = denialsByPayerSheet(groups, t, tc);
     expect(isSuppressedCell(sheet.rows[0]!.count)).toBe(true);
     expect(isSuppressedCell(sheet.rows[0]!.sumCents)).toBe(true);
     expect(isSuppressedCell(sheet.totals!.count)).toBe(true);
@@ -76,7 +82,7 @@ describe("denialsByPayerSheet — small-cell suppression (R-8.7)", () => {
         sensitive: false,
       },
     ];
-    const sheet = denialsByPayerSheet(groups);
+    const sheet = denialsByPayerSheet(groups, t, tc);
     const suppressedRows = sheet.rows.filter((r) => isSuppressedCell(r.count));
     expect(suppressedRows.length).toBeGreaterThan(0);
     // The totals row must be suppressed whenever any row is, so a reader can never compute
@@ -109,7 +115,7 @@ describe("denialsByPayerSheet — small-cell suppression (R-8.7)", () => {
         sensitive: false,
       },
     ];
-    const sheet = denialsByPayerSheet(groups);
+    const sheet = denialsByPayerSheet(groups, t, tc);
     expect(sheet.rows.every((r) => !isSuppressedCell(r.count))).toBe(true);
     expect(isSuppressedCell(sheet.totals!.count)).toBe(false);
     expect(sheet.totals!.count).toBe(3);
@@ -134,7 +140,7 @@ describe("denialsByCategorySheet — small-cell suppression applies across the w
         carcs: [{ carc: "27", count: 500, sumCents: 50_000, avgCents: 100, sensitive: false }],
       },
     ];
-    const sheet = denialsByCategorySheet(groups);
+    const sheet = denialsByCategorySheet(groups, t, tc);
     const codingRow = sheet.rows.find((r) => r.carc === "11")!;
     const eligRow = sheet.rows.find((r) => r.carc === "27")!;
     expect(isSuppressedCell(codingRow.count)).toBe(true);
@@ -154,7 +160,7 @@ describe("denialsByDeadlineBucketSheet — never picks a zero-count bucket as th
       { bucket: "31-plus", count: 40, sumCents: 4_000, sensitive: false },
       { bucket: "no_deadline", count: 0, sumCents: 0, sensitive: false },
     ];
-    const sheet = denialsByDeadlineBucketSheet(groups);
+    const sheet = denialsByDeadlineBucketSheet(groups, t, tc);
     const rowFor = (bucket: string) => sheet.rows.find((r) => r.bucket === bucket)!;
     expect(isSuppressedCell(rowFor("Past deadline").count)).toBe(false);
     expect(rowFor("Past deadline").count).toBe(0);
@@ -179,7 +185,7 @@ describe("denialsByDeadlineBucketSheet — never picks a zero-count bucket as th
       { bucket: "31-plus", count: 0, sumCents: 0, sensitive: false },
       { bucket: "no_deadline", count: 0, sumCents: 0, sensitive: false },
     ];
-    const sheet = denialsByDeadlineBucketSheet(groups);
+    const sheet = denialsByDeadlineBucketSheet(groups, t, tc);
     const suppressedCount = sheet.rows.filter((r) => isSuppressedCell(r.count)).length;
     expect(suppressedCount).toBe(1); // only the sensitive row — no zero-count row was chosen
     // The totals row still gets suppressed, closing the back-calculation path Total − zeros = it.
@@ -207,7 +213,7 @@ describe("claimsByStatusSheet — suppresses every numeric column and the totals
         sensitive: false,
       },
     ];
-    const sheet = claimsByStatusSheet(groups);
+    const sheet = claimsByStatusSheet(groups, t, tc);
     const deniedRow = sheet.rows.find((r) => r.status === "Denied")!;
     expect(isSuppressedCell(deniedRow.count)).toBe(true);
     expect(isSuppressedCell(deniedRow.billedCents)).toBe(true);
@@ -241,7 +247,7 @@ describe("appealOutcomesSheets — suppresses the outcome totals row too", () =>
         sensitive: false,
       },
     ];
-    const byPayerSheet = appealOutcomesSheets(byPayer, [])[0]!;
+    const byPayerSheet = appealOutcomesSheets(byPayer, [], t, tc)[0]!;
     const sensitiveRow = byPayerSheet.rows.find((r) => r.group === "Sensitive Payer")!;
     expect(isSuppressedCell(sensitiveRow.overturned)).toBe(true);
     expect(isSuppressedCell(sensitiveRow.upheld)).toBe(true);
@@ -265,7 +271,7 @@ describe("appealOutcomesSheets — suppresses the outcome totals row too", () =>
         sensitive: false,
       },
     ];
-    const byPayerSheet = appealOutcomesSheets(byPayer, [])[0]!;
+    const byPayerSheet = appealOutcomesSheets(byPayer, [], t, tc)[0]!;
     expect(isSuppressedCell(byPayerSheet.totals!.overturned)).toBe(false);
     expect(byPayerSheet.totals!.overturned).toBe(1);
   });
@@ -308,7 +314,7 @@ describe("appealOutcomesSheets — suppresses the outcome totals row too", () =>
         sensitive: false,
       },
     ];
-    const [byPayerSheet, byCategorySheet] = appealOutcomesSheets(byPayer, byCategory);
+    const [byPayerSheet, byCategorySheet] = appealOutcomesSheets(byPayer, byCategory, t, tc);
     // The by-payer sheet has a suppressed row, as before.
     expect(isSuppressedCell(byPayerSheet!.totals!.overturned)).toBe(true);
     // The by-category sheet has no suppressed row of its own, but its totals must be suppressed
@@ -318,5 +324,34 @@ describe("appealOutcomesSheets — suppresses the outcome totals row too", () =>
     expect(isSuppressedCell(byCategorySheet!.totals!.upheld)).toBe(true);
     expect(isSuppressedCell(byCategorySheet!.totals!.overturnRate)).toBe(true);
     expect(isSuppressedCell(byCategorySheet!.totals!.reversedCents)).toBe(true);
+  });
+});
+
+describe("sheets in another language", () => {
+  it("names the sheet and columns in Spanish and keeps suppression a typed marker", () => {
+    const tEs = createTranslator(es.insight, "es");
+    const tcEs = createTranslator(es.common, "es");
+    const groups: CategoryGroup[] = [
+      {
+        category: "coding",
+        count: 2,
+        sumCents: 200,
+        avgCents: 100,
+        carcs: [{ carc: "11", count: 2, sumCents: 200, avgCents: 100, sensitive: true }],
+      },
+      {
+        category: "eligibility",
+        count: 500,
+        sumCents: 50_000,
+        avgCents: 100,
+        carcs: [{ carc: "27", count: 500, sumCents: 50_000, avgCents: 100, sensitive: false }],
+      },
+    ];
+    const sheet = denialsByCategorySheet(groups, tEs, tcEs);
+    expect(sheet.name).toBe(es.insight["sheet.denialsByCategory"]);
+    expect(sheet.name.length).toBeLessThanOrEqual(31);
+    expect(sheet.columns.map((c) => c.header)).toContain(es.common["word.category"]);
+    expect(sheet.rows.find((r) => r.carc === "11")!.category).toBe(es.common["category.coding"]);
+    expect(isSuppressedCell(sheet.rows.find((r) => r.carc === "11")!.count)).toBe(true);
   });
 });

@@ -6,10 +6,14 @@ import type { Rule } from "@rules/types";
 import { Badge } from "@/components/ui/Badge";
 import { Code } from "@/components/ui/Code";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
-import { CARC, CATEGORY_LABELS } from "@/domain/carc";
-import { REGIME_LABELS } from "@/domain/denial-status";
+import { CARC, CATEGORY_LABEL_KEYS } from "@/domain/carc";
+import { regimeLabel } from "@/domain/denial-status";
 import { GROUP_CODES } from "@/domain/group-codes";
 import type { Block } from "@/domain/university/content";
+import type { Formatters } from "@/i18n/format";
+import type { Messages } from "@/i18n/messages/types";
+import { getFormat, getT } from "@/i18n/server";
+import type { Translator } from "@/i18n/translate";
 
 const plural = (value: number, one: string, many: string) => `${value} ${value === 1 ? one : many}`;
 
@@ -38,12 +42,27 @@ const ANCHOR_LABELS: Record<NonNullable<Rule["anchor"]>, string> = {
   prior_decision_receipt: "Receipt of the prior level's decision",
 };
 
-function regimeList(rule: Rule): string {
-  return rule.regimes.map((regime) => REGIME_LABELS[regime] ?? regime).join(", ");
+type CommonT = Translator<Messages["common"]>;
+type UniversityT = Translator<Messages["university"]>;
+
+function regimeList(rule: Rule, tc: CommonT): string {
+  return rule.regimes.map((regime) => regimeLabel(regime, tc)).join(", ");
 }
 
 /** A rule row: the catalog's own title, value, citation, and verification state, never retyped. */
-function RulesBlock({ block, today }: { block: Extract<Block, { kind: "rules" }>; today: string }) {
+function RulesBlock({
+  block,
+  today,
+  t,
+  tc,
+  f,
+}: {
+  block: Extract<Block, { kind: "rules" }>;
+  today: string;
+  t: UniversityT;
+  tc: CommonT;
+  f: Formatters;
+}) {
   const reference = new Set(block.referenceOnly ?? []);
   // A rule with no version in force today renders a row saying so, never a crashed page.
   const rules = block.ruleIds.map((id) => {
@@ -58,24 +77,24 @@ function RulesBlock({ block, today }: { block: Extract<Block, { kind: "rules" }>
       <Table caption={block.caption}>
         <thead>
           <tr>
-            <Th>Rule</Th>
-            <Th>Applies to</Th>
-            <Th>Counted from</Th>
-            <Th>Value</Th>
-            <Th>Source</Th>
-            <Th>Status</Th>
+            <Th>{t("lessonBody.rule")}</Th>
+            <Th>{t("lessonBody.appliesTo")}</Th>
+            <Th>{t("lessonBody.countedFrom")}</Th>
+            <Th>{t("lessonBody.value")}</Th>
+            <Th>{t("lessonBody.source")}</Th>
+            <Th>{tc("word.status")}</Th>
           </tr>
         </thead>
         <tbody>
           {rules.map((rule) =>
             typeof rule === "string" ? (
               <Tr key={rule}>
-                <Td colSpan={6}>No version of this rule is in force today.</Td>
+                <Td colSpan={6}>{t("lessonBody.noVersion")}</Td>
               </Tr>
             ) : (
               <Tr key={rule.id}>
                 <Td className="font-medium">{rule.title}</Td>
-                <Td>{regimeList(rule)}</Td>
+                <Td>{regimeList(rule, tc)}</Td>
                 <Td>{rule.anchor ? ANCHOR_LABELS[rule.anchor] : "—"}</Td>
                 <Td>
                   <span className="font-mono tabular-nums">{UNIT_LABELS[rule.unit](rule.value)}</span>
@@ -84,16 +103,16 @@ function RulesBlock({ block, today }: { block: Extract<Block, { kind: "rules" }>
                 <Td>
                   {reference.has(rule.id) && (
                     <Badge tone="neutral" dot={false}>
-                      Reference only
+                      {t("lessonBody.referenceOnly")}
                     </Badge>
                   )}{" "}
                   {!rule.verify && rule.confirmedBy ? (
                     <Badge tone="success" dot={false}>
-                      Confirmed by counsel {rule.confirmedBy.on}
+                      {t("lessonBody.confirmedByCounsel", { date: f.date(rule.confirmedBy.on) })}
                     </Badge>
                   ) : (
                     <Badge tone="warning" dot={false}>
-                      Pending counsel verification
+                      {t("lessonBody.pendingCounselVerification")}
                     </Badge>
                   )}
                 </Td>
@@ -106,15 +125,23 @@ function RulesBlock({ block, today }: { block: Extract<Block, { kind: "rules" }>
   );
 }
 
-function CarcsBlock({ block }: { block: Extract<Block, { kind: "carcs" }> }) {
+function CarcsBlock({
+  block,
+  t,
+  tc,
+}: {
+  block: Extract<Block, { kind: "carcs" }>;
+  t: UniversityT;
+  tc: CommonT;
+}) {
   return (
     <div className="overflow-hidden rounded-panel border border-border">
       <Table caption={block.caption}>
         <thead>
           <tr>
-            <Th>Code</Th>
-            <Th>Summary</Th>
-            <Th>DenialDesk category</Th>
+            <Th>{t("lessonBody.code")}</Th>
+            <Th>{t("lessonBody.summary")}</Th>
+            <Th>{t("lessonBody.category")}</Th>
           </tr>
         </thead>
         <tbody>
@@ -127,28 +154,36 @@ function CarcsBlock({ block }: { block: Extract<Block, { kind: "carcs" }> }) {
                   <Code>CARC {code}</Code>
                 </Td>
                 <Td>{entry.summary}</Td>
-                <Td>{CATEGORY_LABELS[entry.category]}</Td>
+                <Td>{tc(CATEGORY_LABEL_KEYS[entry.category])}</Td>
               </Tr>
             );
           })}
         </tbody>
       </Table>
       <p className="border-t border-border bg-surface-muted px-3 py-2 text-caption text-muted">
-        Summaries, not the official X12 wording; categories are DenialDesk&rsquo;s own classification.
+        {t("lessonBody.carcFootnote")}
       </p>
     </div>
   );
 }
 
-function GroupCodesBlock({ block }: { block: Extract<Block, { kind: "groupCodes" }> }) {
+function GroupCodesBlock({
+  block,
+  t,
+  tc,
+}: {
+  block: Extract<Block, { kind: "groupCodes" }>;
+  t: UniversityT;
+  tc: CommonT;
+}) {
   return (
     <div className="overflow-hidden rounded-panel border border-border">
       <Table caption={block.caption}>
         <thead>
           <tr>
-            <Th>Group code</Th>
-            <Th>Name</Th>
-            <Th>Summary</Th>
+            <Th>{t("lessonBody.groupCode")}</Th>
+            <Th>{tc("word.name")}</Th>
+            <Th>{t("lessonBody.summary")}</Th>
           </tr>
         </thead>
         <tbody>
@@ -168,7 +203,7 @@ function GroupCodesBlock({ block }: { block: Extract<Block, { kind: "groupCodes"
         </tbody>
       </Table>
       <p className="border-t border-border bg-surface-muted px-3 py-2 text-caption text-muted">
-        Summaries of the X12 835 group codes, not the official wording.
+        {t("lessonBody.groupCodeFootnote")}
       </p>
     </div>
   );
@@ -202,8 +237,11 @@ function TableBlock({ block }: { block: Extract<Block, { kind: "table" }> }) {
 }
 
 /** Renders lesson blocks (docs/specs/denialdesk-university.md). Server component: reads the rules catalog. */
-export function LessonBody({ blocks }: { blocks: Block[] }) {
+export async function LessonBody({ blocks }: { blocks: Block[] }) {
   const today = todayIn();
+  const t = await getT("university");
+  const tc = await getT("common");
+  const f = await getFormat();
   return (
     <div className="flex flex-col gap-5 text-body text-text">
       {blocks.map((block, index) => {
@@ -229,7 +267,9 @@ export function LessonBody({ blocks }: { blocks: Block[] }) {
                 aria-label={block.title}
                 className="max-w-[720px] rounded-panel border border-border bg-surface-muted px-4 py-3"
               >
-                <p className="text-label font-semibold tracking-wider text-muted uppercase">In DenialDesk</p>
+                <p className="text-label font-semibold tracking-wider text-muted uppercase">
+                  {t("lessonBody.inDenialDesk")}
+                </p>
                 <p className="mt-1 font-semibold text-text">{block.title}</p>
                 <p className="mt-1 text-muted">{block.text}</p>
                 {block.href && (
@@ -255,11 +295,11 @@ export function LessonBody({ blocks }: { blocks: Block[] }) {
               </p>
             );
           case "rules":
-            return <RulesBlock key={index} block={block} today={today} />;
+            return <RulesBlock key={index} block={block} today={today} t={t} tc={tc} f={f} />;
           case "carcs":
-            return <CarcsBlock key={index} block={block} />;
+            return <CarcsBlock key={index} block={block} t={t} tc={tc} />;
           case "groupCodes":
-            return <GroupCodesBlock key={index} block={block} />;
+            return <GroupCodesBlock key={index} block={block} t={t} tc={tc} />;
           case "table":
             return <TableBlock key={index} block={block} />;
         }

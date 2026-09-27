@@ -6,8 +6,14 @@ import { todayIn } from "@rules/calendar";
 import { canCorrectClaims } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
-import { correctionSchema, dollarsToCents, splitCodes } from "@/domain/claims/correction";
+import {
+  correctionIssueMessage,
+  correctionSchema,
+  dollarsToCents,
+  splitCodes,
+} from "@/domain/claims/correction";
 import { ClaimCorrectionError, correctClaim } from "@/domain/claims/versions";
+import { getT } from "@/i18n/server";
 
 export interface CorrectionState {
   error?: string;
@@ -40,16 +46,17 @@ function readForm(formData: FormData) {
 
 export async function submitCorrection(_: CorrectionState, formData: FormData): Promise<CorrectionState> {
   const auth = await requireAuth();
-  if (!canCorrectClaims(auth.role)) return { error: "Your role can view claims but not correct them." };
+  const t = await getT("claims");
+  if (!canCorrectClaims(auth.role)) return { error: t("action.error.forbiddenCorrect") };
   const ids = z
     .object({ claimId: z.uuid(), expectedVersion: z.coerce.number().int().min(1) })
     .safeParse({ claimId: formData.get("claimId"), expectedVersion: formData.get("expectedVersion") });
-  if (!ids.success) return { error: "Reload the page and try again." };
+  if (!ids.success) return { error: t("action.error.reload") };
   const parsed = correctionSchema.safeParse(readForm(formData));
   if (!parsed.success) {
     const issue = parsed.error.issues[0]!;
-    const line = issue.path[0] === "lines" ? `Line ${Number(issue.path[1]) + 1}: ` : "";
-    return { error: `${line}${issue.message}` };
+    const { message, line } = correctionIssueMessage(issue, t);
+    return { error: line !== undefined ? t("correction.error.line", { number: line, message }) : message };
   }
 
   try {
@@ -66,7 +73,7 @@ export async function submitCorrection(_: CorrectionState, formData: FormData): 
     revalidatePath(`/claims/${ids.data.claimId}`);
     return { savedVersion: result.version };
   } catch (error) {
-    if (error instanceof ClaimCorrectionError) return { error: error.message };
+    if (error instanceof ClaimCorrectionError) return { error: t(error.key, error.params) };
     throw error;
   }
 }

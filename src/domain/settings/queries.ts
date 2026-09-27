@@ -2,6 +2,9 @@ import { and, asc, count, eq, max, sql } from "drizzle-orm";
 import { customFields } from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
 import { audit } from "@/lib/audit";
+import { en } from "@/i18n/messages/en";
+import type { Messages } from "@/i18n/messages/types";
+import { createTranslator, type Translator } from "@/i18n/translate";
 import {
   MAX_FIELDS_PER_ENTITY,
   type CustomFieldChanges,
@@ -11,6 +14,10 @@ import {
 
 // Custom field definitions (docs/specs/settings-and-custom-fields.md). Every change is audited with
 // IDs and enum values only; labels are configuration, not PHI, but are still kept out of the log.
+
+type SettingsT = Translator<Messages["settings"]>;
+/** English translator used when a caller doesn't have the request's language (e.g. integration tests). */
+const englishSettingsT: SettingsT = createTranslator(en.settings, "en");
 
 export class CustomFieldError extends Error {
   constructor(
@@ -54,21 +61,24 @@ async function lockEntity(tx: TenantTx, actor: Actor, entity: CustomFieldEntity)
 }
 
 /** The limit counts active fields only: deactivating a field frees its slot. */
-async function assertRoomFor(tx: TenantTx, entity: CustomFieldEntity) {
+async function assertRoomFor(tx: TenantTx, entity: CustomFieldEntity, t: SettingsT = englishSettingsT) {
   const [{ active } = { active: 0 }] = await tx
     .select({ active: count() })
     .from(customFields)
     .where(and(eq(customFields.entity, entity), eq(customFields.active, true)));
   if (active >= MAX_FIELDS_PER_ENTITY) {
-    throw new CustomFieldError(
-      `This record type already has ${MAX_FIELDS_PER_ENTITY} active fields. Deactivate one you no longer use.`,
-    );
+    throw new CustomFieldError(t("error.tooManyFields", { max: MAX_FIELDS_PER_ENTITY }));
   }
 }
 
-export async function createCustomField(tx: TenantTx, actor: Actor, input: NewCustomField): Promise<string> {
+export async function createCustomField(
+  tx: TenantTx,
+  actor: Actor,
+  input: NewCustomField,
+  t: SettingsT = englishSettingsT,
+): Promise<string> {
   await lockEntity(tx, actor, input.entity);
-  await assertRoomFor(tx, input.entity);
+  await assertRoomFor(tx, input.entity, t);
   const [existing] = await tx
     .select({ last: max(customFields.position) })
     .from(customFields)
@@ -78,7 +88,7 @@ export async function createCustomField(tx: TenantTx, actor: Actor, input: NewCu
     .from(customFields)
     .where(and(eq(customFields.entity, input.entity), eq(customFields.key, input.key)))
     .limit(1);
-  if (taken) throw new CustomFieldError("Another field on these records already uses this key.", "key");
+  if (taken) throw new CustomFieldError(t("error.duplicateKey"), "key");
 
   const [row] = await tx
     .insert(customFields)
@@ -112,16 +122,21 @@ export async function createCustomField(tx: TenantTx, actor: Actor, input: NewCu
   return row!.id;
 }
 
-async function lockField(tx: TenantTx, fieldId: string, expectedUpdatedAt: string) {
+async function lockField(
+  tx: TenantTx,
+  fieldId: string,
+  expectedUpdatedAt: string,
+  t: SettingsT = englishSettingsT,
+) {
   const [current] = await tx
     .select()
     .from(customFields)
     .where(eq(customFields.id, fieldId))
     .for("update")
     .limit(1);
-  if (!current) throw new CustomFieldError("Field not found.");
+  if (!current) throw new CustomFieldError(t("error.fieldNotFound"));
   if (current.updatedAt.toISOString() !== expectedUpdatedAt) {
-    throw new CustomFieldError("This field changed since you opened it. Reload and try again.");
+    throw new CustomFieldError(t("error.staleField"));
   }
   return current;
 }
@@ -133,8 +148,9 @@ export async function updateCustomField(
   fieldId: string,
   expectedUpdatedAt: string,
   changes: CustomFieldChanges,
+  t: SettingsT = englishSettingsT,
 ): Promise<string[]> {
-  const current = await lockField(tx, fieldId, expectedUpdatedAt);
+  const current = await lockField(tx, fieldId, expectedUpdatedAt, t);
   const changed: string[] = [];
   if (current.label !== changes.label) changed.push("label");
   if ((current.helpText ?? null) !== changes.helpText) changed.push("helpText");
@@ -171,12 +187,13 @@ export async function setCustomFieldActive(
   fieldId: string,
   expectedUpdatedAt: string,
   active: boolean,
+  t: SettingsT = englishSettingsT,
 ): Promise<void> {
-  const current = await lockField(tx, fieldId, expectedUpdatedAt);
+  const current = await lockField(tx, fieldId, expectedUpdatedAt, t);
   if (current.active === active) return;
   if (active) {
     await lockEntity(tx, actor, current.entity);
-    await assertRoomFor(tx, current.entity);
+    await assertRoomFor(tx, current.entity, t);
   }
   await tx.update(customFields).set({ active, updatedAt: new Date() }).where(eq(customFields.id, fieldId));
   await audit(tx, {

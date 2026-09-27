@@ -1,5 +1,9 @@
 import type { Tone } from "@/components/ui/Badge";
 import type { appealDecisionOutcomeEnum, appealStatusEnum, appealSubmittedMethodEnum } from "@/db/schema";
+import type { MessageKey } from "@/i18n/messages/types";
+import type { AppealLevel } from "./types";
+
+type AppealKey = MessageKey<"appeals">;
 
 export type AppealStatus = (typeof appealStatusEnum.enumValues)[number];
 export type AppealSubmittedMethod = (typeof appealSubmittedMethodEnum.enumValues)[number];
@@ -7,16 +11,21 @@ export type AppealDecisionOutcome = (typeof appealDecisionOutcomeEnum.enumValues
 
 export const APPEAL_STATUSES: Record<
   AppealStatus,
-  { label: string; tone: Tone; open: boolean; awaitingAction: boolean }
+  { labelKey: AppealKey; tone: Tone; open: boolean; awaitingAction: boolean }
 > = {
-  draft: { label: "Draft", tone: "neutral", open: true, awaitingAction: true },
-  in_review: { label: "In review", tone: "info", open: true, awaitingAction: true },
-  ready: { label: "Ready", tone: "info", open: true, awaitingAction: true },
-  submitted: { label: "Submitted", tone: "info", open: true, awaitingAction: false },
-  awaiting_decision: { label: "Awaiting decision", tone: "info", open: true, awaitingAction: false },
-  decided: { label: "Decided", tone: "success", open: false, awaitingAction: false },
-  withdrawn: { label: "Withdrawn", tone: "neutral", open: false, awaitingAction: false },
-  dismissed: { label: "Dismissed", tone: "neutral", open: false, awaitingAction: false },
+  draft: { labelKey: "status.draft", tone: "neutral", open: true, awaitingAction: true },
+  in_review: { labelKey: "status.inReview", tone: "info", open: true, awaitingAction: true },
+  ready: { labelKey: "status.ready", tone: "info", open: true, awaitingAction: true },
+  submitted: { labelKey: "status.submitted", tone: "info", open: true, awaitingAction: false },
+  awaiting_decision: {
+    labelKey: "status.awaitingDecision",
+    tone: "info",
+    open: true,
+    awaitingAction: false,
+  },
+  decided: { labelKey: "status.decided", tone: "success", open: false, awaitingAction: false },
+  withdrawn: { labelKey: "status.withdrawn", tone: "neutral", open: false, awaitingAction: false },
+  dismissed: { labelKey: "status.dismissed", tone: "neutral", open: false, awaitingAction: false },
 };
 
 const statuses = Object.keys(APPEAL_STATUSES) as AppealStatus[];
@@ -24,30 +33,31 @@ export const APPEAL_OPEN_STATUSES = statuses.filter((s) => APPEAL_STATUSES[s].op
 /** Statuses where the deadline still matters: not yet submitted (spec: deadline counts exclude submitted appeals). */
 export const APPEAL_AWAITING_STATUSES = statuses.filter((s) => APPEAL_STATUSES[s].awaitingAction);
 
-export const APPEAL_LEVEL_LABELS: Record<string, string> = {
-  first_level: "First-level appeal",
-  second_level: "Second-level appeal",
-  external_review: "External review",
-  medicare_redetermination: "Medicare redetermination",
-  medicare_qic: "Medicare reconsideration (QIC)",
-  medicare_alj: "Medicare ALJ hearing",
-  medicare_council: "Medicare Appeals Council",
-  medicare_federal_court: "Federal district court",
+/** Message key (appeals namespace) for each appeal level's name; show it with `t(APPEAL_LEVEL_LABEL_KEYS[l])`. */
+export const APPEAL_LEVEL_LABEL_KEYS: Record<AppealLevel, AppealKey> = {
+  first_level: "level.firstLevel",
+  second_level: "level.secondLevel",
+  external_review: "level.externalReview",
+  medicare_redetermination: "level.medicareRedetermination",
+  medicare_qic: "level.medicareQic",
+  medicare_alj: "level.medicareAlj",
+  medicare_council: "level.medicareCouncil",
+  medicare_federal_court: "level.medicareFederalCourt",
 };
 
-export const APPEAL_SUBMITTED_METHOD_LABELS: Record<AppealSubmittedMethod, string> = {
-  portal: "Payer portal",
-  fax: "Fax",
-  mail: "Mail",
-  electronic: "Electronic (clearinghouse)",
+export const APPEAL_SUBMITTED_METHOD_LABEL_KEYS: Record<AppealSubmittedMethod, AppealKey> = {
+  portal: "method.portal",
+  fax: "method.fax",
+  mail: "method.mail",
+  electronic: "method.electronic",
 };
 
-export const APPEAL_DECISION_OUTCOME_LABELS: Record<AppealDecisionOutcome, string> = {
-  overturned_full: "Overturned in full",
-  overturned_partial: "Partially overturned",
-  upheld: "Upheld",
-  withdrawn: "Withdrawn",
-  dismissed: "Dismissed",
+export const APPEAL_DECISION_OUTCOME_LABEL_KEYS: Record<AppealDecisionOutcome, AppealKey> = {
+  overturned_full: "outcome.overturnedFull",
+  overturned_partial: "outcome.overturnedPartial",
+  upheld: "outcome.upheld",
+  withdrawn: "outcome.withdrawn",
+  dismissed: "outcome.dismissed",
 };
 
 /**

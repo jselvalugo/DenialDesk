@@ -11,13 +11,17 @@ import { claims, denials, payers } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { firstLevelDeadline } from "@/domain/appeals/deadline";
 import { openAppealsForDenial } from "@/domain/appeals/queries";
-import { CATEGORY_LABELS } from "@/domain/carc";
+import { CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { ACTION_STATUSES } from "@/domain/denial-status";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
-import { formatCents, formatDate } from "@/lib/format";
+import { formatCents } from "@/lib/format";
 import { NewAppealForm } from "./NewAppealForm";
 
-export const metadata: Metadata = { title: "New appeal" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("appeals");
+  return { title: t("new.title") };
+}
 
 export default async function NewAppealPage({
   searchParams,
@@ -28,6 +32,9 @@ export default async function NewAppealPage({
   const parsed = z.uuid().safeParse(denialId);
   if (!parsed.success) notFound();
   const auth = await requireAuth();
+  const t = await getT("appeals");
+  const tc = await getT("common");
+  const f = await getFormat();
 
   const data = await withTenant(auth, async (tx) => {
     const [row] = await tx
@@ -60,68 +67,61 @@ export default async function NewAppealPage({
 
   return (
     <div className="mx-auto flex max-w-[720px] flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href={`/denials/${denial.id}`} className="font-medium text-link hover:underline">
           {claim.claimNumber}
         </Link>{" "}
-        <span aria-hidden>/</span> New appeal
+        <span aria-hidden>/</span> {t("new.breadcrumb")}
       </nav>
-      <PageHeader
-        title="Start an appeal"
-        description="First-level appeal, linked to this denial and claim."
-      />
+      <PageHeader title={t("new.pageTitle")} description={t("new.description")} />
 
       {!canStart ? (
         <Panel>
-          <p className="text-body text-muted">Your role can view appeals but not start one.</p>
+          <p className="text-body text-muted">{t("error.notAllowedStart")}</p>
         </Panel>
       ) : !eligible ? (
         <Panel>
           <p className="text-body text-muted">
-            {openAppeals.length > 0
-              ? "This denial already has an open appeal."
-              : "This denial isn't awaiting action, so no new appeal can be started from it."}
+            {openAppeals.length > 0 ? t("error.alreadyOpen") : t("error.notEligible")}
           </p>
           <Link
             href={`/denials/${denial.id}`}
             className="mt-3 inline-block font-medium text-link hover:underline"
           >
-            Back to the denial
+            {t("new.backToDenial")}
           </Link>
         </Panel>
       ) : (
-        <Panel title="First-level appeal">
+        <Panel title={t("new.panelTitle")}>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-4 pb-4">
             <div>
-              <dt className="text-label font-medium text-muted">Claim</dt>
+              <dt className="text-label font-medium text-muted">{tc("word.claim")}</dt>
               <dd className="font-mono text-body text-text">{claim.claimNumber}</dd>
             </div>
             <div>
-              <dt className="text-label font-medium text-muted">Payer</dt>
+              <dt className="text-label font-medium text-muted">{tc("word.payer")}</dt>
               <dd className="text-body text-text">{payer.name}</dd>
             </div>
             <div>
-              <dt className="text-label font-medium text-muted">Denial category</dt>
-              <dd className="text-body text-text">{CATEGORY_LABELS[denial.category]}</dd>
+              <dt className="text-label font-medium text-muted">{t("new.denialCategory")}</dt>
+              <dd className="text-body text-text">{tc(CATEGORY_LABEL_KEYS[denial.category])}</dd>
             </div>
             <div>
-              <dt className="text-label font-medium text-muted">Denied amount</dt>
+              <dt className="text-label font-medium text-muted">{t("field.deniedAmount")}</dt>
               <dd className="text-body text-text">{formatCents(denial.deniedCents)}</dd>
             </div>
             <div className="col-span-2">
-              <dt className="text-label font-medium text-muted">Deadline</dt>
+              <dt className="text-label font-medium text-muted">{tc("word.deadline")}</dt>
               <dd className="text-body text-text">
                 {deadline ? (
                   <>
-                    {formatDate(deadline.date)} — {deadline.citation}
+                    {t("new.deadlineLine", { date: f.date(deadline.date), citation: deadline.citation })}
                     {deadline.verify && (
-                      <span className="ml-1 text-warning-fg">(pending counsel verification)</span>
+                      <span className="ml-1 text-warning-fg">{t("new.pendingVerification")}</span>
                     )}
                   </>
                 ) : (
-                  <span className="text-warning-fg">
-                    Not configured — no appeal window on file for {payer.name}.
-                  </span>
+                  <span className="text-warning-fg">{t("new.notConfigured", { payer: payer.name })}</span>
                 )}
               </dd>
             </div>

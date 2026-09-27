@@ -21,13 +21,16 @@ import {
 } from "@/domain/settings/queries";
 import { customFields } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { getT } from "@/i18n/server";
+import type { Messages } from "@/i18n/messages/types";
+import type { Translator } from "@/i18n/translate";
 
 export interface CustomFieldFormState {
   error?: string;
   field?: string;
 }
 
-const NOT_ALLOWED = "Only administrators can change custom fields.";
+type SettingsT = Translator<Messages["settings"]>;
 const uuid = z.uuid();
 
 function text(formData: FormData, name: string, max = 200) {
@@ -44,10 +47,9 @@ function common(formData: FormData) {
   };
 }
 
-function failure(error: unknown): CustomFieldFormState {
+function failure(error: unknown, t: SettingsT): CustomFieldFormState {
   if (error instanceof CustomFieldError) return { error: error.message, field: error.field };
-  if (isUniqueViolation(error))
-    return { error: "Another field on these records already uses this key.", field: "key" };
+  if (isUniqueViolation(error)) return { error: t("error.duplicateKey"), field: "key" };
   throw error;
 }
 
@@ -61,9 +63,10 @@ export async function addCustomField(
   formData: FormData,
 ): Promise<CustomFieldFormState> {
   const auth = await requireAuth();
-  if (!canConfigureSettings(auth.role)) return { error: NOT_ALLOWED };
+  const t = await getT("settings");
+  if (!canConfigureSettings(auth.role)) return { error: t("error.notAdmin") };
   const label = text(formData, "label");
-  const parsed = newCustomFieldSchema.safeParse({
+  const parsed = newCustomFieldSchema(t).safeParse({
     ...common(formData),
     entity: text(formData, "entity"),
     key: text(formData, "key", 60).trim() || keyFromLabel(label),
@@ -71,9 +74,9 @@ export async function addCustomField(
   });
   if (!parsed.success) return issue(parsed.error);
   try {
-    await withTenant(auth, (tx) => createCustomField(tx, auth, parsed.data));
+    await withTenant(auth, (tx) => createCustomField(tx, auth, parsed.data, t));
   } catch (error) {
-    return failure(error);
+    return failure(error, t);
   }
   revalidatePath("/settings/fields");
   redirect(`/settings/fields?records=${parsed.data.entity}`);
@@ -84,9 +87,10 @@ export async function saveCustomField(
   formData: FormData,
 ): Promise<CustomFieldFormState> {
   const auth = await requireAuth();
-  if (!canConfigureSettings(auth.role)) return { error: NOT_ALLOWED };
+  const t = await getT("settings");
+  if (!canConfigureSettings(auth.role)) return { error: t("error.notAdmin") };
   const id = uuid.safeParse(text(formData, "id"));
-  if (!id.success) return { error: "Field not found." };
+  if (!id.success) return { error: t("error.fieldNotFound") };
   const expected = text(formData, "updatedAt", 40);
   let entity: string;
   try {
@@ -96,17 +100,20 @@ export async function saveCustomField(
         .from(customFields)
         .where(eq(customFields.id, id.data))
         .limit(1);
-      if (!stored) throw new CustomFieldError("Field not found.");
-      const parsed = customFieldChangesSchema.safeParse({ ...common(formData), fieldType: stored.fieldType });
+      if (!stored) throw new CustomFieldError(t("error.fieldNotFound"));
+      const parsed = customFieldChangesSchema(t).safeParse({
+        ...common(formData),
+        fieldType: stored.fieldType,
+      });
       if (!parsed.success) {
         const state = issue(parsed.error);
         throw new CustomFieldError(state.error!, state.field);
       }
-      await updateCustomField(tx, auth, id.data, expected, parsed.data);
+      await updateCustomField(tx, auth, id.data, expected, parsed.data, t);
       return stored.entity;
     });
   } catch (error) {
-    return failure(error);
+    return failure(error, t);
   }
   revalidatePath("/settings/fields");
   redirect(`/settings/fields?records=${entity}`);
@@ -118,9 +125,10 @@ export async function toggleCustomField(
   formData: FormData,
 ): Promise<CustomFieldFormState> {
   const auth = await requireAuth();
-  if (!canConfigureSettings(auth.role)) return { error: NOT_ALLOWED };
+  const t = await getT("settings");
+  if (!canConfigureSettings(auth.role)) return { error: t("error.notAdmin") };
   const id = uuid.safeParse(text(formData, "id"));
-  if (!id.success) return { error: "Field not found." };
+  if (!id.success) return { error: t("error.fieldNotFound") };
   try {
     await withTenant(auth, (tx) =>
       setCustomFieldActive(
@@ -129,10 +137,11 @@ export async function toggleCustomField(
         id.data,
         text(formData, "updatedAt", 40),
         formData.get("active") === "true",
+        t,
       ),
     );
   } catch (error) {
-    return failure(error);
+    return failure(error, t);
   }
   revalidatePath("/settings/fields");
   return {};

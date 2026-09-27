@@ -8,6 +8,7 @@ import { DEPOSIT_MAX_BYTES, parseDepositFile } from "@/domain/revenue-cycle/agin
 import { decodeUpload } from "@/domain/revenue-cycle/monthly-file";
 import { revalidatePath } from "next/cache";
 import { DepositError, importDeposits, reverseDepositsFor } from "@/domain/revenue-cycle/receivables";
+import { getT } from "@/i18n/server";
 import { auditSystem } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
 
@@ -23,6 +24,7 @@ export interface DepositUploadState {
  */
 export async function uploadDeposits(_: DepositUploadState, formData: FormData): Promise<DepositUploadState> {
   const auth = await requireAuth();
+  const t = await getT("revenue");
   const rejected = (reason: string, problems = 0) =>
     auditSystem({
       action: "rcm.deposits_rejected",
@@ -32,37 +34,37 @@ export async function uploadDeposits(_: DepositUploadState, formData: FormData):
     });
   if (!canRunRevenueCycle(auth.role)) {
     await rejected("forbidden");
-    return { error: "Only administrators and RCM managers can import deposits." };
+    return { error: t("deposits.error.onlyManagers") };
   }
   const syntheticOnly = syntheticDataOnly();
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0 || !/\.csv$/i.test(file.name)) {
     await rejected("upload_check");
-    return { error: "Choose the bank export as a CSV (.csv) file." };
+    return { error: t("deposits.error.chooseCsv") };
   }
   if (syntheticOnly && formData.get("syntheticAttestation") !== "on") {
     await rejected("upload_check");
-    return { error: "Confirm that the file contains synthetic data only." };
+    return { error: t("import.error.confirmSynthetic") };
   }
   if (file.size > DEPOSIT_MAX_BYTES) {
     await rejected("too_large");
-    return { error: "The file is larger than 1 MB. Split it by month." };
+    return { error: t("deposits.error.tooLarge") };
   }
   const text = decodeUpload(await file.arrayBuffer());
   if (text === null) {
     await rejected("encoding");
-    return { error: "The file isn't UTF-8 text. Export it from your bank as CSV." };
+    return { error: t("deposits.error.notUtf8") };
   }
-  const parsed = parseDepositFile(text, { syntheticOnly });
+  const parsed = parseDepositFile(text, { syntheticOnly }, t);
   if (!parsed.ok) {
     await rejected("validation", parsed.problems.length);
     return {
-      error: "The file wasn't imported. Fix these rows and upload it again.",
+      error: t("import.error.notImported"),
       problems: parsed.problems,
     };
   }
   try {
-    await withTenant(auth, (tx) => importDeposits(tx, auth, parsed.deposits));
+    await withTenant(auth, (tx) => importDeposits(tx, auth, parsed.deposits, t));
   } catch (error) {
     if (!(error instanceof DepositError)) throw error;
     await rejected("refused");
@@ -77,7 +79,13 @@ export async function reverseDeposits(
   formData: FormData,
 ): Promise<DepositUploadState> {
   const auth = await requireAuth();
-  const result = await reverseDepositsFor(auth, formData.get("fileId"), String(formData.get("reason") ?? ""));
+  const t = await getT("revenue");
+  const result = await reverseDepositsFor(
+    auth,
+    formData.get("fileId"),
+    String(formData.get("reason") ?? ""),
+    t,
+  );
   if (!result.ok) return { error: result.error };
   revalidatePath("/revenue-cycle/deposits");
   return {};

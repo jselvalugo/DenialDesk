@@ -5,10 +5,13 @@ import { CARC } from "@/domain/carc";
 import { DUE_SOON_DAYS, PAGE_SIZE } from "@/domain/denials/queries";
 import { GROUP_CODES } from "@/domain/group-codes";
 import { navApps } from "@/components/shell/navigation";
+import { en } from "@/i18n/messages/en";
+import { createTranslator } from "@/i18n/translate";
 import { COURSES, findCourse, findLesson } from "./catalog";
 import { courseProgress, isSlug, lessonKey, progressLabel, readingMinutes } from "./content";
 
 const today = todayIn();
+const t = createTranslator(en.university, "en");
 const shippedPages = new Set(
   navApps({ showRevenueCycle: true, showSettings: true })
     .flatMap((app) => app.items)
@@ -130,12 +133,12 @@ describe("progress", () => {
   const course = findCourse("reading-a-denial")!;
 
   it("counts completed lessons by key and labels the state", () => {
-    expect(progressLabel(courseProgress(course, new Set()))).toBe("Not started");
+    expect(progressLabel(courseProgress(course, new Set()), t)).toBe("Not started");
     const one = new Set([lessonKey(course.id, course.lessons[0]!.id)]);
     expect(courseProgress(course, one)).toEqual({ completed: 1, total: 3, done: false });
-    expect(progressLabel(courseProgress(course, one))).toBe("1 of 3 lessons");
+    expect(progressLabel(courseProgress(course, one), t)).toBe("1 of 3 lessons");
     const all = new Set(course.lessons.map((lesson) => lessonKey(course.id, lesson.id)));
-    expect(progressLabel(courseProgress(course, all))).toBe("Complete");
+    expect(progressLabel(courseProgress(course, all), t)).toBe("Complete");
   });
 
   it("ignores completions from another course with the same lesson slug", () => {

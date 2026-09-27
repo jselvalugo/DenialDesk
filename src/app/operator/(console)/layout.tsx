@@ -4,10 +4,14 @@ import { keepOperatorSessionAlive, signOutOperator } from "@/auth/operator-actio
 import { SessionTimeout } from "@/components/shell/SessionTimeout";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { OperatorLanguageMenu } from "@/components/shell/OperatorLanguageMenu";
+import { getT } from "@/i18n/server";
 
 /** Platform operator console: separate chrome so it's never confused with a practice's workspace. */
 export default async function OperatorLayout({ children }: { children: React.ReactNode }) {
   const operator = await requireOperator();
+  const t = await getT("shell");
+  const tc = await getT("common");
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header
@@ -18,14 +22,15 @@ export default async function OperatorLayout({ children }: { children: React.Rea
           <span className="rounded-control bg-white px-2 py-1">
             <Image src="/brand/denialdesk-logo.png" alt="DenialDesk" width={110} height={26} />
           </span>
-          <span className="text-body font-semibold">Platform console</span>
-          <Badge tone="warning">Operator</Badge>
+          <span className="text-body font-semibold">{t("operator.console")}</span>
+          <Badge tone="warning">{t("operator.badge")}</Badge>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-body text-white/85">{operator.displayName}</span>
+          <OperatorLanguageMenu />
           <form action={signOutOperator}>
             <Button type="submit" size="sm" variant="secondary">
-              Sign out
+              {tc("action.signOut")}
             </Button>
           </form>
         </div>

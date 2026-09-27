@@ -13,67 +13,76 @@ import { Panel } from "@/components/ui/Panel";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
 import { periodLabel } from "@/domain/revenue-cycle/imports";
-import { allPassed } from "@/domain/revenue-cycle/journal";
+import { allPassed, VOUCHER_CHECK_LABEL_KEYS } from "@/domain/revenue-cycle/journal";
 import { getVoucher } from "@/domain/revenue-cycle/vouchers";
+import { getFormat, getT } from "@/i18n/server";
 import { formatCents } from "@/lib/format";
 import { VoucherStatusBadge } from "../VoucherStatusBadge";
 import { ApproveVoucherForm, ExportVoucherButton, VoidVoucherForm } from "../VoucherForms";
 
-export const metadata: Metadata = { title: "Journal voucher" };
-
-const when = (date: Date | null) =>
-  date?.toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" });
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("revenue");
+  return { title: t("voucher.title") };
+}
 
 export default async function VoucherPage({ params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
+  const t = await getT("revenue");
+  const f = await getFormat();
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
-  const detail = await withTenant(auth, (tx) => getVoucher(tx, id));
+  const detail = await withTenant(auth, (tx) => getVoucher(tx, id, {}, t));
   if (!detail) notFound();
   const { voucher, lines, checks } = detail;
   const passed = allPassed(checks);
   const canRun = canRunRevenueCycle(auth.role);
   const isPreparer = voucher.preparedBy === auth.userId;
-  const period = periodLabel(voucher.periodYear, voucher.periodMonth);
+  const period = periodLabel(voucher.periodYear, voucher.periodMonth, t.locale);
+  const when = (date: Date | null) => (date ? f.dateTime(date) : undefined);
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <p className="text-label text-muted">
         <Link href="/revenue-cycle/journal" className="text-link hover:underline">
-          Journal vouchers
+          {t("journal.title")}
         </Link>{" "}
         / {voucher.number}
       </p>
       <PageHeader
-        title={`${period} voucher`}
-        description={`${voucher.number} · prepared by ${detail.preparedByName ?? "unknown"} on ${when(voucher.createdAt)}`}
+        title={t("voucher.pageTitle", { period })}
+        description={t("voucher.pageDescription", {
+          number: voucher.number,
+          name: detail.preparedByName ?? t("voucher.unknownPerson"),
+          date: when(voucher.createdAt) ?? "",
+        })}
       />
 
-      <section aria-label="Voucher summary" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile label="Status" value={<VoucherStatusBadge status={voucher.status} />} />
-        <StatTile label="Total debits" value={formatCents(voucher.debitCents)} />
-        <StatTile label="Total credits" value={formatCents(voucher.creditCents)} />
+      <section aria-label={t("voucher.summary")} className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile label={t("voucher.col.status")} value={<VoucherStatusBadge status={voucher.status} />} />
+        <StatTile label={t("voucher.totalDebits")} value={formatCents(voucher.debitCents)} />
+        <StatTile label={t("voucher.totalCredits")} value={formatCents(voucher.creditCents)} />
         <StatTile
-          label="Checks passed"
-          value={`${checks.filter((c) => c.passed).length} of ${checks.length}`}
-          detail={passed ? "Ready for approval" : "Fix the failing checks before approval"}
+          label={t("voucher.checksPassed")}
+          value={t("voucher.checksPassedValue", {
+            passed: checks.filter((c) => c.passed).length,
+            total: checks.length,
+          })}
+          detail={passed ? t("voucher.readyForApproval") : t("voucher.fixFailingChecks")}
           emphasis={passed ? undefined : "danger"}
         />
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <Panel
-          title="Checks"
-          description="Recomputed from the source file and chart of accounts every time"
-          flush
-        >
-          <ul className="divide-y divide-border" aria-label="Voucher checks">
+        <Panel title={t("voucher.checksTitle")} description={t("voucher.checksDescription")} flush>
+          <ul className="divide-y divide-border" aria-label={t("voucher.checksAria")}>
             {checks.map((c) => (
               <li key={c.id} className="flex items-start gap-3 px-4 py-3">
-                <Badge tone={c.passed ? "success" : "danger"}>{c.passed ? "Pass" : "Fail"}</Badge>
+                <Badge tone={c.passed ? "success" : "danger"}>
+                  {c.passed ? t("voucher.pass") : t("voucher.fail")}
+                </Badge>
                 <div>
-                  <p className="font-medium text-text">{c.label}</p>
+                  <p className="font-medium text-text">{t(VOUCHER_CHECK_LABEL_KEYS[c.id])}</p>
                   <p className="text-label text-muted">{c.detail}</p>
                 </div>
               </li>
@@ -81,35 +90,35 @@ export default async function VoucherPage({ params }: { params: Promise<{ id: st
           </ul>
         </Panel>
 
-        <Panel title="Workflow">
+        <Panel title={t("voucher.workflow")}>
           <dl className="mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-body">
-            <dt className="text-muted">Source file</dt>
+            <dt className="text-muted">{t("voucher.sourceFile")}</dt>
             <dd>
               <Link href={`/revenue-cycle/files/${voucher.fileId}`} className="text-link hover:underline">
-                {period} activity file
+                {t("voucher.activityFile", { period })}
               </Link>
             </dd>
             {voucher.approvedAt && (
               <>
-                <dt className="text-muted">Approved</dt>
+                <dt className="text-muted">{t("voucher.approved")}</dt>
                 <dd>
-                  {detail.approvedByName ?? "unknown"} · {when(voucher.approvedAt)}
+                  {detail.approvedByName ?? t("voucher.unknownPerson")} · {when(voucher.approvedAt)}
                 </dd>
               </>
             )}
             {voucher.exportedAt && (
               <>
-                <dt className="text-muted">First exported</dt>
+                <dt className="text-muted">{t("voucher.firstExported")}</dt>
                 <dd>
-                  {detail.exportedByName ?? "unknown"} · {when(voucher.exportedAt)}
+                  {detail.exportedByName ?? t("voucher.unknownPerson")} · {when(voucher.exportedAt)}
                 </dd>
               </>
             )}
             {voucher.voidedAt && (
               <>
-                <dt className="text-muted">Voided</dt>
+                <dt className="text-muted">{t("voucher.voided")}</dt>
                 <dd>
-                  {detail.voidedByName ?? "unknown"} · {when(voucher.voidedAt)}
+                  {detail.voidedByName ?? t("voucher.unknownPerson")} · {when(voucher.voidedAt)}
                   <p className="text-label text-muted">{voucher.voidReason}</p>
                 </dd>
               </>
@@ -119,18 +128,16 @@ export default async function VoucherPage({ params }: { params: Promise<{ id: st
             {voucher.status === "draft" &&
               canRun &&
               (isPreparer ? (
-                <p className="text-body text-muted">
-                  You prepared this voucher, so another administrator or RCM manager must approve it.
-                </p>
+                <p className="text-body text-muted">{t("voucher.preparerMustNotApprove")}</p>
               ) : passed ? (
                 <ApproveVoucherForm voucherId={voucher.id} />
               ) : (
-                <p className="text-body text-muted">Approval is available once every check passes.</p>
+                <p className="text-body text-muted">{t("voucher.approvalAvailableOncePassing")}</p>
               ))}
             {(voucher.status === "approved" || voucher.status === "exported") && canRun && (
               <ExportVoucherButton
                 voucherId={voucher.id}
-                label={voucher.status === "approved" ? "Export GL file" : "Download GL file again"}
+                label={voucher.status === "approved" ? t("voucher.exportGlFile") : t("voucher.downloadAgain")}
               />
             )}
             {(voucher.status === "approved" || voucher.status === "exported") &&
@@ -138,22 +145,26 @@ export default async function VoucherPage({ params }: { params: Promise<{ id: st
                 <VoidVoucherForm voucherId={voucher.id} exported={voucher.status === "exported"} />
               )}
             {voucher.status === "superseded" && (
-              <p className="text-body text-muted">A newer draft for {period} replaced this voucher.</p>
+              <p className="text-body text-muted">{t("voucher.replacedBy", { period })}</p>
             )}
           </div>
         </Panel>
       </div>
 
-      <Panel title="Lines" description={`${lines.length} lines`} flush>
-        <Table caption="Voucher lines">
+      <Panel
+        title={t("voucher.linesTitle")}
+        description={t("voucher.linesDescription", { count: lines.length })}
+        flush
+      >
+        <Table caption={t("voucher.tableCaption")}>
           <thead>
             <tr>
               <Th numeric>#</Th>
-              <Th>Account</Th>
-              <Th>Site</Th>
-              <Th>Memo</Th>
-              <Th numeric>Debit</Th>
-              <Th numeric>Credit</Th>
+              <Th>{t("voucher.col.account")}</Th>
+              <Th>{t("file.col.site")}</Th>
+              <Th>{t("voucher.col.memo")}</Th>
+              <Th numeric>{t("voucher.col.debit")}</Th>
+              <Th numeric>{t("voucher.col.credit")}</Th>
             </tr>
           </thead>
           <tbody>

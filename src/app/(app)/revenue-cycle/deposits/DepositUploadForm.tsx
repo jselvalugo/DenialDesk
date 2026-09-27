@@ -4,25 +4,27 @@ import { useActionState } from "react";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
+import { useT } from "@/i18n/client";
 import { reverseDeposits, uploadDeposits, type DepositUploadState } from "./actions";
 
 export function DepositUploadForm({ syntheticOnly }: { syntheticOnly: boolean }) {
+  const t = useT("revenue");
   const [state, action] = useActionState<DepositUploadState, FormData>(uploadDeposits, {});
   return (
     <form action={action} className="flex flex-col items-start gap-3">
       <FormAlert message={state.error} />
       {state.problems && state.problems.length > 0 && (
-        <ul aria-label="Problems in the file" className="list-disc pl-5 text-body text-danger-fg">
+        <ul aria-label={t("deposits.problemsAria")} className="list-disc pl-5 text-body text-danger-fg">
           {state.problems.map((p) => (
             <li key={`${p.row}-${p.message}`}>
-              Row {p.row}: {p.message}
+              {t("deposits.rowProblem", { row: p.row, message: p.message })}
             </li>
           ))}
         </ul>
       )}
       <div className="flex flex-col gap-1.5">
         <label htmlFor="deposit-file" className="text-label font-medium text-text">
-          Bank deposits (CSV, up to 1 MB)
+          {t("deposits.fileLabel")}
         </label>
         <input
           id="deposit-file"
@@ -36,37 +38,36 @@ export function DepositUploadForm({ syntheticOnly }: { syntheticOnly: boolean })
       {syntheticOnly && (
         <label className="flex items-start gap-2 text-body text-text">
           <input type="checkbox" name="syntheticAttestation" required className="mt-1" />
-          <span>
-            This file contains synthetic data only (this environment doesn&apos;t accept real bank data).
-          </span>
+          <span>{t("deposits.syntheticAttestation")}</span>
         </label>
       )}
-      <SubmitButton variant="primary" pendingLabel="Importing…">
-        Import deposits
+      <SubmitButton variant="primary" pendingLabel={t("deposits.importing")}>
+        {t("deposits.importAction")}
       </SubmitButton>
     </form>
   );
 }
 
 export function ReverseDepositsForm({ fileId }: { fileId: string }) {
+  const t = useT("revenue");
   const [state, action] = useActionState<DepositUploadState, FormData>(reverseDeposits, {});
   return (
     <details>
-      <summary className="cursor-pointer text-label font-medium text-link">Reverse</summary>
+      <summary className="cursor-pointer text-label font-medium text-link">{t("deposits.reverse")}</summary>
       <form action={action} className="mt-2 flex flex-col items-start gap-2">
         <FormAlert message={state.error} />
         <input type="hidden" name="fileId" value={fileId} />
         <TextField
-          label="Reason"
+          label={t("deposits.reasonLabel")}
           name="reason"
           required
           minLength={10}
           maxLength={500}
-          hint="Recorded in the audit trail. No patient information."
+          hint={t("hint.auditReason")}
           className="w-72 max-w-full"
         />
-        <SubmitButton variant="danger" size="sm" pendingLabel="Reversing…">
-          Reverse this file
+        <SubmitButton variant="danger" size="sm" pendingLabel={t("deposits.reversing")}>
+          {t("deposits.reverseThisFile")}
         </SubmitButton>
       </form>
     </details>

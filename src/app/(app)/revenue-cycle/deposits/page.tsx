@@ -10,15 +10,21 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { listDepositFiles, monthsWithoutDeposits } from "@/domain/revenue-cycle/receivables";
+import { rich } from "@/i18n/rich";
+import { getFormat, getT } from "@/i18n/server";
 import { syntheticDataOnly } from "@/lib/env";
-import { formatDate } from "@/lib/format";
 import { DepositUploadForm, ReverseDepositsForm } from "./DepositUploadForm";
 
-export const metadata: Metadata = { title: "Deposits" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("revenue");
+  return { title: t("deposits.title") };
+}
 
 export default async function DepositsPage() {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
+  const t = await getT("revenue");
+  const f = await getFormat();
   const { files, openMonths } = await withTenant(auth, async (tx) => ({
     files: await listDepositFiles(tx),
     openMonths: await monthsWithoutDeposits(tx),
@@ -28,50 +34,48 @@ export default async function DepositsPage() {
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="Deposits"
-        description="Bank deposits, reconciled month by month against the payments posted in the practice-management system."
-      />
+      <PageHeader title={t("deposits.title")} description={t("deposits.description")} />
 
-      <Panel title="Imported deposit files" description={`${files.length} files, newest first`} flush>
+      <Panel
+        title={t("deposits.importedTitle")}
+        description={t("deposits.importedDescription", { count: files.length })}
+        flush
+      >
         {files.length === 0 ? (
-          <EmptyState
-            title="No deposits imported yet"
-            description="Import the bank's deposit export to reconcile it with posted payments on the A/R aging page."
-          />
+          <EmptyState title={t("deposits.emptyTitle")} description={t("deposits.emptyDescription")} />
         ) : (
-          <Table caption="Imported deposit files">
+          <Table caption={t("deposits.tableCaption")}>
             <thead>
               <tr>
-                <Th>Imported</Th>
-                <Th>Deposit dates</Th>
-                <Th numeric>Deposits</Th>
-                <Th numeric>Total</Th>
-                <Th>By</Th>
-                <Th>Status</Th>
+                <Th>{t("deposits.col.imported")}</Th>
+                <Th>{t("deposits.col.depositDates")}</Th>
+                <Th numeric>{t("deposits.col.deposits")}</Th>
+                <Th numeric>{t("deposits.col.total")}</Th>
+                <Th>{t("deposits.col.by")}</Th>
+                <Th>{t("deposits.col.status")}</Th>
               </tr>
             </thead>
             <tbody>
-              {files.map((f) => (
-                <Tr key={f.id}>
-                  <Td>{f.createdAt.toLocaleDateString("en-US", { timeZone: "America/New_York" })}</Td>
+              {files.map((row) => (
+                <Tr key={row.id}>
+                  <Td>{f.dateOf(row.createdAt)}</Td>
                   <Td className="tabular">
-                    {f.dateFrom && f.dateTo ? `${formatDate(f.dateFrom)}–${formatDate(f.dateTo)}` : "—"}
+                    {row.dateFrom && row.dateTo ? `${f.date(row.dateFrom)}–${f.date(row.dateTo)}` : "—"}
                   </Td>
-                  <Td numeric>{f.rowCount.toLocaleString("en-US")}</Td>
+                  <Td numeric>{f.number(row.rowCount)}</Td>
                   <Td numeric>
-                    <Money cents={f.totalCents} />
+                    <Money cents={row.totalCents} />
                   </Td>
-                  <Td className="text-muted">{f.uploadedBy ?? "—"}</Td>
+                  <Td className="text-muted">{row.uploadedBy ?? "—"}</Td>
                   <Td>
-                    {f.reversesFileId ? (
-                      <Badge tone="neutral">Reversal</Badge>
-                    ) : f.reversedBy ? (
-                      <Badge tone="danger">Reversed</Badge>
+                    {row.reversesFileId ? (
+                      <Badge tone="neutral">{t("deposits.status.reversal")}</Badge>
+                    ) : row.reversedBy ? (
+                      <Badge tone="danger">{t("deposits.status.reversed")}</Badge>
                     ) : isAdmin ? (
-                      <ReverseDepositsForm fileId={f.id} />
+                      <ReverseDepositsForm fileId={row.id} />
                     ) : (
-                      <Badge tone="success">Active</Badge>
+                      <Badge tone="success">{t("deposits.status.active")}</Badge>
                     )}
                   </Td>
                 </Tr>
@@ -82,28 +86,23 @@ export default async function DepositsPage() {
       </Panel>
 
       {canRunRevenueCycle(auth.role) && (
-        <Panel
-          title="Import deposits"
-          description="CSV with a Date column and an Amount column (negative for returned items). Other columns, such as descriptions or account numbers, are ignored and never stored. A file may not overlap the dates of one already imported; reverse the earlier file first."
-        >
+        <Panel title={t("deposits.importTitle")} description={t("deposits.importDescription")}>
           <DepositUploadForm syntheticOnly={synthetic} />
           {synthetic && (
             <p className="mt-4 text-label text-muted">
-              {openMonths.length > 0 ? (
-                <>
-                  Need a file to try?{" "}
-                  <a
-                    href="/api/revenue-cycle/sample-deposits"
-                    download
-                    className="font-medium text-link hover:underline"
-                  >
-                    Download synthetic deposits
-                  </a>{" "}
-                  for the {openMonths.length} imported months without deposits.
-                </>
-              ) : (
-                "Every imported month already has deposits. Import a new month's activity file to try another deposit file."
-              )}
+              {openMonths.length > 0
+                ? rich(t("deposits.sampleFilePrompt", { count: openMonths.length }), {
+                    a: (chunks) => (
+                      <a
+                        href="/api/revenue-cycle/sample-deposits"
+                        download
+                        className="font-medium text-link hover:underline"
+                      >
+                        {chunks}
+                      </a>
+                    ),
+                  })
+                : t("deposits.everyMonthHasDeposits")}
             </p>
           )}
         </Panel>

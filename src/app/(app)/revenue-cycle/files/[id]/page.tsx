@@ -18,18 +18,26 @@ import {
   maskAccount,
   maskPatientName,
   periodLabel,
-  REVIEW_REASONS,
+  REVIEW_REASON_LABEL_KEYS,
   type ReviewReason,
 } from "@/domain/revenue-cycle/imports";
 import { EmptyState } from "@/components/ui/EmptyState";
+import type { Translator } from "@/i18n/translate";
+import type { Messages } from "@/i18n/messages/types";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
-import { formatCents, formatDate } from "@/lib/format";
+import { formatCents } from "@/lib/format";
 
 // Page title never includes PHI (DESIGN.md §12).
-const reasonText = (reasons: string[]) =>
-  reasons.map((r) => REVIEW_REASONS[r as ReviewReason] ?? r).join("; ");
+const reasonText = (reasons: string[], t: Translator<Messages["revenue"]>) =>
+  reasons
+    .map((r) => (r in REVIEW_REASON_LABEL_KEYS ? t(REVIEW_REASON_LABEL_KEYS[r as ReviewReason]) : r))
+    .join("; ");
 
-export const metadata: Metadata = { title: "Monthly file" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("revenue");
+  return { title: t("file.title") };
+}
 
 const params = z.object({
   rule: z
@@ -50,6 +58,9 @@ export default async function FilePage({
 }) {
   const auth = await requireAuth();
   if (!canViewRevenueCycle(auth.role)) notFound();
+  const t = await getT("revenue");
+  const tc = await getT("common");
+  const f = await getFormat();
   const { id } = await routeParams;
   if (!z.uuid().safeParse(id).success) notFound();
   const query = params.parse(await searchParams);
@@ -95,47 +106,61 @@ export default async function FilePage({
   if (filters.page > pages) redirect(href({ rule: filters.ruleCode, flagged: filters.flagged, page: pages }));
   const first = data.total === 0 ? 0 : (filters.page - 1) * LINES_PAGE_SIZE + 1;
   const last = Math.min(filters.page * LINES_PAGE_SIZE, data.total);
+  const linesDescription =
+    t("file.linesCount", { count: data.total }) +
+    (filtered
+      ? (filters.ruleCode ? " " + t("file.matchedBy", { rule: filters.ruleCode }) : "") +
+        (filters.flagged ? " " + t("file.needingReview") : "")
+      : "");
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <p className="text-body text-muted">
         <Link href="/revenue-cycle/files" className="font-medium text-link hover:underline">
-          Monthly files
+          {t("files.title")}
         </Link>{" "}
-        / {periodLabel(file.periodYear, file.periodMonth)}
+        / {periodLabel(file.periodYear, file.periodMonth, t.locale)}
       </p>
       <PageHeader
-        title={periodLabel(file.periodYear, file.periodMonth)}
-        description={`${file.filename} · imported by ${data.uploadedBy ?? "unknown"} on ${file.createdAt.toLocaleDateString("en-US", { timeZone: "America/New_York" })}`}
+        title={periodLabel(file.periodYear, file.periodMonth, t.locale)}
+        description={t("file.headerDescription", {
+          filename: file.filename,
+          name: data.uploadedBy ?? t("file.unknownUploader"),
+          date: f.dateOf(file.createdAt),
+        })}
       />
 
       <section
-        aria-label="File control totals"
+        aria-label={t("file.controlTotals")}
         className="grid grid-cols-2 gap-4 lg:grid-cols-4 xl:grid-cols-7"
       >
-        <StatTile label="Lines" value={file.rowCount.toLocaleString("en-US")} />
-        <StatTile label="Charges" value={formatCents(file.billedCents)} />
-        <StatTile label="Adjustments" value={formatCents(file.adjustmentCents)} />
-        <StatTile label="Net revenue" value={formatCents(file.netCents)} />
-        <StatTile label="Payments" value={formatCents(file.paymentCents)} />
-        <StatTile label="Open balance" value={formatCents(file.balanceCents)} detail="At period end" />
+        <StatTile label={t("files.col.lines")} value={f.number(file.rowCount)} />
+        <StatTile label={t("files.col.charges")} value={formatCents(file.billedCents)} />
+        <StatTile label={t("files.col.adjustments")} value={formatCents(file.adjustmentCents)} />
+        <StatTile label={t("files.col.netRevenue")} value={formatCents(file.netCents)} />
+        <StatTile label={t("files.col.payments")} value={formatCents(file.paymentCents)} />
         <StatTile
-          label="Needs review"
+          label={t("files.col.openBalance")}
+          value={formatCents(file.balanceCents)}
+          detail={t("file.atPeriodEnd")}
+        />
+        <StatTile
+          label={t("files.col.needsReview")}
           value={file.flaggedCount}
-          detail={file.flaggedCount === 1 ? "line to check" : "lines to check"}
+          detail={file.flaggedCount === 1 ? t("file.lineToCheck") : t("file.linesToCheck")}
           emphasis={file.flaggedCount > 0 ? "warning" : undefined}
         />
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[3fr_2fr_2fr]">
-        <Panel title="By rule" description="Select a rule to see its lines" flush>
-          <Table caption="Totals by rule">
+        <Panel title={t("file.byRule")} description={t("file.selectRuleHint")} flush>
+          <Table caption={t("file.tableByRule")}>
             <thead>
               <tr>
-                <Th>Rule</Th>
-                <Th numeric>Lines</Th>
-                <Th numeric>Adjustments</Th>
-                <Th numeric>Net</Th>
+                <Th>{t("file.col.rule")}</Th>
+                <Th numeric>{t("files.col.lines")}</Th>
+                <Th numeric>{t("files.col.adjustments")}</Th>
+                <Th numeric>{t("file.col.net")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -161,21 +186,21 @@ export default async function FilePage({
             </tbody>
           </Table>
         </Panel>
-        <Panel title="By financial class" flush>
-          <Table caption="Totals by financial class">
+        <Panel title={t("file.byClass")} flush>
+          <Table caption={t("file.tableByClass")}>
             <thead>
               <tr>
-                <Th>Class</Th>
-                <Th numeric>Lines</Th>
-                <Th numeric>Charges</Th>
-                <Th numeric>Payments</Th>
+                <Th>{t("file.col.class")}</Th>
+                <Th numeric>{t("files.col.lines")}</Th>
+                <Th numeric>{t("files.col.charges")}</Th>
+                <Th numeric>{t("files.col.payments")}</Th>
               </tr>
             </thead>
             <tbody>
               {data.byPayerClass.map((p) => (
                 <Tr key={p.key}>
                   <Td>
-                    <Code>{p.key || "(blank)"}</Code>
+                    <Code>{p.key || t("file.blank")}</Code>
                   </Td>
                   <Td numeric>{p.lines}</Td>
                   <Td numeric>
@@ -189,19 +214,25 @@ export default async function FilePage({
             </tbody>
           </Table>
         </Panel>
-        <Panel title="By site" flush>
-          <Table caption="Totals by site">
+        <Panel title={t("file.bySite")} flush>
+          <Table caption={t("file.tableBySite")}>
             <thead>
               <tr>
-                <Th>Site</Th>
-                <Th numeric>Lines</Th>
-                <Th numeric>Net revenue</Th>
+                <Th>{t("file.col.site")}</Th>
+                <Th numeric>{t("files.col.lines")}</Th>
+                <Th numeric>{t("files.col.netRevenue")}</Th>
               </tr>
             </thead>
             <tbody>
               {data.bySite.map((s) => (
                 <Tr key={s.siteId ?? "none"}>
-                  <Td>{s.code ? `${s.code} · ${s.name}` : <span className="text-subtle">No site</span>}</Td>
+                  <Td>
+                    {s.code ? (
+                      `${s.code} · ${s.name}`
+                    ) : (
+                      <span className="text-subtle">{t("file.noSite")}</span>
+                    )}
+                  </Td>
                   <Td numeric>{s.lines}</Td>
                   <Td numeric>
                     <Money cents={s.netCents} />
@@ -214,17 +245,13 @@ export default async function FilePage({
       </div>
 
       <Panel
-        title="Lines"
-        description={
-          filtered
-            ? `${data.total} lines${filters.ruleCode ? ` matched by ${filters.ruleCode}` : ""}${filters.flagged ? " needing review" : ""}`
-            : `${data.total} lines`
-        }
+        title={t("file.linesTitle")}
+        description={linesDescription}
         actions={
           <div className="flex items-center gap-3 text-label">
             {filtered && (
               <Link href={href({})} className="font-medium text-link hover:underline">
-                Clear filter
+                {t("file.clearFilter")}
               </Link>
             )}
             {!filters.flagged && file.flaggedCount > 0 && (
@@ -232,7 +259,7 @@ export default async function FilePage({
                 href={href({ rule: filters.ruleCode, flagged: true })}
                 className="font-medium text-link hover:underline"
               >
-                Show lines needing review
+                {t("file.showNeedsReview")}
               </Link>
             )}
           </div>
@@ -240,28 +267,25 @@ export default async function FilePage({
         flush
       >
         {data.total === 0 ? (
-          <EmptyState
-            title="No lines match this filter"
-            description="Clear the filter to see every line in the file."
-          />
+          <EmptyState title={t("file.noLinesTitle")} description={t("file.noLinesDescription")} />
         ) : (
-          <Table caption="Classified lines">
+          <Table caption={t("file.tableLines")}>
             <thead>
               <tr>
-                <Th numeric>Row</Th>
-                <Th>Patient</Th>
-                <Th>Account</Th>
-                <Th>Service date</Th>
-                <Th>Code</Th>
-                <Th>Class</Th>
-                <Th>Site</Th>
-                <Th>Rule</Th>
-                <Th numeric>Charges</Th>
-                <Th numeric>Adjustments</Th>
-                <Th numeric>Net</Th>
-                <Th numeric>Payments</Th>
-                <Th numeric>Balance</Th>
-                <Th>AR</Th>
+                <Th numeric>{t("file.col.row")}</Th>
+                <Th>{tc("word.patient")}</Th>
+                <Th>{t("file.col.account")}</Th>
+                <Th>{t("import.column.serviceDate")}</Th>
+                <Th>{t("file.col.code")}</Th>
+                <Th>{t("file.col.class")}</Th>
+                <Th>{t("file.col.site")}</Th>
+                <Th>{t("file.col.rule")}</Th>
+                <Th numeric>{t("files.col.charges")}</Th>
+                <Th numeric>{t("files.col.adjustments")}</Th>
+                <Th numeric>{t("file.col.net")}</Th>
+                <Th numeric>{t("files.col.payments")}</Th>
+                <Th numeric>{t("file.col.balance")}</Th>
+                <Th>{t("file.col.ar")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -276,7 +300,7 @@ export default async function FilePage({
                   <Td className="font-mono text-label">
                     {maskIdentifiers ? maskAccount(l.accountNumber) : l.accountNumber}
                   </Td>
-                  <Td className="tabular">{formatDate(l.serviceDate)}</Td>
+                  <Td className="tabular">{f.date(l.serviceDate)}</Td>
                   <Td>
                     <Code>{l.cpt || "—"}</Code>
                   </Td>
@@ -286,9 +310,9 @@ export default async function FilePage({
                     <span className="flex flex-wrap items-center gap-1">
                       <span className="font-mono text-label">{l.ruleCode}</span>
                       {l.flagged && (
-                        <span title={reasonText(l.reviewReasons)}>
-                          <Badge tone="warning">Review</Badge>
-                          <span className="sr-only">: {reasonText(l.reviewReasons)}</span>
+                        <span title={reasonText(l.reviewReasons, t)}>
+                          <Badge tone="warning">{t("file.reviewBadge")}</Badge>
+                          <span className="sr-only">: {reasonText(l.reviewReasons, t)}</span>
                         </span>
                       )}
                     </span>
@@ -318,7 +342,13 @@ export default async function FilePage({
         )}
         <div className="flex items-center justify-between border-t border-border px-4 py-2.5 text-label text-muted">
           <span>
-            {first}–{last} of {data.total.toLocaleString("en-US")} · Page {filters.page} of {pages}
+            {t("file.pageSummary", {
+              first: f.number(first),
+              last: f.number(last),
+              total: f.number(data.total),
+              page: filters.page,
+              pages,
+            })}
           </span>
           <span className="flex gap-3">
             {filters.page > 1 && (
@@ -326,7 +356,7 @@ export default async function FilePage({
                 href={href({ rule: filters.ruleCode, flagged: filters.flagged, page: filters.page - 1 })}
                 className="font-medium text-link hover:underline"
               >
-                Previous
+                {tc("pagination.previous")}
               </Link>
             )}
             {filters.page < pages && (
@@ -334,7 +364,7 @@ export default async function FilePage({
                 href={href({ rule: filters.ruleCode, flagged: filters.flagged, page: filters.page + 1 })}
                 className="font-medium text-link hover:underline"
               >
-                Next
+                {tc("pagination.next")}
               </Link>
             )}
           </span>

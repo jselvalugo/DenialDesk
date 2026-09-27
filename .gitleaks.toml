@@ -1,0 +1,11 @@
+# gitleaks configuration (CI: .github/workflows/ci.yml, "Dependency audit and secrets scan").
+# The default rules stay in force; the allowlist below only excludes one known false positive.
+title = "DenialDesk gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "UI message keys (src/i18n) are dotted identifiers such as \"aging.bucket.31_60\", not credentials; the generic-api-key rule matches them when a `key`/`labelKey` field precedes a digit-heavy key."
+regexTarget = "line"
+regexes = ['''(?i)\b[a-z]*key: "[A-Za-z0-9_.]+"''']

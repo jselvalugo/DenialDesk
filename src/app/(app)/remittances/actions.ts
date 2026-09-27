@@ -6,6 +6,7 @@ import { z } from "zod";
 import { canPostRemittances, canVoidRemittances } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
+import { CLAIM_STATUSES, type ClaimStatus } from "@/domain/claims/status";
 import { decodeUpload } from "@/domain/revenue-cycle/monthly-file";
 import {
   loadRemittance,
@@ -15,8 +16,38 @@ import {
 } from "@/domain/remittances/records";
 import { Edi835Error, parse835 } from "@/edi/x12/835";
 import { MAX_X12_BYTES } from "@/edi/x12/segments";
+import type { Messages } from "@/i18n/messages/types";
+import { getT } from "@/i18n/server";
+import type { Params, Translator } from "@/i18n/translate";
 import { auditSystem } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
+
+const MAX_NAMED = 5;
+
+/** Joins a claim/trace-number list for an error message, translating the "and N more" tail. */
+function joinNamed(values: string[], t: Translator<Messages["remittances"]>): string {
+  const shown = values.slice(0, MAX_NAMED).join(", ");
+  return values.length > MAX_NAMED ? t("error.andMore", { shown, count: values.length - MAX_NAMED }) : shown;
+}
+
+/** Renders a `RemittanceError`: joins any list fields and translates an embedded claim status. */
+function remittanceMessage(
+  error: RemittanceError,
+  t: Translator<Messages["remittances"]>,
+  tc: Translator<Messages["common"]>,
+): string {
+  const params: Params = {};
+  for (const [key, value] of Object.entries(error.data ?? {})) {
+    if (Array.isArray(value)) {
+      params[key] = joinNamed(value, t);
+    } else if (key === "status" && typeof value === "string" && value in CLAIM_STATUSES) {
+      params[key] = tc(CLAIM_STATUSES[value as ClaimStatus].labelKey);
+    } else {
+      params[key] = value;
+    }
+  }
+  return t(error.key, params);
+}
 
 export interface RemittanceActionState {
   error?: string;
@@ -33,7 +64,9 @@ export async function uploadRemittance(
   formData: FormData,
 ): Promise<RemittanceActionState> {
   const auth = await requireAuth();
-  if (!canPostRemittances(auth.role)) return { error: "Your role can view remittances but not load them." };
+  const t = await getT("remittances");
+  const tc = await getT("common");
+  if (!canPostRemittances(auth.role)) return { error: t("action.error.forbiddenUpload") };
   const rejected = (reason: string) =>
     auditSystem({
       action: "remittance.upload_rejected",
@@ -43,18 +76,18 @@ export async function uploadRemittance(
     });
 
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Choose an 835 file to upload." };
+  if (!(file instanceof File) || file.size === 0) return { error: t("action.error.chooseFile") };
   if (file.size > MAX_X12_BYTES) {
     await rejected("size");
-    return { error: "The file is larger than 5 MB. Upload one remittance per file." };
+    return { error: t("action.error.fileTooLarge") };
   }
   if (syntheticDataOnly() && formData.get("syntheticAttestation") !== "on") {
-    return { error: "Confirm that the file contains synthetic data only." };
+    return { error: t("action.error.confirmSynthetic") };
   }
   const text = decodeUpload(await file.arrayBuffer());
   if (text === null) {
     await rejected("encoding");
-    return { error: "The file isn't plain text. Upload the 835 exactly as the payer sent it." };
+    return { error: t("action.error.notPlainText") };
   }
   let id: string;
   try {
@@ -63,9 +96,14 @@ export async function uploadRemittance(
       loadRemittance(tx, { tenantId: auth.tenantId, userId: auth.userId, parsed }),
     ));
   } catch (error) {
-    if (error instanceof Edi835Error || error instanceof RemittanceError) {
-      await rejected(error instanceof Edi835Error ? "format" : "matching");
-      return { error: error.message };
+    if (error instanceof Edi835Error) {
+      await rejected("format");
+      // The parser's diagnostic names the segment at fault; it is technical and stays as produced.
+      return { error: t("error.fileFormat", { detail: error.message }) };
+    }
+    if (error instanceof RemittanceError) {
+      await rejected("matching");
+      return { error: remittanceMessage(error, t, tc) };
     }
     throw error;
   }
@@ -80,9 +118,11 @@ export async function postRemittanceAction(
   formData: FormData,
 ): Promise<RemittanceActionState> {
   const auth = await requireAuth();
-  if (!canPostRemittances(auth.role)) return { error: "Your role can view remittances but not post them." };
+  const t = await getT("remittances");
+  const tc = await getT("common");
+  if (!canPostRemittances(auth.role)) return { error: t("action.error.forbiddenPost") };
   const id = idSchema.safeParse(formData.get("remittanceId"));
-  if (!id.success) return { error: "Reload the page and try again." };
+  if (!id.success) return { error: t("action.error.reload") };
   try {
     const result = await withTenant(auth, (tx) =>
       postRemittance(tx, { tenantId: auth.tenantId, userId: auth.userId, remittanceId: id.data }),
@@ -91,12 +131,13 @@ export async function postRemittanceAction(
     revalidatePath("/remittances");
     const denials = result.denialsCaptured;
     return {
-      done: `Posted to ${result.claims} claim${result.claims === 1 ? "" : "s"}${
-        denials > 0 ? `; ${denials} denial${denials === 1 ? "" : "s"} added to the queue` : ""
-      }.`,
+      done:
+        denials > 0
+          ? t("action.done.postedWithDenials", { claims: result.claims, denials })
+          : t("action.done.postedNoDenials", { count: result.claims }),
     };
   } catch (error) {
-    if (error instanceof RemittanceError) return { error: error.message };
+    if (error instanceof RemittanceError) return { error: remittanceMessage(error, t, tc) };
     throw error;
   }
 }
@@ -106,10 +147,11 @@ export async function voidRemittanceAction(
   formData: FormData,
 ): Promise<RemittanceActionState> {
   const auth = await requireAuth();
-  if (!canVoidRemittances(auth.role))
-    return { error: "Only administrators and managers can void a remittance." };
+  const t = await getT("remittances");
+  const tc = await getT("common");
+  if (!canVoidRemittances(auth.role)) return { error: t("action.error.forbiddenVoid") };
   const id = idSchema.safeParse(formData.get("remittanceId"));
-  if (!id.success) return { error: "Reload the page and try again." };
+  if (!id.success) return { error: t("action.error.reload") };
   try {
     await withTenant(auth, (tx) =>
       voidRemittance(tx, {
@@ -121,9 +163,9 @@ export async function voidRemittanceAction(
     );
     revalidatePath(`/remittances/${id.data}`);
     revalidatePath("/remittances");
-    return { done: "Voided." };
+    return { done: t("action.done.voided") };
   } catch (error) {
-    if (error instanceof RemittanceError) return { error: error.message };
+    if (error instanceof RemittanceError) return { error: remittanceMessage(error, t, tc) };
     throw error;
   }
 }

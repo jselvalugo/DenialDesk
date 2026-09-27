@@ -246,6 +246,13 @@
       "when": 1790476668542,
       "tag": "0034_purge_university_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790514457627,
+      "tag": "0035_users_locale",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { linkButtonReset } from "@/components/ui/linkButton";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
+import { useT } from "@/i18n/client";
 import { recordContestAction, type PromptPayActionState } from "../../../actions";
 
 export function ContestForm({
@@ -18,22 +19,24 @@ export function ContestForm({
   today: string;
 }) {
   const [state, action] = useActionState<PromptPayActionState, FormData>(recordContestAction, {});
+  const t = useT("promptPay");
+  const tc = useT("common");
   return (
-    <form action={action} className="flex max-w-[720px] flex-col gap-4" aria-label="Record payer contest">
+    <form action={action} className="flex max-w-[720px] flex-col gap-4" aria-label={t("newContest.title")}>
       <FormAlert message={state.error} />
       <input type="hidden" name="claimId" value={claimId} />
       <TextField
-        label="Date on the payer's notice"
+        label={t("contestForm.dateLabel")}
         name="responseDate"
         type="date"
         min={minDate}
         max={today}
         required
         className="w-48"
-        hint="The date the payer contested the claim or asked for information."
+        hint={t("contestForm.dateHint")}
       />
       <label className="flex flex-col gap-1.5 text-label font-medium text-text">
-        What did the payer ask for?
+        {t("contestForm.noteLabel")}
         <textarea
           name="note"
           required
@@ -44,11 +47,11 @@ export function ContestForm({
         />
       </label>
       <div className="flex gap-2">
-        <SubmitButton variant="primary" pendingLabel="Saving…">
-          Record contest
+        <SubmitButton variant="primary" pendingLabel={t("contestForm.saving")}>
+          {t("contestForm.submit")}
         </SubmitButton>
         <Link href={`/prompt-pay/${claimId}`} className={linkButtonReset}>
-          Cancel
+          {tc("action.cancel")}
         </Link>
       </div>
     </form>

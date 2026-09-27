@@ -1,14 +1,17 @@
 import { Badge, type Tone } from "@/components/ui/Badge";
+import type { MessageKey } from "@/i18n/messages/types";
+import { getT } from "@/i18n/server";
 
-const statuses: Record<string, { label: string; tone: Tone }> = {
-  draft: { label: "Draft", tone: "info" },
-  approved: { label: "Approved", tone: "success" },
-  exported: { label: "Exported", tone: "success" },
-  superseded: { label: "Superseded", tone: "neutral" },
-  void: { label: "Void", tone: "danger" },
+const statuses: Record<string, { labelKey: MessageKey<"revenue">; tone: Tone }> = {
+  draft: { labelKey: "voucher.status.draft", tone: "info" },
+  approved: { labelKey: "voucher.status.approved", tone: "success" },
+  exported: { labelKey: "voucher.status.exported", tone: "success" },
+  superseded: { labelKey: "voucher.status.superseded", tone: "neutral" },
+  void: { labelKey: "voucher.status.void", tone: "danger" },
 };
 
-export function VoucherStatusBadge({ status }: { status: string }) {
-  const { label, tone } = statuses[status] ?? { label: status, tone: "neutral" as const };
-  return <Badge tone={tone}>{label}</Badge>;
+export async function VoucherStatusBadge({ status }: { status: string }) {
+  const t = await getT("revenue");
+  const entry = statuses[status];
+  return <Badge tone={entry?.tone ?? "neutral"}>{entry ? t(entry.labelKey) : status}</Badge>;
 }

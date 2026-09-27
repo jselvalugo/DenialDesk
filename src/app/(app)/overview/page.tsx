@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { todayIn } from "@rules/calendar";
 import { daysUntil } from "@rules/deadlines";
@@ -11,14 +12,23 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
-import { CATEGORY_LABELS } from "@/domain/carc";
+import { CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { DENIAL_STATUSES } from "@/domain/denial-status";
 import { DUE_SOON_DAYS, openByCategory, queueSummary, upcomingDeadlines } from "@/domain/denials/queries";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { formatCents } from "@/lib/format";
 
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("denials");
+  return { title: t("overview.title") };
+}
+
 export default async function OverviewPage() {
   const auth = await requireAuth();
+  const t = await getT("denials");
+  const tc = await getT("common");
+  const f = await getFormat();
   const today = todayIn();
   const { summary, upcoming, categories } = await withTenant(auth, async (tx) => {
     const [summary, upcoming, categories] = await Promise.all([
@@ -39,50 +49,50 @@ export default async function OverviewPage() {
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <PageHeader
-        title="Overview"
-        description="Open denials, money at risk, and the deadlines that need attention first."
+        title={t("overview.title")}
+        description={t("overview.description")}
         actions={
           <Link
             href="/denials"
             className="inline-flex h-8 items-center rounded-control border border-primary bg-primary px-3 text-body font-medium text-white hover:bg-primary-hover"
           >
-            Open denial queue
+            {t("overview.openQueueLink")}
           </Link>
         }
       />
 
-      <section aria-label="Open denial totals" className="grid grid-cols-4 gap-4">
-        <StatTile label="Open denials" value={summary.open.toLocaleString("en-US")} />
-        <StatTile label="Amount at risk" value={formatCents(summary.atRiskCents)} />
+      <section aria-label={t("overview.totalsAriaLabel")} className="grid grid-cols-4 gap-4">
+        <StatTile label={t("stat.openDenials")} value={f.number(summary.open)} />
+        <StatTile label={t("stat.amountAtRisk")} value={formatCents(summary.atRiskCents)} />
         <StatTile
-          label={`Due in ${DUE_SOON_DAYS} days`}
-          value={summary.dueSoon}
+          label={t("stat.dueInDays", { count: DUE_SOON_DAYS })}
+          value={f.number(summary.dueSoon)}
           emphasis={summary.dueSoon > 0 ? "warning" : undefined}
         />
         <StatTile
-          label="Past deadline"
-          value={summary.overdue}
+          label={t("stat.pastDeadline")}
+          value={f.number(summary.overdue)}
           emphasis={summary.overdue > 0 ? "danger" : undefined}
         />
       </section>
 
       <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start gap-6">
-        <Panel title="Next appeal deadlines" description="Open denials, soonest first." flush>
+        <Panel title={t("overview.deadlines.title")} description={t("overview.deadlines.description")} flush>
           {upcoming.length === 0 ? (
             <EmptyState
-              title="No upcoming deadlines"
-              description="Open denials with an appeal deadline will appear here, soonest first."
+              title={t("overview.deadlines.emptyTitle")}
+              description={t("overview.deadlines.emptyDescription")}
             />
           ) : (
-            <Table caption="Next appeal deadlines">
+            <Table caption={t("overview.deadlines.title")}>
               <thead>
                 <tr>
-                  <Th>Claim</Th>
-                  <Th>Payer</Th>
-                  <Th>Category</Th>
-                  <Th numeric>Denied</Th>
-                  <Th>Deadline</Th>
-                  <Th>Status</Th>
+                  <Th>{tc("word.claim")}</Th>
+                  <Th>{tc("word.payer")}</Th>
+                  <Th>{tc("word.category")}</Th>
+                  <Th numeric>{t("field.denied")}</Th>
+                  <Th>{tc("word.deadline")}</Th>
+                  <Th>{tc("word.status")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -97,7 +107,7 @@ export default async function OverviewPage() {
                       </Link>
                     </Td>
                     <Td>{row.payerName}</Td>
-                    <Td className="text-muted">{CATEGORY_LABELS[row.category]}</Td>
+                    <Td className="text-muted">{tc(CATEGORY_LABEL_KEYS[row.category])}</Td>
                     <Td numeric>
                       <Money cents={row.deniedCents} />
                     </Td>
@@ -112,7 +122,7 @@ export default async function OverviewPage() {
                     </Td>
                     <Td>
                       <Badge tone={DENIAL_STATUSES[row.status].tone}>
-                        {DENIAL_STATUSES[row.status].label}
+                        {tc(DENIAL_STATUSES[row.status].labelKey)}
                       </Badge>
                     </Td>
                   </Tr>
@@ -122,20 +132,20 @@ export default async function OverviewPage() {
           )}
         </Panel>
 
-        <Panel title="Open denials by reason" description="Where the money at risk sits." flush>
+        <Panel title={t("overview.byReason.title")} description={t("overview.byReason.description")} flush>
           {categories.length === 0 ? (
             <EmptyState
-              title="No open denials"
-              description="Denials appear here once remittances with denials are imported."
+              title={t("queue.emptyDefaultTitle")}
+              description={t("overview.byReason.emptyDescription")}
             />
           ) : (
-            <Table caption="Open denials by reason category">
+            <Table caption={t("overview.byReason.tableCaption")}>
               <thead>
                 <tr>
-                  <Th>Category</Th>
-                  <Th numeric>Denials</Th>
-                  <Th numeric>Denied</Th>
-                  <Th numeric>Share</Th>
+                  <Th>{tc("word.category")}</Th>
+                  <Th numeric>{t("field.count")}</Th>
+                  <Th numeric>{t("field.denied")}</Th>
+                  <Th numeric>{t("field.share")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -148,10 +158,10 @@ export default async function OverviewPage() {
                           href={`/denials?category=${row.category}`}
                           className="font-medium text-text hover:text-link hover:underline"
                         >
-                          {CATEGORY_LABELS[row.category]}
+                          {tc(CATEGORY_LABEL_KEYS[row.category])}
                         </Link>
                       </Td>
-                      <Td numeric>{row.count}</Td>
+                      <Td numeric>{f.number(row.count)}</Td>
                       <Td numeric>
                         <Money cents={row.deniedCents} />
                       </Td>

@@ -11,20 +11,25 @@ import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Money } from "@/components/ui/Money";
+import { Pagination } from "@/components/ui/Pagination";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Select } from "@/components/ui/Select";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
-import { CATEGORY_LABELS } from "@/domain/carc";
+import { CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { appealQueueSummary, listAppeals, PAGE_SIZE, DUE_SOON_DAYS } from "@/domain/appeals/queries";
-import { APPEAL_LEVEL_LABELS, APPEAL_STATUSES } from "@/domain/appeals/status";
+import { APPEAL_LEVEL_LABEL_KEYS, APPEAL_STATUSES } from "@/domain/appeals/status";
 import { payerOptions } from "@/domain/denials/queries";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { formatCents } from "@/lib/format";
 import { appealFiltersToQuery, parseAppealFilters } from "./filters";
 
-export const metadata: Metadata = { title: "Appeals" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("appeals");
+  return { title: t("queue.title") };
+}
 
 export default async function AppealsPage({
   searchParams,
@@ -34,6 +39,10 @@ export default async function AppealsPage({
   const auth = await requireAuth();
   const filters = parseAppealFilters(await searchParams);
   const today = todayIn();
+  const t = await getT("appeals");
+  const tc = await getT("common");
+  const f = await getFormat();
+  const sortLabel = filters.sort === "amount" ? t("sortLabel.amount") : t("sortLabel.deadline");
 
   const { rows, total, summary, payers } = await withTenant(auth, async (tx) => {
     const [list, summary, payers] = await Promise.all([
@@ -57,38 +66,32 @@ export default async function AppealsPage({
   if (total > 0 && filters.page > Math.ceil(total / PAGE_SIZE)) {
     redirect(`/appeals${appealFiltersToQuery(filters, { page: Math.ceil(total / PAGE_SIZE) })}`);
   }
-  const first = total === 0 ? 0 : (filters.page - 1) * PAGE_SIZE + 1;
-  const last = Math.min(filters.page * PAGE_SIZE, total);
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="Appeals"
-        description="Open appeals, most urgent deadline first. Start one from a denial's page."
-      />
+      <PageHeader title={t("queue.title")} description={t("queue.description")} />
 
-      <section aria-label="Open appeal totals" className="grid grid-cols-4 gap-4">
-        <StatTile label="Open appeals" value={summary.open.toLocaleString("en-US")} />
+      <section aria-label={t("queue.totalsAriaLabel")} className="grid grid-cols-4 gap-4">
+        <StatTile label={t("stat.openAppeals")} value={f.number(summary.open)} />
         <StatTile
-          label="Amount at stake"
+          label={t("stat.amountAtStake")}
           value={formatCents(summary.atStakeCents)}
-          detail="Denied amount on open appeals"
+          detail={t("stat.amountAtStakeDetail")}
         />
         <StatTile
-          label={`Due in ${DUE_SOON_DAYS} days`}
-          value={summary.dueSoon}
+          label={t("stat.dueInDays", { count: DUE_SOON_DAYS })}
+          value={f.number(summary.dueSoon)}
           emphasis={summary.dueSoon > 0 ? "warning" : undefined}
-          detail="Deadline this week, not yet submitted"
+          detail={t("stat.dueSoonDetail")}
         />
         <StatTile
-          label="Past deadline"
-          value={summary.overdue}
+          label={t("stat.pastDeadline")}
+          value={f.number(summary.overdue)}
           emphasis={summary.overdue > 0 ? "danger" : undefined}
           detail={
             summary.noDeadline > 0
-              ? `${summary.noDeadline} with no deadline configured`
-              : "Not yet submitted, deadline passed"
+              ? t("stat.pastDeadlineDetailNoDeadline", { count: summary.noDeadline })
+              : t("stat.pastDeadlineDetailDefault")
           }
         />
       </section>
@@ -96,71 +99,68 @@ export default async function AppealsPage({
       <Panel flush>
         <form method="get" className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
           <Select
-            label="Status"
+            label={tc("word.status")}
             name="status"
             defaultValue={filters.status}
             options={[
-              { value: "open", label: "Open" },
-              { value: "closed", label: "Closed" },
-              { value: "all", label: "All" },
+              { value: "open", label: t("filter.statusOpen") },
+              { value: "closed", label: t("filter.statusClosed") },
+              { value: "all", label: tc("word.all") },
             ]}
           />
           <Select
-            label="Level"
+            label={t("field.level")}
             name="level"
             defaultValue={filters.level ?? ""}
             options={[
-              { value: "", label: "All levels" },
-              { value: "first_level", label: APPEAL_LEVEL_LABELS.first_level! },
+              { value: "", label: t("filter.allLevels") },
+              { value: "first_level", label: t(APPEAL_LEVEL_LABEL_KEYS.first_level) },
             ]}
           />
           <Select
-            label="Payer"
+            label={tc("word.payer")}
             name="payer"
             defaultValue={filters.payerId ?? ""}
             options={[
-              { value: "", label: "All payers" },
+              { value: "", label: t("filter.allPayers") },
               ...payers.map((p) => ({ value: p.id, label: p.name })),
             ]}
           />
           <Select
-            label="Sort by"
+            label={t("field.sortBy")}
             name="sort"
             defaultValue={filters.sort}
             options={[
-              { value: "deadline", label: "Deadline" },
-              { value: "amount", label: "Denied amount" },
+              { value: "deadline", label: tc("word.deadline") },
+              { value: "amount", label: t("field.deniedAmount") },
             ]}
           />
           <div className="flex gap-2">
             <Button type="submit" size="md">
-              Apply
+              {tc("action.apply")}
             </Button>
             <Link
               href="/appeals"
               className="inline-flex h-8 items-center rounded-control px-3 text-body font-medium text-muted hover:bg-surface-muted hover:text-text"
             >
-              Reset
+              {tc("action.reset")}
             </Link>
           </div>
         </form>
 
         {rows.length === 0 ? (
-          <EmptyState
-            title="No appeals match these filters"
-            description="Start an appeal from a denial's page (“Start appeal”), or try a different filter."
-          />
+          <EmptyState title={t("empty.title")} description={t("empty.description")} />
         ) : (
-          <Table caption={`Appeals, sorted by ${filters.sort === "amount" ? "denied amount" : "deadline"}`}>
+          <Table caption={t("queue.tableCaption", { sort: sortLabel })}>
             <thead>
               <tr>
-                <Th>Claim</Th>
-                <Th>Level</Th>
-                <Th>Payer</Th>
-                <Th>Category</Th>
-                <Th numeric>Denied</Th>
-                <Th>Deadline</Th>
-                <Th>Status</Th>
+                <Th>{tc("word.claim")}</Th>
+                <Th>{t("field.level")}</Th>
+                <Th>{tc("word.payer")}</Th>
+                <Th>{tc("word.category")}</Th>
+                <Th numeric>{t("field.denied")}</Th>
+                <Th>{tc("word.deadline")}</Th>
+                <Th>{tc("word.status")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -176,10 +176,10 @@ export default async function AppealsPage({
                         {row.claimNumber}
                       </Link>
                     </Td>
-                    <Td>{APPEAL_LEVEL_LABELS[row.level] ?? row.level}</Td>
+                    <Td>{t(APPEAL_LEVEL_LABEL_KEYS[row.level])}</Td>
                     <Td>{row.payerName}</Td>
                     <Td>
-                      <Code>{CATEGORY_LABELS[row.category]}</Code>
+                      <Code>{tc(CATEGORY_LABEL_KEYS[row.category])}</Code>
                     </Td>
                     <Td numeric className="font-medium">
                       <Money cents={row.deniedCents} />
@@ -193,14 +193,16 @@ export default async function AppealsPage({
                             dueSoonDays={DUE_SOON_DAYS}
                           />
                         ) : (
-                          <span className="tabular text-muted">{row.deadline}</span>
+                          <span className="tabular text-muted">{f.date(row.deadline)}</span>
                         )
                       ) : (
-                        <span className="text-label font-medium text-warning-fg">Not configured</span>
+                        <span className="text-label font-medium text-warning-fg">
+                          {t("deadlineNotConfigured")}
+                        </span>
                       )}
                     </Td>
                     <Td>
-                      <Badge tone={status.tone}>{status.label}</Badge>
+                      <Badge tone={status.tone}>{t(status.labelKey)}</Badge>
                     </Td>
                   </Tr>
                 );
@@ -209,59 +211,13 @@ export default async function AppealsPage({
           </Table>
         )}
 
-        <nav
-          aria-label="Pagination"
-          className="flex items-center justify-between border-t border-border px-4 py-2.5 text-label text-muted"
-        >
-          <span className="tabular">
-            {total === 0 ? "No results" : `Showing ${first}–${last} of ${total.toLocaleString("en-US")}`}
-          </span>
-          <span className="flex items-center gap-2">
-            <PageLink
-              disabled={filters.page <= 1}
-              href={`/appeals${appealFiltersToQuery(filters, { page: filters.page - 1 })}`}
-            >
-              Previous
-            </PageLink>
-            <span className="tabular">
-              Page {filters.page} of {pages}
-            </span>
-            <PageLink
-              disabled={filters.page >= pages}
-              href={`/appeals${appealFiltersToQuery(filters, { page: filters.page + 1 })}`}
-            >
-              Next
-            </PageLink>
-          </span>
-        </nav>
+        <Pagination
+          page={filters.page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          hrefFor={(page) => `/appeals${appealFiltersToQuery(filters, { page })}`}
+        />
       </Panel>
     </div>
-  );
-}
-
-function PageLink({
-  href,
-  disabled,
-  children,
-}: {
-  href: string;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  const className = "inline-flex h-7 items-center rounded-control border px-2.5 font-medium";
-  if (disabled) {
-    return (
-      <span aria-disabled="true" className={`${className} border-border text-subtle`}>
-        {children}
-      </span>
-    );
-  }
-  return (
-    <Link
-      href={href}
-      className={`${className} border-border-strong bg-surface text-text hover:bg-surface-muted`}
-    >
-      {children}
-    </Link>
   );
 }

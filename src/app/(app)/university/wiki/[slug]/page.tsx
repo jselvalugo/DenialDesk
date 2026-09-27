@@ -9,14 +9,15 @@ import { Panel } from "@/components/ui/Panel";
 import { findArticle, findCategory } from "@/domain/university/wiki/catalog";
 import { headings, parseMarkdown, ruleIds } from "@/domain/university/wiki/markdown";
 import { ruleReferences } from "@/domain/university/wiki/rule-tokens";
-import { formatDate } from "@/lib/format";
+import { getFormat, getT } from "@/i18n/server";
 import { UniversityHeader } from "../../UniversityHeader";
 
 type Params = Promise<{ slug: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const article = findArticle((await params).slug);
-  return { title: article ? `Wiki — ${article.title}` : "Wiki" };
+  const t = await getT("university");
+  return { title: article ? t("article.metaTitle", { title: article.title }) : t("wiki.title") };
 }
 
 // Never pre-rendered: every request runs requireAuth() first.
@@ -27,6 +28,8 @@ export default async function WikiArticlePage({ params }: { params: Params }) {
   if (!canViewUniversity(auth.role)) notFound();
   const article = findArticle((await params).slug);
   if (!article) notFound();
+  const t = await getT("university");
+  const f = await getFormat();
 
   const blocks = parseMarkdown(article.body);
   const outline = headings(blocks).filter((heading) => heading.level === 2);
@@ -37,24 +40,20 @@ export default async function WikiArticlePage({ params }: { params: Params }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href="/university" className="hover:text-text hover:underline">
-          University
+          {t("breadcrumb.university")}
         </Link>
         <span aria-hidden="true"> / </span>
         <Link href="/university/wiki" className="hover:text-text hover:underline">
-          Wiki
+          {t("wiki.title")}
         </Link>
         <span aria-hidden="true"> / </span>
         <Link href={`/university/wiki#${category.id}`} className="hover:text-text hover:underline">
-          {category.label}
+          {t(category.labelKey)}
         </Link>
       </nav>
-      <UniversityHeader
-        eyebrow="DenialDesk University · Wiki"
-        title={article.title}
-        description={article.summary}
-      />
+      <UniversityHeader eyebrow={t("wiki.eyebrow")} title={article.title} description={article.summary} />
       <div className="grid items-start gap-4 lg:grid-cols-[1fr_280px]">
         <Panel>
           <article aria-label={article.title}>
@@ -63,8 +62,8 @@ export default async function WikiArticlePage({ params }: { params: Params }) {
         </Panel>
         <div className="flex flex-col gap-4 lg:sticky lg:top-4">
           {outline.length > 0 && (
-            <Panel title="On this page">
-              <nav aria-label="On this page">
+            <Panel title={t("article.onThisPage")}>
+              <nav aria-label={t("article.onThisPage")}>
                 <ul className="flex flex-col gap-1 text-body">
                   {outline.map((heading) => (
                     <li key={heading.id}>
@@ -78,25 +77,22 @@ export default async function WikiArticlePage({ params }: { params: Params }) {
             </Panel>
           )}
           {referenced.length > 0 && (
-            <Panel title="Rules referenced" description="Read from the rules engine as of today.">
+            <Panel title={t("article.rulesReferenced")} description={t("article.rulesReferencedDescription")}>
               <ul className="flex flex-col gap-2 text-body">
                 {referenced.map(([id, reference]) => (
                   <li key={id} className="flex flex-col">
                     <span className="text-text">{reference?.title ?? id}</span>
                     <span>
-                      <RuleValue reference={reference} id={id} />
+                      <RuleValue reference={reference} id={id} t={t} />
                     </span>
                   </li>
                 ))}
               </ul>
-              <p className="mt-3 text-label text-subtle">
-                &ldquo;Unconfirmed&rdquo; means Florida healthcare counsel has not yet confirmed the value;
-                DenialDesk still applies it.
-              </p>
+              <p className="mt-3 text-label text-subtle">{t("article.unconfirmedNote")}</p>
             </Panel>
           )}
           {related.length > 0 && (
-            <Panel title="Related articles">
+            <Panel title={t("article.relatedArticles")}>
               <ul className="flex flex-col gap-1 text-body">
                 {related.map((item) => (
                   <li key={item.slug}>
@@ -108,7 +104,7 @@ export default async function WikiArticlePage({ params }: { params: Params }) {
               </ul>
             </Panel>
           )}
-          <Panel title="Sources">
+          <Panel title={t("article.sources")}>
             <ul className="flex flex-col gap-1 text-body">
               {article.sources.map((source) => (
                 <li key={source.label}>
@@ -120,7 +116,7 @@ export default async function WikiArticlePage({ params }: { params: Params }) {
                       className="text-link underline decoration-border-strong underline-offset-2 hover:decoration-link"
                     >
                       {source.label}
-                      <span className="sr-only"> (opens in a new tab)</span>
+                      <span className="sr-only"> {t("article.opensNewTab")}</span>
                     </a>
                   ) : (
                     <span className="text-text">{source.label}</span>
@@ -128,7 +124,9 @@ export default async function WikiArticlePage({ params }: { params: Params }) {
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-label text-subtle">Last reviewed {formatDate(article.reviewedOn)}.</p>
+            <p className="mt-3 text-label text-subtle">
+              {t("article.lastReviewed", { date: f.date(article.reviewedOn) })}
+            </p>
           </Panel>
         </div>
       </div>

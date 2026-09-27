@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { addCalendarDays, todayIn } from "@rules/calendar";
 import type { TenantTx } from "@/db/tenant";
 import { appeals, denials, type appealSubmittedMethodEnum } from "@/db/schema";
+import type { MessageKey } from "@/i18n/messages/types";
 import { audit } from "@/lib/audit";
 import { getAppealFollowUpDays } from "./settings";
 
@@ -16,14 +17,17 @@ export interface RecordSubmissionInput {
 }
 
 export interface RecordSubmissionResult {
-  error?: string;
+  /** A key in the `appeals` namespace; the caller (a server action) translates it for display. */
+  errorKey?: MessageKey<"appeals">;
   ok?: boolean;
 }
 
 /**
  * Records that an appeal was submitted and syncs the linked denial's status (spec: appeals.md A1,
- * "Action: record submission"). Pure domain logic — no auth, no form parsing, no Next.js —
- * so it can be exercised directly in integration tests and from the server action alike.
+ * "Action: record submission"). Pure domain logic — no auth, no form parsing, no Next.js, and no
+ * translation (it never imports `@/i18n/server`) — so it can be exercised directly in integration
+ * tests and from the server action alike. Errors come back as message keys for the caller to
+ * translate.
  */
 export async function recordSubmission(
   tx: TenantTx,
@@ -31,7 +35,7 @@ export async function recordSubmission(
   input: RecordSubmissionInput,
 ): Promise<RecordSubmissionResult> {
   const today = todayIn();
-  if (input.submittedOn > today) return { error: "The submitted date can't be in the future." };
+  if (input.submittedOn > today) return { errorKey: "error.futureSubmittedDate" };
 
   const [current] = await tx
     .select({
@@ -43,15 +47,15 @@ export async function recordSubmission(
     .from(appeals)
     .where(eq(appeals.id, input.appealId))
     .for("update");
-  if (!current) return { error: "This appeal no longer exists." };
+  if (!current) return { errorKey: "error.notFound" };
   if (!["draft", "in_review", "ready"].includes(current.status)) {
-    return { error: "This appeal has already been submitted." };
+    return { errorKey: "error.alreadySubmitted" };
   }
   // The practice's calendar date, not UTC: an appeal created late evening ET can still be "today"
   // in UTC's next day, which would otherwise reject a same-day submission.
   const createdDate = todayIn(undefined, current.createdAt);
   if (input.submittedOn < createdDate) {
-    return { error: "The submitted date can't be before the appeal was created." };
+    return { errorKey: "error.submittedBeforeCreated" };
   }
 
   const followUpDays = await getAppealFollowUpDays(tx, auth.tenantId);

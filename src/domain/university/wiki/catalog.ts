@@ -12,30 +12,38 @@ import { welcomeToDenialDesk } from "./articles/welcome-to-denialdesk";
 import { workingTheDenialQueue } from "./articles/working-the-denial-queue";
 import type { WikiArticle, WikiCategory, WikiCategoryId } from "./types";
 
-/** Categories in the order the index shows them. */
+/** Categories in the order the index shows them. Labels/descriptions: message keys, `university` namespace. */
 export const WIKI_CATEGORIES: WikiCategory[] = [
   {
     id: "getting-started",
-    label: "Getting started",
-    description: "What DenialDesk is and how its parts fit together.",
+    labelKey: "wikiCategory.gettingStarted.label",
+    descriptionKey: "wikiCategory.gettingStarted.description",
   },
   {
     id: "denials-and-appeals",
-    label: "Denials and appeals",
-    description: "Reading, working, and appealing a denial.",
+    labelKey: "wikiCategory.denialsAndAppeals.label",
+    descriptionKey: "wikiCategory.denialsAndAppeals.description",
   },
   {
     id: "claims-and-payments",
-    label: "Claims and payments",
-    description: "Claims, remittances, and posting.",
+    labelKey: "wikiCategory.claimsAndPayments.label",
+    descriptionKey: "wikiCategory.claimsAndPayments.description",
   },
   {
     id: "florida-and-medicare-rules",
-    label: "Florida and Medicare rules",
-    description: "The legal clocks DenialDesk tracks, with values read live from the rules engine.",
+    labelKey: "wikiCategory.floridaAndMedicareRules.label",
+    descriptionKey: "wikiCategory.floridaAndMedicareRules.description",
   },
-  { id: "data-safety", label: "Data safety", description: "Safeguards every user should know." },
-  { id: "glossary", label: "Glossary", description: "Terms and file names." },
+  {
+    id: "data-safety",
+    labelKey: "wikiCategory.dataSafety.label",
+    descriptionKey: "wikiCategory.dataSafety.description",
+  },
+  {
+    id: "glossary",
+    labelKey: "wikiCategory.glossary.label",
+    descriptionKey: "wikiCategory.glossary.description",
+  },
 ];
 
 /** Every article, in index order within its category. Adding an article means adding it here. */

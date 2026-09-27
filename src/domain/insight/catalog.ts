@@ -1,6 +1,10 @@
+import type { MessageKey } from "@/i18n/messages/types";
+
 /**
  * The fixed catalog of Insight standard reports (docs/specs/insight-standard-reports.md). This
  * slice ships no custom/user-built reports — only these, some available today and some planned.
+ * Names and purposes are message keys (insight namespace) — this module is pure domain code and
+ * never imports `@/i18n/server`; callers translate with `t(entry.titleKey)` / `t(entry.purposeKey)`.
  */
 
 export type ReportId =
@@ -13,8 +17,8 @@ export type ReportId =
 
 export interface ReportCatalogEntry {
   id: ReportId | "prompt-pay-scorecard" | "underpayment-variance";
-  title: string;
-  purpose: string;
+  titleKey: MessageKey<"insight">;
+  purposeKey: MessageKey<"insight">;
   available: boolean;
   /** Whether the report's own payer filter is user-selectable (report #2 disables it). */
   payerFilterEnabled: boolean;
@@ -23,57 +27,57 @@ export interface ReportCatalogEntry {
 export const REPORT_CATALOG: ReportCatalogEntry[] = [
   {
     id: "denials-by-category",
-    title: "Denial summary by category and CARC",
-    purpose: "Where denial dollars and volume concentrate, by root cause.",
+    titleKey: "catalog.denialsByCategory.title",
+    purposeKey: "catalog.denialsByCategory.purpose",
     available: true,
     payerFilterEnabled: true,
   },
   {
     id: "denials-by-payer",
-    title: "Denial summary by payer",
-    purpose: "Which payers generate the most denial dollars and volume, and their top category.",
+    titleKey: "catalog.denialsByPayer.title",
+    purposeKey: "catalog.denialsByPayer.purpose",
     available: true,
     payerFilterEnabled: false,
   },
   {
     id: "denial-rate",
-    title: "Denial rate",
-    purpose: "The share of billed claims that received at least one denial.",
+    titleKey: "catalog.denialRate.title",
+    purposeKey: "catalog.denialRate.purpose",
     available: true,
     payerFilterEnabled: true,
   },
   {
     id: "denials-by-deadline-bucket",
-    title: "Open denials by appeal-deadline bucket",
-    purpose: "A report-form total of what the denial queue already sorts by.",
+    titleKey: "catalog.denialsByDeadlineBucket.title",
+    purposeKey: "catalog.denialsByDeadlineBucket.purpose",
     available: true,
     payerFilterEnabled: true,
   },
   {
     id: "claims-by-status",
-    title: "Claims by status / A/R summary",
-    purpose: "How much is outstanding and in what state, from the claims table itself.",
+    titleKey: "catalog.claimsByStatus.title",
+    purposeKey: "catalog.claimsByStatus.purpose",
     available: true,
     payerFilterEnabled: true,
   },
   {
     id: "appeal-outcomes",
-    title: "Appeal outcomes",
-    purpose: "Overturn vs. upheld rates by payer and category.",
+    titleKey: "catalog.appealOutcomes.title",
+    purposeKey: "catalog.appealOutcomes.purpose",
     available: true,
     payerFilterEnabled: true,
   },
   {
     id: "prompt-pay-scorecard",
-    title: "Prompt-pay scorecard",
-    purpose: "Planned — see spec (blocked on notice-classification fix, billing review F4).",
+    titleKey: "catalog.promptPayScorecard.title",
+    purposeKey: "catalog.promptPayScorecard.purpose",
     available: false,
     payerFilterEnabled: false,
   },
   {
     id: "underpayment-variance",
-    title: "Underpayment variance",
-    purpose: "Planned — see spec (blocked on a payer_contracts / fee-schedule table).",
+    titleKey: "catalog.underpaymentVariance.title",
+    purposeKey: "catalog.underpaymentVariance.purpose",
     available: false,
     payerFilterEnabled: false,
   },

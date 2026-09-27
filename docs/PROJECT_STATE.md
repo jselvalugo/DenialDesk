@@ -6,6 +6,23 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-27_
 
 ## Where we are
+- Internationalization (`specs/internationalization.md`, ADR 0009, R-11.1): the whole product (practice
+  app, sign-in, operator console, Insight .xlsx export) reads in English, Spanish, or Portuguese. Own
+  module in `src/i18n/` (no dependency): typed dictionaries per namespace in
+  `src/i18n/messages/{en,es,pt}/`, `getT`/`getFormat` on the server, `useT`/`useFormat` in client
+  components, ICU-subset messages (`{param}`, plurals, `<b>` tags). The user menu has a language group
+  (English / Español / Português; current one marked); the operator header has the same picker. Choice
+  lives in the `dd_locale` cookie and `users.locale` (migration 0035), applied at sign-in;
+  `Accept-Language` before any choice. Dates and counts follow the language; money stays `$1,234.56`.
+  Domain label maps hold message keys (`labelKey`), domain errors carry `key`/`params` beside an
+  English `message`. Rule: no English literal in JSX or user-facing strings (`CLAUDE.md`,
+  `src/i18n/README.md`). Open: OA-040 practice-wide default language, OA-041 native-speaker
+  terminology review + counsel sign-off, OA-042 translate University content (UI is translated). Not translated by design: codes and their sourced summaries, statutes, payer
+  names, user data, GL memos stored in ledger rows, the CSV header contract, audit/log identifiers.
+  Reviewed 2026-09-27 by `reviewer`, `security-reviewer`, `compliance-checker`: no blocking findings
+  open after fixes (own-row/MFA-gated preference write, capped claim lists in error messages, English
+  CSV headers quoted in import errors, date-only "Created" columns, CSV/835 diagnostics translated or
+  wrapped). Deferred: per-route dictionary splitting, `passwordProblem()` codes, more `=0` plurals.
 - DenialDesk University U1 (`specs/denialdesk-university.md`, owner request 2026-09-27): in-app
   courses at `/university`, reached from the "University of DenialDesk" logo button in the global
   header and on the welcome page, and a "DenialDesk University" item in the user menu (not a module
@@ -192,6 +209,7 @@ _Last updated: 2026-09-27_
 | 2026-09-26 | Rate limits on demo login, sign-in, MFA, and seed endpoint | `specs/rate-limiting.md` |
 | 2026-09-26 | Insight standard reports: all roles view, export limited to admin/manager/compliance, aggregate-only (no drill-down), primary export is a formatted .xlsx workbook (not CSV); `exceljs` added | `specs/insight-standard-reports.md` |
 | 2026-09-26 | Insight small-cell suppression (R-8.7): rows tied to a sensitivity-tagged patient with a count under 11 (config, ⚠️ VERIFY) show "Suppressed (<11)" instead of values on-screen and in exports, with complementary suppression to prevent back-calculation | `specs/insight-standard-reports.md` |
+| 2026-09-27 | Three UI languages (en/es/pt) with an own message module, cookie + `users.locale`, money not localized | ADR 0009, `specs/internationalization.md` |
 | 2026-09-26 | ERP shell: global header, navy tab bar, module switcher (replaces the sidebar) | ADR 0004 amendment, `specs/erp-shell.md` |
 | 2026-09-27 | DenialDesk University lives outside the module switcher (header link + user-menu item); content is code-reviewed catalog data, never retyped statutory values; completions are append-only training records | `specs/denialdesk-university.md` |
 | 2026-09-26 | Operator two-step is off on the Netlify console for now (`PLATFORM_OPERATOR_MFA=off`; ignored in production); unset the variable to turn it back on | `specs/operator-login.md` |
@@ -317,6 +335,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
     (including `detail` row values). Decide how production migrations run and where their output goes.
 
 ## Lessons / conventions learned
+- Components that take a function prop (e.g. `Pagination`'s `hrefFor`) must stay server components;
+  a `"use client"` directive there breaks every page with "Functions cannot be passed directly to
+  Client Components". Client components get translations from `useT`, server ones from `getT`.
+- e2e tests assert exact English text and `aria-label`s; when a string moves into the dictionary,
+  keep its English value verbatim (add a separate key rather than reusing a nearby one).
 - Netlify env vars set as "secret" through the connector with context "all" were silently dropped;
   set secrets per context in the Netlify UI, or non-secret via the connector.
 - In raw SQL subqueries, unqualified column names bind to the inner table (team-size bug caught by

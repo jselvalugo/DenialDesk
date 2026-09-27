@@ -1,4 +1,6 @@
 import { CsvError, parseCsv, type CsvRow } from "@/lib/csv/parse";
+import type { MessageKey } from "@/i18n/messages/types";
+import { englishRevenue, type RevenueT, csvProblemMessage } from "./i18n";
 
 /**
  * Month-end activity file from the practice-management (PM) system, DenialDesk's own layout: one
@@ -41,6 +43,28 @@ const COLUMNS = {
 } as const;
 
 type ColumnKey = keyof typeof COLUMNS;
+
+/**
+ * On-screen name for each column, separate from `COLUMNS[key].label` above: that English label is
+ * part of the header-matching contract and the template file (`MONTHLY_FILE_HEADER`) and never
+ * changes with the language; this is only what error messages and the import instructions show.
+ */
+/** On-screen names of the columns (tables, hints). The CSV header contract itself is `COLUMNS[key].label`. */
+export const COLUMN_LABEL_KEYS: Record<ColumnKey, MessageKey<"revenue">> = {
+  patientName: "import.column.patientName",
+  accountNumber: "import.column.accountNumber",
+  serviceDate: "import.column.serviceDate",
+  cpt: "import.column.cpt",
+  description: "import.column.description",
+  facility: "import.column.facility",
+  payerName: "import.column.payerName",
+  payerClass: "import.column.payerClass",
+  status: "import.column.status",
+  billed: "import.column.billed",
+  payment: "import.column.payment",
+  adjustment: "import.column.adjustment",
+  balance: "import.column.balance",
+};
 
 export interface MonthlyLine {
   rowNumber: number;
@@ -122,16 +146,23 @@ export function parseServiceDate(raw: string): string | null {
 
 const MAX_PROBLEMS = 20;
 
-export function parseMonthlyFile(text: string, options: { syntheticOnly: boolean }): ParseResult {
+export function parseMonthlyFile(
+  text: string,
+  options: { syntheticOnly: boolean },
+  t: RevenueT = englishRevenue,
+): ParseResult {
   let rows: CsvRow[];
   try {
     rows = parseCsv(text, { maxRows: MAX_ROWS, maxColumns: MAX_COLUMNS, headerRows: 1 });
   } catch (error) {
     if (error instanceof CsvError)
-      return { ok: false, problems: [{ row: error.row, message: error.message }] };
+      return {
+        ok: false,
+        problems: [{ row: error.row, message: csvProblemMessage(error, t) }],
+      };
     throw error;
   }
-  if (rows.length < 2) return { ok: false, problems: [{ row: 1, message: "The file has no data rows." }] };
+  if (rows.length < 2) return { ok: false, problems: [{ row: 1, message: t("import.error.noDataRows") }] };
 
   const headerRow = rows[0]!;
   const header = headerRow.cells.map(normalize);
@@ -147,7 +178,9 @@ export function parseMonthlyFile(text: string, options: { syntheticOnly: boolean
   if (missing.length > 0) {
     return {
       ok: false,
-      problems: [{ row: headerRow.line, message: `Missing required columns: ${missing.join(", ")}.` }],
+      problems: [
+        { row: headerRow.line, message: t("import.error.missingColumns", { columns: missing.join(", ") }) },
+      ],
     };
   }
   if (ambiguous.length > 0) {
@@ -156,7 +189,7 @@ export function parseMonthlyFile(text: string, options: { syntheticOnly: boolean
       problems: [
         {
           row: headerRow.line,
-          message: `More than one column could be ${ambiguous.join(", ")}. Keep one column for each.`,
+          message: t("import.error.ambiguousColumns", { columns: ambiguous.join(", ") }),
         },
       ],
     };
@@ -172,23 +205,21 @@ export function parseMonthlyFile(text: string, options: { syntheticOnly: boolean
     const cell = (key: ColumnKey) => (index[key] >= 0 ? (cells[index[key]] ?? "").trim() : "");
     const money = (key: ColumnKey) => {
       const value = parseMoney(cell(key));
-      if (value === null)
-        add(rowNumber, `${COLUMNS[key].label} isn't a valid dollar amount (up to $10,000,000).`);
+      if (value === null) add(rowNumber, t("import.error.invalidAmount", { column: COLUMNS[key].label }));
       return value ?? 0;
     };
     const accountNumber = cell("accountNumber");
     const serviceDate = parseServiceDate(cell("serviceDate"));
-    if (!cell("patientName")) add(rowNumber, "Patient name is blank.");
-    if (!accountNumber) add(rowNumber, "Account number is blank.");
+    if (!cell("patientName")) add(rowNumber, t("import.error.patientNameBlank"));
+    if (!accountNumber) add(rowNumber, t("import.error.accountNumberBlank"));
     else if (options.syntheticOnly && !accountNumber.startsWith(SYNTHETIC_ACCOUNT_PREFIX)) {
-      add(
-        rowNumber,
-        `Account number must start with ${SYNTHETIC_ACCOUNT_PREFIX}: this environment accepts synthetic files only.`,
-      );
+      add(rowNumber, t("import.error.syntheticAccountRequired", { prefix: SYNTHETIC_ACCOUNT_PREFIX }));
     }
-    if (!serviceDate) add(rowNumber, "Service date isn't a valid date (use MM/DD/YYYY).");
+    if (!serviceDate) add(rowNumber, t("import.error.serviceDateInvalid"));
     for (const key of Object.keys(COLUMNS) as ColumnKey[]) {
-      if (cell(key).length > 200) add(rowNumber, `${COLUMNS[key].label} is longer than 200 characters.`);
+      if (cell(key).length > 200) {
+        add(rowNumber, t("import.error.tooLong", { column: COLUMNS[key].label }));
+      }
     }
     lines.push({
       rowNumber,
@@ -216,20 +247,22 @@ export const MONTHLY_FILE_HEADER = Object.values(COLUMNS).map((c) => c.label);
 export type UploadCheck = { ok: true } | { ok: false; error: string };
 
 /** Checks on the uploaded file itself, before its contents are read. */
-export function checkUpload(file: {
-  name: string;
-  size: number;
-  attestedSynthetic: boolean;
-  syntheticOnly: boolean;
-}): UploadCheck {
-  if (file.size === 0) return { ok: false, error: "Choose a CSV file to import." };
+export function checkUpload(
+  file: {
+    name: string;
+    size: number;
+    attestedSynthetic: boolean;
+    syntheticOnly: boolean;
+  },
+  t: RevenueT = englishRevenue,
+): UploadCheck {
+  if (file.size === 0) return { ok: false, error: t("import.error.chooseFile") };
   if (!/\.csv$/i.test(file.name)) {
-    return { ok: false, error: "Upload the file as CSV (.csv). Excel files aren't supported yet." };
+    return { ok: false, error: t("import.error.notCsv") };
   }
-  if (file.size > MAX_FILE_BYTES)
-    return { ok: false, error: "The file is larger than 5 MB. Split it by site or month." };
+  if (file.size > MAX_FILE_BYTES) return { ok: false, error: t("import.error.tooLarge") };
   if (file.syntheticOnly && !file.attestedSynthetic) {
-    return { ok: false, error: "Confirm that the file contains synthetic data only." };
+    return { ok: false, error: t("import.error.confirmSynthetic") };
   }
   return { ok: true };
 }

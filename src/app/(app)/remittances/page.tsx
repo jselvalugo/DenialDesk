@@ -18,11 +18,14 @@ import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
 import { payerOptions } from "@/domain/denials/queries";
 import { REMITTANCES_PAGE_SIZE, remittanceList, type RemittanceFilters } from "@/domain/remittances/queries";
-import { METHOD_LABELS, REMITTANCE_STATUSES } from "@/domain/remittances/status";
+import { METHOD_LABEL_KEYS, REMITTANCE_STATUSES } from "@/domain/remittances/status";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
-import { formatCents, formatDate } from "@/lib/format";
 
-export const metadata: Metadata = { title: "Remittances" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("remittances");
+  return { title: t("list.title") };
+}
 
 const schema = z.object({
   status: z.enum(["received", "posted", "void"]).optional().catch(undefined),
@@ -54,6 +57,9 @@ export default async function RemittancesPage({
 }) {
   const auth = await requireAuth();
   const filters = parseFilters(await searchParams);
+  const t = await getT("remittances");
+  const tc = await getT("common");
+  const f = await getFormat();
 
   const { rows, total, summary, payers } = await withTenant(auth, async (tx) => {
     const list = await remittanceList(tx, filters);
@@ -78,77 +84,77 @@ export default async function RemittancesPage({
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <PageHeader
-        title="Remittances"
-        description="Payer payments from 835 remittance files. Check that a file balances, then post it to its claims."
+        title={t("list.title")}
+        description={t("list.description")}
         actions={
           canPostRemittances(auth.role) ? (
             <Link href="/remittances/new" className={primaryLinkButtonClass}>
-              New remittance
+              {t("list.newRemittance")}
             </Link>
           ) : undefined
         }
       />
 
-      <section aria-label="Remittance totals" className="grid grid-cols-4 gap-4">
+      <section aria-label={t("list.stat.sectionLabel")} className="grid grid-cols-4 gap-4">
         <StatTile
-          label="Ready to post"
-          value={summary.ready.toLocaleString("en-US")}
+          label={t("list.stat.readyToPost")}
+          value={f.number(summary.ready)}
           emphasis={summary.ready > 0 ? "warning" : undefined}
-          detail="Loaded, not yet applied to claims"
+          detail={t("list.stat.readyDetail")}
         />
-        <StatTile label="Ready to post, paid" value={formatCents(summary.readyCents)} />
-        <StatTile label="Posted" value={summary.posted.toLocaleString("en-US")} />
-        <StatTile label="Posted, paid" value={formatCents(summary.postedCents)} />
+        <StatTile label={t("list.stat.readyPaid")} value={f.cents(summary.readyCents)} />
+        <StatTile label={t("list.stat.posted")} value={f.number(summary.posted)} />
+        <StatTile label={t("list.stat.postedPaid")} value={f.cents(summary.postedCents)} />
       </section>
 
       <Panel flush>
         <form method="get" className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
           <Select
-            label="Status"
+            label={tc("word.status")}
             name="status"
             defaultValue={filters.status ?? ""}
             options={[
-              { value: "", label: "All" },
-              { value: "received", label: REMITTANCE_STATUSES.received.label },
-              { value: "posted", label: REMITTANCE_STATUSES.posted.label },
-              { value: "void", label: REMITTANCE_STATUSES.void.label },
+              { value: "", label: tc("word.all") },
+              { value: "received", label: t(REMITTANCE_STATUSES.received.labelKey) },
+              { value: "posted", label: t(REMITTANCE_STATUSES.posted.labelKey) },
+              { value: "void", label: t(REMITTANCE_STATUSES.void.labelKey) },
             ]}
           />
           <Select
-            label="Payer"
+            label={tc("word.payer")}
             name="payer"
             defaultValue={filters.payerId ?? ""}
             options={[
-              { value: "", label: "All payers" },
+              { value: "", label: t("list.filter.allPayers") },
               ...payers.map((p) => ({ value: p.id, label: p.name })),
             ]}
           />
           <div className="flex gap-2">
             <Button type="submit" size="md">
-              Apply
+              {tc("action.apply")}
             </Button>
             <Link href="/remittances" className={linkButtonReset}>
-              Reset
+              {tc("action.reset")}
             </Link>
           </div>
         </form>
 
         {rows.length === 0 ? (
           <EmptyState
-            title={filtered ? "No remittances match these filters" : "No remittances yet"}
-            description="Upload an 835 remittance file from the payer or clearinghouse to see it here."
+            title={filtered ? t("list.empty.titleFiltered") : t("list.empty.title")}
+            description={t("list.empty.description")}
           />
         ) : (
-          <Table caption="Remittances">
+          <Table caption={t("list.title")}>
             <thead>
               <tr>
-                <Th>Trace number</Th>
-                <Th>Payer</Th>
-                <Th>Method</Th>
-                <Th aria-sort="descending">Payment date</Th>
-                <Th numeric>Claims</Th>
-                <Th numeric>Paid</Th>
-                <Th>Status</Th>
+                <Th>{t("list.table.traceNumber")}</Th>
+                <Th>{tc("word.payer")}</Th>
+                <Th>{t("list.table.method")}</Th>
+                <Th aria-sort="descending">{t("list.table.paymentDate")}</Th>
+                <Th numeric>{t("list.table.claims")}</Th>
+                <Th numeric>{t("list.table.paid")}</Th>
+                <Th>{tc("word.status")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -165,14 +171,14 @@ export default async function RemittancesPage({
                       </Link>
                     </Td>
                     <Td>{row.payerName}</Td>
-                    <Td>{METHOD_LABELS[row.method]}</Td>
-                    <Td className="tabular">{formatDate(row.paymentDate)}</Td>
+                    <Td>{t(METHOD_LABEL_KEYS[row.method])}</Td>
+                    <Td className="tabular">{f.date(row.paymentDate)}</Td>
                     <Td numeric>{row.claims}</Td>
                     <Td numeric className="font-medium">
                       <Money cents={row.totalPaidCents} />
                     </Td>
                     <Td>
-                      <Badge tone={status.tone}>{status.label}</Badge>
+                      <Badge tone={status.tone}>{t(status.labelKey)}</Badge>
                     </Td>
                   </Tr>
                 );

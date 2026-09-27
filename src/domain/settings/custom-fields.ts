@@ -1,26 +1,43 @@
 import { z } from "zod";
-import { SENSITIVITY_TAGS, type SensitivityTag } from "@/domain/patients/record";
+import { en } from "@/i18n/messages/en";
+import type { MessageKey, Messages } from "@/i18n/messages/types";
+import { createTranslator, type Translator } from "@/i18n/translate";
+import { SENSITIVITY_TAG_LABEL_KEYS, type SensitivityTag } from "@/domain/patients/record";
 
 // Custom field definitions (docs/specs/settings-and-custom-fields.md). Pure rules shared by the
 // settings form, the server actions, and the database checks in drizzle/0023.
 
-export const CUSTOM_FIELD_ENTITIES = {
-  patient: "Patients",
-  claim: "Claims",
-  denial: "Denials",
-  payer: "Payers",
-} as const;
-export type CustomFieldEntity = keyof typeof CUSTOM_FIELD_ENTITIES;
+type SettingsKey = MessageKey<"settings">;
+type SettingsT = Translator<Messages["settings"]>;
 
-export const CUSTOM_FIELD_TYPES = {
-  text: "Short text",
-  long_text: "Long text",
-  number: "Number",
-  date: "Date",
-  checkbox: "Checkbox (yes / no)",
-  select: "Choice list",
-} as const;
-export type CustomFieldType = keyof typeof CUSTOM_FIELD_TYPES;
+/** English translator used when a caller doesn't have the request's language (e.g. unit tests). */
+const englishSettingsT: SettingsT = createTranslator(en.settings, "en");
+
+export const CUSTOM_FIELD_ENTITY_LABEL_KEYS = {
+  patient: "entity.patient",
+  claim: "entity.claim",
+  denial: "entity.denial",
+  payer: "entity.payer",
+} as const satisfies Record<string, SettingsKey>;
+export type CustomFieldEntity = keyof typeof CUSTOM_FIELD_ENTITY_LABEL_KEYS;
+
+export function customFieldEntityLabel(entity: CustomFieldEntity, t: SettingsT = englishSettingsT): string {
+  return t(CUSTOM_FIELD_ENTITY_LABEL_KEYS[entity]);
+}
+
+export const CUSTOM_FIELD_TYPE_LABEL_KEYS = {
+  text: "type.text",
+  long_text: "type.longText",
+  number: "type.number",
+  date: "type.date",
+  checkbox: "type.checkbox",
+  select: "type.select",
+} as const satisfies Record<string, SettingsKey>;
+export type CustomFieldType = keyof typeof CUSTOM_FIELD_TYPE_LABEL_KEYS;
+
+export function customFieldTypeLabel(type: CustomFieldType, t: SettingsT = englishSettingsT): string {
+  return t(CUSTOM_FIELD_TYPE_LABEL_KEYS[type]);
+}
 
 /** Per record type, so a practice can't bury its forms under hundreds of fields. */
 export const MAX_FIELDS_PER_ENTITY = 50;
@@ -55,68 +72,88 @@ export function parseOptions(raw: string): string[] {
   return options;
 }
 
-const label = z.string().trim().min(1, "Enter a label.").max(60, "Keep the label to 60 characters or fewer.");
-const helpText = z
-  .string()
-  .trim()
-  .max(200, "Keep the help text to 200 characters or fewer.")
-  .transform((value) => value || null);
-const options = z
-  .array(z.string().max(60, "Keep each choice to 60 characters or fewer."))
-  .max(MAX_OPTIONS, `A choice list can have at most ${MAX_OPTIONS} choices.`);
-
-/** Blank means ordinary; otherwise one of the record sensitivity categories (R-3.5.1). */
-const sensitivity = z
-  .string()
-  .trim()
-  .refine(
-    (value) => value === "" || value in SENSITIVITY_TAGS,
-    "Choose a sensitivity category from the list.",
-  )
-  .transform((value) => (value ? (value as SensitivityTag) : null));
-
-function checkOptions(value: { fieldType: CustomFieldType; options: string[] }, ctx: z.RefinementCtx) {
-  if (value.fieldType === "select" && value.options.length === 0) {
-    ctx.addIssue({ code: "custom", path: ["options"], message: "Add at least one choice, one per line." });
-  }
+function checkOptions(t: SettingsT) {
+  return (value: { fieldType: CustomFieldType; options: string[] }, ctx: z.RefinementCtx) => {
+    if (value.fieldType === "select" && value.options.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["options"], message: t("validation.needOneChoice") });
+    }
+  };
 }
 
 /** A new field: its record type, key, and type are fixed once created. */
-export const newCustomFieldSchema = z
-  .object({
-    entity: z.enum(Object.keys(CUSTOM_FIELD_ENTITIES) as [CustomFieldEntity, ...CustomFieldEntity[]], {
-      message: "Choose which records get this field.",
-    }),
-    label,
-    key: z
-      .string()
-      .trim()
-      .regex(KEY, "Use a lowercase key that starts with a letter: letters, numbers, and underscores."),
-    fieldType: z.enum(Object.keys(CUSTOM_FIELD_TYPES) as [CustomFieldType, ...CustomFieldType[]], {
-      message: "Choose a field type.",
-    }),
-    options,
-    required: z.boolean(),
-    helpText,
-    sensitivity,
-  })
-  .superRefine(checkOptions)
-  .transform((value) => ({ ...value, options: value.fieldType === "select" ? value.options : [] }));
-export type NewCustomField = z.output<typeof newCustomFieldSchema>;
+export function newCustomFieldSchema(t: SettingsT = englishSettingsT) {
+  const label = z.string().trim().min(1, t("validation.enterLabel")).max(60, t("validation.labelMaxLength"));
+  const helpText = z
+    .string()
+    .trim()
+    .max(200, t("validation.helpTextMaxLength"))
+    .transform((value) => value || null);
+  const options = z
+    .array(z.string().max(60, t("validation.choiceMaxLength")))
+    .max(MAX_OPTIONS, t("validation.choicesMax", { max: MAX_OPTIONS }));
+  /** Blank means ordinary; otherwise one of the record sensitivity categories (R-3.5.1). */
+  const sensitivity = z
+    .string()
+    .trim()
+    .refine((value) => value === "" || value in SENSITIVITY_TAG_LABEL_KEYS, t("validation.chooseSensitivity"))
+    .transform((value) => (value ? (value as SensitivityTag) : null));
+
+  return z
+    .object({
+      entity: z.enum(
+        Object.keys(CUSTOM_FIELD_ENTITY_LABEL_KEYS) as [CustomFieldEntity, ...CustomFieldEntity[]],
+        {
+          message: t("validation.chooseEntity"),
+        },
+      ),
+      label,
+      key: z.string().trim().regex(KEY, t("validation.keyFormat")),
+      fieldType: z.enum(
+        Object.keys(CUSTOM_FIELD_TYPE_LABEL_KEYS) as [CustomFieldType, ...CustomFieldType[]],
+        {
+          message: t("validation.chooseFieldType"),
+        },
+      ),
+      options,
+      required: z.boolean(),
+      helpText,
+      sensitivity,
+    })
+    .superRefine(checkOptions(t))
+    .transform((value) => ({ ...value, options: value.fieldType === "select" ? value.options : [] }));
+}
+export type NewCustomField = z.output<ReturnType<typeof newCustomFieldSchema>>;
 
 /** What an edit may change. `fieldType` comes from the stored field, not the form. */
-export const customFieldChangesSchema = z
-  .object({
-    fieldType: z.enum(Object.keys(CUSTOM_FIELD_TYPES) as [CustomFieldType, ...CustomFieldType[]]),
-    label,
-    options,
-    required: z.boolean(),
-    helpText,
-    sensitivity,
-  })
-  .superRefine(checkOptions)
-  .transform(({ fieldType, ...value }) => ({
-    ...value,
-    options: fieldType === "select" ? value.options : [],
-  }));
-export type CustomFieldChanges = z.output<typeof customFieldChangesSchema>;
+export function customFieldChangesSchema(t: SettingsT = englishSettingsT) {
+  const label = z.string().trim().min(1, t("validation.enterLabel")).max(60, t("validation.labelMaxLength"));
+  const helpText = z
+    .string()
+    .trim()
+    .max(200, t("validation.helpTextMaxLength"))
+    .transform((value) => value || null);
+  const options = z
+    .array(z.string().max(60, t("validation.choiceMaxLength")))
+    .max(MAX_OPTIONS, t("validation.choicesMax", { max: MAX_OPTIONS }));
+  const sensitivity = z
+    .string()
+    .trim()
+    .refine((value) => value === "" || value in SENSITIVITY_TAG_LABEL_KEYS, t("validation.chooseSensitivity"))
+    .transform((value) => (value ? (value as SensitivityTag) : null));
+
+  return z
+    .object({
+      fieldType: z.enum(Object.keys(CUSTOM_FIELD_TYPE_LABEL_KEYS) as [CustomFieldType, ...CustomFieldType[]]),
+      label,
+      options,
+      required: z.boolean(),
+      helpText,
+      sensitivity,
+    })
+    .superRefine(checkOptions(t))
+    .transform(({ fieldType, ...value }) => ({
+      ...value,
+      options: fieldType === "select" ? value.options : [],
+    }));
+}
+export type CustomFieldChanges = z.output<ReturnType<typeof customFieldChangesSchema>>;

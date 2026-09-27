@@ -8,6 +8,7 @@ import { withTenant } from "@/db/tenant";
 import { findLesson } from "@/domain/university/catalog";
 import { lessonKey } from "@/domain/university/content";
 import { completedLessons } from "@/domain/university/queries";
+import { getT } from "@/i18n/server";
 import { UniversityHeader } from "../../UniversityHeader";
 import { CompleteLessonForm } from "./CompleteLessonForm";
 import { LessonBody } from "./LessonBody";
@@ -17,7 +18,8 @@ type Params = Promise<{ courseId: string; lessonId: string }>;
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { courseId, lessonId } = await params;
   const found = findLesson(courseId, lessonId);
-  return { title: found ? `${found.lesson.title} · ${found.course.title}` : "DenialDesk University" };
+  const t = await getT("university");
+  return { title: found ? `${found.lesson.title} · ${found.course.title}` : t("eyebrow") };
 }
 
 /** One lesson: its body, previous/next, and "Mark lesson complete". No PHI is read; not audited. */
@@ -27,15 +29,16 @@ export default async function LessonPage({ params }: { params: Params }) {
   if (!found) notFound();
   const { course, lesson, previous, next } = found;
   const auth = await requireAuth();
+  const t = await getT("university");
   const completed = await withTenant(auth, (tx) => completedLessons(tx, auth.userId));
   const completedAt = completed.get(lessonKey(course.id, lesson.id)) ?? null;
   const position = course.lessons.findIndex((item) => item.id === lesson.id) + 1;
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href="/university" className="font-medium text-link hover:underline">
-          DenialDesk University
+          {t("eyebrow")}
         </Link>{" "}
         <span aria-hidden>/</span>{" "}
         <Link href={`/university/${course.id}`} className="font-medium text-link hover:underline">
@@ -45,7 +48,7 @@ export default async function LessonPage({ params }: { params: Params }) {
       </nav>
 
       <UniversityHeader
-        eyebrow={`${course.title} · Lesson ${position} of ${course.lessons.length}`}
+        eyebrow={t("lesson.eyebrow", { course: course.title, position, total: course.lessons.length })}
         title={lesson.title}
         description={lesson.summary}
       />
@@ -54,7 +57,7 @@ export default async function LessonPage({ params }: { params: Params }) {
         <LessonBody blocks={lesson.blocks} />
       </Panel>
 
-      <Panel title="Your progress" description="Completions are kept for your account and can't be undone.">
+      <Panel title={t("lesson.progressTitle")} description={t("lesson.progressDescription")}>
         <CompleteLessonForm
           courseId={course.id}
           lessonId={lesson.id}
@@ -62,14 +65,14 @@ export default async function LessonPage({ params }: { params: Params }) {
         />
       </Panel>
 
-      <nav aria-label="Lesson navigation" className="flex items-center justify-between gap-4 text-body">
+      <nav aria-label={t("nav.lesson")} className="flex items-center justify-between gap-4 text-body">
         {previous ? (
           <Link
             href={`/university/${course.id}/${previous.id}`}
             className="inline-flex items-center gap-1 font-medium text-link hover:underline"
           >
             <ArrowLeft aria-hidden="true" className="size-3.5" strokeWidth={2} />
-            Previous: {previous.title}
+            {t("lesson.previous", { title: previous.title })}
           </Link>
         ) : (
           <span />
@@ -79,7 +82,7 @@ export default async function LessonPage({ params }: { params: Params }) {
             href={`/university/${course.id}/${next.id}`}
             className="inline-flex items-center gap-1 font-medium text-link hover:underline"
           >
-            Next: {next.title}
+            {t("lesson.next", { title: next.title })}
             <ArrowRight aria-hidden="true" className="size-3.5" strokeWidth={2} />
           </Link>
         ) : (
@@ -87,7 +90,7 @@ export default async function LessonPage({ params }: { params: Params }) {
             href={`/university/${course.id}`}
             className="inline-flex items-center gap-1 font-medium text-link hover:underline"
           >
-            Back to the course
+            {t("lesson.backToCourse")}
             <ArrowRight aria-hidden="true" className="size-3.5" strokeWidth={2} />
           </Link>
         )}

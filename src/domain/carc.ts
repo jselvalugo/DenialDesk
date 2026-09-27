@@ -1,4 +1,5 @@
 import type { denialCategoryEnum } from "@/db/schema";
+import type { MessageKey } from "@/i18n/messages/types";
 
 export type DenialCategory = (typeof denialCategoryEnum.enumValues)[number];
 
@@ -45,19 +46,23 @@ export const CARC: Record<string, { summary: string; category: DenialCategory }>
   "252": { summary: "An attachment or other documentation is required", category: "missing_information" },
 };
 
-export const CATEGORY_LABELS: Record<DenialCategory, string> = {
-  eligibility: "Eligibility",
-  authorization: "Authorization",
-  coding: "Coding",
-  medical_necessity: "Medical necessity",
-  timely_filing: "Timely filing",
-  duplicate: "Duplicate",
-  bundling: "Bundling",
-  coordination_of_benefits: "Coordination of benefits",
-  missing_information: "Missing information",
-  credentialing: "Credentialing",
-  other: "Other",
+/** Message key (common namespace) for each category's name; show it with `t(CATEGORY_LABEL_KEYS[c])`. */
+export const CATEGORY_LABEL_KEYS: Record<DenialCategory, MessageKey<"common">> = {
+  eligibility: "category.eligibility",
+  authorization: "category.authorization",
+  coding: "category.coding",
+  medical_necessity: "category.medical_necessity",
+  timely_filing: "category.timely_filing",
+  duplicate: "category.duplicate",
+  bundling: "category.bundling",
+  coordination_of_benefits: "category.coordination_of_benefits",
+  missing_information: "category.missing_information",
+  credentialing: "category.credentialing",
+  other: "category.other",
 };
+
+/** Categories in their canonical order (the order of the reference table above). */
+export const CATEGORY_ORDER = Object.keys(CATEGORY_LABEL_KEYS) as DenialCategory[];
 
 /** Category for a CARC; unknown codes go to "other" for a human to classify. */
 export function categorize(carc: string): DenialCategory {

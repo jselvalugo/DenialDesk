@@ -5,10 +5,17 @@ import type { CustomFieldRow } from "@/domain/settings/queries";
 import type { TenantTx } from "@/db/tenant";
 import { decryptField, encryptField } from "@/lib/crypto/field";
 import { audit } from "@/lib/audit";
+import { en } from "@/i18n/messages/en";
+import type { Messages } from "@/i18n/messages/types";
+import { createTranslator, type Translator } from "@/i18n/translate";
 import { activeCustomFields } from "@/domain/settings/queries";
 import type { CustomFieldEntity, CustomFieldType } from "@/domain/settings/custom-fields";
 import { canWorkDenials } from "@/auth/permissions";
 import type { Role } from "@/auth/session";
+
+type SettingsT = Translator<Messages["settings"]>;
+/** English translator used when a caller doesn't have the request's language (e.g. integration tests). */
+const englishSettingsT: SettingsT = createTranslator(en.settings, "en");
 
 // Values stored on patient, claim, denial, and payer records (docs/specs/settings-and-custom-fields.md
 // S2; ADR 0007; threat model docs/threat-models/custom-field-values.md). Every value is encrypted
@@ -92,13 +99,18 @@ function isRealCalendarDate(value: string): boolean {
  * `null` when the value should be cleared (blank, non-required). Throws `CustomFieldValueError`
  * with the field's key on any other invalid input.
  */
-export function serializeValue(field: CustomFieldRow, raw: unknown): string | null {
+export function serializeValue(
+  field: CustomFieldRow,
+  raw: unknown,
+  t: SettingsT = englishSettingsT,
+): string | null {
   const fail = (message: string): never => {
     throw new CustomFieldValueError(message, field.key);
   };
+  const required = () => fail(t("error.required", { field: field.label }));
 
   if (raw === null || raw === undefined) {
-    if (field.required && field.active) fail(`${field.label} is required.`);
+    if (field.required && field.active) required();
     return null;
   }
 
@@ -107,27 +119,28 @@ export function serializeValue(field: CustomFieldRow, raw: unknown): string | nu
     case "long_text": {
       const value = String(raw).trim();
       if (!value) {
-        if (field.required && field.active) fail(`${field.label} is required.`);
+        if (field.required && field.active) required();
         return null;
       }
       const max = field.fieldType === "text" ? MAX_TEXT : MAX_LONG_TEXT;
-      if (value.length > max) fail(`${field.label} must be ${max} characters or fewer.`);
+      if (value.length > max) fail(t("error.maxLength", { field: field.label, max }));
       return value;
     }
     case "number": {
-      if (typeof raw !== "string" && typeof raw !== "number") fail(`${field.label} must be a number.`);
+      if (typeof raw !== "string" && typeof raw !== "number")
+        fail(t("error.mustBeNumber", { field: field.label }));
       const trimmed = typeof raw === "string" ? raw.trim() : raw;
       if (trimmed === "") {
-        if (field.required && field.active) fail(`${field.label} is required.`);
+        if (field.required && field.active) required();
         return null;
       }
       const num = typeof trimmed === "number" ? trimmed : Number(trimmed);
-      if (!Number.isFinite(num)) fail(`${field.label} must be a number.`);
+      if (!Number.isFinite(num)) fail(t("error.mustBeNumber", { field: field.label }));
       const magnitude = Math.abs(num);
       // Outside this range `toString()` switches to exponential notation ("1e+21"), which the
       // plain digit count below can't read; treat it the same as too many digits.
       if (magnitude !== 0 && (magnitude >= 1e21 || magnitude < 1e-6)) {
-        fail(`${field.label} has too many digits.`);
+        fail(t("error.tooManyDigits", { field: field.label }));
       }
       // 15 significant digits: matches the double-precision round-trip the form displays. Counts
       // the digit characters of the shortest round-tripping representation, leading zeros dropped.
@@ -135,17 +148,19 @@ export function serializeValue(field: CustomFieldRow, raw: unknown): string | nu
         .toString()
         .replace(/[^0-9]/g, "")
         .replace(/^0+(?=\d)/, "");
-      if (digits.length > 15) fail(`${field.label} has too many digits.`);
+      if (digits.length > 15) fail(t("error.tooManyDigits", { field: field.label }));
       return String(num);
     }
     case "date": {
-      const value = (typeof raw === "string" ? raw : fail(`${field.label} must be a valid date.`)).trim();
+      const value = (
+        typeof raw === "string" ? raw : fail(t("error.mustBeDate", { field: field.label }))
+      ).trim();
       if (!value) {
-        if (field.required && field.active) fail(`${field.label} is required.`);
+        if (field.required && field.active) required();
         return null;
       }
       if (!ISO_DATE.test(value) || !isRealCalendarDate(value)) {
-        fail(`${field.label} must be a valid date.`);
+        fail(t("error.mustBeDate", { field: field.label }));
       }
       return value;
     }
@@ -156,14 +171,14 @@ export function serializeValue(field: CustomFieldRow, raw: unknown): string | nu
     case "select": {
       const value = String(raw).trim();
       if (!value) {
-        if (field.required && field.active) fail(`${field.label} is required.`);
+        if (field.required && field.active) required();
         return null;
       }
-      if (!field.options.includes(value)) fail(`Choose a current option for ${field.label}.`);
+      if (!field.options.includes(value)) fail(t("error.chooseCurrentOption", { field: field.label }));
       return value;
     }
     default:
-      return fail(`Unknown field type for ${field.label}.`);
+      return fail(t("error.unknownFieldType", { field: field.label }));
   }
 }
 
@@ -296,6 +311,7 @@ export async function saveValuesForRecord(
   entity: CustomFieldEntity,
   recordId: string,
   inputs: Map<string, unknown>,
+  t: SettingsT = englishSettingsT,
 ): Promise<string[]> {
   const fields = await activeCustomFields(tx, entity);
   const column = RECORD_COLUMN[entity];
@@ -306,9 +322,9 @@ export async function saveValuesForRecord(
     if (!inputs.has(field.id)) continue; // not submitted: masked value, left unchanged.
     const masked = Boolean(field.sensitivity) || recordSensitive;
     if (masked && !canWorkDenials(actor.role)) {
-      throw new CustomFieldValueError(`Your role can't change ${field.label}.`, field.key);
+      throw new CustomFieldValueError(t("error.cantChangeField", { field: field.label }), field.key);
     }
-    const serialized = serializeValue(field, inputs.get(field.id));
+    const serialized = serializeValue(field, inputs.get(field.id), t);
 
     const [current] = await tx
       .select({ id: customFieldValues.id, valueEnc: customFieldValues.valueEnc })
@@ -450,14 +466,15 @@ export async function revealCustomFieldValue(
   tx: TenantTx,
   actor: Actor,
   input: { fieldId: string; entity: CustomFieldEntity; recordId: string; reason: RevealReason },
+  t: SettingsT = englishSettingsT,
 ): Promise<{ value?: CustomFieldTypedValue; error?: string }> {
-  if (!canWorkDenials(actor.role)) return { error: "Your role can't reveal custom field values." };
+  if (!canWorkDenials(actor.role)) return { error: t("error.cantReveal") };
 
   const [field] = await tx.select().from(customFields).where(eq(customFields.id, input.fieldId)).limit(1);
-  if (!field || field.entity !== input.entity || !field.active) return { error: "Field not found." };
+  if (!field || field.entity !== input.entity || !field.active) return { error: t("error.fieldNotFound") };
 
   const recordSensitive = await recordIsSensitive(tx, input.entity, input.recordId);
-  if (!field.sensitivity && !recordSensitive) return { error: "This value isn't locked." };
+  if (!field.sensitivity && !recordSensitive) return { error: t("error.notLocked") };
 
   const column = RECORD_COLUMN[input.entity];
   const [row] = await tx
@@ -465,7 +482,7 @@ export async function revealCustomFieldValue(
     .from(customFieldValues)
     .where(and(eq(customFieldValues.fieldId, input.fieldId), eq(column, input.recordId)))
     .limit(1);
-  if (!row?.valueEnc) return { error: "No value on file." };
+  if (!row?.valueEnc) return { error: t("error.noValueOnFile") };
 
   await audit(tx, {
     action: "custom_field.value_revealed",
@@ -493,6 +510,6 @@ export async function revealCustomFieldValue(
       entityId: input.fieldId,
       metadata: { entity: input.entity, recordId: input.recordId },
     });
-    return { error: "Value unavailable." };
+    return { error: t("error.valueUnavailable") };
   }
 }
