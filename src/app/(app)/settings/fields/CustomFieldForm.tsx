@@ -5,10 +5,17 @@ import { useActionState, useState } from "react";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
-import { SENSITIVITY_TAGS } from "@/domain/patients/record";
+import { useT } from "@/i18n/client";
 import {
-  CUSTOM_FIELD_ENTITIES,
-  CUSTOM_FIELD_TYPES,
+  sensitivityTagLabel,
+  SENSITIVITY_TAG_LABEL_KEYS,
+  type SensitivityTag,
+} from "@/domain/patients/record";
+import {
+  CUSTOM_FIELD_ENTITY_LABEL_KEYS,
+  CUSTOM_FIELD_TYPE_LABEL_KEYS,
+  customFieldEntityLabel,
+  customFieldTypeLabel,
   keyFromLabel,
   type CustomFieldEntity,
   type CustomFieldType,
@@ -33,6 +40,9 @@ export interface CustomFieldValues {
 
 /** Add a field (no `field`) or edit one. Record type, key, and type are fixed once created. */
 export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; entity: CustomFieldEntity }) {
+  const t = useT("settings");
+  const tp = useT("patients");
+  const tc = useT("common");
   const editing = Boolean(field);
   const [state, action] = useActionState<CustomFieldFormState, FormData>(
     editing ? saveCustomField : addCustomField,
@@ -55,7 +65,7 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="field-entity" className="text-label font-medium text-text">
-            Add to
+            {t("form.addTo")}
           </label>
           <select
             id="field-entity"
@@ -64,16 +74,16 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
             disabled={editing}
             className={selectClass}
           >
-            {Object.entries(CUSTOM_FIELD_ENTITIES).map(([value, name]) => (
+            {(Object.keys(CUSTOM_FIELD_ENTITY_LABEL_KEYS) as CustomFieldEntity[]).map((value) => (
               <option key={value} value={value}>
-                {name}
+                {customFieldEntityLabel(value, t)}
               </option>
             ))}
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="field-fieldType" className="text-label font-medium text-text">
-            Field type
+            {t("form.fieldType")}
           </label>
           <select
             id="field-fieldType"
@@ -83,26 +93,26 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
             disabled={editing}
             className={selectClass}
           >
-            {Object.entries(CUSTOM_FIELD_TYPES).map(([value, name]) => (
+            {(Object.keys(CUSTOM_FIELD_TYPE_LABEL_KEYS) as CustomFieldType[]).map((value) => (
               <option key={value} value={value}>
-                {name}
+                {customFieldTypeLabel(value, t)}
               </option>
             ))}
           </select>
         </div>
       </div>
       <TextField
-        label="Label"
+        label={t("fields.label")}
         name="label"
         value={label}
         onChange={(event) => setLabel(event.target.value)}
         maxLength={60}
         required
-        hint="What people see on the form, e.g. “Referring clinic”. Never put patient information in a label."
+        hint={t("form.labelHint")}
         error={errorFor("label")}
       />
       <TextField
-        label="Key"
+        label={t("fields.key")}
         name="key"
         value={editing ? key : key || ""}
         placeholder={keyFromLabel(label)}
@@ -110,17 +120,13 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
         maxLength={40}
         disabled={editing}
         className="font-mono"
-        hint={
-          editing
-            ? "The key can't change once the field exists."
-            : "Used in exports and integrations. Leave blank to use the suggestion. It can't change later."
-        }
+        hint={editing ? t("form.keyHintEditing") : t("form.keyHintNew")}
         error={errorFor("key")}
       />
       {fieldType === "select" && (
         <div className="flex flex-col gap-1.5">
           <label htmlFor="field-options" className="text-label font-medium text-text">
-            Choices
+            {t("form.choices")}
           </label>
           <textarea
             id="field-options"
@@ -132,7 +138,7 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
             className="rounded-control border border-border-strong bg-surface px-3 py-2 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus"
           />
           <p id="field-options-hint" className="text-label text-muted">
-            One choice per line, in the order to show them (up to 50).
+            {t("form.choicesHint")}
           </p>
           {errorFor("options") && (
             <p className="text-label font-medium text-danger-fg">{errorFor("options")}</p>
@@ -140,16 +146,16 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
         </div>
       )}
       <TextField
-        label="Help text (optional)"
+        label={t("form.helpText")}
         name="helpText"
         defaultValue={field?.helpText ?? ""}
         maxLength={200}
-        hint="Shown under the field on the form."
+        hint={t("form.helpTextHint")}
         error={errorFor("helpText")}
       />
       <div className="flex flex-col gap-1.5">
         <label htmlFor="field-sensitivity" className="text-label font-medium text-text">
-          Sensitivity
+          {t("fields.sensitivity")}
         </label>
         <select
           id="field-sensitivity"
@@ -159,16 +165,15 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
           aria-invalid={errorFor("sensitivity") ? true : undefined}
           className={selectClass}
         >
-          <option value="">Not sensitive</option>
-          {Object.entries(SENSITIVITY_TAGS).map(([value, name]) => (
+          <option value="">{t("fields.notSensitive")}</option>
+          {(Object.keys(SENSITIVITY_TAG_LABEL_KEYS) as SensitivityTag[]).map((value) => (
             <option key={value} value={value}>
-              Sensitive: {name}
+              {t("form.sensitiveOption", { name: sensitivityTagLabel(value, tp) })}
             </option>
           ))}
         </select>
         <p id="field-sensitivity-hint" className="text-label text-muted">
-          A sensitive field is locked on every record: its value stays hidden until someone opens it with a
-          reason, and each opening is recorded in the audit log.
+          {t("form.sensitivityHint")}
         </p>
         {errorFor("sensitivity") && (
           <p className="text-label font-medium text-danger-fg">{errorFor("sensitivity")}</p>
@@ -176,17 +181,17 @@ export function CustomFieldForm({ field, entity }: { field?: CustomFieldValues; 
       </div>
       <label className="flex items-center gap-2 text-body text-text">
         <input type="checkbox" name="required" defaultChecked={field?.required ?? false} className="size-4" />
-        Required: the record can&apos;t be saved without it
+        {t("form.requiredLabel")}
       </label>
       <div className="flex items-center gap-2">
-        <SubmitButton variant="primary" pendingLabel={editing ? "Saving…" : "Adding…"}>
-          {editing ? "Save field" : "Add field"}
+        <SubmitButton variant="primary" pendingLabel={editing ? tc("action.saving") : t("form.adding")}>
+          {editing ? t("form.saveField") : t("fields.addField")}
         </SubmitButton>
         <Link
           href={`/settings/fields?records=${field?.entity ?? entity}`}
           className="text-body font-medium text-link hover:underline"
         >
-          Cancel
+          {tc("action.cancel")}
         </Link>
       </div>
     </form>

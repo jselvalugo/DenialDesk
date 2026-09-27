@@ -7,21 +7,26 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { payerOptions } from "@/domain/denials/queries";
+import { getT } from "@/i18n/server";
 import { syntheticDataOnly } from "@/lib/env";
 import { PatientForm } from "../PatientForm";
 
-export const metadata: Metadata = { title: "Register patient" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("patients");
+  return { title: t("new.title") };
+}
 
 export default async function NewPatientPage() {
   const auth = await requireAuth();
+  const t = await getT("patients");
   if (!canEditPatients(auth.role)) {
     return (
       <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-        <PageHeader title="Register patient" />
+        <PageHeader title={t("new.title")} />
         <p role="note" className="text-body text-muted">
-          Your role can view patients but not register them.{" "}
+          {t("new.readOnlyNotice")}{" "}
           <Link href="/patients" className="font-medium text-link hover:underline">
-            Back to patients
+            {t("new.backToPatients")}
           </Link>
         </p>
       </div>
@@ -31,16 +36,13 @@ export default async function NewPatientPage() {
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href="/patients" className="font-medium text-link hover:underline">
-          Patients
+          {t("list.title")}
         </Link>{" "}
-        <span aria-hidden>/</span> Register
+        <span aria-hidden>/</span> {t("nav.register")}
       </nav>
-      <PageHeader
-        title="Register patient"
-        description="Demographics and primary insurance. Claims for this patient will link to this record."
-      />
+      <PageHeader title={t("new.title")} description={t("new.description")} />
       <Panel>
         <PatientForm payers={payers} syntheticOnly={syntheticDataOnly()} today={todayIn()} />
       </Panel>

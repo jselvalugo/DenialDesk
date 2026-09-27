@@ -10,18 +10,23 @@ import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { payerOptions } from "@/domain/denials/queries";
 import { getPatientForEdit } from "@/domain/patients/queries";
+import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
 import { PatientForm } from "../../PatientForm";
 
-// The title never includes patient data (DESIGN.md §12).
-export const metadata: Metadata = { title: "Edit patient" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("patients");
+  // The title never includes patient data (DESIGN.md §12).
+  return { title: t("edit.title") };
+}
 
 export default async function EditPatientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
   const auth = await requireAuth();
   if (!canEditPatients(auth.role)) redirect(`/patients/${id}`);
+  const t = await getT("patients");
 
   const data = await withTenant(auth, async (tx) => {
     const patient = await getPatientForEdit(tx, id);
@@ -42,20 +47,17 @@ export default async function EditPatientPage({ params }: { params: Promise<{ id
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href="/patients" className="font-medium text-link hover:underline">
-          Patients
+          {t("list.title")}
         </Link>{" "}
         <span aria-hidden>/</span>{" "}
         <Link href={`/patients/${id}`} className="font-mono font-medium text-link hover:underline">
           {patient.mrn}
         </Link>{" "}
-        <span aria-hidden>/</span> Edit
+        <span aria-hidden>/</span> {t("nav.edit")}
       </nav>
-      <PageHeader
-        title="Edit patient"
-        description="Changes are saved with your reason in the audit trail. Claims already sent keep what was billed."
-      />
+      <PageHeader title={t("edit.title")} description={t("edit.description")} />
       <Panel>
         <PatientForm
           patient={{ ...patient, updatedAt: patient.updatedAt.toISOString() }}

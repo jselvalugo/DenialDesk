@@ -6,14 +6,19 @@ import { canEditPatients } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Pagination } from "@/components/ui/Pagination";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { listPatients, PATIENTS_PAGE_SIZE } from "@/domain/patients/queries";
+import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { PatientSearch } from "./PatientSearch";
 import { PatientTable } from "./PatientTable";
 
-export const metadata: Metadata = { title: "Patients" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("patients");
+  return { title: t("list.title") };
+}
 
 const newPatientClass =
   "inline-flex h-8 items-center rounded-control border border-primary bg-primary px-3 text-body font-medium text-white hover:border-primary-hover hover:bg-primary-hover";
@@ -24,6 +29,7 @@ export default async function PatientsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const auth = await requireAuth();
+  const t = await getT("patients");
   // Only the page number is ever in the URL; searches are POSTed (no PHI in URLs).
   const page = z.coerce
     .number()
@@ -46,19 +52,17 @@ export default async function PatientsPage({
 
   const pages = Math.max(1, Math.ceil(total / PATIENTS_PAGE_SIZE));
   if (total > 0 && page > pages) redirect(`/patients?page=${pages}`);
-  const first = total === 0 ? 0 : (page - 1) * PATIENTS_PAGE_SIZE + 1;
-  const last = Math.min(page * PATIENTS_PAGE_SIZE, total);
   const canEdit = canEditPatients(auth.role);
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <PageHeader
-        title="Patients"
-        description="Every claim and denial belongs to a patient. Open a patient to see their coverage, claims, and denials in one place."
+        title={t("list.title")}
+        description={t("list.description")}
         actions={
           canEdit && (
             <Link href="/patients/new" className={newPatientClass}>
-              Register patient
+              {t("list.register")}
             </Link>
           )
         }
@@ -68,63 +72,19 @@ export default async function PatientsPage({
         <PatientSearch />
         {rows.length === 0 ? (
           <EmptyState
-            title="No patients yet"
-            description={
-              canEdit
-                ? "Register a patient to start their record. Claims and denials link to it."
-                : "Patients appear here once your team registers them."
-            }
+            title={t("list.emptyTitle")}
+            description={canEdit ? t("list.emptyDescriptionCanEdit") : t("list.emptyDescriptionReadOnly")}
           />
         ) : (
-          <PatientTable rows={rows} caption="Patients" />
+          <PatientTable rows={rows} caption={t("list.title")} />
         )}
-        <nav
-          aria-label="Pagination"
-          className="flex items-center justify-between border-t border-border px-4 py-2.5 text-label text-muted"
-        >
-          <span className="tabular">
-            {total === 0 ? "No results" : `Showing ${first}–${last} of ${total.toLocaleString("en-US")}`}
-          </span>
-          <span className="flex items-center gap-2">
-            <PageLink disabled={page <= 1} href={`/patients?page=${page - 1}`}>
-              Previous
-            </PageLink>
-            <span className="tabular">
-              Page {page} of {pages}
-            </span>
-            <PageLink disabled={page >= pages} href={`/patients?page=${page + 1}`}>
-              Next
-            </PageLink>
-          </span>
-        </nav>
+        <Pagination
+          page={page}
+          pageSize={PATIENTS_PAGE_SIZE}
+          total={total}
+          hrefFor={(p) => `/patients?page=${p}`}
+        />
       </Panel>
     </div>
-  );
-}
-
-function PageLink({
-  href,
-  disabled,
-  children,
-}: {
-  href: string;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
-  const className = "inline-flex h-7 items-center rounded-control border px-2.5 font-medium";
-  if (disabled) {
-    return (
-      <span aria-disabled="true" className={`${className} border-border text-subtle`}>
-        {children}
-      </span>
-    );
-  }
-  return (
-    <Link
-      href={href}
-      className={`${className} border-border-strong bg-surface text-text hover:bg-surface-muted`}
-    >
-      {children}
-    </Link>
   );
 }

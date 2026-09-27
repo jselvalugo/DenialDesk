@@ -1,22 +1,21 @@
 import { PageHeader } from "@/components/ui/PageHeader";
+import { getT } from "@/i18n/server";
 import { SettingsTabs, type SettingsTab } from "./SettingsTabs";
 
 /** Settings: one header, a tab per section (docs/specs/settings-and-custom-fields.md). */
-export default function SettingsLayout({ children }: { children: React.ReactNode }) {
+export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
+  const t = await getT("settings");
   const tabs: SettingsTab[] = [
-    { label: "General", href: "/settings", available: true },
-    { label: "Custom fields", href: "/settings/fields", available: true },
-    { label: "Users and roles", href: "/settings/users", available: false },
-    { label: "Security", href: "/settings/security", available: false },
-    { label: "Notifications", href: "/settings/notifications", available: false },
-    { label: "Integrations", href: "/settings/integrations", available: false },
+    { label: t("tabs.general"), href: "/settings", available: true },
+    { label: t("tabs.customFields"), href: "/settings/fields", available: true },
+    { label: t("tabs.usersAndRoles"), href: "/settings/users", available: false },
+    { label: t("tabs.security"), href: "/settings/security", available: false },
+    { label: t("tabs.notifications"), href: "/settings/notifications", available: false },
+    { label: t("tabs.integrations"), href: "/settings/integrations", available: false },
   ];
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader
-        title="Settings"
-        description="How DenialDesk is set up for your practice: its profile, the fields on its records, and who can do what."
-      />
+      <PageHeader title={t("page.title")} description={t("page.description")} />
       <SettingsTabs tabs={tabs} />
       {children}
     </div>

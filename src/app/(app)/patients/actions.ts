@@ -16,7 +16,10 @@ import {
   updatePatient,
   type PatientListRow,
 } from "@/domain/patients/queries";
-import { patientSchema, SENSITIVITY_TAGS } from "@/domain/patients/record";
+import { patientSchema, SENSITIVITY_TAG_LABEL_KEYS } from "@/domain/patients/record";
+import { getT } from "@/i18n/server";
+import type { Messages } from "@/i18n/messages/types";
+import type { Translator } from "@/i18n/translate";
 import { syntheticDataOnly } from "@/lib/env";
 
 export interface PatientFormState {
@@ -25,7 +28,7 @@ export interface PatientFormState {
   field?: string;
 }
 
-const NOT_ALLOWED = "Your role can view patients but not change them.";
+type PatientsT = Translator<Messages["patients"]>;
 
 /** Reads the patient form. Every field is short, so each is bounded before parsing. */
 function readForm(formData: FormData) {
@@ -45,22 +48,22 @@ function readForm(formData: FormData) {
     memberId: text("memberId"),
     sensitivityTags: formData
       .getAll("sensitivityTags")
-      .slice(0, Object.keys(SENSITIVITY_TAGS).length)
+      .slice(0, Object.keys(SENSITIVITY_TAG_LABEL_KEYS).length)
       .map(String),
   };
 }
 
 /** Pre-production accepts synthetic patients only (R-15.1); the person entering one says so. */
-function missingAttestation(formData: FormData): PatientFormState | null {
+function missingAttestation(formData: FormData, t: PatientsT): PatientFormState | null {
   if (!syntheticDataOnly() || formData.get("syntheticAttestation") === "on") return null;
   return {
-    error: "Confirm this patient is synthetic. Real patient data is not allowed here.",
+    error: t("error.syntheticRequired"),
     field: "syntheticAttestation",
   };
 }
 
-function parse(formData: FormData) {
-  const parsed = patientSchema({ today: todayIn(), syntheticOnly: syntheticDataOnly() }).safeParse(
+function parse(formData: FormData, t: PatientsT) {
+  const parsed = patientSchema({ today: todayIn(), syntheticOnly: syntheticDataOnly() }, t).safeParse(
     readForm(formData),
   );
   if (parsed.success) return { data: parsed.data };
@@ -75,11 +78,12 @@ function isDuplicateMrn(error: unknown): boolean {
 
 export async function registerPatient(_: PatientFormState, formData: FormData): Promise<PatientFormState> {
   const auth = await requireAuth();
-  if (!canEditPatients(auth.role)) return { error: NOT_ALLOWED };
-  const unattested = missingAttestation(formData);
+  const t = await getT("patients");
+  if (!canEditPatients(auth.role)) return { error: t("error.roleReadOnly") };
+  const unattested = missingAttestation(formData, t);
   if (unattested) return unattested;
-  const parsed = parse(formData);
-  if (!parsed.data) return parsed.state;
+  const parsed = parse(formData, t);
+  if (!parsed.data) return parsed.state!;
 
   let id: string;
   const register = () =>
@@ -92,7 +96,8 @@ export async function registerPatient(_: PatientFormState, formData: FormData): 
           canTag: canTagSensitivity(auth.role),
           syntheticOnly: syntheticDataOnly(),
         },
-        parsed.data,
+        parsed.data!,
+        t,
       ),
     );
   try {
@@ -105,7 +110,7 @@ export async function registerPatient(_: PatientFormState, formData: FormData): 
     }
   } catch (error) {
     if (error instanceof PatientRecordError) return { error: error.message, field: error.field };
-    if (isDuplicateMrn(error)) return { error: "Another patient already has this MRN.", field: "mrn" };
+    if (isDuplicateMrn(error)) return { error: t("error.duplicateMrn"), field: "mrn" };
     throw error;
   }
   revalidatePath("/patients");
@@ -114,22 +119,23 @@ export async function registerPatient(_: PatientFormState, formData: FormData): 
 
 export async function savePatient(_: PatientFormState, formData: FormData): Promise<PatientFormState> {
   const auth = await requireAuth();
-  if (!canEditPatients(auth.role)) return { error: NOT_ALLOWED };
+  const t = await getT("patients");
+  if (!canEditPatients(auth.role)) return { error: t("error.roleReadOnly") };
   const ids = z.object({ patientId: z.uuid(), expectedUpdatedAt: z.iso.datetime() }).safeParse({
     patientId: formData.get("patientId"),
     expectedUpdatedAt: formData.get("expectedUpdatedAt"),
   });
-  if (!ids.success) return { error: "Reload the page and try again." };
+  if (!ids.success) return { error: t("error.reload") };
   const reason = String(formData.get("reason") ?? "")
     .slice(0, 600)
     .trim();
   if (reason.length < 5 || reason.length > 500) {
-    return { error: "Say why the record is changing (5 to 500 characters).", field: "reason" };
+    return { error: t("error.reasonLength"), field: "reason" };
   }
-  const unattested = missingAttestation(formData);
+  const unattested = missingAttestation(formData, t);
   if (unattested) return unattested;
-  const parsed = parse(formData);
-  if (!parsed.data) return parsed.state;
+  const parsed = parse(formData, t);
+  if (!parsed.data) return parsed.state!;
 
   try {
     await withTenant(auth, (tx) =>
@@ -145,11 +151,12 @@ export async function savePatient(_: PatientFormState, formData: FormData): Prom
         ids.data.expectedUpdatedAt,
         parsed.data,
         reason,
+        t,
       ),
     );
   } catch (error) {
     if (error instanceof PatientRecordError) return { error: error.message, field: error.field };
-    if (isDuplicateMrn(error)) return { error: "Another patient already has this MRN.", field: "mrn" };
+    if (isDuplicateMrn(error)) return { error: t("error.duplicateMrn"), field: "mrn" };
     throw error;
   }
   revalidatePath(`/patients/${ids.data.patientId}`);
@@ -164,8 +171,9 @@ export interface SearchState {
 /** Name or MRN search as a POST, so the terms never reach a URL, log, or analytics (CLAUDE.md #4). */
 export async function findPatients(_: SearchState, formData: FormData): Promise<SearchState> {
   const auth = await requireAuth();
+  const t = await getT("patients");
   const term = String(formData.get("q") ?? "").slice(0, 100);
-  if (term.trim().length < 2) return { error: "Enter at least 2 characters of a name or MRN." };
+  if (term.trim().length < 2) return { error: t("error.searchTooShort") };
   const results = await withTenant(auth, (tx) => searchPatientsAudited(tx, auth, term));
   return { results };
 }
@@ -176,13 +184,14 @@ export async function revealPatientMemberId(
   reason: string,
 ): Promise<{ value?: string; error?: string }> {
   const auth = await requireAuth();
+  const t = await getT("patients");
   // Minimum necessary (R-5.1.2): the same roles that may reveal it from a denial.
-  if (!canWorkDenials(auth.role)) return { error: "Your role can't view full member IDs." };
+  if (!canWorkDenials(auth.role)) return { error: t("error.cantViewMemberId") };
   const parsed = z
     .object({ patientId: z.uuid(), reason: z.enum(["appeal", "eligibility", "payer_call", "other"]) })
     .safeParse({ patientId, reason });
-  if (!parsed.success) return { error: "Choose a reason." };
+  if (!parsed.success) return { error: t("error.chooseReason") };
   return withTenant(auth, (tx) =>
-    revealPatientMemberIdFor(tx, auth, parsed.data.patientId, parsed.data.reason),
+    revealPatientMemberIdFor(tx, auth, parsed.data.patientId, parsed.data.reason, t),
   );
 }

@@ -12,17 +12,21 @@ import { Money } from "@/components/ui/Money";
 import { Panel } from "@/components/ui/Panel";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
-import { CATEGORY_LABELS } from "@/domain/carc";
+import { CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { CLAIM_STATUSES } from "@/domain/claims/status";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { getPatientChart } from "@/domain/patients/queries";
-import { patientName, SENSITIVITY_TAGS, SEX_LABELS, type SensitivityTag } from "@/domain/patients/record";
+import { patientName, sensitivityTagLabel, sexLabel, type SensitivityTag } from "@/domain/patients/record";
+import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
-import { formatCents, formatDate } from "@/lib/format";
+import { formatCents } from "@/lib/format";
 import { revealPatientMemberId } from "../actions";
 
-// The title never includes patient data (DESIGN.md §12).
-export const metadata: Metadata = { title: "Patient" };
+export async function generateMetadata(): Promise<Metadata> {
+  const tc = await getT("common");
+  // The title never includes patient data (DESIGN.md §12).
+  return { title: tc("word.patient") };
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -40,6 +44,9 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
   const auth = await requireAuth();
+  const t = await getT("patients");
+  const tc = await getT("common");
+  const f = await getFormat();
 
   const chart = await withTenant(auth, async (tx) => {
     const chart = await getPatientChart(tx, id);
@@ -67,9 +74,9 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <nav aria-label="Breadcrumb" className="text-label text-muted">
+      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
         <Link href="/patients" className="font-medium text-link hover:underline">
-          Patients
+          {t("list.title")}
         </Link>{" "}
         <span aria-hidden>/</span> <span className="font-mono">{patient.mrn}</span>
       </nav>
@@ -82,53 +89,50 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
             {canTagSensitivity(auth.role)
               ? patient.sensitivityTags.map((tag) => (
                   <Badge key={tag} tone="warning">
-                    {SENSITIVITY_TAGS[tag as SensitivityTag] ?? tag}
+                    {sensitivityTagLabel(tag as SensitivityTag, t)}
                   </Badge>
                 ))
-              : patient.sensitivityTags.length > 0 && <Badge tone="warning">Restricted</Badge>}
+              : patient.sensitivityTags.length > 0 && <Badge tone="warning">{t("badge.restricted")}</Badge>}
           </div>
           <p className="mt-1 text-body text-muted">
-            <span className="font-mono">{patient.mrn}</span> · born {formatDate(patient.birthDate)} ·{" "}
-            {payer?.name ?? "Self-pay"}
+            <span className="font-mono">{patient.mrn}</span> ·{" "}
+            {t("detail.bornOn", { date: f.date(patient.birthDate) })} · {payer?.name ?? t("badge.selfPay")}
           </p>
         </div>
         {canEditPatients(auth.role) && (
           <Link href={`/patients/${patient.id}/edit`} className={editClass}>
-            Edit record
+            {t("detail.editRecord")}
           </Link>
         )}
       </header>
 
-      <section aria-label="Patient totals" className="grid grid-cols-4 gap-4">
-        <StatTile label="Claims" value={totals.claims} />
-        <StatTile label="Billed" value={formatCents(totals.billedCents)} />
-        <StatTile label="Paid" value={formatCents(totals.paidCents)} />
+      <section aria-label={t("detail.totalsLabel")} className="grid grid-cols-4 gap-4">
+        <StatTile label={t("detail.claims")} value={totals.claims} />
+        <StatTile label={t("detail.billed")} value={formatCents(totals.billedCents)} />
+        <StatTile label={t("detail.paid")} value={formatCents(totals.paidCents)} />
         <StatTile
-          label="Open denied"
+          label={t("detail.openDenied")}
           value={formatCents(totals.openDeniedCents)}
           emphasis={totals.openDenials > 0 ? "warning" : undefined}
-          detail={`${totals.openDenials} open denial${totals.openDenials === 1 ? "" : "s"}`}
+          detail={t("detail.openDenialsCount", { count: totals.openDenials })}
         />
       </section>
 
       <div className="grid grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] items-start gap-6">
         <div className="flex min-w-0 flex-col gap-6">
-          <Panel title="Claims" flush>
+          <Panel title={t("detail.claims")} flush>
             {chart.claims.length === 0 ? (
-              <EmptyState
-                title="No claims for this patient"
-                description="Claims appear here once they are created or imported for this patient."
-              />
+              <EmptyState title={t("detail.noClaimsTitle")} description={t("detail.noClaimsDescription")} />
             ) : (
-              <Table caption="Claims for this patient">
+              <Table caption={t("detail.claims")}>
                 <thead>
                   <tr>
-                    <Th>Claim</Th>
-                    <Th>Payer</Th>
-                    <Th>Date of service</Th>
-                    <Th numeric>Billed</Th>
-                    <Th numeric>Paid</Th>
-                    <Th>Status</Th>
+                    <Th>{tc("word.claim")}</Th>
+                    <Th>{tc("word.payer")}</Th>
+                    <Th>{t("detail.dateOfService")}</Th>
+                    <Th numeric>{t("detail.billed")}</Th>
+                    <Th numeric>{t("detail.paid")}</Th>
+                    <Th>{tc("word.status")}</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -143,7 +147,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
                         </Link>
                       </Td>
                       <Td>{claim.payerName}</Td>
-                      <Td className="tabular">{formatDate(claim.serviceDate)}</Td>
+                      <Td className="tabular">{f.date(claim.serviceDate)}</Td>
                       <Td numeric>
                         <Money cents={claim.billedCents} />
                       </Td>
@@ -152,7 +156,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
                       </Td>
                       <Td>
                         <Badge tone={CLAIM_STATUSES[claim.status].tone}>
-                          {CLAIM_STATUSES[claim.status].label}
+                          {tc(CLAIM_STATUSES[claim.status].labelKey)}
                         </Badge>
                       </Td>
                     </Tr>
@@ -162,22 +166,19 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
             )}
           </Panel>
 
-          <Panel title="Denials" flush>
+          <Panel title={t("detail.denials")} flush>
             {chart.denials.length === 0 ? (
-              <EmptyState
-                title="No denials for this patient"
-                description="Denials on this patient's claims appear here."
-              />
+              <EmptyState title={t("detail.noDenialsTitle")} description={t("detail.noDenialsDescription")} />
             ) : (
-              <Table caption="Denials for this patient">
+              <Table caption={t("detail.denials")}>
                 <thead>
                   <tr>
-                    <Th>Reason</Th>
-                    <Th>Claim</Th>
-                    <Th>Notice</Th>
-                    <Th>Appeal by</Th>
-                    <Th numeric>Denied</Th>
-                    <Th>Status</Th>
+                    <Th>{tc("word.reason")}</Th>
+                    <Th>{tc("word.claim")}</Th>
+                    <Th>{t("detail.notice")}</Th>
+                    <Th>{t("detail.appealBy")}</Th>
+                    <Th numeric>{t("detail.denied")}</Th>
+                    <Th>{tc("word.status")}</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -188,7 +189,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
                           href={`/denials/${denial.id}`}
                           className="font-medium text-link hover:underline"
                         >
-                          {CATEGORY_LABELS[denial.category]}
+                          {tc(CATEGORY_LABEL_KEYS[denial.category])}
                         </Link>
                         <span className="block font-mono text-label text-muted">
                           {denial.groupCode}-{denial.carc}
@@ -202,10 +203,10 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
                           {denial.claimNumber}
                         </Link>
                       </Td>
-                      <Td className="tabular">{formatDate(denial.noticeDate)}</Td>
+                      <Td className="tabular">{f.date(denial.noticeDate)}</Td>
                       <Td className="tabular">
                         {denial.appealDeadline ? (
-                          formatDate(denial.appealDeadline)
+                          f.date(denial.appealDeadline)
                         ) : (
                           <span className="text-muted">—</span>
                         )}
@@ -215,7 +216,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
                       </Td>
                       <Td>
                         <Badge tone={DENIAL_STATUSES[denial.status].tone}>
-                          {DENIAL_STATUSES[denial.status].label}
+                          {tc(DENIAL_STATUSES[denial.status].labelKey)}
                         </Badge>
                       </Td>
                     </Tr>
@@ -227,33 +228,35 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
         </div>
 
         <div className="flex flex-col gap-6">
-          <Panel title="Demographics">
+          <Panel title={t("detail.demographics")}>
             <dl className="flex flex-col gap-3">
-              <Field label="Date of birth">
-                <span className="tabular">{formatDate(patient.birthDate)}</span>
+              <Field label={t("field.birthDate")}>
+                <span className="tabular">{f.date(patient.birthDate)}</span>
               </Field>
-              <Field label="Sex">{SEX_LABELS[patient.sex]}</Field>
-              <Field label="Address">{address || <span className="text-muted">Not on file</span>}</Field>
-              <Field label="Phone">
+              <Field label={t("field.sex")}>{sexLabel(patient.sex, t)}</Field>
+              <Field label={t("field.address")}>
+                {address || <span className="text-muted">{t("detail.notOnFile")}</span>}
+              </Field>
+              <Field label={t("field.phone")}>
                 {patient.phone ? (
                   <span className="tabular">{patient.phone}</span>
                 ) : (
-                  <span className="text-muted">Not on file</span>
+                  <span className="text-muted">{t("detail.notOnFile")}</span>
                 )}
               </Field>
             </dl>
           </Panel>
 
-          <Panel title="Primary insurance">
+          <Panel title={t("detail.primaryInsurance")}>
             {payer ? (
               <dl className="flex flex-col gap-3">
-                <Field label="Payer">
+                <Field label={tc("word.payer")}>
                   {payer.name}
-                  <span className="block text-label text-muted">{regimeLabel(payer.regime)}</span>
+                  <span className="block text-label text-muted">{regimeLabel(payer.regime, tc)}</span>
                 </Field>
-                <Field label="Member ID">
+                <Field label={t("field.memberId")}>
                   {!patient.memberIdLast4 ? (
-                    <span className="text-muted">Not on file</span>
+                    <span className="text-muted">{t("detail.notOnFile")}</span>
                   ) : canWorkDenials(auth.role) ? (
                     <MaskedMemberId
                       last4={patient.memberIdLast4}
@@ -265,7 +268,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
                 </Field>
               </dl>
             ) : (
-              <p className="text-body text-muted">No insurance on file (self-pay).</p>
+              <p className="text-body text-muted">{t("detail.noInsurance")}</p>
             )}
           </Panel>
         </div>

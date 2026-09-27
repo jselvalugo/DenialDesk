@@ -3,9 +3,16 @@ import type { TenantTx } from "@/db/tenant";
 import { claims, denials, patients, payers } from "@/db/schema";
 import { decryptField, encryptField } from "@/lib/crypto/field";
 import { audit } from "@/lib/audit";
+import { en } from "@/i18n/messages/en";
+import type { Messages } from "@/i18n/messages/types";
+import { createTranslator, type Translator } from "@/i18n/translate";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { SYNTHETIC_MARKER } from "@/domain/synthetic/generator";
 import { changedPatientFields, nextMrn, type PatientInput } from "./record";
+
+type PatientsT = Translator<Messages["patients"]>;
+/** English translator used when a caller doesn't have the request's language (e.g. integration tests). */
+const englishPatientsT: PatientsT = createTranslator(en.patients, "en");
 
 export const PATIENTS_PAGE_SIZE = 25;
 export const SEARCH_LIMIT = 25;
@@ -195,16 +202,16 @@ export class PatientRecordError extends Error {
 }
 
 /** FKs bypass RLS, so a payer ID from the form is checked against this practice first. */
-async function assertPracticePayer(tx: TenantTx, payerId: string | null) {
+async function assertPracticePayer(tx: TenantTx, payerId: string | null, t: PatientsT = englishPatientsT) {
   if (!payerId) return;
   const [payer] = await tx.select({ id: payers.id }).from(payers).where(eq(payers.id, payerId)).limit(1);
-  if (!payer) throw new PatientRecordError("Choose a payer from the list.", "primaryPayerId");
+  if (!payer) throw new PatientRecordError(t("error.choosePayer"), "primaryPayerId");
 }
 
-async function assertMrnFree(tx: TenantTx, mrn: string, exceptId?: string) {
+async function assertMrnFree(tx: TenantTx, mrn: string, exceptId?: string, t: PatientsT = englishPatientsT) {
   const [taken] = await tx.select({ id: patients.id }).from(patients).where(eq(patients.mrn, mrn)).limit(1);
   if (taken && taken.id !== exceptId) {
-    throw new PatientRecordError("Another patient already has this MRN.", "mrn");
+    throw new PatientRecordError(t("error.duplicateMrn"), "mrn");
   }
 }
 
@@ -232,13 +239,14 @@ export async function createPatient(
   tx: TenantTx,
   actor: Actor,
   input: PatientInput,
+  t: PatientsT = englishPatientsT,
 ): Promise<{ id: string }> {
-  await assertPracticePayer(tx, input.primaryPayerId);
+  await assertPracticePayer(tx, input.primaryPayerId, t);
   if (input.primaryPayerId && !input.memberId) {
-    throw new PatientRecordError("Enter the member ID for this payer.", "memberId");
+    throw new PatientRecordError(t("error.enterMemberIdForPayer"), "memberId");
   }
   const mrn = input.mrn ?? (await generateMrn(tx, actor.syntheticOnly));
-  await assertMrnFree(tx, mrn);
+  await assertMrnFree(tx, mrn, undefined, t);
   const [created] = await tx
     .insert(patients)
     .values({
@@ -282,11 +290,12 @@ export async function updatePatient(
   expectedUpdatedAt: string,
   input: PatientInput,
   reason: string,
+  t: PatientsT = englishPatientsT,
 ): Promise<{ changedFields: string[] }> {
   const [current] = await tx.select().from(patients).where(eq(patients.id, patientId)).for("update").limit(1);
-  if (!current) throw new PatientRecordError("Patient not found.");
+  if (!current) throw new PatientRecordError(t("error.patientNotFound"));
   if (current.updatedAt.toISOString() !== expectedUpdatedAt) {
-    throw new PatientRecordError("This patient changed since you opened the form. Reload and try again.");
+    throw new PatientRecordError(t("error.staleRecord"));
   }
   const next = {
     ...input,
@@ -295,11 +304,11 @@ export async function updatePatient(
   const changed = changedPatientFields(current, next);
   if (changed.length === 0) return { changedFields: [] };
   const payerChanged = changed.includes("primaryPayerId");
-  if (payerChanged) await assertPracticePayer(tx, next.primaryPayerId);
-  if (changed.includes("mrn")) await assertMrnFree(tx, next.mrn!, patientId);
+  if (payerChanged) await assertPracticePayer(tx, next.primaryPayerId, t);
+  if (changed.includes("mrn")) await assertMrnFree(tx, next.mrn!, patientId, t);
   // A member ID belongs to one payer: a new payer needs its own, never the old payer's.
   if (next.primaryPayerId && !next.memberId && (payerChanged || !current.memberIdLast4)) {
-    throw new PatientRecordError("Enter the member ID for this payer.", "memberId");
+    throw new PatientRecordError(t("error.enterMemberIdForPayer"), "memberId");
   }
   // Self-pay keeps no member ID (minimum necessary).
   const clearMemberId = !next.primaryPayerId && Boolean(current.memberIdLast4);
@@ -381,14 +390,15 @@ export async function revealPatientMemberIdFor(
   actor: { tenantId: string; userId: string },
   patientId: string,
   reason: RevealReason,
+  t: PatientsT = englishPatientsT,
 ): Promise<{ value?: string; error?: string }> {
   const [row] = await tx
     .select({ memberIdEnc: patients.memberIdEnc, memberIdLast4: patients.memberIdLast4 })
     .from(patients)
     .where(eq(patients.id, patientId))
     .limit(1);
-  if (!row) return { error: "Not found." };
-  if (!row.memberIdLast4) return { error: "No member ID on file." };
+  if (!row) return { error: t("error.notFound") };
+  if (!row.memberIdLast4) return { error: t("error.noMemberIdOnFile") };
   await audit(tx, {
     action: "patient.member_id_revealed",
     actorUserId: actor.userId,

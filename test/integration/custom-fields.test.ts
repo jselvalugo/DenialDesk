@@ -24,7 +24,7 @@ let a: Ctx;
 let b: Ctx;
 
 function field(overrides: Partial<Record<string, unknown>> = {}): NewCustomField {
-  return newCustomFieldSchema.parse({
+  return newCustomFieldSchema().parse({
     entity: "patient",
     label: "Referring clinic",
     key: "referring_clinic",

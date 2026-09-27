@@ -8,18 +8,24 @@ import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
-import { SENSITIVITY_TAGS, type SensitivityTag } from "@/domain/patients/record";
+import { sensitivityTagLabel, type SensitivityTag } from "@/domain/patients/record";
 import {
-  CUSTOM_FIELD_ENTITIES,
-  CUSTOM_FIELD_TYPES,
+  CUSTOM_FIELD_ENTITY_LABEL_KEYS,
+  customFieldEntityLabel,
+  customFieldTypeLabel,
   MAX_FIELDS_PER_ENTITY,
+  type CustomFieldEntity,
 } from "@/domain/settings/custom-fields";
 import { listCustomFields } from "@/domain/settings/queries";
+import { getT } from "@/i18n/server";
 import { cn } from "@/lib/cn";
 import { recordsParam } from "./records";
 import { ToggleFieldButton } from "./ToggleFieldButton";
 
-export const metadata: Metadata = { title: "Custom fields" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("settings");
+  return { title: t("fields.metaTitle") };
+}
 
 export default async function CustomFieldsPage({
   searchParams,
@@ -27,18 +33,24 @@ export default async function CustomFieldsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const auth = await requireAuth();
+  const t = await getT("settings");
+  const tp = await getT("patients");
+  const tc = await getT("common");
   const entity = recordsParam((await searchParams).records);
   const canEdit = canConfigureSettings(auth.role);
   const all = await withTenant(auth, (tx) => listCustomFields(tx));
   const fields = all.filter((field) => field.entity === entity);
-  const entityName = CUSTOM_FIELD_ENTITIES[entity];
+  const entityName = customFieldEntityLabel(entity, t);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-      <nav aria-label="Record types">
-        <p className="mb-2 text-label font-semibold tracking-wide text-muted uppercase">Records</p>
+      <nav aria-label={t("fields.recordTypesLabel")}>
+        <p className="mb-2 text-label font-semibold tracking-wide text-muted uppercase">
+          {t("fields.recordsHeading")}
+        </p>
         <ul className="flex flex-col gap-0.5">
-          {Object.entries(CUSTOM_FIELD_ENTITIES).map(([value, name]) => {
+          {(Object.keys(CUSTOM_FIELD_ENTITY_LABEL_KEYS) as CustomFieldEntity[]).map((value) => {
+            const name = customFieldEntityLabel(value, t);
             const active = all.filter((f) => f.entity === value && f.active).length;
             const current = value === entity;
             return (
@@ -61,15 +73,15 @@ export default async function CustomFieldsPage({
       </nav>
 
       <Panel
-        title={`${entityName} fields`}
-        description={`Fields your practice adds to ${entityName.toLowerCase()}, in form order. Deactivated fields are hidden from forms and keep their history.`}
+        title={t("fields.panelTitle", { entity: entityName })}
+        description={t("fields.panelDescription", { entity: entityName.toLowerCase() })}
         actions={
           canEdit && fields.filter((f) => f.active).length < MAX_FIELDS_PER_ENTITY ? (
             <Link
               href={`/settings/fields/new?records=${entity}`}
               className="inline-flex h-8 items-center rounded-control border border-primary bg-primary px-3 text-body font-medium text-white hover:bg-primary-hover"
             >
-              Add field
+              {t("fields.addField")}
             </Link>
           ) : undefined
         }
@@ -77,24 +89,20 @@ export default async function CustomFieldsPage({
       >
         {fields.length === 0 ? (
           <EmptyState
-            title={`No custom fields on ${entityName.toLowerCase()} yet`}
-            description={
-              canEdit
-                ? "Add a field to capture something DenialDesk doesn't track out of the box, such as a referring clinic or an internal account tier."
-                : "An administrator can add fields to capture what your practice tracks beyond the standard record."
-            }
+            title={t("fields.emptyTitle", { entity: entityName.toLowerCase() })}
+            description={canEdit ? t("fields.emptyDescriptionCanEdit") : t("fields.emptyDescriptionReadOnly")}
           />
         ) : (
-          <Table caption={`${entityName} custom fields`}>
+          <Table caption={t("fields.tableCaption", { entity: entityName })}>
             <thead>
               <tr>
-                <Th>Label</Th>
-                <Th>Key</Th>
-                <Th>Type</Th>
-                <Th>Required</Th>
-                <Th>Sensitivity</Th>
-                <Th>Status</Th>
-                {canEdit && <Th className="text-right">Actions</Th>}
+                <Th>{t("fields.label")}</Th>
+                <Th>{t("fields.key")}</Th>
+                <Th>{tc("word.type")}</Th>
+                <Th>{tc("word.required")}</Th>
+                <Th>{t("fields.sensitivity")}</Th>
+                <Th>{tc("word.status")}</Th>
+                {canEdit && <Th className="text-right">{tc("word.actions")}</Th>}
               </tr>
             </thead>
             <tbody>
@@ -108,26 +116,31 @@ export default async function CustomFieldsPage({
                     <Code>{field.key}</Code>
                   </Td>
                   <Td>
-                    {CUSTOM_FIELD_TYPES[field.fieldType]}
+                    {customFieldTypeLabel(field.fieldType, t)}
                     {field.fieldType === "select" && (
-                      <span className="text-label text-muted"> · {field.options.length} choices</span>
+                      <span className="text-label text-muted">
+                        {" "}
+                        · {t("fields.choicesCount", { count: field.options.length })}
+                      </span>
                     )}
                   </Td>
-                  <Td>{field.required ? "Yes" : "No"}</Td>
+                  <Td>{field.required ? tc("word.yes") : tc("word.no")}</Td>
                   <Td>
                     {field.sensitivity ? (
                       <Badge tone="warning">
-                        Locked · {SENSITIVITY_TAGS[field.sensitivity as SensitivityTag] ?? field.sensitivity}
+                        {t("fields.locked", {
+                          category: sensitivityTagLabel(field.sensitivity as SensitivityTag, tp),
+                        })}
                       </Badge>
                     ) : (
-                      <span className="text-label text-muted">Not sensitive</span>
+                      <span className="text-label text-muted">{t("fields.notSensitive")}</span>
                     )}
                   </Td>
                   <Td>
                     {field.active ? (
-                      <Badge tone="success">Active</Badge>
+                      <Badge tone="success">{t("fields.active")}</Badge>
                     ) : (
-                      <Badge tone="neutral">Inactive</Badge>
+                      <Badge tone="neutral">{t("fields.inactive")}</Badge>
                     )}
                   </Td>
                   {canEdit && (
@@ -136,9 +149,9 @@ export default async function CustomFieldsPage({
                         <Link
                           href={`/settings/fields/${field.id}`}
                           className="inline-flex h-7 items-center text-label font-medium text-link hover:underline"
-                          aria-label={`Edit ${field.label}`}
+                          aria-label={t("fields.editAria", { label: field.label })}
                         >
-                          Edit
+                          {tc("action.edit")}
                         </Link>
                         <ToggleFieldButton
                           id={field.id}
