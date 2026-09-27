@@ -182,7 +182,7 @@ counterparts), `fl.timely_filing.{initial,secondary}` and the HMO counterparts,
 
 ## Out of scope
 Videos, external LMS integration, certificates, SCORM/xAPI, per-user reminders (U3), marketing
-content beyond the owner-requested access prompt (OA-043), role-gated courses, online payment,
+content beyond the owner-requested access prompt (OA-044), role-gated courses, online payment,
 anything that writes to a claim, denial, or code.
 
 ## Open questions
@@ -194,7 +194,7 @@ anything that writes to a claim, denial, or code.
   `rules/` (florida-rules-engine; see the TODO in `rules/catalog.ts`).
 - U3: does the practice's HIPAA training program want DenialDesk completions as evidence, and in
   what form (owner / practice compliance officer)? Tracked as `OA-035`.
-- Access (OA-043): the owner decided on 2026-09-27 to lock the courses until access is purchased
+- Access (OA-044): the owner decided on 2026-09-27 to lock the courses until access is purchased
   (done: operator grants it). Still open: what "starting at $299" covers (term, renewals, what a
   higher tier adds), how a practice pays (today the operator records the purchase by hand after a
   request), and who at DenialDesk watches for requests (they appear on the practice page only).

@@ -15,6 +15,7 @@ import {
   searchPatients,
   searchPatientsAudited,
   updatePatient,
+  PATIENT_LIST_FIELDS,
 } from "@/domain/patients/queries";
 import { patientSchema } from "@/domain/patients/record";
 import { generateDataset } from "@/domain/synthetic/generator";
@@ -409,7 +410,7 @@ describe("audited reads", () => {
         .orderBy(desc(auditEvents.id))
         .limit(1),
     );
-    expect(event!.metadata).toEqual({ patientIds: id, count: 1 });
+    expect(event!.metadata).toEqual({ patientIds: id, count: 1, fields: PATIENT_LIST_FIELDS });
     expect(JSON.stringify(event)).not.toContain("Umbrafield");
   });
 

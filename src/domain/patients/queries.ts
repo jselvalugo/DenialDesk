@@ -16,6 +16,8 @@ const englishPatientsT: PatientsT = createTranslator(en.patients, "en");
 
 export const PATIENTS_PAGE_SIZE = 25;
 export const SEARCH_LIMIT = 25;
+/** Which fields a list or search row shows, recorded on `patient.list_viewed` / `patient.searched`. */
+export const PATIENT_LIST_FIELDS = "name,mrn,birthDate,age,sex,location,coverage";
 
 const listColumns = {
   id: patients.id,
@@ -23,6 +25,9 @@ const listColumns = {
   firstName: patients.firstName,
   lastName: patients.lastName,
   birthDate: patients.birthDate,
+  sex: patients.sex,
+  city: patients.city,
+  state: patients.state,
   payerName: payers.name,
   sensitivityTags: patients.sensitivityTags,
 };
@@ -377,7 +382,11 @@ export async function searchPatientsAudited(
     action: "patient.searched",
     actorUserId: actor.userId,
     tenantId: actor.tenantId,
-    metadata: { patientIds: results.map((r) => r.id).join(","), count: results.length },
+    metadata: {
+      patientIds: results.map((r) => r.id).join(","),
+      count: results.length,
+      fields: PATIENT_LIST_FIELDS,
+    },
   });
   return results;
 }

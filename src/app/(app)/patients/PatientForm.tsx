@@ -2,8 +2,12 @@
 
 import Link from "next/link";
 import { startTransition, useActionState, useId, useMemo, useState } from "react";
+import { FormActions, FormNotices, FormRow, FormSection } from "@/components/records/FormShell";
 import { Button } from "@/components/ui/Button";
 import { FormAlert } from "@/components/ui/FormAlert";
+import { linkButtonReset } from "@/components/ui/linkButton";
+import { SelectField } from "@/components/ui/SelectField";
+import { TextareaField } from "@/components/ui/TextareaField";
 import { TextField } from "@/components/ui/TextField";
 import { useT } from "@/i18n/client";
 import { SEX_LABEL_KEYS, sexLabel } from "@/domain/patients/record";
@@ -12,8 +16,8 @@ import { CustomFieldInputs, type CustomFieldOption } from "@/components/custom-f
 import type { LoadedCustomFieldValue } from "@/domain/custom-fields/values";
 import { registerPatient, savePatient, type PatientFormState } from "./actions";
 
-const selectClass =
-  "h-9 rounded-control border border-border-strong bg-surface px-2.5 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus";
+const inputClass =
+  "h-9 rounded-control border border-border-strong bg-surface px-3 text-body text-text placeholder:text-subtle focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus";
 
 const SELF_PAY = "";
 
@@ -77,7 +81,7 @@ function PayerPicker({
           else if (next.status === "matched") setPayerId(next.payer.id);
           onValidityChange(next.status !== "unmatched");
         }}
-        className={selectClass}
+        className={inputClass}
       />
       <datalist id={listId}>
         {payers.map((p) => (
@@ -121,7 +125,10 @@ export interface PatientFormValues {
   updatedAt: string;
 }
 
-/** Register (no `patient`) or edit a patient record (docs/specs/patients.md). */
+/**
+ * Register (no `patient`) or edit a patient record (docs/specs/patients.md), laid out as named
+ * sections per the record pattern (docs/specs/record-pages.md). Rendered inside `<Panel flush>`.
+ */
 export function PatientForm({
   patient,
   payers,
@@ -140,6 +147,7 @@ export function PatientForm({
 }) {
   const t = useT("patients");
   const tc = useT("common");
+  const tcf = useT("customFields");
   const editing = Boolean(patient);
   const [state, action, pending] = useActionState<PatientFormState, FormData>(
     editing ? savePatient : registerPatient,
@@ -160,7 +168,7 @@ export function PatientForm({
         const formData = new FormData(event.currentTarget);
         startTransition(() => action(formData));
       }}
-      className="flex flex-col gap-6"
+      className="flex flex-col"
       aria-label={editing ? t("edit.title") : t("new.title")}
       autoComplete="off"
     >
@@ -170,16 +178,20 @@ export function PatientForm({
           <input type="hidden" name="expectedUpdatedAt" value={patient.updatedAt} />
         </>
       )}
-      <FormAlert message={state.error} />
-      {syntheticOnly && (
-        <p role="note" className="rounded-control bg-warning-bg px-3 py-2 text-label text-warning-fg">
-          {t("form.syntheticNotice")}
-        </p>
-      )}
+      <FormNotices>
+        <FormAlert message={state.error} />
+        {syntheticOnly && (
+          <p
+            role="note"
+            className="rounded-control border border-warning-border bg-warning-bg px-3 py-2 text-label text-warning-fg"
+          >
+            {t("form.syntheticNotice")}
+          </p>
+        )}
+      </FormNotices>
 
-      <fieldset className="flex flex-col gap-4">
-        <legend className="mb-3 text-heading font-semibold text-text">{t("detail.demographics")}</legend>
-        <div className="grid grid-cols-3 gap-4">
+      <FormSection title={t("detail.demographics")} description={t("form.demographicsHint")}>
+        <FormRow columns="md:grid-cols-3">
           <TextField
             label={t("field.lastName")}
             name="lastName"
@@ -205,6 +217,8 @@ export function PatientForm({
             error={err("mrn")}
             className="font-mono"
           />
+        </FormRow>
+        <FormRow columns="md:grid-cols-3">
           <TextField
             label={t("field.birthDate")}
             name="birthDate"
@@ -215,18 +229,16 @@ export function PatientForm({
             defaultValue={patient?.birthDate}
             error={err("birthDate")}
           />
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="field-sex" className="text-label font-medium text-text">
-              {t("field.sex")}
-            </label>
-            <select id="field-sex" name="sex" defaultValue={patient?.sex ?? "U"} className={selectClass}>
-              {(Object.keys(SEX_LABEL_KEYS) as (keyof typeof SEX_LABEL_KEYS)[]).map((value) => (
-                <option key={value} value={value}>
-                  {sexLabel(value, t)}
-                </option>
-              ))}
-            </select>
-          </div>
+          <SelectField
+            label={t("field.sex")}
+            name="sex"
+            defaultValue={patient?.sex ?? "U"}
+            error={err("sex")}
+            options={(Object.keys(SEX_LABEL_KEYS) as (keyof typeof SEX_LABEL_KEYS)[]).map((value) => ({
+              value,
+              label: sexLabel(value, t),
+            }))}
+          />
           <TextField
             label={t("field.phone")}
             name="phone"
@@ -235,8 +247,8 @@ export function PatientForm({
             defaultValue={patient?.phone ?? ""}
             error={err("phone")}
           />
-        </div>
-        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_80px_120px] gap-4">
+        </FormRow>
+        <FormRow columns="md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_80px_120px]">
           <TextField
             label={t("field.address")}
             name="addressLine1"
@@ -266,12 +278,11 @@ export function PatientForm({
             defaultValue={patient?.postalCode ?? ""}
             error={err("postalCode")}
           />
-        </div>
-      </fieldset>
+        </FormRow>
+      </FormSection>
 
-      <fieldset className="flex flex-col gap-4">
-        <legend className="mb-3 text-heading font-semibold text-text">{t("detail.primaryInsurance")}</legend>
-        <div className="grid grid-cols-2 gap-4">
+      <FormSection title={t("detail.primaryInsurance")} description={t("form.insuranceHint")}>
+        <FormRow columns="md:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <PayerPicker
               payers={payers}
@@ -295,50 +306,56 @@ export function PatientForm({
             }
             error={err("memberId")}
           />
-        </div>
-      </fieldset>
+        </FormRow>
+      </FormSection>
 
       {/* Sensitivity checkboxes are hidden for now; stored tags are carried through unchanged. */}
       {patient?.sensitivityTags.map((tag) => (
         <input key={tag} type="hidden" name="sensitivityTags" value={tag} />
       ))}
 
-      <CustomFieldInputs
-        fields={customFields}
-        values={customValues}
-        errorFor={(key) => (state.field === `cf.${key}` ? state.error : undefined)}
-      />
+      {customFields.length > 0 && (
+        <FormSection title={tcf("section.title")}>
+          <CustomFieldInputs
+            bare
+            fields={customFields}
+            values={customValues}
+            errorFor={(key) => (state.field === `cf.${key}` ? state.error : undefined)}
+          />
+        </FormSection>
+      )}
 
       {editing && (
-        <label className="flex flex-col gap-1.5 text-label font-medium text-text">
-          {t("form.reasonLabel")}
-          <textarea
+        <FormSection title={t("form.auditTitle")} description={t("form.auditHint")}>
+          <TextareaField
+            label={t("form.reasonLabel")}
             name="reason"
             required
             minLength={5}
             maxLength={500}
             rows={2}
-            aria-invalid={state.field === "reason" || undefined}
-            className="rounded-control border border-border-strong bg-surface px-3 py-2 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus"
+            hint={t("form.reasonHint")}
+            error={err("reason")}
           />
-          <span className="font-normal text-muted">{t("form.reasonHint")}</span>
-        </label>
+        </FormSection>
       )}
 
       {syntheticOnly && (
-        <label className="flex items-start gap-2 text-body text-text">
-          <input
-            type="checkbox"
-            name="syntheticAttestation"
-            required
-            aria-invalid={state.field === "syntheticAttestation" || undefined}
-            className="mt-0.5 size-4 accent-primary"
-          />
-          {t("form.syntheticAttestation")}
-        </label>
+        <FormSection title={t("form.confirmTitle")} description={t("form.confirmHint")}>
+          <label className="flex items-start gap-2 text-body text-text">
+            <input
+              type="checkbox"
+              name="syntheticAttestation"
+              required
+              aria-invalid={state.field === "syntheticAttestation" || undefined}
+              className="mt-0.5 size-4 accent-primary"
+            />
+            {t("form.syntheticAttestation")}
+          </label>
+        </FormSection>
       )}
 
-      <div className="flex gap-2">
+      <FormActions note={editing ? t("form.actionsNote") : undefined}>
         <Button
           type="submit"
           variant="primary"
@@ -347,13 +364,10 @@ export function PatientForm({
         >
           {pending ? tc("action.saving") : editing ? t("form.saveChanges") : t("new.title")}
         </Button>
-        <Link
-          href={patient ? `/patients/${patient.id}` : "/patients"}
-          className="inline-flex h-8 items-center rounded-control px-3 text-body font-medium text-muted hover:bg-surface-muted hover:text-text"
-        >
+        <Link href={patient ? `/patients/${patient.id}` : "/patients"} className={linkButtonReset}>
           {tc("action.cancel")}
         </Link>
-      </div>
+      </FormActions>
     </form>
   );
 }

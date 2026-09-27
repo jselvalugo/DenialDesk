@@ -165,6 +165,13 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
     style, legal values as mono number + unit + caption citation. Never imagery, never emoji.
 - **Page header:** white band (panel style) with the module tile, an uppercase "Module · Page"
   eyebrow, the serif title, a one-line description, and actions on the right.
+- **Record pages and edit forms** follow one pattern (`specs/record-pages.md`,
+  `src/components/records/`): breadcrumb (list / identifier / action), a `RecordHeader` band whose
+  `h1` is the record's own name or number with its badges, a meta strip of labelled facts, and the
+  actions on the right; stat tiles when the record has totals; then `RecordLayout`: work tables in
+  the wide column, the record's own fields (`FieldList`) in the aside. Edit forms are `FormSection`s
+  (title and one-line explanation on the left, fields on the right) inside a flush panel with a
+  single `FormActions` footer. Build new modules from these parts; never hand-roll a header.
 - **Preview banner:** 32px strip above everything in non-production (ADR 0003).
 - **Page:** page header, then filters toolbar, then content. Page padding 24px (16px under 1024px).
 - Tables use the full content width. Forms max 720px wide, labels above fields.
@@ -185,6 +192,9 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 | `Code` | Mono, small, `surface-muted` background, for CARC/RARC/CPT/ICD/IDs. |
 | `DataTable` | Sticky header, 40px rows (32px compact), zebra off, row hover `surface-muted`, selected `selected`, sortable headers with arrow, numeric columns right-aligned, pagination footer with counts. |
 | `PageHeader`, `Panel`, `EmptyState`, `Skeleton` | Layout primitives. |
+| `Breadcrumbs`, `RecordHeader`, `RecordLayout`, `FieldList` | Record page parts (§8, `specs/record-pages.md`). |
+| `FormSection`, `FormRow`, `FormActions`, `TextField`, `SelectField`, `TextareaField` | Sectioned edit forms; every field has label above, hint and error below. |
+| `TableToolbar`, `SearchInput` | The strip above a table: search and filters left, count or actions right. |
 | `MaskedValue` | Member ID / SSN / MBI shown as `•••• 1234`; "Reveal" is an audited action (R-7.5.1). |
 | `AIContent` | Labeled "AI draft — review before sending" with the approving user recorded (R-7.11.2). Phase 3. |
 

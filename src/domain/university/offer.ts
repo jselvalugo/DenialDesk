@@ -7,7 +7,7 @@ import { WIKI_ARTICLES } from "./wiki/catalog";
  * (docs/specs/denialdesk-university.md, "Access prompt"). Business content set by the owner
  * (2026-09-27), not a legal value: the starting price of access. Integer cents (CLAUDE.md).
  * What "starting at" includes, per-user vs. per-practice terms, and the purchase channel are open
- * owner items (OA-043).
+ * owner items (OA-044).
  */
 export const UNIVERSITY_ACCESS_FROM_CENTS = 29900;
 

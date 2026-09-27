@@ -3,14 +3,15 @@ import Link from "next/link";
 import { todayIn } from "@rules/calendar";
 import { canEditPatients } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { payerOptions } from "@/domain/denials/queries";
 import { activeCustomFields } from "@/domain/settings/queries";
 import { getT } from "@/i18n/server";
-import { syntheticDataOnly } from "@/lib/env";
 import { toCustomFieldOptions } from "@/components/custom-fields/options";
+import { syntheticDataOnly } from "@/lib/env";
 import { PatientForm } from "../PatientForm";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -41,14 +42,12 @@ export default async function NewPatientPage() {
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
-        <Link href="/patients" className="font-medium text-link hover:underline">
-          {t("list.title")}
-        </Link>{" "}
-        <span aria-hidden>/</span> {t("nav.register")}
-      </nav>
+      <Breadcrumbs
+        label={t("nav.breadcrumb")}
+        items={[{ label: t("list.title"), href: "/patients" }, { label: t("nav.register") }]}
+      />
       <PageHeader title={t("new.title")} description={t("new.description")} />
-      <Panel>
+      <Panel flush>
         <PatientForm
           payers={payers}
           syntheticOnly={syntheticDataOnly()}

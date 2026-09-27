@@ -168,4 +168,25 @@ export const patients: Messages["patients"] = {
   "reveal.reasonOther": "Outro",
   "reveal.reveal": "Revelar",
   "reveal.error": "Não foi possível revelar.",
+
+  // Padrão de registro (docs/specs/record-pages.md): barra da lista, cabeçalho do prontuário, seções do formulário
+  "list.count": "{count, plural, one {# paciente cadastrado} other {# pacientes cadastrados}}",
+  "list.searchHint": "Digite pelo menos 2 letras de um nome, “Sobrenome, Nome” ou um MRN.",
+  "field.age": "{years, plural, one {# ano} other {# anos}}",
+  "field.location": "Localidade",
+  "field.coverage": "Cobertura",
+  "detail.eyebrow": "Prontuário do paciente",
+  "detail.claimsCount": "{count, plural, one {# reivindicação} other {# reivindicações}}",
+  "detail.denialsCount": "{count, plural, one {# negativa} other {# negativas}}",
+  "detail.record": "Registro",
+  "detail.recordDescription": "Quando este registro foi cadastrado e alterado pela última vez.",
+  "form.demographicsHint":
+    "Nome e data de nascimento como aparecem na carteirinha do convênio, além dos dados de contato.",
+  "form.insuranceHint":
+    "O pagador principal e o ID de beneficiário da carteirinha. Deixe o pagador em branco para particular.",
+  "form.auditTitle": "Trilha de auditoria",
+  "form.auditHint": "Toda alteração é salva com quem a fez e por quê.",
+  "form.confirmTitle": "Confirmação",
+  "form.confirmHint": "Obrigatória antes de salvar o registro.",
+  "form.actionsNote": "Ao salvar, seu nome e o horário são registrados na trilha de auditoria.",
 };
