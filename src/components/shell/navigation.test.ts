@@ -7,13 +7,14 @@ const none = { showRevenueCycle: false };
 describe("navApps", () => {
   it("hides revenue cycle and settings from users who can't open them", () => {
     const ids = navApps(none).map((app) => app.id);
-    expect(ids).toEqual(["denials", "patients", "claims", "insight"]);
+    expect(ids).toEqual(["denials", "patients", "claims", "insight", "university"]);
     expect(navApps(all).map((app) => app.id)).toEqual([
       "denials",
       "patients",
       "claims",
       "revenue-cycle",
       "insight",
+      "university",
       "settings",
     ]);
   });
@@ -71,6 +72,10 @@ describe("locate", () => {
     expect(locate(apps, "/settings/fields")).toMatchObject({
       app: { id: "settings" },
       item: { label: "Settings" },
+    });
+    expect(locate(apps, "/university/wiki/glossary")).toMatchObject({
+      app: { id: "university" },
+      item: { label: "Wiki" },
     });
   });
 
