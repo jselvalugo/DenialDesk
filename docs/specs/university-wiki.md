@@ -9,9 +9,10 @@ A signed-in practice user can open the DenialDesk Wiki, search it, and read shor
 articles about how denials, claims, appeals, and Florida payment rules work in DenialDesk, with every
 legal value pulled live from the rules engine and every statement sourced.
 
-The Wiki is the first page of a new **University** module. The owner will structure the rest of the
-University separately (2026-09-27); this spec deliberately defines only the Wiki, and the University
-module lists no other pages until the owner decides them.
+The Wiki is a page of DenialDesk University (`specs/denialdesk-university.md`), beside the U1 courses:
+same header, same entry points (header link, user menu), linked from the course catalog and linking
+back, and, like the courses, not a module in the switcher. The owner will structure the rest of the
+University separately (2026-09-27); this spec deliberately defines only the Wiki.
 
 ## User stories
 - As a billing specialist, I can look up what a CARC, RARC, or group code is while working a denial
@@ -45,8 +46,8 @@ module lists no other pages until the owner decides them.
 - [x] Articles contain no PHI and no names, identifiers, or amounts that could be mistaken for a real
       patient or claim; the fixture check in the unit tests scans for SSN-, MBI-, and phone-shaped
       strings.
-- [x] "University" appears in the module switcher (tone navy, graduation-cap glyph) with "Wiki" as
-      its only page; every role can view it. `/university` opens the Wiki.
+- [x] The course catalog (`/university`) has an "Open the Wiki" action and the Wiki index links back
+      to Courses; both use the University header (not the shell's module tile); every role can view.
 - [x] Accessible: real headings in order, a labelled search form, `aria-current` on the active
       category, keyboard-operable, no color-only meaning (DESIGN.md §11).
 - [x] Unit tests: markdown parser (each block and inline type, rule tokens, unsafe link rejection),
@@ -77,6 +78,6 @@ Read-only references to `rules/` by ID through `{{rule:<id>}}`: `fl.promptpay.*`
 
 ## Open questions
 - Owner: the structure of the University beyond the Wiki (courses, role-based tracks, training
-  records for R-10.4). Logged in `docs/owner/OWNER_ACTION_ITEMS.xlsx` as OA-035.
+  records for R-10.4). Logged in `docs/owner/OWNER_ACTION_ITEMS.xlsx` as OA-036.
 - Owner: whether practices should be able to add their own articles (would need a table with RLS,
   audit, and a content policy).

@@ -4,10 +4,10 @@ import { notFound } from "next/navigation";
 import { canViewUniversity } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { articlesInCategory, WIKI_CATEGORIES } from "@/domain/university/wiki/catalog";
 import type { WikiArticle } from "@/domain/university/wiki/types";
+import { UniversityHeader } from "../UniversityHeader";
 import { WikiSearch } from "./WikiSearch";
 
 export const metadata: Metadata = { title: "University — Wiki" };
@@ -33,9 +33,18 @@ export default async function WikiIndexPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
+      <UniversityHeader
+        eyebrow="DenialDesk University"
         title="Wiki"
         description="Reference articles on how denials, claims, appeals, and Florida payment rules work in DenialDesk. Legal values are read from the rules engine, never typed in."
+        actions={
+          <Link
+            href="/university"
+            className="inline-flex h-8 items-center rounded-control border border-border-strong bg-surface px-3 text-body font-medium text-text hover:bg-surface-muted"
+          >
+            Courses
+          </Link>
+        }
       />
       <WikiSearch />
       <div className="grid gap-4 lg:grid-cols-[220px_1fr]">

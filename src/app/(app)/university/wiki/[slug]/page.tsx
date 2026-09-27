@@ -5,12 +5,12 @@ import { todayIn } from "@rules/calendar";
 import { canViewUniversity } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { ArticleBody, RuleValue } from "@/components/university/ArticleBody";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { findArticle, findCategory } from "@/domain/university/wiki/catalog";
 import { headings, parseMarkdown, ruleIds } from "@/domain/university/wiki/markdown";
 import { ruleReferences } from "@/domain/university/wiki/rule-tokens";
 import { formatDate } from "@/lib/format";
+import { UniversityHeader } from "../../UniversityHeader";
 
 type Params = Promise<{ slug: string }>;
 
@@ -38,6 +38,10 @@ export default async function WikiArticlePage({ params }: { params: Params }) {
   return (
     <div className="flex flex-col gap-4">
       <nav aria-label="Breadcrumb" className="text-label text-muted">
+        <Link href="/university" className="hover:text-text hover:underline">
+          University
+        </Link>
+        <span aria-hidden="true"> / </span>
         <Link href="/university/wiki" className="hover:text-text hover:underline">
           Wiki
         </Link>
@@ -46,7 +50,11 @@ export default async function WikiArticlePage({ params }: { params: Params }) {
           {category.label}
         </Link>
       </nav>
-      <PageHeader title={article.title} description={article.summary} />
+      <UniversityHeader
+        eyebrow="DenialDesk University · Wiki"
+        title={article.title}
+        description={article.summary}
+      />
       <div className="grid items-start gap-4 lg:grid-cols-[1fr_280px]">
         <Panel>
           <article aria-label={article.title}>

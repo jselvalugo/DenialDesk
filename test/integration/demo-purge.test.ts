@@ -3,7 +3,15 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
-import { auditEvents, claims, claimVersions, memberships, tenants, users } from "@/db/schema";
+import {
+  auditEvents,
+  claims,
+  claimVersions,
+  memberships,
+  tenants,
+  universityProgress,
+  users,
+} from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { seedPractice } from "@/db/seed";
 import { generateDataset } from "@/domain/synthetic/generator";
@@ -59,6 +67,12 @@ describe("purge_demo_practices", () => {
     await systemDb()
       .insert(memberships)
       .values({ tenantId: demo.tenantId, userId: customer.userIds[0]!, role: "admin" });
+    // A University completion (0033) must not block the purge (0034).
+    await systemDb().insert(universityProgress).values({
+      tenantId: demo.tenantId,
+      userId: demo.userIds[0]!,
+      lessonId: "getting-started/finding-your-way",
+    });
     await systemDb()
       .update(tenants)
       .set({ kind: "demo", suspendedAt: new Date() })

@@ -165,9 +165,14 @@ export default async function HomePage() {
             value and deadline, and keeps the Florida clocks that decide what can still be recovered.
           </p>
         </div>
-        <Link href="/denials" className={primaryLinkButtonClass}>
-          Open denial queue
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/university" className="text-body font-medium text-link hover:underline">
+            New here? Start with DenialDesk University
+          </Link>
+          <Link href="/denials" className={primaryLinkButtonClass}>
+            Open denial queue
+          </Link>
+        </div>
       </header>
 
       <Panel title="How DenialDesk works" description="The path a claim takes through the platform" flush>

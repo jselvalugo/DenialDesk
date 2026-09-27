@@ -7,14 +7,13 @@ const none = { showRevenueCycle: false };
 describe("navApps", () => {
   it("hides revenue cycle and settings from users who can't open them", () => {
     const ids = navApps(none).map((app) => app.id);
-    expect(ids).toEqual(["denials", "patients", "claims", "insight", "university"]);
+    expect(ids).toEqual(["denials", "patients", "claims", "insight"]);
     expect(navApps(all).map((app) => app.id)).toEqual([
       "denials",
       "patients",
       "claims",
       "revenue-cycle",
       "insight",
-      "university",
       "settings",
     ]);
   });
@@ -73,14 +72,12 @@ describe("locate", () => {
       app: { id: "settings" },
       item: { label: "Settings" },
     });
-    expect(locate(apps, "/university/wiki/glossary")).toMatchObject({
-      app: { id: "university" },
-      item: { label: "Wiki" },
-    });
   });
 
   it("does not match a path that only shares a prefix, and never a planned page", () => {
     expect(locate(apps, "/claimsx").item).toBeNull();
+    // The University (courses and wiki) is not a module (specs/denialdesk-university.md).
+    expect(locate(apps, "/university/wiki").item).toBeNull();
     expect(locate(apps, "/reports").item).toBeNull();
   });
 

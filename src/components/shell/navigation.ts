@@ -1,11 +1,9 @@
 import {
   BarChart3,
-  BookOpen,
   BookOpenCheck,
   FileSpreadsheet,
   FileText,
   Gavel,
-  GraduationCap,
   Hourglass,
   Inbox,
   Landmark,
@@ -107,16 +105,6 @@ export function navApps({ showRevenueCycle, showSettings = false }: NavVisibilit
     icon: BarChart3,
     tone: "amber",
     items: [{ label: "Reports", href: "/insight", icon: BarChart3, available: true }],
-  });
-  // The University holds the Wiki today; the owner is shaping the rest of the module
-  // (docs/specs/university-wiki.md), so no other page is listed yet, not even as planned.
-  apps.push({
-    id: "university",
-    label: "University",
-    description: "Reference articles on how DenialDesk works and the Florida and Medicare rules it tracks.",
-    icon: GraduationCap,
-    tone: "navy",
-    items: [{ label: "Wiki", href: "/university/wiki", icon: BookOpen, available: true }],
   });
   const settings: NavItem[] = [];
   // The platform console isn't linked from practices: it has its own sign-in (/operator/login).
