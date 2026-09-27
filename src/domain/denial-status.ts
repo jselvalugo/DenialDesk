@@ -19,9 +19,19 @@ export const DENIAL_STATUSES: Record<
 > = {
   new: { labelKey: "denialStatus.new", tone: "neutral", open: true, awaitingAction: true },
   in_review: { labelKey: "denialStatus.in_review", tone: "info", open: true, awaitingAction: true },
-  needs_records: { labelKey: "denialStatus.needs_records", tone: "warning", open: true, awaitingAction: true },
+  needs_records: {
+    labelKey: "denialStatus.needs_records",
+    tone: "warning",
+    open: true,
+    awaitingAction: true,
+  },
   appeal_drafted: { labelKey: "denialStatus.appeal_drafted", tone: "info", open: true, awaitingAction: true },
-  appeal_submitted: { labelKey: "denialStatus.appeal_submitted", tone: "info", open: true, awaitingAction: false },
+  appeal_submitted: {
+    labelKey: "denialStatus.appeal_submitted",
+    tone: "info",
+    open: true,
+    awaitingAction: false,
+  },
   overturned: { labelKey: "denialStatus.overturned", tone: "success", open: false, awaitingAction: false },
   upheld: { labelKey: "denialStatus.upheld", tone: "danger", open: false, awaitingAction: false },
   written_off: { labelKey: "denialStatus.written_off", tone: "neutral", open: false, awaitingAction: false },

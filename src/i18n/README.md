@@ -4,6 +4,7 @@ Spec: `docs/specs/internationalization.md`. ADR: `docs/decisions/0009-internatio
 Languages: English (`en`, source), Spanish (`es`), Portuguese (`pt`).
 
 ## Rules
+
 1. **No user-visible English literal in code.** Every label, heading, button, hint, placeholder,
    `aria-label`, `title`, empty state, page title, and error message returned to the user is a key in
    `messages/en/<namespace>.ts`, with its Spanish and Portuguese in `messages/es/` and `messages/pt/`.
@@ -22,6 +23,7 @@ Languages: English (`en`, source), Spanish (`es`), Portuguese (`pt`).
    statute citations, NPIs, and anything the practice typed are shown as stored.
 
 ## Server components, actions, route handlers
+
 ```ts
 import { getFormat, getT } from "@/i18n/server";
 
@@ -38,28 +40,34 @@ export default async function Page() {
   // f.number(total)   f.cents(cents) (same as formatCents)   tc(DENIAL_STATUSES[s].labelKey)
 }
 ```
+
 Server actions that return `{ error }` call `await getT("ns")` too. Zod messages: map issue paths
 to keys in the action rather than putting English into the schema.
 
 ## Client components
+
 ```tsx
 "use client";
 import { useFormat, useLocale, useT } from "@/i18n/client";
 const t = useT("claims");
 const f = useFormat();
 ```
+
 Rich text (either side): `rich(t("hint.mfa"), { b: (c) => <strong>{c}</strong> })` from `@/i18n/rich`.
 
 ## Domain code (`src/domain/**`, `rules/`)
+
 Pure modules return **message keys** (`MessageKey<"claims">`) or take a `Translator` parameter; they
 never import `@/i18n/server`. Label maps look like `CLAIM_STATUSES[s].labelKey`. Tests build a
 translator with `createTranslator(en.claims, "en")`.
 
 ## Formatting
+
 Dates and counts follow the language (`f.date`, `f.dateTime`, `f.number`). Money is always
 `$1,234.56` (`formatCents`, `<Money>`), see ADR 0009. Never call `toLocaleString("en-US")` or
 `formatDate(x)` without the locale in page code; use the formatters.
 
 ## Adding a language later
+
 Add the code to `LOCALES`, `LOCALE_NAMES`, `INTL_TAGS` in `config.ts`, a `messages/<code>/` folder
 typed `Messages`, and the CHECK constraint on `users.locale` (new migration).

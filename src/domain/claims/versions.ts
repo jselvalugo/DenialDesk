@@ -6,14 +6,23 @@ import type { Params } from "@/i18n/translate";
 import { audit } from "@/lib/audit";
 import { changedFields, snapshotOf, type Correction } from "./correction";
 import { isUnsubmitted } from "./status";
+import { en } from "@/i18n/messages/en";
+import { createTranslator } from "@/i18n/translate";
 
 /** Carries a message key (claims namespace) instead of English text; the action translates it. */
+const english = createTranslator(en.claims, "en");
+function englishMessage(key: MessageKey<"claims">, params?: Params): string {
+  return english(key, params);
+}
+
 export class ClaimCorrectionError extends Error {
   constructor(
     public readonly key: MessageKey<"claims">,
     public readonly params?: Params,
   ) {
-    super(key);
+    // The message is the English text, so logs and tests read it directly; server actions translate
+    // `key`/`params` for the user instead of showing `message`.
+    super(englishMessage(key, params));
     this.name = "ClaimCorrectionError";
   }
 }

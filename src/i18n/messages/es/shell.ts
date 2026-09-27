@@ -1,7 +1,7 @@
 import type { Messages } from "../types";
 
 export const shell: Messages["shell"] = {
-  "skipToContent": "Saltar al contenido",
+  skipToContent: "Saltar al contenido",
   "brand.home": "Inicio de DenialDesk",
   "header.goTo": "Ir a un módulo o página",
   "header.practice": "Consultorio",
@@ -16,7 +16,8 @@ export const shell: Messages["shell"] = {
   "switcher.close": "Cerrar",
   "switcher.columnModule": "Módulo",
   "switcher.columnPages": "Páginas",
-  "switcher.noMatch": "Nada coincide con “{query}”. Pruebe con el nombre de un módulo o página, como “{example}”.",
+  "switcher.noMatch":
+    "Nada coincide con “{query}”. Pruebe con el nombre de un módulo o página, como “{example}”.",
   "switcher.moduleLink": "Módulo {module}",
   "switcher.count":
     "{modules, plural, one {# módulo} other {# módulos}} · {pages, plural, one {# página} other {# páginas}}",
@@ -27,14 +28,16 @@ export const shell: Messages["shell"] = {
   "module.denials": "Denegaciones",
   "module.denials.description": "Denegaciones abiertas, plazos de apelación y la cola de trabajo.",
   "module.patients": "Pacientes",
-  "module.patients.description": "Expedientes de pacientes: datos demográficos, seguro y cada reclamación y denegación.",
+  "module.patients.description":
+    "Expedientes de pacientes: datos demográficos, seguro y cada reclamación y denegación.",
   "module.claims": "Reclamaciones",
   "module.claims.description": "Reclamaciones, correcciones, remesas y seguimiento del pago puntual.",
   "module.revenueCycle": "Ciclo de ingresos",
   "module.revenueCycle.description":
     "Archivos mensuales, comprobantes de diario, antigüedad de cuentas por cobrar, depósitos y el libro mayor.",
   "module.insight": "Análisis",
-  "module.insight.description": "Informes sobre tendencias de denegaciones, recuperación y desempeño de los pagadores.",
+  "module.insight.description":
+    "Informes sobre tendencias de denegaciones, recuperación y desempeño de los pagadores.",
   "module.settings": "Configuración",
   "module.settings.description": "Perfil del consultorio, campos personalizados y acceso.",
   "page.overview": "Resumen",

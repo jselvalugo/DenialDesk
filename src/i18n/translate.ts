@@ -57,7 +57,9 @@ function resolveArgument(inner: string, params: Params, locale: Locale): string 
   if (raw === undefined || Number.isNaN(value)) return `{${inner}}`;
   const branches = parseBranches(rest.slice("plural,".length));
   const chosen =
-    branches[`=${value}`] ?? branches[new Intl.PluralRules(INTL_TAGS[locale]).select(value)] ?? branches.other;
+    branches[`=${value}`] ??
+    branches[new Intl.PluralRules(INTL_TAGS[locale]).select(value)] ??
+    branches.other;
   if (chosen === undefined) return `{${inner}}`;
   return formatMessage(chosen.replaceAll("#", formatNumber(value, locale)), params, locale);
 }

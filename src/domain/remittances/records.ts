@@ -21,18 +21,34 @@ import type { MessageKey } from "@/i18n/messages/types";
 import { audit } from "@/lib/audit";
 import { CARC } from "@/domain/carc";
 import { isExpected, postedClaimStatus } from "./status";
+import { en } from "@/i18n/messages/en";
+import { createTranslator } from "@/i18n/translate";
 
 /**
  * Carries a message key (remittances namespace) instead of English text. A value that's a list
  * (e.g. claim numbers) is joined and translated by the caller (`joinNamed` in the server action),
  * not here: this module never imports `@/i18n/server`.
  */
+const english = createTranslator(en.remittances, "en");
+function englishMessage(
+  key: MessageKey<"remittances">,
+  params?: Record<string, string | number | string[]>,
+): string {
+  return english(
+    key,
+    params &&
+      Object.fromEntries(Object.entries(params).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : v])),
+  );
+}
+
 export class RemittanceError extends Error {
   constructor(
     public readonly key: MessageKey<"remittances">,
     public readonly data?: Record<string, string | number | string[]>,
   ) {
-    super(key);
+    // The message is the English text, so logs and tests read it directly; server actions translate
+    // `key`/`data` for the user instead of showing `message`.
+    super(englishMessage(key, data));
     this.name = "RemittanceError";
   }
 }

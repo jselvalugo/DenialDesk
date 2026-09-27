@@ -1,6 +1,6 @@
 /** App chrome: header, tab bar, module switcher, user menu, session timeout, environment banner. */
 export const shell = {
-  "skipToContent": "Skip to content",
+  skipToContent: "Skip to content",
   "brand.home": "DenialDesk home",
   "header.goTo": "Go to a module or page",
   "header.practice": "Practice",

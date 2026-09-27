@@ -63,10 +63,14 @@ test.describe("shell chrome", () => {
       // The whole page re-renders in Spanish: tab bar, header field, and <html lang>.
       await expect(page.locator("html")).toHaveAttribute("lang", "es");
       await expect(
-        page.getByRole("navigation", { name: "Principal" }).getByRole("link", { name: "Cola de denegaciones" }),
+        page
+          .getByRole("navigation", { name: "Principal" })
+          .getByRole("link", { name: "Cola de denegaciones" }),
       ).toBeVisible();
       await expect(page.getByRole("button", { name: /, cambiar de módulo$/ })).toBeVisible();
-      await expect(page.getByRole("note", { name: "Aviso de entorno" })).toContainText("Solo datos sintéticos");
+      await expect(page.getByRole("note", { name: "Aviso de entorno" })).toContainText(
+        "Solo datos sintéticos",
+      );
       // The choice is stored on the account and applied at the next sign-in; the cookie carries it now.
       await page.goto("/settings");
       await expect(page.locator("html")).toHaveAttribute("lang", "es");
@@ -80,10 +84,15 @@ test.describe("shell chrome", () => {
       // Leave the shared worker account in English for the other tests.
       await page.goto("/overview");
       await userMenu.click();
-      await page.getByRole("group", { name: /Language|Idioma/ }).getByRole("button", { name: "English" }).click();
+      await page
+        .getByRole("group", { name: /Language|Idioma/ })
+        .getByRole("button", { name: "English" })
+        .click();
       await expect(page.locator("html")).toHaveAttribute("lang", "en");
     }
-    await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Denial queue" })).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Denial queue" }),
+    ).toBeVisible();
   });
 
   test("skip link moves focus to the main content", async ({ page }) => {

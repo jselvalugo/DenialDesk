@@ -1,7 +1,7 @@
 import type { Messages } from "../types";
 
 export const shell: Messages["shell"] = {
-  "skipToContent": "Pular para o conteúdo",
+  skipToContent: "Pular para o conteúdo",
   "brand.home": "Início do DenialDesk",
   "header.goTo": "Ir para um módulo ou página",
   "header.practice": "Clínica",
@@ -27,14 +27,16 @@ export const shell: Messages["shell"] = {
   "module.denials": "Negativas",
   "module.denials.description": "Negativas em aberto, prazos de recurso e a fila de trabalho.",
   "module.patients": "Pacientes",
-  "module.patients.description": "Cadastros de pacientes: dados demográficos, convênio e cada reivindicação e negativa.",
+  "module.patients.description":
+    "Cadastros de pacientes: dados demográficos, convênio e cada reivindicação e negativa.",
   "module.claims": "Reivindicações",
   "module.claims.description": "Reivindicações, correções, remessas e acompanhamento do pagamento pontual.",
   "module.revenueCycle": "Ciclo de receita",
   "module.revenueCycle.description":
     "Arquivos mensais, lançamentos de diário, antiguidade de contas a receber, depósitos e o livro-razão.",
   "module.insight": "Análises",
-  "module.insight.description": "Relatórios sobre tendências de negativas, recuperação e desempenho dos pagadores.",
+  "module.insight.description":
+    "Relatórios sobre tendências de negativas, recuperação e desempenho dos pagadores.",
   "module.settings": "Configurações",
   "module.settings.description": "Perfil da clínica, campos personalizados e acesso.",
   "page.overview": "Visão geral",

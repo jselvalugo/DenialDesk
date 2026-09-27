@@ -34,7 +34,9 @@ export function Pagination({
         <PageLink disabled={page <= 1} href={hrefFor(page - 1)}>
           {t("pagination.previous")}
         </PageLink>
-        <span className="tabular">{t("pagination.page", { page: f.number(page), pages: f.number(pages) })}</span>
+        <span className="tabular">
+          {t("pagination.page", { page: f.number(page), pages: f.number(pages) })}
+        </span>
         <PageLink disabled={page >= pages} href={hrefFor(page + 1)}>
           {t("pagination.next")}
         </PageLink>

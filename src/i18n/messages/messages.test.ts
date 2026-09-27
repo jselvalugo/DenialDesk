@@ -40,7 +40,9 @@ describe("message dictionaries (spec: internationalization)", () => {
       for (const namespace of namespaces) {
         const table = messages[locale][namespace] as Record<string, string>;
         for (const [key, source] of Object.entries(messages.en[namespace] as Record<string, string>)) {
-          expect(placeholders(table[key] ?? ""), `${locale}.${namespace}.${key}`).toEqual(placeholders(source));
+          expect(placeholders(table[key] ?? ""), `${locale}.${namespace}.${key}`).toEqual(
+            placeholders(source),
+          );
         }
       }
     }
