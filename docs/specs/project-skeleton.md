@@ -46,7 +46,9 @@ Netlify deploy configuration (next roadmap item), auth, tenancy tables, rules en
 data generator, any UI beyond a placeholder home page.
 
 ## Decisions
-- Secrets scanner: gitleaks (GitHub Action).
+- Secrets scanner: gitleaks (GitHub Action). Config in `.gitleaks.toml`: default rules plus one
+  allowlist for UI message keys (`labelKey: "aging.bucket.31_60"` reads as an API key to the
+  generic rule).
 - Background-job queue library: decided in a later spec, not here.
 
 ## Verification notes (2026-09-26)
