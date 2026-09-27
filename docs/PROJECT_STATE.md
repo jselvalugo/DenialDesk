@@ -138,7 +138,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
    payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
    timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.
-8. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
+8. Re-seed pre-production data after PR #59 (P1 rules): `denials.appeal_deadline` rows written
+   before it hold the old rolled (later) date and show no "pending counsel" marker.
+9. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 

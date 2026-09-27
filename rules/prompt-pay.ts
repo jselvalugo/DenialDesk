@@ -173,7 +173,8 @@ export function evaluatePromptPay(input: {
   // Regime check before rule lookup: MA, Medicare, ERISA etc. never resolve Florida rules.
   const set = floridaRuleSet(input.regime);
   if (set === null) return empty;
-  const ids = promptPayRuleIds(input.regime, electronic)!;
+  const ids = promptPayRuleIds(input.regime, electronic);
+  if (ids === null) throw new Error(`No prompt-pay rule ids for regime ${input.regime}`);
   const kind = electronic ? "electronic" : "paper";
   const [contestRule, denyRule, uncontestableRule] = ids.map((id) =>
     resolveRule(id, receivedDate, rules),
