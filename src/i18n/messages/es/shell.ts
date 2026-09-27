@@ -3,6 +3,7 @@ import type { Messages } from "../types";
 export const shell: Messages["shell"] = {
   skipToContent: "Saltar al contenido",
   "brand.home": "Inicio de DenialDesk",
+  "meta.description": "Gestión de reclamaciones y denegaciones para consultorios médicos de Florida.",
   "header.goTo": "Ir a un módulo o página",
   "header.practice": "Consultorio",
   "header.styleGuide": "Guía de estilo",
@@ -62,7 +63,8 @@ export const shell: Messages["shell"] = {
   "userMenu.signOut": "Cerrar sesión",
 
   "timeout.title": "Su sesión está por terminar",
-  "timeout.body": "Por seguridad, se cerrará la sesión tras 15 minutos sin actividad. Tiempo restante:",
+  "timeout.body":
+    "Por seguridad, se cerrará la sesión tras {minutes} minutos sin actividad. Tiempo restante:",
   "timeout.signOut": "Cerrar sesión",
   "timeout.stay": "Seguir conectado",
 

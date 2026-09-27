@@ -34,7 +34,7 @@ export default async function JournalPage() {
     .filter((file) => file.formatVersion === CURRENT_FORMAT_VERSION)
     .map((file) => ({
       value: file.id,
-      label: `${periodLabel(file.periodYear, file.periodMonth, t.locale)} · ${t("journal.importedOn", { date: f.dateTime(file.createdAt) })}`,
+      label: `${periodLabel(file.periodYear, file.periodMonth, t.locale)} · ${t("journal.importedOn", { date: f.dateOf(file.createdAt) })}`,
     }));
 
   return (
@@ -94,7 +94,7 @@ export default async function JournalPage() {
                     <Money cents={v.debitCents} />
                   </Td>
                   <Td className="text-muted">
-                    {v.preparedBy ?? "—"} · {f.dateTime(v.createdAt)}
+                    {v.preparedBy ?? "—"} · {f.dateOf(v.createdAt)}
                   </Td>
                 </Tr>
               ))}

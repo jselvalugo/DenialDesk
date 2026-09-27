@@ -46,12 +46,12 @@ function rows(
 ): StatementRow[] {
   const index = new Map(months.map((m, i) => [monthKey(m), i]));
   const byAccount = new Map<string, number[]>();
-  for (const t of totals) {
-    const i = index.get(monthKey(t));
-    if (i === undefined || t.cents === 0) continue;
-    const series = byAccount.get(t.account) ?? months.map(() => 0);
-    series[i]! += t.cents;
-    byAccount.set(t.account, series);
+  for (const total of totals) {
+    const i = index.get(monthKey(total));
+    if (i === undefined || total.cents === 0) continue;
+    const series = byAccount.get(total.account) ?? months.map(() => 0);
+    series[i]! += total.cents;
+    byAccount.set(total.account, series);
   }
   return [...byAccount.entries()]
     .sort(([a], [b]) => (a < b ? -1 : 1))

@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, max, sql } from "drizzle-orm";
+import type { Locale } from "@/i18n/config";
 import { alias } from "drizzle-orm/pg-core";
 import type { Role } from "@/auth/session";
 import { canConfigureRevenueCycle, canRunRevenueCycle } from "@/auth/permissions";
@@ -90,7 +91,13 @@ async function fileBalances(tx: TenantTx, fileId: string): Promise<Balances> {
  * first imported month has no opening (its opening balances are in the GL); any later month whose
  * prior month has no current-format file is a gap that must be filled first.
  */
-async function voucherBalances(tx: TenantTx, fileId: string, year: number, month: number) {
+async function voucherBalances(
+  tx: TenantTx,
+  fileId: string,
+  year: number,
+  month: number,
+  locale: Locale = "en",
+) {
   const prior = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
   const periods = await periodFiles(tx);
   const priorFile = periods.find((p) => p.periodYear === prior.year && p.periodMonth === prior.month);
@@ -98,7 +105,7 @@ async function voucherBalances(tx: TenantTx, fileId: string, year: number, month
   return {
     opening: priorFile ? await fileBalances(tx, priorFile.fileId) : null,
     closing: await fileBalances(tx, fileId),
-    missingPrior: !priorFile && hasEarlier ? periodLabel(prior.year, prior.month) : null,
+    missingPrior: !priorFile && hasEarlier ? periodLabel(prior.year, prior.month, locale) : null,
   };
 }
 
@@ -156,7 +163,7 @@ export async function prepareVoucher(
     .where(eq(glAccounts.isPaymentsClearing, true))
     .limit(1);
   if (!clearing) throw new VoucherError("voucher.error.noClearingAccount", undefined, t);
-  const balances = await voucherBalances(tx, fileId, periodYear, periodMonth);
+  const balances = await voucherBalances(tx, fileId, periodYear, periodMonth, t.locale);
   const lines = buildVoucherLines(
     await fileGroups(tx, fileId),
     periodYear,
@@ -290,7 +297,7 @@ export async function getVoucher(
       source: await sourceTotals(tx, voucher.fileId),
       accounts: await chart(tx),
       otherPostedVoucher: posted && posted.id !== voucher.id ? posted.number : null,
-      balances: await voucherBalances(tx, voucher.fileId, voucher.periodYear, voucher.periodMonth),
+      balances: await voucherBalances(tx, voucher.fileId, voucher.periodYear, voucher.periodMonth, t.locale),
     },
     t,
   );

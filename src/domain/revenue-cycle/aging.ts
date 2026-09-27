@@ -1,5 +1,5 @@
 import { CsvError, parseCsv } from "@/lib/csv/parse";
-import { englishRevenue, type RevenueT } from "./i18n";
+import { englishRevenue, type RevenueT, csvProblemMessage } from "./i18n";
 import { parseMoney, parseServiceDate } from "./monthly-file";
 
 /**
@@ -256,7 +256,10 @@ export function parseDepositFile(
     rows = parseCsv(text, { maxRows: DEPOSIT_MAX_ROWS, maxColumns: 50, headerRows: 1 });
   } catch (error) {
     if (error instanceof CsvError)
-      return { ok: false, problems: [{ row: error.row, message: error.message }] };
+      return {
+        ok: false,
+        problems: [{ row: error.row, message: csvProblemMessage(error, t) }],
+      };
     throw error;
   }
   if (rows.length < 2) return { ok: false, problems: [{ row: 1, message: t("import.error.noDataRows") }] };

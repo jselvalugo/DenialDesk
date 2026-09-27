@@ -2,9 +2,9 @@ import type { Messages } from "../types";
 
 export const operator: Messages["operator"] = {
   // Shared status words (practices list and practice detail)
-  "status.active": "Ativo",
-  "status.suspended": "Suspenso",
-  "status.archived": "Arquivado",
+  "status.active": "Ativa",
+  "status.suspended": "Suspensa",
+  "status.archived": "Arquivada",
   "status.demo": "Demonstração",
   "status.customer": "Cliente",
 
@@ -55,7 +55,7 @@ export const operator: Messages["operator"] = {
   "newPractice.sendDetails":
     "Envie ao administrador os dados de acesso por um canal seguro. Esta senha é exibida apenas uma vez.",
   "newPractice.temporaryPasswordLabel": "Senha temporária",
-  "newPractice.mfaHint": "Ele configurará a verificação em duas etapas no primeiro acesso.",
+  "newPractice.mfaHint": "A verificação em duas etapas será configurada no primeiro acesso.",
   "newPractice.openPractice": "Abrir clínica",
   "newPractice.createAnother": "Criar outra",
 
@@ -64,7 +64,7 @@ export const operator: Messages["operator"] = {
   "practice.descriptionCustomer": "Clínica cliente. Somente dados no nível da clínica.",
   "practice.descriptionDemo": "Clínica de demonstração com dados sintéticos.",
   "practice.panelTitle": "Clínica",
-  "practice.baaTitle": "Acordo de Associado Comercial (BAA)",
+  "practice.baaTitle": "Acordo de associado comercial (BAA)",
   "practice.baaDescription": "O acordo assinado registrado para esta clínica, e todas as versões anteriores.",
   "practice.noAgreement":
     "Nenhum acordo registrado. Registre o BAA assinado abaixo antes que esta clínica lide com dados de pacientes.",
@@ -95,8 +95,8 @@ export const operator: Messages["operator"] = {
   "agreementForm.expiresOnLabel": "Expira em",
   "agreementForm.expiresOnHint": "Deixe em branco se vigorar até o término.",
   "agreementForm.signedOnLabel": "Data de assinatura",
-  "agreementForm.practiceSignerLabel": "Assinado pela clínica",
-  "agreementForm.ourSignerLabel": "Assinado pela DenialDesk",
+  "agreementForm.practiceSignerLabel": "Assinado em nome da clínica por",
+  "agreementForm.ourSignerLabel": "Assinado em nome da DenialDesk por",
   "agreementForm.nameAndTitleHint": "Nome e cargo.",
   "agreementForm.noteLabel": "Observação",
   "agreementForm.noteHint": "Opcional. Sem informações de pacientes.",

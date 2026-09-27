@@ -543,4 +543,11 @@ export const revenue = {
   "statements.cashTableCaption": "Cash by month",
   "statements.undepositedToDate": "Undeposited to date",
   "statements.notInChart": "Not in the chart of accounts",
+
+  // CSV parser problems (lib/csv/parse.ts)
+  "csv.tooManyColumns": "A row has more than {max} columns.",
+  "csv.tooManyRows": "The file has more than {max} data rows.",
+  "csv.textAfterQuote": "Text follows a closing quote.",
+  "csv.quoteInUnquotedField": "A quote appears inside an unquoted field.",
+  "csv.unclosedQuote": "A quoted field is never closed.",
 } as const;

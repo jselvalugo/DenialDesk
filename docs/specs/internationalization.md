@@ -2,7 +2,7 @@
 
 Status: in progress
 Roadmap item: owner request 2026-09-27 ("make the entire platform English, Spanish and Portuguese")
-Requirement IDs: R-11.1 (new), R-7.5.4 (no PHI in logs: language choice is not PHI), R-7.11.5 unaffected
+Requirement IDs: R-11.1 (new); R-7.5.1 and non-negotiable 4 (the language choice is not PHI and never reaches logs)
 
 ## Goal
 Every screen, menu, message, and export label in DenialDesk reads in the user's chosen language:
@@ -124,4 +124,11 @@ date order change. Rule IDs and citations shown on screen stay as cited.
   users (today: browser language until the user picks)? Added to `docs/owner/OWNER_ACTION_ITEMS.xlsx`
   as OA-034.
 - Owner: a native-speaker review of the Spanish and Portuguese billing terminology before launch
-  (OA-035). The glossary above is what the product uses until then.
+  (OA-035), extended to counsel or compliance sign-off that the translated attestations and caveats
+  (synthetic-data attestation, BAA recording labels, uncontestable-obligation alert, R-8.7
+  suppression and residual-risk text) say the same thing in law. The glossary above is what the
+  product uses until then. Pre-production holds synthetic data only, so this gates the Azure launch.
+- Follow-ups from the 2026-09-27 reviews (not blocking): send each route group only the namespaces
+  it needs instead of the whole dictionary (~118 KB, incl. operator text on `/login`); give
+  `passwordProblem()` a code instead of matching its English sentences in `auth/actions.ts`; more
+  `=0` plural wordings where a zero count is likely.

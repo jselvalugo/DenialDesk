@@ -80,7 +80,7 @@ export const promptPay: Messages["promptPay"] = {
   "detail.notReceived":
     "El pagador aún no ha confirmado la recepción de esta reclamación, así que su reloj de pago puntual no ha comenzado.",
   "detail.uncontestableAlert":
-    "El pagador no pagó ni denegó esta reclamación para el hito de incontestabilidad. El pago podría ahora ser una obligación incontestable (R-3.1.4). Confirme con un abogado antes de enviar un reclamo.",
+    "El pagador no pagó ni denegó esta reclamación para el hito de incontestabilidad. El pago podría ahora ser una obligación incontestable (R-3.1.4). Confirme con un abogado antes de enviar un requerimiento de pago.",
   "detail.milestones.title": "Hitos",
   "detail.milestones.caption": "Hitos del pago puntual",
   "detail.milestones.description": "Contados en días calendario desde la fecha de recepción del pagador.",
@@ -93,7 +93,7 @@ export const promptPay: Messages["promptPay"] = {
   "detail.interest.totalOwed": "Interés total adeudado",
   "detail.interest.ratePerYear": "{rate}% anual",
   "detail.interest.footnote":
-    "El interés comienza el día después del vencimiento del pago (la fecha de pagar o contestar, o la de pagar o denegar una vez que el pagador objeta). Pendiente de verificación legal.",
+    "El interés comienza el día después del vencimiento del pago (la fecha de pagar u objetar, o la de pagar o denegar una vez que el pagador objeta). Pendiente de verificación legal.",
   "detail.claim.title": "Reclamación",
   "detail.claim.billedPaid": "Facturado / pagado",
   "detail.claim.contestResponseDue": "Su respuesta a la objeción vence el",
@@ -115,7 +115,7 @@ export const promptPay: Messages["promptPay"] = {
   // Página y formulario de nueva objeción
   "newContest.title": "Registrar objeción del pagador",
   "newContest.description":
-    "El pagador objetó esta reclamación o solicitó más información. Esto cumple solo el hito de pagar o contestar; el reloj de pagar o denegar sigue corriendo.",
+    "El pagador objetó esta reclamación o solicitó más información. Esto cumple solo el hito de pagar u objetar; el reloj de pagar o denegar sigue corriendo.",
   "newContest.breadcrumbRecordContest": "Registrar objeción",
   "contestForm.dateLabel": "Fecha del aviso del pagador",
   "contestForm.dateHint": "La fecha en que el pagador objetó la reclamación o solicitó información.",

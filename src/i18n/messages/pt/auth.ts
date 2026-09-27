@@ -16,17 +16,17 @@ export const auth: Messages["auth"] = {
   "signIn.passwordLabel": "Senha",
   "signIn.submit": "Entrar",
   "signIn.submitting": "Entrando…",
-  "notice.timeout": "Sua sessão foi encerrada após 15 minutos sem atividade.",
+  "notice.timeout": "Sua sessão foi encerrada após {minutes} minutos sem atividade.",
   "notice.locked":
-    "Muitas tentativas. Tente novamente em 15 minutos ou entre em contato com o administrador.",
-  "notice.operatorLocked": "Muitas tentativas. Tente novamente em 15 minutos.",
+    "Muitas tentativas. Tente novamente em {minutes} minutos ou entre em contato com o administrador.",
+  "notice.operatorLocked": "Muitas tentativas. Tente novamente em {minutes} minutos.",
   "error.noPractice":
     "Sua conta ainda não está vinculada a nenhuma clínica. Entre em contato com o administrador.",
   "error.practiceSuspended":
     "O acesso desta clínica está suspenso. Entre em contato com o suporte da DenialDesk.",
   "error.enterEmailPassword": "Informe seu e-mail e senha.",
   "error.signInFailed":
-    "O e-mail ou a senha estão incorretos, ou a conta está temporariamente bloqueada. Tente novamente em 15 minutos ou entre em contato com o administrador.",
+    "O e-mail ou a senha estão incorretos, ou a conta está temporariamente bloqueada. Tente novamente em {minutes} minutos ou entre em contato com o administrador.",
 
   // Two-step verification at sign-in (app/login/mfa/**)
   "mfaVerify.pageTitle": "Verificar acesso",
@@ -75,7 +75,7 @@ export const auth: Messages["auth"] = {
   "operatorSignIn.pageTitle": "Acesso ao console da plataforma",
   "operatorSignIn.title": "Acesso do operador",
   "operatorSignIn.subtitle":
-    "Somente para o operador da plataforma. Os usuários da clínica acessam em <a>a página de acesso da clínica</a>.",
+    "Somente para o operador da plataforma. Os usuários da clínica acessam pela <a>página de acesso da clínica</a>.",
   "operatorMfaVerify.pageTitle": "Verificar acesso do operador",
   "operatorMfaSetup.pageTitle": "Configurar a verificação em duas etapas do operador",
 };

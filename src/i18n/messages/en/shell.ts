@@ -2,6 +2,7 @@
 export const shell = {
   skipToContent: "Skip to content",
   "brand.home": "DenialDesk home",
+  "meta.description": "Claims and denial management for Florida physician practices.",
   "header.goTo": "Go to a module or page",
   "header.practice": "Practice",
   "header.styleGuide": "Style guide",
@@ -61,7 +62,8 @@ export const shell = {
 
   // Session timeout dialog
   "timeout.title": "Your session is about to end",
-  "timeout.body": "For security, you'll be signed out after 15 minutes without activity. Time remaining:",
+  "timeout.body":
+    "For security, you'll be signed out after {minutes} minutes without activity. Time remaining:",
   "timeout.signOut": "Sign out",
   "timeout.stay": "Stay signed in",
 

@@ -56,10 +56,11 @@ function resolveArgument(inner: string, params: Params, locale: Locale): string 
   const value = typeof raw === "number" ? raw : Number(raw);
   if (raw === undefined || Number.isNaN(value)) return `{${inner}}`;
   const branches = parseBranches(rest.slice("plural,".length));
-  const chosen =
-    branches[`=${value}`] ??
-    branches[new Intl.PluralRules(INTL_TAGS[locale]).select(value)] ??
-    branches.other;
+  // CLDR puts 0 in Portuguese's "one" category ("0 dia"); everyday Brazilian usage says "0 dias",
+  // so zero takes the plural branch unless the message spells out an `=0` wording.
+  const category =
+    value === 0 && locale === "pt" ? "other" : new Intl.PluralRules(INTL_TAGS[locale]).select(value);
+  const chosen = branches[`=${value}`] ?? branches[category] ?? branches.other;
   if (chosen === undefined) return `{${inner}}`;
   return formatMessage(chosen.replaceAll("#", formatNumber(value, locale)), params, locale);
 }

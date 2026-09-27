@@ -209,7 +209,9 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                         <Td numeric>
                           <Money cents={line.paidCents} />
                         </Td>
-                        <Td numeric>{t("detail.interest.ratePerYear", { rate: line.ratePercent })}</Td>
+                        <Td numeric>
+                          {t("detail.interest.ratePerYear", { rate: f.decimal(line.ratePercent, 1) })}
+                        </Td>
                         <Td numeric className="font-medium">
                           <Money cents={line.interestCents} />
                         </Td>

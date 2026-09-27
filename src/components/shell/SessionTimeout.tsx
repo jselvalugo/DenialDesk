@@ -83,7 +83,7 @@ export function SessionTimeout({
           {t("timeout.title")}
         </h2>
         <p id="timeout-body" className="mt-2 text-body text-muted">
-          {t("timeout.body")}{" "}
+          {t("timeout.body", { minutes: SESSION_IDLE_MS / 60_000 })}{" "}
           <span className="tabular font-medium text-text">
             {minutes}:{seconds}
           </span>

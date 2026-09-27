@@ -18,14 +18,14 @@ export const auth = {
   "signIn.passwordLabel": "Password",
   "signIn.submit": "Sign in",
   "signIn.submitting": "Signing in…",
-  "notice.timeout": "You were signed out after 15 minutes without activity.",
-  "notice.locked": "Too many attempts. Try again in 15 minutes or contact your administrator.",
-  "notice.operatorLocked": "Too many attempts. Try again in 15 minutes.",
+  "notice.timeout": "You were signed out after {minutes} minutes without activity.",
+  "notice.locked": "Too many attempts. Try again in {minutes} minutes or contact your administrator.",
+  "notice.operatorLocked": "Too many attempts. Try again in {minutes} minutes.",
   "error.noPractice": "Your account isn't linked to a practice yet. Contact your administrator.",
   "error.practiceSuspended": "This practice's access is suspended. Contact DenialDesk support.",
   "error.enterEmailPassword": "Enter your email and password.",
   "error.signInFailed":
-    "Email or password is incorrect, or the account is temporarily locked. Try again in 15 minutes or contact your administrator.",
+    "Email or password is incorrect, or the account is temporarily locked. Try again in {minutes} minutes or contact your administrator.",
 
   // Two-step verification at sign-in (app/login/mfa/**)
   "mfaVerify.pageTitle": "Verify sign-in",

@@ -1,6 +1,6 @@
 import { CsvError, parseCsv, type CsvRow } from "@/lib/csv/parse";
 import type { MessageKey } from "@/i18n/messages/types";
-import { englishRevenue, type RevenueT } from "./i18n";
+import { englishRevenue, type RevenueT, csvProblemMessage } from "./i18n";
 
 /**
  * Month-end activity file from the practice-management (PM) system, DenialDesk's own layout: one
@@ -49,7 +49,8 @@ type ColumnKey = keyof typeof COLUMNS;
  * part of the header-matching contract and the template file (`MONTHLY_FILE_HEADER`) and never
  * changes with the language; this is only what error messages and the import instructions show.
  */
-const COLUMN_LABEL_KEYS: Record<ColumnKey, MessageKey<"revenue">> = {
+/** On-screen names of the columns (tables, hints). The CSV header contract itself is `COLUMNS[key].label`. */
+export const COLUMN_LABEL_KEYS: Record<ColumnKey, MessageKey<"revenue">> = {
   patientName: "import.column.patientName",
   accountNumber: "import.column.accountNumber",
   serviceDate: "import.column.serviceDate",
@@ -155,7 +156,10 @@ export function parseMonthlyFile(
     rows = parseCsv(text, { maxRows: MAX_ROWS, maxColumns: MAX_COLUMNS, headerRows: 1 });
   } catch (error) {
     if (error instanceof CsvError)
-      return { ok: false, problems: [{ row: error.row, message: error.message }] };
+      return {
+        ok: false,
+        problems: [{ row: error.row, message: csvProblemMessage(error, t) }],
+      };
     throw error;
   }
   if (rows.length < 2) return { ok: false, problems: [{ row: 1, message: t("import.error.noDataRows") }] };
@@ -167,8 +171,8 @@ export function parseMonthlyFile(
   const ambiguous: string[] = [];
   for (const [key, column] of Object.entries(COLUMNS) as [ColumnKey, (typeof COLUMNS)[ColumnKey]][]) {
     const matches = header.flatMap((h, i) => ((column.aliases as readonly string[]).includes(h) ? [i] : []));
-    if (matches.length === 0 && column.required) missing.push(t(COLUMN_LABEL_KEYS[key]));
-    if (matches.length > 1) ambiguous.push(t(COLUMN_LABEL_KEYS[key]));
+    if (matches.length === 0 && column.required) missing.push(column.label);
+    if (matches.length > 1) ambiguous.push(column.label);
     index[key] = matches[0] ?? -1;
   }
   if (missing.length > 0) {
@@ -201,8 +205,7 @@ export function parseMonthlyFile(
     const cell = (key: ColumnKey) => (index[key] >= 0 ? (cells[index[key]] ?? "").trim() : "");
     const money = (key: ColumnKey) => {
       const value = parseMoney(cell(key));
-      if (value === null)
-        add(rowNumber, t("import.error.invalidAmount", { column: t(COLUMN_LABEL_KEYS[key]) }));
+      if (value === null) add(rowNumber, t("import.error.invalidAmount", { column: COLUMNS[key].label }));
       return value ?? 0;
     };
     const accountNumber = cell("accountNumber");
@@ -215,7 +218,7 @@ export function parseMonthlyFile(
     if (!serviceDate) add(rowNumber, t("import.error.serviceDateInvalid"));
     for (const key of Object.keys(COLUMNS) as ColumnKey[]) {
       if (cell(key).length > 200) {
-        add(rowNumber, t("import.error.tooLong", { column: t(COLUMN_LABEL_KEYS[key]) }));
+        add(rowNumber, t("import.error.tooLong", { column: COLUMNS[key].label }));
       }
     }
     lines.push({

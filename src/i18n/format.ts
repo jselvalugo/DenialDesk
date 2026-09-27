@@ -1,5 +1,5 @@
 import { formatCents, formatDate, formatDateOf, formatDateTime } from "@/lib/format";
-import type { Locale } from "./config";
+import { INTL_TAGS, type Locale } from "./config";
 import { formatNumber } from "./translate";
 
 export interface Formatters {
@@ -12,6 +12,8 @@ export interface Formatters {
   dateOf: (at: Date) => string;
   /** Counts and plain numbers with the locale's grouping. */
   number: (value: number) => string;
+  /** A number with a fixed number of decimals in the locale's digits (12.5 / 12,5). */
+  decimal: (value: number, digits: number) => string;
   /** Money: always USD in U.S. form ($1,234.56), whatever the language (ADR 0009). */
   cents: (cents: number) => string;
 }
@@ -23,6 +25,11 @@ export function createFormatters(locale: Locale): Formatters {
     dateTime: (at) => formatDateTime(at, locale),
     dateOf: (at) => formatDateOf(at, locale),
     number: (value) => formatNumber(value, locale),
+    decimal: (value, digits) =>
+      new Intl.NumberFormat(INTL_TAGS[locale], {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      }).format(value),
     cents: formatCents,
   };
 }

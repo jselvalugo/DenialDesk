@@ -49,9 +49,10 @@ export const revenue: Messages["revenue"] = {
   "import.error.notImported": "El archivo no se importó. Corrija estas filas y súbalo de nuevo.",
 
   // Deposit import (domain/revenue-cycle/aging.ts, receivables.ts)
-  "deposits.error.columns": "El archivo necesita exactamente una columna de Fecha y una de Monto.",
+  "deposits.error.columns":
+    "El archivo necesita exactamente una columna “Date” y una columna “Amount” (encabezados en inglés).",
   "deposits.error.syntheticColumnRequired":
-    'Este entorno solo acepta archivos de depósitos sintéticos: agregue una columna "Marca sintética" con {marker} en cada fila.',
+    "Este entorno solo acepta archivos de depósitos sintéticos: agregue una columna “Synthetic marker” (encabezado en inglés) con {marker} en cada fila.",
   "deposits.error.syntheticMarkerMismatch": "La marca sintética no es {marker}.",
   "deposits.error.invalidDate": "La fecha no es una fecha válida (use MM/DD/AAAA).",
   "deposits.error.dateOutOfRange": "La fecha está fuera del rango 2000–2100.",
@@ -96,7 +97,7 @@ export const revenue: Messages["revenue"] = {
   "deposits.status.active": "Activo",
   "deposits.importTitle": "Importar depósitos",
   "deposits.importDescription":
-    "CSV con una columna de Fecha y una de Monto (negativo para artículos devueltos). Otras columnas, como descripciones o números de cuenta, se ignoran y nunca se guardan. Un archivo no puede superponerse con las fechas de uno ya importado; primero revierta el archivo anterior.",
+    "CSV con una columna “Date” y una “Amount” (encabezados en inglés; el monto es negativo para artículos devueltos). Otras columnas, como descripciones o números de cuenta, se ignoran y nunca se guardan. Un archivo no puede superponerse con las fechas de uno ya importado; primero revierta el archivo anterior.",
   "deposits.sampleFilePrompt":
     "¿Necesita un archivo de prueba? <a>Descargue depósitos sintéticos</a> para {count, plural, one {el # mes importado} other {los # meses importados}} sin depósitos.",
   "deposits.everyMonthHasDeposits":
@@ -570,4 +571,11 @@ export const revenue: Messages["revenue"] = {
   "statements.cashTableCaption": "Efectivo por mes",
   "statements.undepositedToDate": "Sin depositar a la fecha",
   "statements.notInChart": "No está en el plan de cuentas",
+
+  // CSV parser problems (lib/csv/parse.ts)
+  "csv.tooManyColumns": "Una fila tiene más de {max} columnas.",
+  "csv.tooManyRows": "El archivo tiene más de {max} filas de datos.",
+  "csv.textAfterQuote": "Hay texto después de una comilla de cierre.",
+  "csv.quoteInUnquotedField": "Aparece una comilla dentro de un campo sin comillas.",
+  "csv.unclosedQuote": "Un campo entre comillas nunca se cierra.",
 };

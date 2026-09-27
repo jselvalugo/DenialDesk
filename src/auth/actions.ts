@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { LOCKOUT_MS } from "./policy";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { systemDb } from "@/db/client";
@@ -70,7 +71,7 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
   if (!user || user.disabledAt) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing for unknown accounts
     await auditSystem({ action: "auth.login_failed", ipAddress: await clientIp() });
-    return { error: t("error.signInFailed") };
+    return { error: t("error.signInFailed", { minutes: LOCKOUT_MS / 60_000 }) };
   }
   // The platform operator signs in only at /operator/login; here it looks like any unknown account.
   // An account with a practice membership is never the operator, even if its email matches.
@@ -82,7 +83,7 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
       ipAddress: await clientIp(),
       metadata: { operatorAccount: true },
     });
-    return { error: t("error.signInFailed") };
+    return { error: t("error.signInFailed", { minutes: LOCKOUT_MS / 60_000 }) };
   }
   if (!(await reserveAttempt(user.id))) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing while locked
@@ -92,11 +93,11 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
       ipAddress: await clientIp(),
       metadata: { locked: true },
     });
-    return { error: t("error.signInFailed") };
+    return { error: t("error.signInFailed", { minutes: LOCKOUT_MS / 60_000 }) };
   }
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
     await recordFailure(user.id, "auth.login_failed");
-    return { error: t("error.signInFailed") };
+    return { error: t("error.signInFailed", { minutes: LOCKOUT_MS / 60_000 }) };
   }
 
   // The attempt counter is deliberately NOT reset here: it resets only after MFA succeeds.

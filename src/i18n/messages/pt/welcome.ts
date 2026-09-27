@@ -67,7 +67,7 @@ export const welcome: Messages["welcome"] = {
     "Nenhum código de procedimento ou diagnóstico será alterado sem uma aprovação humana registrada.",
   "safeguard5.title": "O login exige um segundo fator",
   "safeguard5.body":
-    "Cada conta da clínica usa um código de autenticação, e as sessões inativas terminam após 15 minutos.",
+    "Cada conta da clínica usa um código de autenticação, e as sessões inativas terminam após {minutes} minutos.",
   "safeguard6.title": "Os identificadores são criptografados",
   "safeguard6.body":
     "Os IDs de beneficiário são criptografados campo a campo, e os nomes dos pacientes ficam fora dos endereços de página.",

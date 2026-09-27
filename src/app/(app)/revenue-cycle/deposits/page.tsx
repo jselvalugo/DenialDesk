@@ -58,7 +58,7 @@ export default async function DepositsPage() {
             <tbody>
               {files.map((row) => (
                 <Tr key={row.id}>
-                  <Td>{f.dateTime(row.createdAt)}</Td>
+                  <Td>{f.dateOf(row.createdAt)}</Td>
                   <Td className="tabular">
                     {row.dateFrom && row.dateTo ? `${f.date(row.dateFrom)}–${f.date(row.dateTo)}` : "—"}
                   </Td>

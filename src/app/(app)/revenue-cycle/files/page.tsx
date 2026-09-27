@@ -12,7 +12,7 @@ import { Panel } from "@/components/ui/Panel";
 import { rcmSites } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { CURRENT_FORMAT_VERSION, listFiles, periodLabel } from "@/domain/revenue-cycle/imports";
-import type { MessageKey } from "@/i18n/messages/types";
+import { MONTHLY_FILE_HEADER } from "@/domain/revenue-cycle/monthly-file";
 import { rich } from "@/i18n/rich";
 import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
@@ -56,21 +56,6 @@ export default async function FilesPage() {
   }
   const [year, month] = todayIn().split("-").map(Number) as [number, number];
   const previous = month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
-  const importColumns = [
-    "patientName",
-    "accountNumber",
-    "serviceDate",
-    "cpt",
-    "description",
-    "facility",
-    "payerName",
-    "payerClass",
-    "status",
-    "billed",
-    "payment",
-    "adjustment",
-    "balance",
-  ] as const;
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
@@ -139,7 +124,7 @@ export default async function FilesPage() {
                   </Td>
                   <Td numeric>{row.flaggedCount}</Td>
                   <Td className="text-muted">
-                    {row.uploadedBy ?? "—"} · {f.dateTime(row.createdAt)}
+                    {row.uploadedBy ?? "—"} · {f.dateOf(row.createdAt)}
                   </Td>
                 </Tr>
               ))}
@@ -152,7 +137,8 @@ export default async function FilesPage() {
         <Panel
           title={t("files.importTitle")}
           description={t("files.importDescription", {
-            columns: importColumns.map((c) => t(("import.column." + c) as MessageKey<"revenue">)).join(", "),
+            // The CSV header names are an English file-format contract (monthly-file.ts), quoted as-is.
+            columns: MONTHLY_FILE_HEADER.join(", "),
           })}
         >
           <UploadForm

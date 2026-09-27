@@ -129,7 +129,7 @@ export default async function AgingPage({
           detail={
             over90Bps === null
               ? t("arAging.noOpenAr")
-              : t("arAging.shareOfOpenAr", { percent: (over90Bps / 100).toFixed(1) })
+              : t("arAging.shareOfOpenAr", { percent: f.decimal(over90Bps / 100, 1) })
           }
           emphasis={over90Bps !== null && over90Bps > OVER_90_WARNING_SHARE_BPS ? "warning" : undefined}
         />

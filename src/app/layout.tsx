@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 import { connection } from "next/server";
 import { PreviewBanner } from "@/components/shell/PreviewBanner";
 import { LocaleProvider } from "@/i18n/client";
-import { getMessages } from "@/i18n/server";
+import { getMessages, getT } from "@/i18n/server";
 import { appEnv, isProduction } from "@/lib/env";
 import "./globals.css";
 
@@ -32,11 +32,14 @@ const spaceMono = localFont({
 });
 
 // Page titles never contain PHI (DESIGN.md §12).
-export const metadata: Metadata = {
-  title: { default: "DenialDesk", template: "%s · DenialDesk" },
-  description: "Claims and denial management for Florida physician practices.",
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("shell");
+  return {
+    title: { default: "DenialDesk", template: "%s · DenialDesk" },
+    description: t("meta.description"),
+    robots: { index: false, follow: false },
+  };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Render per request so APP_ENV is read at runtime, not baked in at build time: one container

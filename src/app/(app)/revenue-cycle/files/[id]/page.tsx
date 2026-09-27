@@ -126,7 +126,7 @@ export default async function FilePage({
         description={t("file.headerDescription", {
           filename: file.filename,
           name: data.uploadedBy ?? t("file.unknownUploader"),
-          date: f.dateTime(file.createdAt),
+          date: f.dateOf(file.createdAt),
         })}
       />
 

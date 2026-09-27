@@ -5,10 +5,16 @@
  * (cells may hold PHI and error messages can reach logs). Rows whose cells are all empty (blank
  * lines, trailing ",,,," rows from spreadsheet exports) are skipped.
  */
+export type CsvErrorCode =
+  "tooManyColumns" | "tooManyRows" | "textAfterQuote" | "quoteInUnquotedField" | "unclosedQuote";
+
+/** A malformed CSV. `code` and `params` let the caller show the problem in the user's language. */
 export class CsvError extends Error {
   constructor(
     message: string,
     readonly row: number,
+    readonly code: CsvErrorCode,
+    readonly params: Record<string, number> = {},
   ) {
     super(message);
     this.name = "CsvError";
@@ -39,7 +45,9 @@ export function parseCsv(
     field = "";
     closedQuote = false;
     if (cells.length > options.maxColumns) {
-      throw new CsvError(`A row has more than ${options.maxColumns} columns.`, rowLine);
+      throw new CsvError(`A row has more than ${options.maxColumns} columns.`, rowLine, "tooManyColumns", {
+        max: options.maxColumns,
+      });
     }
   };
   const endRow = () => {
@@ -50,6 +58,8 @@ export function parseCsv(
         throw new CsvError(
           `The file has more than ${options.maxRows.toLocaleString("en-US")} ${options.headerRows ? "data rows" : "rows"}.`,
           rowLine,
+          "tooManyRows",
+          { max: options.maxRows },
         );
       }
     }
@@ -81,15 +91,16 @@ export function parseCsv(
       line++;
       rowLine = line;
     } else if (closedQuote) {
-      throw new CsvError("Text follows a closing quote.", line);
+      throw new CsvError("Text follows a closing quote.", line, "textAfterQuote");
     } else if (ch === '"') {
-      if (field !== "") throw new CsvError("A quote appears inside an unquoted field.", line);
+      if (field !== "")
+        throw new CsvError("A quote appears inside an unquoted field.", line, "quoteInUnquotedField");
       quoted = true;
     } else {
       field += ch;
     }
   }
-  if (quoted) throw new CsvError("A quoted field is never closed.", rowLine);
+  if (quoted) throw new CsvError("A quoted field is never closed.", rowLine, "unclosedQuote");
   if (field !== "" || cells.length > 0 || closedQuote) endRow();
   return rows;
 }

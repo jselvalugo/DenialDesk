@@ -63,7 +63,7 @@ export const welcome = {
   "safeguard4.body": "No procedure or diagnosis code will be changed without a recorded human approval.",
   "safeguard5.title": "Sign-in needs a second factor",
   "safeguard5.body":
-    "Every practice account uses an authenticator code, and idle sessions end after 15 minutes.",
+    "Every practice account uses an authenticator code, and idle sessions end after {minutes} minutes.",
   "safeguard6.title": "Identifiers are encrypted",
   "safeguard6.body":
     "Member IDs are encrypted field by field, and patient names are kept out of page addresses.",

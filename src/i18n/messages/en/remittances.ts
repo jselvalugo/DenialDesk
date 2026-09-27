@@ -91,6 +91,7 @@ export const remittances = {
     "Added to the denial queue when this remittance was posted. Categories come from DenialDesk's own code mapping, pending review.",
   "detail.history.title": "History",
   "detail.history.listLabel": "Remittance history",
+  "error.fileFormat": "The 835 file couldn't be read: {detail}",
   "detail.history.description":
     "Every change to this remittance: who, when, and why. History can't be edited.",
   "event.received": "Loaded",

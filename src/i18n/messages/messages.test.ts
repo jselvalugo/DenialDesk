@@ -24,7 +24,7 @@ describe("message dictionaries (spec: internationalization)", () => {
     }
   });
 
-  it("no translation is empty or left in English by accident (identical values are allowed only for short names, codes, and shared terms)", () => {
+  it("no message is empty in any language", () => {
     for (const locale of LOCALES) {
       for (const namespace of namespaces) {
         for (const [key, value] of Object.entries(messages[locale][namespace])) {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LOCKOUT_MS, SESSION_IDLE_MS } from "@/auth/policy";
 import { redirect } from "next/navigation";
 import { getSession } from "@/auth/session";
 import { getT } from "@/i18n/server";
@@ -25,8 +26,8 @@ export default async function SignInPage({
 
   const t = await getT("auth");
   const notices: Record<string, string> = {
-    timeout: t("notice.timeout"),
-    locked: t("notice.locked"),
+    timeout: t("notice.timeout", { minutes: SESSION_IDLE_MS / 60_000 }),
+    locked: t("notice.locked", { minutes: LOCKOUT_MS / 60_000 }),
   };
   const errors: Record<string, string> = {
     "no-practice": t("error.noPractice"),

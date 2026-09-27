@@ -49,7 +49,7 @@ export const patients: Messages["patients"] = {
   // Etiquetas de sensibilidad del registro (R-3.5.1)
   "sensitivity.hiv": "VIH",
   "sensitivity.mentalHealth": "Salud mental",
-  "sensitivity.sud": "Consumo de sustancias (42 CFR Parte 2)",
+  "sensitivity.sud": "Consumo de sustancias (42 CFR Part 2)",
   "sensitivity.genetic": "Pruebas genéticas",
   "sensitivity.minor": "Menor de edad",
   "sensitivity.reproductiveHealth": "Salud reproductiva",

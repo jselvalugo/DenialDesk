@@ -98,7 +98,8 @@ export async function uploadRemittance(
   } catch (error) {
     if (error instanceof Edi835Error) {
       await rejected("format");
-      return { error: error.message };
+      // The parser's diagnostic names the segment at fault; it is technical and stays as produced.
+      return { error: t("error.fileFormat", { detail: error.message }) };
     }
     if (error instanceof RemittanceError) {
       await rejected("matching");

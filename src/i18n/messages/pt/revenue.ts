@@ -48,9 +48,10 @@ export const revenue: Messages["revenue"] = {
   "import.error.notImported": "O arquivo não foi importado. Corrija estas linhas e envie-o novamente.",
 
   // Deposit import (domain/revenue-cycle/aging.ts, receivables.ts)
-  "deposits.error.columns": "O arquivo precisa de exatamente uma coluna de Data e uma de Valor.",
+  "deposits.error.columns":
+    "O arquivo precisa de exatamente uma coluna “Date” e uma coluna “Amount” (cabeçalhos em inglês).",
   "deposits.error.syntheticColumnRequired":
-    'Este ambiente aceita apenas arquivos de depósitos sintéticos: adicione uma coluna "Marcador sintético" com {marker} em cada linha.',
+    "Este ambiente aceita apenas arquivos de depósitos sintéticos: adicione uma coluna “Synthetic marker” (cabeçalho em inglês) com {marker} em cada linha.",
   "deposits.error.syntheticMarkerMismatch": "O marcador sintético não é {marker}.",
   "deposits.error.invalidDate": "A data não é uma data válida (use MM/DD/AAAA).",
   "deposits.error.dateOutOfRange": "A data está fora do intervalo 2000–2100.",
@@ -95,7 +96,7 @@ export const revenue: Messages["revenue"] = {
   "deposits.status.active": "Ativo",
   "deposits.importTitle": "Importar depósitos",
   "deposits.importDescription":
-    "CSV com uma coluna de Data e uma de Valor (negativo para itens devolvidos). Outras colunas, como descrições ou números de conta, são ignoradas e nunca armazenadas. Um arquivo não pode se sobrepor às datas de um já importado; estorne primeiro o arquivo anterior.",
+    "CSV com uma coluna “Date” e uma “Amount” (cabeçalhos em inglês; o valor é negativo para itens devolvidos). Outras colunas, como descrições ou números de conta, são ignoradas e nunca armazenadas. Um arquivo não pode se sobrepor às datas de um já importado; estorne primeiro o arquivo anterior.",
   "deposits.sampleFilePrompt":
     "Precisa de um arquivo para testar? <a>Baixe depósitos sintéticos</a> para {count, plural, one {o # mês importado} other {os # meses importados}} sem depósitos.",
   "deposits.everyMonthHasDeposits":
@@ -566,4 +567,11 @@ export const revenue: Messages["revenue"] = {
   "statements.cashTableCaption": "Caixa por mês",
   "statements.undepositedToDate": "Não depositado até o momento",
   "statements.notInChart": "Não está no plano de contas",
+
+  // CSV parser problems (lib/csv/parse.ts)
+  "csv.tooManyColumns": "Uma linha tem mais de {max} colunas.",
+  "csv.tooManyRows": "O arquivo tem mais de {max} linhas de dados.",
+  "csv.textAfterQuote": "Há texto após uma aspa de fechamento.",
+  "csv.quoteInUnquotedField": "Uma aspa aparece dentro de um campo sem aspas.",
+  "csv.unclosedQuote": "Um campo entre aspas nunca é fechado.",
 };

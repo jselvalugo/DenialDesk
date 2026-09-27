@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { en } from "@/i18n/messages/en";
+import { es } from "@/i18n/messages/es";
 import { createTranslator } from "@/i18n/translate";
 import {
   appealOutcomesSheets,
@@ -323,5 +324,34 @@ describe("appealOutcomesSheets — suppresses the outcome totals row too", () =>
     expect(isSuppressedCell(byCategorySheet!.totals!.upheld)).toBe(true);
     expect(isSuppressedCell(byCategorySheet!.totals!.overturnRate)).toBe(true);
     expect(isSuppressedCell(byCategorySheet!.totals!.reversedCents)).toBe(true);
+  });
+});
+
+describe("sheets in another language", () => {
+  it("names the sheet and columns in Spanish and keeps suppression a typed marker", () => {
+    const tEs = createTranslator(es.insight, "es");
+    const tcEs = createTranslator(es.common, "es");
+    const groups: CategoryGroup[] = [
+      {
+        category: "coding",
+        count: 2,
+        sumCents: 200,
+        avgCents: 100,
+        carcs: [{ carc: "11", count: 2, sumCents: 200, avgCents: 100, sensitive: true }],
+      },
+      {
+        category: "eligibility",
+        count: 500,
+        sumCents: 50_000,
+        avgCents: 100,
+        carcs: [{ carc: "27", count: 500, sumCents: 50_000, avgCents: 100, sensitive: false }],
+      },
+    ];
+    const sheet = denialsByCategorySheet(groups, tEs, tcEs);
+    expect(sheet.name).toBe(es.insight["sheet.denialsByCategory"]);
+    expect(sheet.name.length).toBeLessThanOrEqual(31);
+    expect(sheet.columns.map((c) => c.header)).toContain(es.common["word.category"]);
+    expect(sheet.rows.find((r) => r.carc === "11")!.category).toBe(es.common["category.coding"]);
+    expect(isSuppressedCell(sheet.rows.find((r) => r.carc === "11")!.count)).toBe(true);
   });
 });

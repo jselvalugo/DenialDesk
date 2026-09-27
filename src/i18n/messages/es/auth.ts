@@ -16,17 +16,17 @@ export const auth: Messages["auth"] = {
   "signIn.passwordLabel": "Contraseña",
   "signIn.submit": "Iniciar sesión",
   "signIn.submitting": "Iniciando sesión…",
-  "notice.timeout": "Se cerró su sesión tras 15 minutos sin actividad.",
+  "notice.timeout": "Se cerró su sesión tras {minutes} minutos sin actividad.",
   "notice.locked":
-    "Demasiados intentos. Vuelva a intentarlo en 15 minutos o comuníquese con su administrador.",
-  "notice.operatorLocked": "Demasiados intentos. Vuelva a intentarlo en 15 minutos.",
+    "Demasiados intentos. Vuelva a intentarlo en {minutes} minutos o comuníquese con su administrador.",
+  "notice.operatorLocked": "Demasiados intentos. Vuelva a intentarlo en {minutes} minutos.",
   "error.noPractice":
     "Su cuenta aún no está vinculada a ningún consultorio. Comuníquese con su administrador.",
   "error.practiceSuspended":
     "El acceso de este consultorio está suspendido. Comuníquese con el soporte de DenialDesk.",
   "error.enterEmailPassword": "Ingrese su correo electrónico y contraseña.",
   "error.signInFailed":
-    "El correo electrónico o la contraseña son incorrectos, o la cuenta está bloqueada temporalmente. Vuelva a intentarlo en 15 minutos o comuníquese con su administrador.",
+    "El correo electrónico o la contraseña son incorrectos, o la cuenta está bloqueada temporalmente. Vuelva a intentarlo en {minutes} minutos o comuníquese con su administrador.",
 
   // Two-step verification at sign-in (app/login/mfa/**)
   "mfaVerify.pageTitle": "Verificar inicio de sesión",

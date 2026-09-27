@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { LOCKOUT_MS } from "./policy";
 import { eq, sql } from "drizzle-orm";
 import { systemDb } from "@/db/client";
 import { users } from "@/db/schema";
@@ -120,7 +121,7 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing
     await auditSystem({ action: "operator.login_failed", ipAddress: await clientIp() });
     log.warn("operator.sign_in_refused", { status: refusalStatus(sync, user) });
-    return { error: t("error.signInFailed") };
+    return { error: t("error.signInFailed", { minutes: LOCKOUT_MS / 60_000 }) };
   }
   if (!(await reserveAttempt(user.id))) {
     await verifyPassword(parsed.data.password, await decoyHash()); // equal timing while locked
@@ -131,12 +132,12 @@ export async function signInOperator(_: FormState, formData: FormData): Promise<
       metadata: { locked: true },
     });
     log.warn("operator.sign_in_refused", { status: "locked" });
-    return { error: t("error.signInFailed") };
+    return { error: t("error.signInFailed", { minutes: LOCKOUT_MS / 60_000 }) };
   }
   if (!(await verifyPassword(parsed.data.password, user.passwordHash))) {
     await recordFailure(user.id, "operator.login_failed");
     log.warn("operator.sign_in_refused", { status: "wrong_password" });
-    return { error: t("error.signInFailed") };
+    return { error: t("error.signInFailed", { minutes: LOCKOUT_MS / 60_000 }) };
   }
 
   await replacePreviousOperatorSession(user.id);

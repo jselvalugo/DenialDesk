@@ -10,6 +10,7 @@ import { auditSystem, type AuditAction } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
 import type { RateLimitResult } from "@/lib/rate-limit";
 import { LOCKOUT_MS, MAX_FAILED_ATTEMPTS } from "./policy";
+import { formatMessage } from "@/i18n/translate";
 import { clientIp } from "./session";
 import { verifyTotp } from "./totp";
 
@@ -24,7 +25,7 @@ export interface FormState {
 // which accounts exist (security review finding 3). Locked users are told how to recover.
 // English text (used by tests that run in the default locale); actions.ts and operator-actions.ts
 // show the translated form via `getT("auth")("error.signInFailed")` (spec: internationalization).
-export const SIGN_IN_FAILED = enAuth["error.signInFailed"];
+export const SIGN_IN_FAILED = formatMessage(enAuth["error.signInFailed"], { minutes: LOCKOUT_MS / 60_000 });
 
 export const loginSchema = z.object({
   email: z.email().max(254),

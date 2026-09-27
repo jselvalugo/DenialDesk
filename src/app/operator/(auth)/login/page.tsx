@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LOCKOUT_MS, SESSION_IDLE_MS } from "@/auth/policy";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signInOperator } from "@/auth/operator-actions";
@@ -23,8 +24,8 @@ export default async function OperatorSignInPage({
 
   const t = await getT("auth");
   const notices: Record<string, string> = {
-    timeout: t("notice.timeout"),
-    locked: t("notice.operatorLocked"),
+    timeout: t("notice.timeout", { minutes: SESSION_IDLE_MS / 60_000 }),
+    locked: t("notice.operatorLocked", { minutes: LOCKOUT_MS / 60_000 }),
   };
 
   return (

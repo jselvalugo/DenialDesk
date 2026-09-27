@@ -85,7 +85,7 @@ export const common: Messages["common"] = {
 
   "denialStatus.new": "Nova",
   "denialStatus.in_review": "Em análise",
-  "denialStatus.needs_records": "Requer prontuário",
+  "denialStatus.needs_records": "Requer documentação",
   "denialStatus.appeal_drafted": "Recurso redigido",
   "denialStatus.appeal_submitted": "Recurso enviado",
   "denialStatus.overturned": "Revertida",

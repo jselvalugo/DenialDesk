@@ -67,11 +67,11 @@ export const welcome: Messages["welcome"] = {
     "Ningún código de procedimiento o diagnóstico se cambiará sin una aprobación humana registrada.",
   "safeguard5.title": "El inicio de sesión requiere un segundo factor",
   "safeguard5.body":
-    "Cada cuenta del consultorio usa un código de autenticación, y las sesiones inactivas terminan a los 15 minutos.",
+    "Cada cuenta del consultorio usa un código de autenticación, y las sesiones inactivas terminan a los {minutes} minutos.",
   "safeguard6.title": "Los identificadores están cifrados",
   "safeguard6.body":
     "Los ID de miembro se cifran campo por campo, y los nombres de los pacientes se mantienen fuera de las direcciones de página.",
-  "safeguard7.title": "Acuerdos de asociado comercial en archivo",
+  "safeguard7.title": "Acuerdos de socio comercial en archivo",
   "safeguard7.body":
     "El acuerdo firmado de cada consultorio se registra con sus fechas y firmantes; se señala cuando falta uno.",
 };

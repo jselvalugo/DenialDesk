@@ -24,9 +24,6 @@ export const SENSITIVITY_TAG_LABEL_KEYS = {
 
 export type SensitivityTag = keyof typeof SENSITIVITY_TAG_LABEL_KEYS;
 
-/** Kept for callers that only need the tag keys (e.g. `Object.keys`), not the English text. */
-export const SENSITIVITY_TAGS = SENSITIVITY_TAG_LABEL_KEYS;
-
 export function sensitivityTagLabel(tag: SensitivityTag, t: PatientsT = englishPatientsT): string {
   return t(SENSITIVITY_TAG_LABEL_KEYS[tag]);
 }
@@ -39,9 +36,6 @@ export const SEX_LABEL_KEYS = { F: "sex.female", M: "sex.male", U: "sex.unknown"
 export function sexLabel(sex: keyof typeof SEX_LABEL_KEYS, t: PatientsT = englishPatientsT): string {
   return t(SEX_LABEL_KEYS[sex]);
 }
-
-/** Kept for callers that only need the sex codes, not the English text. */
-export const SEX_LABELS = SEX_LABEL_KEYS;
 
 /** Every field of the form, in the order the audit trail lists changes. Values are message keys. */
 export const PATIENT_FIELD_LABEL_KEYS = {

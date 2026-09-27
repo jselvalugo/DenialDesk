@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { todayIn } from "@rules/calendar";
 import { canViewRevenueCycle } from "@/auth/permissions";
+import { SESSION_IDLE_MS } from "@/auth/policy";
 import { requireAuth } from "@/auth/session";
 import { appHome, navApps } from "@/components/shell/navigation";
 import { toneClasses } from "@/components/shell/tones";
@@ -190,7 +191,9 @@ export default async function HomePage() {
                   />
                   <div>
                     <p className="text-body font-semibold text-text">{t(titleKey)}</p>
-                    <p className="text-label text-muted">{t(bodyKey)}</p>
+                    <p className="text-label text-muted">
+                      {t(bodyKey, { minutes: SESSION_IDLE_MS / 60_000 })}
+                    </p>
                   </div>
                 </li>
               ))}

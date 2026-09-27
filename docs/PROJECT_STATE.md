@@ -19,6 +19,10 @@ _Last updated: 2026-09-27_
   `src/i18n/README.md`). Open: OA-034 practice-wide default language, OA-035 native-speaker
   terminology review. Not translated by design: codes and their sourced summaries, statutes, payer
   names, user data, GL memos stored in ledger rows, the CSV header contract, audit/log identifiers.
+  Reviewed 2026-09-27 by `reviewer`, `security-reviewer`, `compliance-checker`: no blocking findings
+  open after fixes (own-row/MFA-gated preference write, capped claim lists in error messages, English
+  CSV headers quoted in import errors, date-only "Created" columns, CSV/835 diagnostics translated or
+  wrapped). Deferred: per-route dictionary splitting, `passwordProblem()` codes, more `=0` plurals.
 - Appeals A1 (`specs/appeals.md`): `appeals` + `appeal_notes` tables (tenant RLS, isolation test,
   a DB trigger enforcing the status lifecycle draft → in_review → ready → submitted →
   awaiting_decision → decided, with withdrawn/dismissed reachable from submitted/awaiting_decision).
