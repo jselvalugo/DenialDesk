@@ -8,7 +8,9 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { payerOptions } from "@/domain/denials/queries";
+import { activeCustomFields } from "@/domain/settings/queries";
 import { getT } from "@/i18n/server";
+import { toCustomFieldOptions } from "@/components/custom-fields/options";
 import { syntheticDataOnly } from "@/lib/env";
 import { PatientForm } from "../PatientForm";
 
@@ -33,7 +35,10 @@ export default async function NewPatientPage() {
       </div>
     );
   }
-  const payers = await withTenant(auth, (tx) => payerOptions(tx));
+  const { payers, customFields } = await withTenant(auth, async (tx) => ({
+    payers: await payerOptions(tx),
+    customFields: await activeCustomFields(tx, "patient"),
+  }));
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
@@ -43,7 +48,12 @@ export default async function NewPatientPage() {
       />
       <PageHeader title={t("new.title")} description={t("new.description")} />
       <Panel flush>
-        <PatientForm payers={payers} syntheticOnly={syntheticDataOnly()} today={todayIn()} />
+        <PatientForm
+          payers={payers}
+          syntheticOnly={syntheticDataOnly()}
+          today={todayIn()}
+          customFields={toCustomFieldOptions(customFields)}
+        />
       </Panel>
     </div>
   );

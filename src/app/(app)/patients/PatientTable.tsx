@@ -4,19 +4,44 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Code } from "@/components/ui/Code";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
+import type { ListColumnDefinition } from "@/domain/custom-fields/list-values";
 import type { PatientListRow } from "@/domain/patients/queries";
+import type { CustomFieldType } from "@/domain/settings/custom-fields";
 import { ageOn, patientName, sexLabel } from "@/domain/patients/record";
 import { useFormat, useT } from "@/i18n/client";
 
-/** Patient rows for the list and search results. `today` (YYYY-MM-DD) comes from the server for ages. */
+/** A custom field value's typed cell, formatted plainly (dates and numbers follow the locale, a
+ * checkbox reads Yes/blank; text and select show as stored — never translated, CLAUDE.md #5). */
+function ListCell({ type, value }: { type: CustomFieldType; value: string | number | boolean | undefined }) {
+  const t = useT("customFields");
+  const f = useFormat();
+  if (value === undefined || value === "") return <span className="text-muted">—</span>;
+  // Formatted by the field's type, as the chart does, so a text value that looks like a date is
+  // shown as typed.
+  if (type === "checkbox") return value === true ? <span>{t("input.checkboxYes")}</span> : <span>—</span>;
+  if (type === "number" && typeof value === "number")
+    return <span className="tabular">{f.number(value)}</span>;
+  if (type === "date" && typeof value === "string") return <span className="tabular">{f.date(value)}</span>;
+  return <span>{String(value)}</span>;
+}
+
+/**
+ * Patient rows for the list and search results, plus up to 5 non-sensitive custom field columns
+ * marked "Show in list" (docs/specs/settings-and-custom-fields.md, S2 table-column addendum).
+ * `today` (YYYY-MM-DD) comes from the server for ages.
+ */
 export function PatientTable({
   rows,
   caption,
   today,
+  listColumns = [],
+  listValues = {},
 }: {
   rows: PatientListRow[];
   caption: string;
   today: string;
+  listColumns?: ListColumnDefinition[];
+  listValues?: Record<string, Record<string, string | number | boolean>>;
 }) {
   const t = useT("patients");
   const tc = useT("common");
@@ -31,6 +56,9 @@ export function PatientTable({
           <Th>{t("field.sex")}</Th>
           <Th>{t("field.location")}</Th>
           <Th>{t("field.coverage")}</Th>
+          {listColumns.map((col) => (
+            <Th key={col.fieldId}>{col.label}</Th>
+          ))}
         </tr>
       </thead>
       <tbody>
@@ -72,6 +100,11 @@ export function PatientTable({
                   </Badge>
                 )}
               </Td>
+              {listColumns.map((col) => (
+                <Td key={col.fieldId}>
+                  <ListCell type={col.type} value={listValues[row.id]?.[col.key]} />
+                </Td>
+              ))}
             </Tr>
           );
         })}

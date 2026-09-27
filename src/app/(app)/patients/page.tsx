@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
+import { loadListValues } from "@/domain/custom-fields/list-values";
 import { listPatients, PATIENT_LIST_FIELDS, PATIENTS_PAGE_SIZE } from "@/domain/patients/queries";
 import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
@@ -38,7 +39,7 @@ export default async function PatientsPage({
     .catch(1)
     .parse((await searchParams).page);
 
-  const { rows, total } = await withTenant(auth, async (tx) => {
+  const { rows, total, listColumns, listValues } = await withTenant(auth, async (tx) => {
     const list = await listPatients(tx, page);
     await audit(tx, {
       action: "patient.list_viewed",
@@ -51,7 +52,13 @@ export default async function PatientsPage({
         fields: PATIENT_LIST_FIELDS,
       },
     });
-    return list;
+    const { columns, valuesByRecord } = await loadListValues(
+      tx,
+      auth,
+      "patient",
+      list.rows.map((r) => r.id),
+    );
+    return { ...list, listColumns: columns, listValues: valuesByRecord };
   });
 
   const pages = Math.max(1, Math.ceil(total / PATIENTS_PAGE_SIZE));
@@ -88,7 +95,15 @@ export default async function PatientsPage({
             }
           />
         ) : (
-          <PatientTable rows={rows} caption={t("list.title")} today={today} />
+          <PatientTable
+            rows={rows}
+            caption={t("list.title")}
+            today={today}
+            listColumns={listColumns}
+            listValues={Object.fromEntries(
+              [...listValues.entries()].map(([recordId, values]) => [recordId, Object.fromEntries(values)]),
+            )}
+          />
         )}
         <Pagination
           page={page}

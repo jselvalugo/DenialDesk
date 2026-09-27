@@ -12,6 +12,8 @@ import { TextField } from "@/components/ui/TextField";
 import { useT } from "@/i18n/client";
 import { SEX_LABEL_KEYS, sexLabel } from "@/domain/patients/record";
 import { resolvePayerByName, type PayerOption } from "@/domain/payers/resolve";
+import { CustomFieldInputs, type CustomFieldOption } from "@/components/custom-fields/CustomFieldInputs";
+import type { LoadedCustomFieldValue } from "@/domain/custom-fields/values";
 import { registerPatient, savePatient, type PatientFormState } from "./actions";
 
 const inputClass =
@@ -132,14 +134,20 @@ export function PatientForm({
   payers,
   syntheticOnly,
   today,
+  customFields = [],
+  customValues = [],
 }: {
   patient?: PatientFormValues;
   payers: PayerOption[];
   syntheticOnly: boolean;
   today: string;
+  /** Active custom fields for patients (docs/specs/settings-and-custom-fields.md S2). */
+  customFields?: CustomFieldOption[];
+  customValues?: LoadedCustomFieldValue[];
 }) {
   const t = useT("patients");
   const tc = useT("common");
+  const tcf = useT("customFields");
   const editing = Boolean(patient);
   const [state, action, pending] = useActionState<PatientFormState, FormData>(
     editing ? savePatient : registerPatient,
@@ -305,6 +313,17 @@ export function PatientForm({
       {patient?.sensitivityTags.map((tag) => (
         <input key={tag} type="hidden" name="sensitivityTags" value={tag} />
       ))}
+
+      {customFields.length > 0 && (
+        <FormSection title={tcf("section.title")}>
+          <CustomFieldInputs
+            bare
+            fields={customFields}
+            values={customValues}
+            errorFor={(key) => (state.field === `cf.${key}` ? state.error : undefined)}
+          />
+        </FormSection>
+      )}
 
       {editing && (
         <FormSection title={t("form.auditTitle")} description={t("form.auditHint")}>

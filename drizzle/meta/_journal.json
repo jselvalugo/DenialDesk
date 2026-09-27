@@ -253,6 +253,13 @@
       "when": 1790514457627,
       "tag": "0035_users_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790519044938,
+      "tag": "0036_custom_field_show_in_list",
+      "breakpoints": true
     }
   ]
 }

@@ -94,6 +94,8 @@ export const settings: Messages["settings"] = {
   "form.sensitivityHint":
     "Un campo sensible queda bloqueado en todo registro: su valor permanece oculto hasta que alguien lo abre con un motivo, y cada apertura queda registrada en el registro de auditoría.",
   "form.requiredLabel": "Obligatorio: el registro no se puede guardar sin este campo",
+  "form.showInListLabel": "Mostrar en la lista: agrega una columna para este campo en la lista de registros",
+  "form.showInListDisabledHint": "Los campos sensibles nunca aparecen en listas, búsquedas ni exportaciones.",
   "form.saveField": "Guardar campo",
   "form.adding": "Agregando…",
 
@@ -118,6 +120,8 @@ export const settings: Messages["settings"] = {
   // Almacenamiento de campos personalizados (domain/settings/queries.ts)
   "error.tooManyFields": "Este tipo de registro ya tiene {max} campos activos. Desactive uno que ya no use.",
   "error.staleField": "Este campo cambió desde que lo abrió. Recargue e intente de nuevo.",
+  "error.tooManyListColumns":
+    "Como máximo {max} campos por tipo de registro pueden mostrarse en la lista. Desactive uno primero.",
 
   // Valores de los campos personalizados (domain/custom-fields/values.ts)
   "error.required": "{field} es obligatorio.",
