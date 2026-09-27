@@ -265,6 +265,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
+- Custom field list columns (PR 2): tagged patients show no custom values in the patient list
+  (excluded at the query); confirm this over showing "Locked" cells. Threat model I5 (a member ID
+  typed into a non-sensitive text field) now also covers list columns; owner to re-confirm.
 - DenialDesk University: should lesson completions serve as the practice's HIPAA training evidence,
   and in what form (U3)? `OA-035`.
 - Month-end clamping of the 6- and 12-month timely-filing windows (billing-structure review §3.4,

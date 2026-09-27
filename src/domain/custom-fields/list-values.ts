@@ -1,9 +1,13 @@
-import { and, eq, inArray, isNull } from "drizzle-orm";
-import { customFields, customFieldValues } from "@/db/schema";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { customFields, customFieldValues, patients } from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
 import { audit } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
-import type { CustomFieldEntity } from "@/domain/settings/custom-fields";
+import {
+  MAX_LIST_COLUMNS,
+  type CustomFieldEntity,
+  type CustomFieldType,
+} from "@/domain/settings/custom-fields";
 import { activeCustomFields } from "@/domain/settings/queries";
 import { parseValue, type CustomFieldTypedValue } from "./values";
 
@@ -23,6 +27,7 @@ export interface ListColumnDefinition {
   fieldId: string;
   key: string;
   label: string;
+  type: CustomFieldType;
 }
 
 const RECORD_COLUMN = {
@@ -56,27 +61,36 @@ export async function loadListValues(
   if (recordIds.length === 0) return emptyResult;
 
   const activeFields = await activeCustomFields(tx, entity);
-  const listFields = activeFields.filter((f) => f.showInList && !f.sensitivity);
+  // The cap is enforced on write (create, edit, reactivate); the slice keeps the list bounded even
+  // if a row slipped past it.
+  const listFields = activeFields.filter((f) => f.showInList && !f.sensitivity).slice(0, MAX_LIST_COLUMNS);
   if (listFields.length === 0) return emptyResult;
 
   const fieldIds = listFields.map((f) => f.id);
   const column = RECORD_COLUMN[entity];
-  const rows = await tx
+  const base = tx
     .select({
       fieldId: customFieldValues.fieldId,
       recordId: column,
       valueEnc: customFieldValues.valueEnc,
     })
     .from(customFieldValues)
-    .innerJoin(customFields, eq(customFields.id, customFieldValues.fieldId))
-    .where(
-      and(
-        inArray(customFieldValues.fieldId, fieldIds),
-        inArray(column, recordIds),
-        isNull(customFields.sensitivity),
-        eq(customFields.showInList, true),
-      ),
-    );
+    .innerJoin(customFields, eq(customFields.id, customFieldValues.fieldId));
+  const fieldFilter = and(
+    inArray(customFieldValues.fieldId, fieldIds),
+    inArray(column, recordIds),
+    isNull(customFields.sensitivity),
+    eq(customFields.showInList, true),
+  );
+  // Record-level masking mirrors `recordIsSensitive` in `custom-fields/values.ts`: a patient with
+  // sensitivity tags has every custom field locked on the chart, so the list must not decrypt
+  // them either. The join keeps only untagged patients; their rows show no value at all.
+  const rows =
+    entity === "patient"
+      ? await base
+          .innerJoin(patients, eq(patients.id, customFieldValues.patientId))
+          .where(and(fieldFilter, sql`cardinality(${patients.sensitivityTags}) = 0`))
+      : await base.where(fieldFilter);
 
   const byField = new Map(listFields.map((f) => [f.id, f]));
   const valuesByRecord = new Map<string, Map<string, CustomFieldTypedValue>>();
@@ -106,7 +120,12 @@ export async function loadListValues(
     });
   }
   return {
-    columns: listFields.map((f) => ({ fieldId: f.id, key: f.key, label: f.label })),
+    columns: listFields.map((f) => ({
+      fieldId: f.id,
+      key: f.key,
+      label: f.label,
+      type: f.fieldType as CustomFieldType,
+    })),
     valuesByRecord,
   };
 }

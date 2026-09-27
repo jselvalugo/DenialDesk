@@ -244,8 +244,8 @@ export async function revealPatientMemberId(
 /** Reveals one custom field's value on a record and records who looked and why (R-7.5.1). Same
  * minimum-necessary roles as `revealPatientMemberId`. */
 export async function revealCustomField(
-  fieldId: string,
   recordId: string,
+  fieldId: string,
   reason: string,
 ): Promise<{ value?: string; error?: string }> {
   const auth = await requireAuth();

@@ -815,6 +815,8 @@ describe("no list/search/export module reads custom field values", () => {
     // that imports it can never reach a masked value through it.
     expect(source).toContain("isNull(customFields.sensitivity)");
     expect(source).toContain("eq(customFields.showInList, true)");
+    // Record-level masking (threat model I7): tagged patients are excluded at the query.
+    expect(source).toContain("cardinality(${patients.sensitivityTags}) = 0");
   });
 });
 
@@ -963,6 +965,28 @@ describe("loadListValues (PR2 table-column addendum)", () => {
     // Tenant isolation: tenant B's list never includes tenant A's record or values.
     const bResult = await withTenant(b.ctx, (tx) => loadListValues(tx, b.ctx, "patient", [a.patientId]));
     expect(bResult.valuesByRecord.size).toBe(0);
+  });
+
+  it("returns no values for a patient that carries sensitivity tags (record-level masking, I7)", async () => {
+    const shownId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ key: "list_tagged", showInList: true })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "patient", a.patientId, new Map([[shownId, "shown when untagged"]])),
+    );
+    await systemDb()
+      .update(patients)
+      .set({ sensitivityTags: ["hiv"] })
+      .where(eq(patients.id, a.patientId));
+    try {
+      const { columns, valuesByRecord } = await withTenant(a.ctx, (tx) =>
+        loadListValues(tx, a.ctx, "patient", [a.patientId]),
+      );
+      expect(columns.some((c) => c.key === "list_tagged")).toBe(true);
+      expect(valuesByRecord.has(a.patientId)).toBe(false);
+    } finally {
+      await systemDb().update(patients).set({ sensitivityTags: [] }).where(eq(patients.id, a.patientId));
+    }
   });
 
   it("returns nothing for an empty page of records without querying", async () => {

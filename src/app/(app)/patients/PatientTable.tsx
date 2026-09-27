@@ -4,21 +4,24 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import type { ListColumnDefinition } from "@/domain/custom-fields/list-values";
+import type { CustomFieldType } from "@/domain/settings/custom-fields";
 import type { PatientListRow } from "@/domain/patients/queries";
 import { patientName } from "@/domain/patients/record";
 import { useFormat, useT } from "@/i18n/client";
 
 /** A custom field value's typed cell, formatted plainly (dates and numbers follow the locale, a
  * checkbox reads Yes/blank; text and select show as stored — never translated, CLAUDE.md #5). */
-function ListCell({ value }: { value: string | number | boolean | undefined }) {
+function ListCell({ type, value }: { type: CustomFieldType; value: string | number | boolean | undefined }) {
   const t = useT("customFields");
   const f = useFormat();
   if (value === undefined || value === "") return <span className="text-muted">—</span>;
-  if (typeof value === "boolean") return value ? <span>{t("input.checkboxYes")}</span> : <span>—</span>;
-  if (typeof value === "number") return <span className="tabular">{f.number(value)}</span>;
-  // ISO dates (YYYY-MM-DD) are the only string shape this module formats specially.
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return <span className="tabular">{f.date(value)}</span>;
-  return <span>{value}</span>;
+  // Formatted by the field's type, as the chart does, so a text value that looks like a date is
+  // shown as typed.
+  if (type === "checkbox") return value === true ? <span>{t("input.checkboxYes")}</span> : <span>—</span>;
+  if (type === "number" && typeof value === "number")
+    return <span className="tabular">{f.number(value)}</span>;
+  if (type === "date" && typeof value === "string") return <span className="tabular">{f.date(value)}</span>;
+  return <span>{String(value)}</span>;
 }
 
 /** Patient rows for the list and search results, plus up to 5 non-sensitive custom field columns
@@ -68,7 +71,7 @@ export function PatientTable({
             <Td>{row.payerName ?? <span className="text-muted">{t("badge.selfPay")}</span>}</Td>
             {listColumns.map((col) => (
               <Td key={col.fieldId}>
-                <ListCell value={listValues[row.id]?.[col.key]} />
+                <ListCell type={col.type} value={listValues[row.id]?.[col.key]} />
               </Td>
             ))}
           </Tr>

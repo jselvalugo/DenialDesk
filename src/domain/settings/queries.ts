@@ -189,6 +189,7 @@ export async function updateCustomField(
   if (current.showInList !== changes.showInList) changed.push("showInList");
   if (changed.length === 0) return [];
   if (changes.showInList && !current.showInList) {
+    await lockEntity(tx, actor, current.entity as CustomFieldEntity);
     await assertRoomInList(tx, current.entity as CustomFieldEntity, fieldId, t);
   }
   await tx
@@ -227,6 +228,7 @@ export async function setCustomFieldActive(
   if (active) {
     await lockEntity(tx, actor, current.entity);
     await assertRoomFor(tx, current.entity, t);
+    if (current.showInList) await assertRoomInList(tx, current.entity as CustomFieldEntity, fieldId, t);
   }
   await tx.update(customFields).set({ active, updatedAt: new Date() }).where(eq(customFields.id, fieldId));
   await audit(tx, {

@@ -280,10 +280,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
 
           {customValues.length > 0 && (
             <Panel title={tcf("section.title")}>
-              <CustomFieldValues
-                values={customValues}
-                reveal={(fieldId, reason) => revealCustomField(fieldId, patient.id, reason)}
-              />
+              <CustomFieldValues values={customValues} reveal={revealCustomField.bind(null, patient.id)} />
             </Panel>
           )}
         </div>
