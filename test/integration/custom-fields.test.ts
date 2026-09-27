@@ -33,6 +33,7 @@ function field(overrides: Partial<Record<string, unknown>> = {}): NewCustomField
     required: false,
     helpText: "",
     sensitivity: "",
+    showInList: false,
     ...overrides,
   });
 }
@@ -106,6 +107,7 @@ describe("custom fields", () => {
         required: true,
         helpText: null,
         sensitivity: null,
+        showInList: false,
       }),
     );
     expect(changed).toEqual(["label", "required"]);
@@ -178,6 +180,7 @@ describe("custom fields", () => {
         options: [],
         required: false,
         helpText: null,
+        showInList: false,
         sensitivity: null,
       }),
     );

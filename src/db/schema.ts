@@ -1217,6 +1217,9 @@ export const customFields = pgTable(
      * audited action with a reason. Null means ordinary. Same keys as SENSITIVITY_TAGS.
      */
     sensitivity: text("sensitivity"),
+    /** Non-sensitive field shown as a column on the record list (spec addendum, S2); never true
+     * when `sensitivity` is set (database check). Capped at 5 per entity (app + query). */
+    showInList: boolean("show_in_list").notNull().default(false),
     /** Display order within the record type (lower first). */
     position: integer("position").notNull().default(0),
     active: boolean("active").notNull().default(true),

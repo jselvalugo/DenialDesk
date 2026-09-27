@@ -44,6 +44,7 @@ function common(formData: FormData) {
     required: formData.get("required") === "on",
     helpText: text(formData, "helpText", 400),
     sensitivity: text(formData, "sensitivity", 40),
+    showInList: formData.get("showInList") === "on",
   };
 }
 

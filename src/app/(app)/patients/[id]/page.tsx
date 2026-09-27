@@ -17,10 +17,12 @@ import { CLAIM_STATUSES } from "@/domain/claims/status";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { getPatientChart } from "@/domain/patients/queries";
 import { patientName, sensitivityTagLabel, sexLabel, type SensitivityTag } from "@/domain/patients/record";
+import { loadValuesForRecord } from "@/domain/custom-fields/values";
+import { CustomFieldValues } from "@/components/custom-fields/CustomFieldValues";
 import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { formatCents } from "@/lib/format";
-import { revealPatientMemberId } from "../actions";
+import { revealCustomField, revealPatientMemberId } from "../actions";
 
 export async function generateMetadata(): Promise<Metadata> {
   const tc = await getT("common");
@@ -46,6 +48,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
   const auth = await requireAuth();
   const t = await getT("patients");
   const tc = await getT("common");
+  const tcf = await getT("customFields");
   const f = await getFormat();
 
   const chart = await withTenant(auth, async (tx) => {
@@ -62,6 +65,9 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
     return chart;
   });
   if (!chart) notFound();
+  const customValues = await withTenant(auth, (tx) =>
+    loadValuesForRecord(tx, { tenantId: auth.tenantId, userId: auth.userId, role: auth.role }, "patient", id),
+  );
 
   const { patient, payer, totals } = chart;
   const address = [
@@ -271,6 +277,12 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
               <p className="text-body text-muted">{t("detail.noInsurance")}</p>
             )}
           </Panel>
+
+          {customValues.length > 0 && (
+            <Panel title={tcf("section.title")}>
+              <CustomFieldValues values={customValues} reveal={revealCustomField.bind(null, patient.id)} />
+            </Panel>
+          )}
         </div>
       </div>
     </div>

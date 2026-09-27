@@ -10,6 +10,7 @@ const base = {
   required: false,
   helpText: "",
   sensitivity: "",
+  showInList: false,
 };
 
 describe("keyFromLabel", () => {
@@ -50,7 +51,14 @@ describe("newCustomFieldSchema", () => {
 
 describe("customFieldChangesSchema", () => {
   it("applies the stored type's choice rules", () => {
-    const edit = { label: "Tier", options: [], required: true, helpText: "", sensitivity: "" };
+    const edit = {
+      label: "Tier",
+      options: [],
+      required: true,
+      helpText: "",
+      sensitivity: "",
+      showInList: false,
+    };
     expect(customFieldChangesSchema().safeParse({ ...edit, fieldType: "select" }).success).toBe(false);
     expect(customFieldChangesSchema().parse({ ...edit, fieldType: "number" })).toEqual({
       label: "Tier",
@@ -58,6 +66,7 @@ describe("customFieldChangesSchema", () => {
       required: true,
       helpText: null,
       sensitivity: null,
+      showInList: false,
     });
   });
 });

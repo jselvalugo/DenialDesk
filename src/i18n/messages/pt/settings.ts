@@ -94,6 +94,8 @@ export const settings: Messages["settings"] = {
   "form.sensitivityHint":
     "Um campo sensível fica bloqueado em todo registro: seu valor permanece oculto até que alguém o abra com um motivo, e cada abertura é registrada na trilha de auditoria.",
   "form.requiredLabel": "Obrigatório: o registro não pode ser salvo sem este campo",
+  "form.showInListLabel": "Mostrar na lista: adiciona uma coluna para este campo na lista de registros",
+  "form.showInListDisabledHint": "Campos sensíveis nunca aparecem em listas, buscas ou exportações.",
   "form.saveField": "Salvar campo",
   "form.adding": "Adicionando…",
 
@@ -119,6 +121,8 @@ export const settings: Messages["settings"] = {
   "error.tooManyFields":
     "Este tipo de registro já tem {max} campos ativos. Desative um que você não usa mais.",
   "error.staleField": "Este campo mudou desde que você o abriu. Recarregue e tente novamente.",
+  "error.tooManyListColumns":
+    "No máximo {max} campos por tipo de registro podem aparecer na lista. Desative um primeiro.",
 
   // Valores dos campos personalizados (domain/custom-fields/values.ts)
   "error.required": "{field} é obrigatório.",

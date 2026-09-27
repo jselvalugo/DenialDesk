@@ -80,7 +80,20 @@ _Last updated: 2026-09-27_
   section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
   planned). The `/design` style-guide page was removed 2026-09-26 (owner request). Administrators define custom fields on patients,
   claims, denials, and payers (`custom_fields`, migration 0023, RLS + isolation test, audited).
-  Next: S2 render and store field values on record forms.
+  S2 values: PR 1 (crypto AAD, `custom_field_values` + `custom_field_value_versions` tables,
+  migration 0027, domain `src/domain/custom-fields/values.ts`) done and merged. PR 2 (patients UI)
+  done: `PatientForm` renders and stores active fields (`cf.<fieldId>` inputs, saved in the same
+  transaction as the patient create/update, so the patient's `expectedUpdatedAt` check covers the
+  values too); the patient detail page shows them read-only, masked ones behind an "Open" + reason
+  dialog (`revealCustomField`, same roles as the member ID reveal); a new `show_in_list` column
+  (migration 0036, checked `NOT (show_in_list AND sensitivity IS NOT NULL)`) lets an administrator
+  add a non-sensitive field as a list column (capped at 5, `MAX_LIST_COLUMNS`), loaded by its own
+  module `src/domain/custom-fields/list-values.ts` (never sensitive/hidden fields, one query per
+  page) and rendered by `PatientTable`. Shared UI in `src/components/custom-fields/` for reuse by
+  claims/denials/payers. `test:integration` not run this session (no `DATABASE_URL`/docker
+  available) — needs a run before merge. Next: PR 3 claims and denials, PR 4 payers; an e2e admin
+  user fixture doesn't exist yet (`test/e2e/global-setup.ts` seeds specialist/compliance/manager
+  only), so the spec's "admin adds a field" E2E case is still open.
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
   rules engine, synthetic data, Netlify config (not yet deployed — see `docs/runbooks/netlify.md`).
 - Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
@@ -252,6 +265,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 
 ## Open questions for humans
+- Custom field list columns (PR 2): tagged patients show no custom values in the patient list
+  (excluded at the query); confirm this over showing "Locked" cells. Threat model I5 (a member ID
+  typed into a non-sensitive text field) now also covers list columns; owner to re-confirm.
 - DenialDesk University: should lesson completions serve as the practice's HIPAA training evidence,
   and in what form (U3)? `OA-035`.
 - Month-end clamping of the 6- and 12-month timely-filing windows (billing-structure review §3.4,
