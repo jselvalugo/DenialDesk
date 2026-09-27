@@ -1,6 +1,7 @@
 # Spec: ERP shell (global header, tab bar, module switcher)
 
-Status: done (2026-09-26) — requested by the product owner; revised 2026-09-26 (ADR 0005)
+Status: done (2026-09-26) — requested by the product owner; revised 2026-09-26 (ADR 0005);
+data-source drop-down added 2026-09-27, not built yet (`specs/patient-integrations.md` PI1b)
 Roadmap item: Phase 0 → design system foundation (amendment)
 Requirement IDs: §11 (WCAG 2.1 AA), R-7.4.8 (no PHI in URLs or client storage), R-7.2.7 (session timeout unchanged)
 
@@ -44,8 +45,32 @@ expression is DenialDesk's own and does not reproduce any vendor's shell (ADR 00
 - [x] Usable at 1024px without horizontal page scroll in the header.
 - [x] Decorative icons are `aria-hidden`; link names stay text-only.
 
+### Data-source drop-down (owner decision 2026-09-27; `specs/patient-integrations.md`, ADR 0010)
+"A drop-down in the nav bar beside the table … so we can connect to this table only."
+- [ ] `NavItem` gains an optional `dataSource?: { table: "patients" }` slot; only the Patients tab sets
+      it today. Other tables opt in later by setting the slot (no shell redesign).
+- [ ] In the navy tab bar, directly after a tab with a `dataSource`, a menu button (Radix menu,
+      `data-chrome="dark"` focus ring) reads "Source: Manual ▾", or "Source: <connection name> ·
+      Synced <relative time> ▾", "Sync running", "Paused", or "Needs attention" (error). Accessible
+      name "Patients data source: <state>"; the status is text, never color alone.
+- [ ] Every role sees the current state, last successful sync, and last run outcome. Administrators
+      (`canManageIntegrations`) also get "Sync now", "Pause sync" / "Resume sync", "Sync history"
+      (→ `/settings/integrations/[id]/runs`), and "Connect an integration…" (→ Settings ›
+      Integrations; shown when no connection exists).
+- [ ] "Sync now" and pause/resume are server actions (POST), never links; the menu shows the result
+      as a status message.
+- [ ] The summary (connection name, status, last sync time, run state) is loaded by `AppShell` for
+      the tenant in one indexed query and passed through `ShellProvider`; it holds no PHI, no
+      counts of patients, and nothing is placed in URLs or client storage (R-7.4.8).
+- [ ] Relative time and all labels come from `src/i18n/` in en/es/pt (R-11.1).
+- [ ] The tab bar still fits 1024px without horizontal page scroll; a long connection name truncates
+      with the full name in the menu.
+- [ ] Menu visibility is not access control: every action re-checks the role on the server.
+
 ## Data / API changes
-None. Navigation is computed client-side from role flags already passed to the shell; no PHI.
+None for navigation: it is computed client-side from role flags already passed to the shell; no
+PHI. The data-source drop-down (2026-09-27) adds one server-side read of the practice's
+integration connection summary in `AppShell` (Confidential configuration, not PHI; not audited).
 
 ## Legal rules used
 None.
