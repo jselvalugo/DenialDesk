@@ -3,6 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const requireAuth = vi.fn();
 vi.mock("@/auth/session", () => ({ requireAuth: () => requireAuth() }));
 
+// getT/getFormat (src/i18n/server.ts) read the request's language from next/headers, which throws
+// outside a real Next.js request scope. This unit test calls POST() directly, so it's mocked to
+// the same "no cookie, no header" shape a real unauthenticated request would have (-> English).
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined }),
+  headers: async () => ({ get: () => null }),
+}));
+
 // withTenant/DB must never be reached for a rejected request; importing route.ts must not touch
 // the database at module-load time, so no DB mock is needed for these checks.
 const { POST } = await import("./route");

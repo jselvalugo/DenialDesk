@@ -7,6 +7,9 @@ import { auditEvents, claims, denials, locations, patients, payers, providers } 
 import { seedPractice } from "@/db/seed";
 import { withTenant } from "@/db/tenant";
 import { OPEN_STATUSES } from "@/domain/denial-status";
+import { createFormatters } from "@/i18n/format";
+import { en } from "@/i18n/messages/en";
+import { createTranslator } from "@/i18n/translate";
 import { defaultDateRange } from "@/domain/insight/filters";
 import {
   fetchAppealOutcomes,
@@ -26,6 +29,11 @@ import type { Actor } from "@/domain/revenue-cycle/vouchers";
 
 let a: Actor;
 let b: Actor;
+
+// Named insightT/commonT (not t/tc) because many tests below shadow `t` with their own tenant Actor.
+const insightT = createTranslator(en.insight, "en");
+const commonT = createTranslator(en.common, "en");
+const f = createFormatters("en");
 
 async function practice(label: string, seed: number): Promise<Actor> {
   const suffix = `${label}-${Date.now()}-${seed}`;
@@ -451,7 +459,7 @@ describe("Insight reports — small-cell suppression (R-8.7)", () => {
     }
 
     const byPayer = await withTenant(t, (tx) => fetchDenialsByPayer(tx, wideFilters));
-    const payerSheetSpec = denialsByPayerSheet(byPayer);
+    const payerSheetSpec = denialsByPayerSheet(byPayer, insightT, commonT);
     const rowFor = (name: string) => payerSheetSpec.rows.find((r) => r.payerName === name)!;
     expect(isSuppressedCell(rowFor(sensitivePayer).count)).toBe(true);
     // complementary suppression (next-smallest visible, nonzero row)
@@ -464,10 +472,15 @@ describe("Insight reports — small-cell suppression (R-8.7)", () => {
     expect(isSuppressedCell(payerSheetSpec.totals!.sumCents)).toBe(true);
 
     const workbook = await withTenant(t, (tx) =>
-      buildSingleReportWorkbook(tx, "denials-by-payer", wideFilters, {
-        practiceName: "Insight suppression (synthetic)",
-        userId: t.userId,
-      }),
+      buildSingleReportWorkbook(
+        tx,
+        "denials-by-payer",
+        wideFilters,
+        { practiceName: "Insight suppression (synthetic)", userId: t.userId },
+        insightT,
+        commonT,
+        f,
+      ),
     );
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(workbook.buffer as unknown as ArrayBuffer);
@@ -520,7 +533,7 @@ describe("Insight reports — small-cell suppression (R-8.7)", () => {
     }
     const byPayer = await withTenant(t, (tx) => fetchDenialsByPayer(tx, wideFilters));
     expect(byPayer).toHaveLength(2);
-    const sheet = denialsByPayerSheet(byPayer);
+    const sheet = denialsByPayerSheet(byPayer, insightT, commonT);
     expect(sheet.rows.every((r) => isSuppressedCell(r.count))).toBe(true);
     // With every row suppressed, the totals row must be too.
     expect(isSuppressedCell(sheet.totals!.count)).toBe(true);
@@ -538,7 +551,7 @@ describe("Insight reports — small-cell suppression (R-8.7)", () => {
     });
     const byPayer = await withTenant(t, (tx) => fetchDenialsByPayer(tx, wideFilters));
     expect(byPayer).toHaveLength(1);
-    const sheet = denialsByPayerSheet(byPayer);
+    const sheet = denialsByPayerSheet(byPayer, insightT, commonT);
     expect(isSuppressedCell(sheet.rows[0]!.count)).toBe(true);
     expect(isSuppressedCell(sheet.totals!.count)).toBe(true);
     expect(isSuppressedCell(sheet.totals!.sumCents)).toBe(true);
@@ -568,7 +581,7 @@ describe("Insight reports — small-cell suppression (R-8.7)", () => {
       });
     }
     const buckets = await withTenant(t, (tx) => fetchDenialsByDeadlineBucket(tx, wideFilters, today));
-    const sheet = denialsByDeadlineBucketSheet(buckets);
+    const sheet = denialsByDeadlineBucketSheet(buckets, insightT, commonT);
     const rowFor = (label: string) => sheet.rows.find((r) => r.bucket === label)!;
     expect(isSuppressedCell(rowFor("No deadline configured").count)).toBe(true);
     // The zero-count buckets are never suppressed — there is nothing in them to hide, and
@@ -595,10 +608,15 @@ describe("Insight reports — audit and export", () => {
 
     const result = await withTenant(a, async (tx) => {
       await recordReportViewed(tx, a, "claims-by-status", filters, route);
-      const workbook = await buildSingleReportWorkbook(tx, "claims-by-status", filters, {
-        practiceName: "Insight reporting alpha (synthetic)",
-        userId: a.userId,
-      });
+      const workbook = await buildSingleReportWorkbook(
+        tx,
+        "claims-by-status",
+        filters,
+        { practiceName: "Insight reporting alpha (synthetic)", userId: a.userId },
+        insightT,
+        commonT,
+        f,
+      );
       await recordReportExported(tx, a, "claims-by-status", filters, workbook.rowCount, exportRoute);
       return {
         events: await tx
@@ -656,10 +674,15 @@ describe("Insight reports — audit and export", () => {
 
   it("exported totals match the on-screen totals on the money columns", async () => {
     const result = await withTenant(a, (tx) =>
-      buildSingleReportWorkbook(tx, "claims-by-status", wideFilters, {
-        practiceName: "Insight reporting alpha (synthetic)",
-        userId: a.userId,
-      }),
+      buildSingleReportWorkbook(
+        tx,
+        "claims-by-status",
+        wideFilters,
+        { practiceName: "Insight reporting alpha (synthetic)", userId: a.userId },
+        insightT,
+        commonT,
+        f,
+      ),
     );
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(result.buffer as unknown as ArrayBuffer);
@@ -677,10 +700,14 @@ describe("Insight reports — audit and export", () => {
 
   it("builds an all-reports workbook with a unique sheet per report plus About, no collisions", async () => {
     const result = await withTenant(a, (tx) =>
-      buildAllReportsWorkbookFor(tx, wideFilters, {
-        practiceName: "Insight reporting alpha (synthetic)",
-        userId: a.userId,
-      }),
+      buildAllReportsWorkbookFor(
+        tx,
+        wideFilters,
+        { practiceName: "Insight reporting alpha (synthetic)", userId: a.userId },
+        insightT,
+        commonT,
+        f,
+      ),
     );
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(result.buffer as unknown as ArrayBuffer);

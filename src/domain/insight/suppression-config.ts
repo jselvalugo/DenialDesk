@@ -16,9 +16,16 @@
  * starting point for its own small-cell risk, not because CMS's rule applies to this product.
  * ⚠️ VERIFY with counsel before relying on 11 as the right number for DenialDesk's risk profile.
  */
+import type { Messages } from "@/i18n/messages/types";
+import type { Translator } from "@/i18n/translate";
+
 export const SMALL_CELL_SUPPRESSION_THRESHOLD = 11;
 
-/** The exact marker text shown in place of a suppressed row's count/dollar/rate cells. */
-export function suppressedLabel(): string {
-  return `Suppressed (<${SMALL_CELL_SUPPRESSION_THRESHOLD})`;
+/**
+ * The exact marker text shown in place of a suppressed row's count/dollar/rate cells, in the
+ * caller's language. `t` is the insight-namespace translator (server pages call `getT("insight")`;
+ * tests build one with `createTranslator(en.insight, "en")`).
+ */
+export function suppressedLabel(t: Translator<Messages["insight"]>): string {
+  return t("suppression.label", { threshold: SMALL_CELL_SUPPRESSION_THRESHOLD });
 }
