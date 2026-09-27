@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { todayIn } from "@rules/calendar";
 import { canEditPatients } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
@@ -47,18 +47,16 @@ export default async function EditPatientPage({ params }: { params: Promise<{ id
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
-        <Link href="/patients" className="font-medium text-link hover:underline">
-          {t("list.title")}
-        </Link>{" "}
-        <span aria-hidden>/</span>{" "}
-        <Link href={`/patients/${id}`} className="font-mono font-medium text-link hover:underline">
-          {patient.mrn}
-        </Link>{" "}
-        <span aria-hidden>/</span> {t("nav.edit")}
-      </nav>
+      <Breadcrumbs
+        label={t("nav.breadcrumb")}
+        items={[
+          { label: t("list.title"), href: "/patients" },
+          { label: patient.mrn, href: `/patients/${id}`, mono: true },
+          { label: t("nav.edit") },
+        ]}
+      />
       <PageHeader title={t("edit.title")} description={t("edit.description")} />
-      <Panel>
+      <Panel flush>
         <PatientForm
           patient={{ ...patient, updatedAt: patient.updatedAt.toISOString() }}
           payers={payers}

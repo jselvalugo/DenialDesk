@@ -161,4 +161,25 @@ export const patients = {
   "reveal.reasonOther": "Other",
   "reveal.reveal": "Reveal",
   "reveal.error": "Couldn't reveal.",
+
+  // Record pattern (docs/specs/record-pages.md): list toolbar, chart header, form sections
+  "list.count": "{count, plural, one {# patient on file} other {# patients on file}}",
+  "list.searchHint": "Type at least 2 letters of a name, “Last, First”, or an MRN.",
+  "field.age": "{years, plural, one {# year} other {# years}}",
+  "field.location": "Location",
+  "field.coverage": "Coverage",
+  "detail.eyebrow": "Patient record",
+  "detail.claimsCount": "{count, plural, one {# claim} other {# claims}}",
+  "detail.denialsCount": "{count, plural, one {# denial} other {# denials}}",
+  "detail.record": "Record",
+  "detail.recordDescription": "When this record was registered and last changed.",
+  "form.demographicsHint":
+    "Name and date of birth as they appear on the insurance card, plus contact details.",
+  "form.insuranceHint":
+    "The primary payer and the member ID from the card. Leave the payer blank for self-pay.",
+  "form.auditTitle": "Audit trail",
+  "form.auditHint": "Every change is saved with who made it and why.",
+  "form.confirmTitle": "Confirmation",
+  "form.confirmHint": "Required before the record is saved.",
+  "form.actionsNote": "Saving records your name and the time in the audit trail.",
 } as const;

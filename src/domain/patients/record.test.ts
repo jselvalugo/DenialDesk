@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changedPatientFields, nextMrn, patientSchema, type StoredPatient } from "./record";
+import { ageOn, changedPatientFields, nextMrn, patientSchema, type StoredPatient } from "./record";
 
 const today = "2026-09-26";
 const payerId = "0b8c8a8e-4d1c-4c5e-9a3b-0f6f1a2b3c4d";
@@ -110,5 +110,22 @@ describe("generated MRNs", () => {
   it("starts at 1 for an empty practice", () => {
     expect(nextMrn([], true)).toBe("SYN-000001");
     expect(nextMrn([], false)).toBe("MRN-000001");
+  });
+});
+
+describe("age on a date", () => {
+  it("counts whole years: the day before, of, and after the birthday", () => {
+    expect(ageOn("1984-03-09", "2026-03-08")).toBe(41);
+    expect(ageOn("1984-03-09", "2026-03-09")).toBe(42);
+    expect(ageOn("1984-03-09", "2026-03-10")).toBe(42);
+  });
+  it("is 0 on the day of birth and turns a leap-day birthday on March 1 in a common year", () => {
+    expect(ageOn("2026-03-09", "2026-03-09")).toBe(0);
+    expect(ageOn("2000-02-29", "2027-02-28")).toBe(26);
+    expect(ageOn("2000-02-29", "2027-03-01")).toBe(27);
+  });
+  it("is null for a malformed date or a birth date after today", () => {
+    expect(ageOn("not-a-date", "2026-03-09")).toBeNull();
+    expect(ageOn("2027-01-01", "2026-03-09")).toBeNull();
   });
 });

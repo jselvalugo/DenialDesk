@@ -168,4 +168,25 @@ export const patients: Messages["patients"] = {
   "reveal.reasonOther": "Otro",
   "reveal.reveal": "Revelar",
   "reveal.error": "No se pudo revelar.",
+
+  // Patrón de registro (docs/specs/record-pages.md): barra de la lista, encabezado del expediente, secciones del formulario
+  "list.count": "{count, plural, one {# paciente registrado} other {# pacientes registrados}}",
+  "list.searchHint": "Escriba al menos 2 letras de un nombre, “Apellido, Nombre” o un MRN.",
+  "field.age": "{years, plural, one {# año} other {# años}}",
+  "field.location": "Ubicación",
+  "field.coverage": "Cobertura",
+  "detail.eyebrow": "Expediente del paciente",
+  "detail.claimsCount": "{count, plural, one {# reclamación} other {# reclamaciones}}",
+  "detail.denialsCount": "{count, plural, one {# denegación} other {# denegaciones}}",
+  "detail.record": "Registro",
+  "detail.recordDescription": "Cuándo se registró y se modificó por última vez este expediente.",
+  "form.demographicsHint":
+    "Nombre y fecha de nacimiento tal como aparecen en la tarjeta del seguro, más los datos de contacto.",
+  "form.insuranceHint":
+    "El pagador principal y el ID de miembro de la tarjeta. Deje el pagador en blanco para pago particular.",
+  "form.auditTitle": "Pista de auditoría",
+  "form.auditHint": "Cada cambio se guarda con quién lo hizo y por qué.",
+  "form.confirmTitle": "Confirmación",
+  "form.confirmHint": "Obligatoria antes de guardar el expediente.",
+  "form.actionsNote": "Al guardar se registran su nombre y la hora en la pista de auditoría.",
 };

@@ -231,3 +231,20 @@ export function nextMrn(existing: string[], syntheticOnly: boolean): string {
 export function patientName(p: { firstName: string; lastName: string }): string {
   return `${p.lastName}, ${p.firstName}`;
 }
+
+/**
+ * Whole years between a date of birth and `today` (both YYYY-MM-DD), or null when either is not a
+ * date or the birth date is later than today. Display only; never a legal clock.
+ */
+export function ageOn(birthDate: string, today: string): number | null {
+  const parse = (iso: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  };
+  const b = parse(birthDate);
+  const t = parse(today);
+  if (!b || !t) return null;
+  let age = t[0]! - b[0]!;
+  if (t[1]! < b[1]! || (t[1] === b[1] && t[2]! < b[2]!)) age -= 1;
+  return age < 0 ? null : age;
+}
