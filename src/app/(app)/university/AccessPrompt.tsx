@@ -8,30 +8,41 @@ import { useFormat, useT } from "@/i18n/client";
 import { requestUniversityAccess, type RequestAccessState } from "./actions";
 
 /**
- * The access prompt on the course catalog (spec: denialdesk-university.md, "Access prompt"). A
- * native modal <dialog> that opens on every visit (owner request 2026-09-27: it always shows),
- * states how long the program is and that access starts at the offer price, and lets the user
- * request access or continue. Nothing is stored about dismissals, so it shows again next time.
+ * The access prompt on the course catalog (spec: denialdesk-university.md, "Access"). Rendered only
+ * while the practice has no access: a native modal <dialog> that opens on every visit (owner
+ * request 2026-09-27), states how long the program is and that access starts at the offer price,
+ * and lets the user request access or continue to the locked catalog. Nothing is stored about a
+ * dismissal, so it opens again next time; it disappears once the operator records the purchase.
  */
 export function AccessPrompt({
   summary,
   priceFromCents,
+  requestedAt,
 }: {
   summary: ProgramSummary;
   priceFromCents: number;
+  /** ISO timestamp of the practice's latest request, if any. */
+  requestedAt: string | null;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const continueButton = useRef<HTMLButtonElement>(null);
   const titleId = useId();
-  const descriptionId = useId();
+  const bodyId = useId();
   const t = useT("university");
   const tc = useT("common");
   const f = useFormat();
   const [state, action] = useActionState<RequestAccessState, FormData>(requestUniversityAccess, {});
+  const requested = state.requested || requestedAt !== null;
 
   useEffect(() => {
     const el = dialog.current;
     if (el && !el.open) el.showModal();
   }, []);
+
+  // The submit button unmounts once the request is recorded; keep keyboard focus in the dialog.
+  useEffect(() => {
+    if (state.requested) continueButton.current?.focus();
+  }, [state.requested]);
 
   const close = () => dialog.current?.close();
 
@@ -39,7 +50,7 @@ export function AccessPrompt({
     <dialog
       ref={dialog}
       aria-labelledby={titleId}
-      aria-describedby={descriptionId}
+      aria-describedby={bodyId}
       onClick={(event) => {
         if (event.target === dialog.current) close(); // backdrop click
       }}
@@ -68,8 +79,8 @@ export function AccessPrompt({
         </button>
       </div>
 
-      <div id={descriptionId} className="flex flex-col gap-4 px-5 py-4 text-body text-text">
-        <p>{t("access.body")}</p>
+      <div className="flex flex-col gap-4 px-5 py-4 text-body text-text">
+        <p id={bodyId}>{t("access.body")}</p>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-panel border border-border bg-surface-muted px-4 py-3 sm:grid-cols-4">
           <div>
             <dt className="text-[0.6875rem] font-semibold tracking-wider text-muted uppercase">
@@ -101,23 +112,32 @@ export function AccessPrompt({
         <p className="text-heading font-semibold text-text">
           {t("access.price", { price: f.cents(priceFromCents) })}
         </p>
-        <p className="text-label text-muted">{t("access.terms")}</p>
+        <p className="text-label text-muted">{t("access.unlocks")}</p>
+        <p className="text-label text-muted">{t("catalog.disclaimer")}</p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3">
-        {state.requested ? (
+        {requested ? (
           <p role="status" className="inline-flex items-center gap-1.5 text-body font-medium text-success-fg">
             <CircleCheck aria-hidden="true" className="size-4" strokeWidth={2} />
-            {t("access.requested")}
+            {state.requested || !requestedAt
+              ? t("access.requested")
+              : t("access.requestedOn", { date: f.dateOf(new Date(requestedAt)) })}
           </p>
         ) : (
-          <form action={action}>
+          <form action={action} className="flex flex-col gap-2">
+            {state.error && (
+              <p role="alert" className="text-label font-medium text-danger-fg">
+                {state.error}
+              </p>
+            )}
             <SubmitButton variant="primary" pendingLabel={tc("action.saving")}>
               {t("access.request")}
             </SubmitButton>
           </form>
         )}
         <button
+          ref={continueButton}
           type="button"
           onClick={close}
           className="inline-flex h-8 items-center rounded-control px-3 text-body font-medium text-muted hover:bg-surface-muted hover:text-text"

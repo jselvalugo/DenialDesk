@@ -234,6 +234,34 @@ test.describe("as the platform operator", () => {
     await anonymous.close();
   });
 
+  test("grants and revokes DenialDesk University access for a practice", async ({ page }) => {
+    await page.goto("/operator/practices/new");
+    const name = `Synthetic Palm Clinic ${Date.now()}`;
+    await page.getByLabel("Practice name").fill(name);
+    await page.getByLabel("Admin's full name").fill("Synthetic Admin");
+    await page.getByLabel("Admin's work email").fill(`uni-admin-${Date.now()}@e2e.denialdesk.test`);
+    await page.getByRole("button", { name: "Create practice" }).click();
+    await page.getByRole("link", { name: "Open practice" }).click();
+    await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+
+    const panel = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "DenialDesk University" }) });
+    await expect(panel).toContainText("Not requested");
+    await page.getByLabel("Order or invoice reference").fill("SYN-order-42");
+    await page.getByRole("button", { name: "Grant access" }).click();
+    await expect(panel.getByRole("status")).toContainText("Access granted");
+    await expect(panel).toContainText("Access granted");
+    await expect(panel).toContainText("SYN-order-42");
+
+    await page.getByLabel("Why access is revoked").fill("Synthetic subscription ended.");
+    await page.getByRole("button", { name: "Revoke access" }).click();
+    await expect(panel.getByRole("status").filter({ hasText: "Access revoked" })).toBeVisible();
+    await expect(panel).toContainText("Revoked");
+    await expect(panel).toContainText("Synthetic subscription ended.");
+    await expect(page.getByRole("button", { name: "Grant access" })).toBeVisible();
+  });
+
   test("sees every practice and can create, suspend, and reactivate one", async ({ page, browser }) => {
     test.setTimeout(60_000);
     await page.goto("/operator");

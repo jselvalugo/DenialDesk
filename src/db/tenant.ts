@@ -33,3 +33,28 @@ export async function withTenant<T>(ctx: TenantContext, fn: (tx: TenantTx) => Pr
     throw sanitizeDatabaseError(error);
   }
 }
+
+/**
+ * Runs `fn` as the schema owner with `app.tenant_id` set but WITHOUT switching to the restricted
+ * app role: the tenant policy still limits every statement to one practice, while column
+ * privileges the app role lacks (e.g. `university_access.granted_at`) are available. For the
+ * platform operator's writes to a practice's records only (spec: denialdesk-university.md, "Access");
+ * never from a practice session. `userId` is the operator, recorded as `app.user_id`.
+ */
+export async function withTenantAsPlatform<T>(
+  ctx: TenantContext,
+  fn: (tx: TenantTx) => Promise<T>,
+): Promise<T> {
+  if (!UUID.test(ctx.tenantId) || !UUID.test(ctx.userId)) {
+    throw new Error("withTenantAsPlatform requires UUID tenant and user IDs");
+  }
+  try {
+    return await systemDb().transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.tenant_id', ${ctx.tenantId}, true)`);
+      await tx.execute(sql`select set_config('app.user_id', ${ctx.userId}, true)`);
+      return fn(tx);
+    });
+  } catch (error) {
+    throw sanitizeDatabaseError(error);
+  }
+}

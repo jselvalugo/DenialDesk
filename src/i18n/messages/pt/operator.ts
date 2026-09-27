@@ -142,4 +142,29 @@ export const operator: Messages["operator"] = {
   "errors.agreementNotFound":
     "Esse acordo não está registrado para esta clínica, ou já está marcado como registrado por engano.",
   "errors.emailExists": "Já existe uma conta com esse e-mail.",
+
+  // Painel de acesso à Universidade (página do consultório)
+  "university.title": "Universidade DenialDesk",
+  "university.description":
+    "O acesso aos cursos da Universidade é registrado aqui quando o consultório o compra. Os cursos permanecem bloqueados até lá; a Wiki está sempre aberta.",
+  "university.status.none": "Não solicitado",
+  "university.status.requested": "Solicitado",
+  "university.status.granted": "Acesso concedido",
+  "university.status.revoked": "Revogado",
+  "university.requestedOn": "Solicitado pelo consultório em {date}",
+  "university.grantedOn": "Concedido em {date}",
+  "university.revokedOn": "Revogado em {date}: {reason}",
+  "university.noteLabel": "Referência do pedido ou da fatura",
+  "university.noteHint": "Opcional. Sem informações de pacientes.",
+  "university.grant": "Conceder acesso",
+  "university.granting": "Concedendo…",
+  "university.granted": "Acesso concedido. Os cursos do consultório estão desbloqueados.",
+  "university.revokeReasonLabel": "Por que o acesso é revogado",
+  "university.revokeReasonHint": "Mantido com o registro e na trilha de auditoria.",
+  "university.revoke": "Revogar acesso",
+  "university.revoking": "Revogando…",
+  "university.revoked": "Acesso revogado. Os cursos do consultório estão bloqueados novamente.",
+  "errors.universityFormInvalid": "Verifique o formulário e tente novamente.",
+  "errors.universityRevokeReasonTooShort": "Informe um motivo com pelo menos cinco caracteres.",
+  "errors.universityNotGranted": "Este consultório não tem acesso a revogar.",
 };

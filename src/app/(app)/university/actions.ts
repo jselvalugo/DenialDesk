@@ -4,10 +4,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
+import {
+  getUniversityAccess,
+  hasUniversityAccess,
+  requestUniversityAccess as requestAccess,
+} from "@/domain/university/access";
 import { findLesson } from "@/domain/university/catalog";
-import { UNIVERSITY_ACCESS_FROM_CENTS } from "@/domain/university/offer";
 import { recordLessonCompleted } from "@/domain/university/queries";
-import { audit } from "@/lib/audit";
 import { getT } from "@/i18n/server";
 
 export interface CompleteLessonState {
@@ -31,14 +34,21 @@ export async function completeLesson(
     return { error: t("complete.lessonGone") };
   }
 
-  const { completedAt } = await withTenant(auth, (tx) =>
-    recordLessonCompleted(tx, {
+  const result = await withTenant(auth, async (tx) => {
+    // The courses are locked until the practice has access (spec: "Access").
+    if (!hasUniversityAccess(await getUniversityAccess(tx, auth.tenantId))) return null;
+    return recordLessonCompleted(tx, {
       tenantId: auth.tenantId,
       userId: auth.userId,
       courseId: found.course.id,
       lessonId: found.lesson.id,
-    }),
-  );
+    });
+  });
+  if (!result) {
+    const t = await getT("university");
+    return { error: t("access.locked") };
+  }
+  const { completedAt } = result;
   revalidatePath("/university");
   revalidatePath(`/university/${found.course.id}`);
   revalidatePath(`/university/${found.course.id}/${found.lesson.id}`);
@@ -47,24 +57,23 @@ export async function completeLesson(
 
 export interface RequestAccessState {
   requested?: boolean;
+  error?: string;
 }
 
 /**
- * "Request access" on the University access prompt (spec: denialdesk-university.md, "Access
- * prompt"). No purchase flow exists yet (OA-043): the request is recorded as an audit event
- * (who, which practice, when, the offer price shown) so the owner can follow up. Every role.
+ * "Request access" on the University access prompt (spec: denialdesk-university.md, "Access").
+ * Records the request on the practice's access row (one per practice; the operator sees it in the
+ * console) and audits it. Every role.
  */
+// Called by useActionState with (state, formData); neither is needed, so none is declared.
 export async function requestUniversityAccess(): Promise<RequestAccessState> {
   const auth = await requireAuth();
-  await withTenant(auth, (tx) =>
-    audit(tx, {
-      action: "university.access_requested",
-      actorUserId: auth.userId,
-      tenantId: auth.tenantId,
-      entityType: "tenant",
-      entityId: auth.tenantId,
-      metadata: { priceFromCents: UNIVERSITY_ACCESS_FROM_CENTS },
-    }),
-  );
+  const t = await getT("university");
+  try {
+    await withTenant(auth, (tx) => requestAccess(tx, { tenantId: auth.tenantId, userId: auth.userId }));
+  } catch {
+    return { error: t("access.failed") };
+  }
+  revalidatePath("/university");
   return { requested: true };
 }

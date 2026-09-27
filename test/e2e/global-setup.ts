@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { generateTotpSecret } from "@/auth/totp";
 import { closeDatabase, systemDb } from "@/db/client";
-import { operatorCredentials, users } from "@/db/schema";
+import { operatorCredentials, universityAccess, users } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { encryptField } from "@/lib/crypto/field";
 
@@ -29,7 +29,7 @@ export default async function globalSetup() {
   const password = `e2e-synthetic-${run}`;
   const make = (name: string) => `${name}-${run}@e2e.denialdesk.test`;
 
-  const { userIds } = await seedPractice({
+  const { tenantId: practiceId, userIds } = await seedPractice({
     practiceName: `E2E practice ${run} (synthetic)`,
     asOf: todayIn(),
     users: [
@@ -90,6 +90,11 @@ export default async function globalSetup() {
           })
           .returning({ id: users.id })
       )[0]!.id;
+  // The first practice has bought DenialDesk University (specs/denialdesk-university.md "Access");
+  // the manager practice stays locked so the access prompt and the lock can be tested.
+  await systemDb()
+    .insert(universityAccess)
+    .values({ tenantId: practiceId, grantedAt: new Date(), grantedBy: operatorId, note: "e2e (synthetic)" });
   await systemDb()
     .update(users)
     .set({

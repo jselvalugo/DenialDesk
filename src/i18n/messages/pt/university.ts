@@ -119,9 +119,18 @@ export const university: Messages["university"] = {
   "access.lengthLabel": "Duração",
   "access.lengthMinutes": "cerca de {count, plural, one {# minuto} other {# minutos}}",
   "access.wikiLabel": "Artigos da Wiki",
-  "access.price": "O acesso começa em {price}",
-  "access.terms": "Preço por consultório. Peça ao DenialDesk um orçamento para a sua equipe.",
+  "access.price": "Acesso a partir de {price}",
+  "access.unlocks":
+    "Quando o seu consultório tiver acesso, os cursos são desbloqueados para toda a equipe. A Wiki continua aberta para todos.",
   "access.request": "Solicitar acesso",
-  "access.requested": "Solicitação registrada. O DenialDesk entrará em contato com o seu consultório.",
+  "access.requested":
+    "Solicitação registrada para o seu consultório. Os cursos são desbloqueados quando o DenialDesk confirmar o acesso.",
+  "access.requestedOn":
+    "Acesso solicitado em {date}. Os cursos são desbloqueados quando o DenialDesk confirmar o acesso.",
+  "access.failed": "Não foi possível registrar a solicitação. Tente novamente.",
+  "access.locked":
+    "Os cursos ficam bloqueados até que o seu consultório tenha acesso à Universidade DenialDesk.",
+  "access.lockedBadge": "Bloqueado",
+  "access.lockedDescription": "Bloqueado até que o seu consultório tenha acesso à Universidade DenialDesk.",
   "access.continue": "Continuar para os cursos",
 };

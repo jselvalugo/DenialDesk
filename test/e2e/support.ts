@@ -57,8 +57,8 @@ export async function openFromSwitcher(page: Page, name: string) {
 }
 
 /**
- * The University access prompt opens on every visit to /university (specs/denialdesk-university.md,
- * "Access prompt"); close it before clicking anything on the catalog behind it.
+ * The University access prompt opens on every visit to /university while the practice has no
+ * access (specs/denialdesk-university.md, "Access"); close it before clicking the catalog behind it.
  */
 export async function dismissAccessPrompt(page: Page) {
   const prompt = page.getByRole("dialog", { name: "Get access to DenialDesk University" });

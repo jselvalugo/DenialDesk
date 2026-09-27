@@ -133,8 +133,15 @@ export const university = {
   "access.lengthMinutes": "about {count, plural, one {# minute} other {# minutes}}",
   "access.wikiLabel": "Wiki articles",
   "access.price": "Access starts at {price}",
-  "access.terms": "Per-practice pricing. Ask DenialDesk for a quote for your team.",
+  "access.unlocks":
+    "Once your practice has access, the courses unlock for everyone on your team. The Wiki stays open to everyone.",
   "access.request": "Request access",
-  "access.requested": "Request recorded. DenialDesk will contact your practice.",
+  "access.requested":
+    "Request recorded for your practice. The courses unlock once DenialDesk confirms access.",
+  "access.requestedOn": "Access requested on {date}. The courses unlock once DenialDesk confirms access.",
+  "access.failed": "The request could not be recorded. Try again.",
+  "access.locked": "The courses are locked until your practice has access to DenialDesk University.",
+  "access.lockedBadge": "Locked",
+  "access.lockedDescription": "Locked until your practice has access to DenialDesk University.",
   "access.continue": "Continue to the courses",
 } as const;

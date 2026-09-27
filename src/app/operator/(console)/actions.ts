@@ -11,6 +11,7 @@ import {
   type RecordOutcome,
 } from "@/domain/platform/agreements";
 import { createPractice as create, PracticeError, setPracticeSuspended } from "@/domain/platform/practices";
+import { grantUniversityAccess, revokeUniversityAccess } from "@/domain/university/access";
 import { getT } from "@/i18n/server";
 import { syntheticDataOnly } from "@/lib/env";
 
@@ -168,4 +169,54 @@ export async function voidAgreement(_: VoidAgreementState, formData: FormData): 
   revalidatePath("/operator");
   revalidatePath(`/operator/practices/${parsed.data.tenantId}`);
   return { voided: true };
+}
+
+export interface UniversityAccessState {
+  error?: string;
+  granted?: true;
+  revoked?: true;
+}
+
+/** Records that the practice bought DenialDesk University access (spec: denialdesk-university.md, "Access"). */
+export async function grantUniversity(
+  _: UniversityAccessState,
+  formData: FormData,
+): Promise<UniversityAccessState> {
+  const operator = await requireOperator();
+  const t = await getT("operator");
+  const parsed = z
+    .object({ tenantId: z.uuid(), note: z.string().trim().max(200).optional() })
+    .safeParse({ tenantId: formData.get("tenantId"), note: formData.get("note") ?? undefined });
+  if (!parsed.success) return { error: t("errors.universityFormInvalid") };
+  try {
+    await grantUniversityAccess({ tenantId: parsed.data.tenantId, note: parsed.data.note ?? null }, operator);
+  } catch (error) {
+    if (error instanceof PracticeError) return { error: t(error.key, error.params) };
+    throw error;
+  }
+  revalidatePath(`/operator/practices/${parsed.data.tenantId}`);
+  revalidatePath("/university");
+  return { granted: true };
+}
+
+/** Ends the practice's University access, with a reason kept on the record. */
+export async function revokeUniversity(
+  _: UniversityAccessState,
+  formData: FormData,
+): Promise<UniversityAccessState> {
+  const operator = await requireOperator();
+  const t = await getT("operator");
+  const parsed = z
+    .object({ tenantId: z.uuid(), reason: z.string().trim().min(5).max(500) })
+    .safeParse({ tenantId: formData.get("tenantId"), reason: formData.get("reason") });
+  if (!parsed.success) return { error: t("errors.universityRevokeReasonTooShort") };
+  try {
+    await revokeUniversityAccess(parsed.data, operator);
+  } catch (error) {
+    if (error instanceof PracticeError) return { error: t(error.key, error.params) };
+    throw error;
+  }
+  revalidatePath(`/operator/practices/${parsed.data.tenantId}`);
+  revalidatePath("/university");
+  return { revoked: true };
 }

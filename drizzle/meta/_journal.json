@@ -253,6 +253,13 @@
       "when": 1790514457627,
       "tag": "0035_users_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790518693638,
+      "tag": "0036_university_access",
+      "breakpoints": true
     }
   ]
 }
