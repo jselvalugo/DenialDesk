@@ -33,7 +33,10 @@ _Last updated: 2026-09-27_
   (a unit test rejects statutory numbers typed in prose), CARC meanings come from
   `src/domain/carc.ts`. Per-user completions in `university_progress` (migration 0033; RLS; app role
   SELECT/INSERT only, append-only; member FK; migration 0034 adds the table to the demo purge)
-  audited as `university.lesson_completed`. Rules a lesson lists but the product does not compute
+  audited as `university.lesson_completed`. An access prompt (owner request 2026-09-27) opens on
+  every visit to the catalog: program length from the catalog, "Access starts at $299.00"
+  (`src/domain/university/offer.ts`), "Request access" writes `university.access_requested`;
+  the courses themselves are not gated (OA-043). Rules a lesson lists but the product does not compute
   yet (acknowledgment, secondary filing, Medicare levels 2–5) are tagged "Reference only". Next: U2
   knowledge checks, U3 practice training record/export (OA-035), U4 more courses.
 - University — Wiki (`specs/university-wiki.md`, 2026-09-27): a second University page at

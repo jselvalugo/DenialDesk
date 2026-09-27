@@ -7,8 +7,10 @@ import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { COURSES } from "@/domain/university/catalog";
 import { courseProgress, progressLabel, readingMinutes } from "@/domain/university/content";
+import { programSummary, UNIVERSITY_ACCESS_FROM_CENTS } from "@/domain/university/offer";
 import { completedLessons } from "@/domain/university/queries";
 import { getT } from "@/i18n/server";
+import { AccessPrompt } from "./AccessPrompt";
 import { UniversityHeader } from "./UniversityHeader";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -27,6 +29,7 @@ export default async function UniversityPage() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
+      <AccessPrompt summary={programSummary()} priceFromCents={UNIVERSITY_ACCESS_FROM_CENTS} />
       <UniversityHeader
         eyebrow={t("eyebrow")}
         title={t("catalog.title")}

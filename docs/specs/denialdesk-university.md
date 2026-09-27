@@ -81,6 +81,24 @@ lesson completions are kept per practice so the practice has a training record (
       (completion is idempotent, tenant-scoped, audited, and append-only), e2e (header and user
       menu links open the University; a lesson can be completed and the course list reflects it).
 
+### Access prompt (owner request 2026-09-27)
+- [x] Every visit to `/university` (the course catalog) opens a modal dialog titled "Get access to
+      DenialDesk University" (`AccessPrompt.tsx`, a native `<dialog>` like the module switcher). It
+      states what the program is, how long it is (courses, lessons, and estimated reading minutes
+      computed from the catalog by `programSummary()`, plus the Wiki article count), and that
+      access starts at the offer price (`UNIVERSITY_ACCESS_FROM_CENTS`, `$299.00`; business
+      content set by the owner, formatted by the platform's money rule, never a legal value).
+- [x] "Request access" records `university.access_requested` (entity `tenant`, metadata
+      `{ priceFromCents }`) inside the practice's tenant transaction and confirms inline; there is
+      no purchase flow yet. "Continue to the courses", the close button, Escape, and a backdrop
+      click dismiss it. Nothing is stored about a dismissal, so it shows again on the next visit
+      (the owner asked for it to always show). Course and lesson pages do not show it.
+- [x] Copy comes from the `university` message namespace (`access.*`) in all three languages;
+      accessible: `aria-labelledby`/`aria-describedby`, focus contained by the native dialog,
+      WCAG AA tokens, no imagery beyond the University tile glyph.
+- [x] E2E: the prompt is visible with the price and length, Escape closes it, a reload shows it
+      again, "Request access" confirms; other catalog tests dismiss it first (`dismissAccessPrompt`).
+
 ### U2 — knowledge checks (planned)
 - [ ] Optional short "Check your understanding" per course (3–5 questions, answers in the
       repository, no free text). A pass is recorded like a completion. Never a gate on using the
@@ -104,6 +122,8 @@ lesson completions are kept per practice so the practice has a training record (
   validates the slugs against the catalog, inserts `ON CONFLICT DO NOTHING`, audits when a row
   was inserted, revalidates the lesson, course, and catalog pages.
 - Audit action `university.lesson_completed`; entity type `university_lesson`.
+- Server action `requestUniversityAccess()` in the same file: audit-only
+  (`university.access_requested`, entity `tenant`); no table.
 - Data classification: Internal. No PHI anywhere in the feature. Logs: none beyond the audit row.
 
 ## Legal rules used
@@ -137,5 +157,10 @@ content, role-gated courses, anything that writes to a claim, denial, or code.
   `rules/` (florida-rules-engine; see the TODO in `rules/catalog.ts`).
 - U3: does the practice's HIPAA training program want DenialDesk completions as evidence, and in
   what form (owner / practice compliance officer)? Tracked as `OA-035`.
+- Access prompt (OA-043): the courses stay open to every signed-in user while the prompt says
+  access starts at $299, so the offer and the product disagree until an entitlement exists. The
+  owner needs to decide what "starting at" covers (per practice, per user, term), the purchase
+  channel that "Request access" should feed (today it only writes an audit event), and whether
+  the catalog should be locked behind the entitlement.
 - Should "Getting started" be suggested on a user's first sign-in (a one-time banner on `/`)?
   Not built; the welcome page already links to the University.

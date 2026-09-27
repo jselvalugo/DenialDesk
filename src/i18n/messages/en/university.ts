@@ -123,4 +123,18 @@ export const university = {
   "search.emptyDescription":
     "Try a shorter word or a code type such as CARC, or browse the categories below.",
   "search.roleDenied": "Your role cannot read the wiki.",
+
+  // AccessPrompt.tsx (the offer shown on every visit to the catalog)
+  "access.title": "Get access to DenialDesk University",
+  "access.body":
+    "A self-paced training program for practice staff: how DenialDesk works, how to read a denial, the Florida prompt-pay and appeal clocks the product enforces, and how patient data is protected, plus the reference Wiki.",
+  "access.coursesLabel": "Courses",
+  "access.lengthLabel": "Length",
+  "access.lengthMinutes": "about {count, plural, one {# minute} other {# minutes}}",
+  "access.wikiLabel": "Wiki articles",
+  "access.price": "Access starts at {price}",
+  "access.terms": "Per-practice pricing. Ask DenialDesk for a quote for your team.",
+  "access.request": "Request access",
+  "access.requested": "Request recorded. DenialDesk will contact your practice.",
+  "access.continue": "Continue to the courses",
 } as const;

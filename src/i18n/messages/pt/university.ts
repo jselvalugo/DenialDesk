@@ -110,4 +110,18 @@ export const university: Messages["university"] = {
   "search.emptyDescription":
     "Tente uma palavra mais curta ou um tipo de código como CARC, ou explore as categorias abaixo.",
   "search.roleDenied": "Sua função não pode ler a wiki.",
+
+  // AccessPrompt.tsx (a oferta exibida em cada visita ao catálogo)
+  "access.title": "Obtenha acesso à Universidade DenialDesk",
+  "access.body":
+    "Um programa de treinamento no seu ritmo para a equipe do consultório: como o DenialDesk funciona, como ler uma negativa, os prazos de pagamento pontual e de recurso da Flórida que o produto aplica e como os dados dos pacientes são protegidos, além da Wiki de referência.",
+  "access.coursesLabel": "Cursos",
+  "access.lengthLabel": "Duração",
+  "access.lengthMinutes": "cerca de {count, plural, one {# minuto} other {# minutos}}",
+  "access.wikiLabel": "Artigos da Wiki",
+  "access.price": "O acesso começa em {price}",
+  "access.terms": "Preço por consultório. Peça ao DenialDesk um orçamento para a sua equipe.",
+  "access.request": "Solicitar acesso",
+  "access.requested": "Solicitação registrada. O DenialDesk entrará em contato com o seu consultório.",
+  "access.continue": "Continuar para os cursos",
 };

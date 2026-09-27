@@ -5,7 +5,9 @@ import { z } from "zod";
 import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
 import { findLesson } from "@/domain/university/catalog";
+import { UNIVERSITY_ACCESS_FROM_CENTS } from "@/domain/university/offer";
 import { recordLessonCompleted } from "@/domain/university/queries";
+import { audit } from "@/lib/audit";
 import { getT } from "@/i18n/server";
 
 export interface CompleteLessonState {
@@ -41,4 +43,28 @@ export async function completeLesson(
   revalidatePath(`/university/${found.course.id}`);
   revalidatePath(`/university/${found.course.id}/${found.lesson.id}`);
   return { completedAt: completedAt.toISOString() };
+}
+
+export interface RequestAccessState {
+  requested?: boolean;
+}
+
+/**
+ * "Request access" on the University access prompt (spec: denialdesk-university.md, "Access
+ * prompt"). No purchase flow exists yet (OA-043): the request is recorded as an audit event
+ * (who, which practice, when, the offer price shown) so the owner can follow up. Every role.
+ */
+export async function requestUniversityAccess(): Promise<RequestAccessState> {
+  const auth = await requireAuth();
+  await withTenant(auth, (tx) =>
+    audit(tx, {
+      action: "university.access_requested",
+      actorUserId: auth.userId,
+      tenantId: auth.tenantId,
+      entityType: "tenant",
+      entityId: auth.tenantId,
+      metadata: { priceFromCents: UNIVERSITY_ACCESS_FROM_CENTS },
+    }),
+  );
+  return { requested: true };
 }

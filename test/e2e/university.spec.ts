@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { dismissAccessPrompt } from "./support";
 
 /**
  * DenialDesk University (docs/specs/denialdesk-university.md U1): reachable from the global header
@@ -16,6 +17,31 @@ test.describe("university", () => {
       page.getByRole("link", { name: "Open course: Getting started with DenialDesk" }),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Open course: Florida prompt pay" })).toBeVisible();
+  });
+
+  test("the access prompt shows on every visit with the program length and starting price", async ({
+    page,
+  }) => {
+    await page.goto("/university");
+    const prompt = page.getByRole("dialog", { name: "Get access to DenialDesk University" });
+    await expect(prompt).toBeVisible();
+    await expect(prompt).toContainText("Access starts at $299.00");
+    await expect(prompt).toContainText(/about \d+ minutes/);
+    await expect(prompt.getByText("Courses", { exact: true })).toBeVisible();
+
+    // Escape closes it, and the catalog behind it is usable; it is not remembered.
+    await page.keyboard.press("Escape");
+    await expect(prompt).toBeHidden();
+    await expect(page.getByRole("heading", { level: 1, name: "Courses" })).toBeVisible();
+    await page.reload();
+    await expect(prompt).toBeVisible();
+
+    // Requesting access records the request and confirms inline.
+    await prompt.getByRole("button", { name: "Request access" }).click();
+    await expect(prompt.getByRole("status")).toContainText("Request recorded");
+    await expect(prompt.getByRole("button", { name: "Request access" })).toHaveCount(0);
+    await prompt.getByRole("button", { name: "Continue to the courses" }).click();
+    await expect(prompt).toBeHidden();
   });
 
   test("the wordmark buttons in the header and on the welcome page open the wiki", async ({ page }) => {
@@ -115,6 +141,7 @@ test.describe("university wiki", () => {
     page,
   }) => {
     await page.goto("/university");
+    await dismissAccessPrompt(page);
     await page.getByRole("link", { name: "Open the Wiki" }).click();
     await expect(page).toHaveURL(/\/university\/wiki$/);
     await expect(page.getByRole("heading", { level: 1, name: "Wiki" })).toBeVisible();

@@ -55,3 +55,14 @@ export async function openFromSwitcher(page: Page, name: string) {
   await page.getByRole("button", { name: /, switch module$/ }).click();
   await page.getByRole("dialog", { name: "Go to" }).getByRole("link", { name, exact: true }).click();
 }
+
+/**
+ * The University access prompt opens on every visit to /university (specs/denialdesk-university.md,
+ * "Access prompt"); close it before clicking anything on the catalog behind it.
+ */
+export async function dismissAccessPrompt(page: Page) {
+  const prompt = page.getByRole("dialog", { name: "Get access to DenialDesk University" });
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole("button", { name: "Continue to the courses" }).click();
+  await expect(prompt).toBeHidden();
+}

@@ -97,7 +97,8 @@ export type AuditAction =
   | "prompt_pay.viewed"
   | "prompt_pay.response_recorded"
   | "prompt_pay.response_voided"
-  | "university.lesson_completed";
+  | "university.lesson_completed"
+  | "university.access_requested";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
