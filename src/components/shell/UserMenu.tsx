@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { Check, ChevronDown, LogOut } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronDown, GraduationCap, LogOut } from "lucide-react";
 import { signOut } from "@/auth/actions";
 import { setLocale } from "@/i18n/actions";
 import { useLocale, useT } from "@/i18n/client";
@@ -29,9 +30,10 @@ function initials(name: string) {
 }
 
 /**
- * Signed-in user, role, and practice, the language choice, and sign-out. A disclosure: Escape or an
- * outside click closes it. The language row (spec: internationalization) lists each language in
- * itself, so someone who can't read the current one still finds theirs.
+ * Signed-in user, role, and practice, a link to DenialDesk University, the language choice, and
+ * sign-out. A disclosure: Escape or an outside click closes it. The language row (spec:
+ * internationalization) lists each language in itself, so someone who can't read the current one
+ * still finds theirs.
  */
 export function UserMenu({ user }: { user: ShellUser }) {
   const [open, setOpen] = useState(false);
@@ -102,6 +104,16 @@ export function UserMenu({ user }: { user: ShellUser }) {
             <p className="text-label text-muted">{role}</p>
             <p className="mt-2 text-label text-subtle">{t("userMenu.practice")}</p>
             <p className="text-body text-text">{user.tenantName}</p>
+          </div>
+          <div className="border-b border-border p-1.5">
+            <Link
+              href="/university"
+              onClick={() => setOpen(false)}
+              className="flex h-9 w-full items-center gap-2.5 rounded-control px-2.5 text-body font-medium text-text hover:bg-surface-muted"
+            >
+              <GraduationCap aria-hidden="true" className="size-4 text-subtle" />
+              {t("userMenu.university")}
+            </Link>
           </div>
           <LanguagePicker
             label={t("userMenu.language")}

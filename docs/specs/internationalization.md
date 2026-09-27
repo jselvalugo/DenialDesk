@@ -85,7 +85,7 @@ to any device, and is remembered by the browser for the sign-in pages too.
 - [x] The cookie is httpOnly, secure, SameSite=Lax, one year; an unsupported value is ignored.
 - [x] Sign-in applies the account's stored language to the browser (practice and operator).
 - [x] With no cookie, `Accept-Language` picks the language (`pt-BR` → Portuguese, unknown → English).
-- [x] Migration 0033 adds `users.locale` (nullable, CHECK in `en|es|pt`).
+- [x] Migration 0035 adds `users.locale` (nullable, CHECK in `en|es|pt`).
 - [x] Spanish and Portuguese dictionaries have exactly the English keys (type-checked) and the same
       placeholders (unit test); no plural message lacks an `other` branch.
 - [x] Shared domain labels (denial statuses, claim statuses, regimes, denial categories, roles) come
@@ -102,7 +102,7 @@ to any device, and is remembered by the browser for the sign-in pages too.
 - [x] `docs/DESIGN.md` §8 mentions the language row in the user menu; `PROJECT_STATE.md` updated.
 
 ## Data / API changes
-- `users.locale text NULL CHECK (locale IN ('en','es','pt'))` (migration `0033_users_locale.sql`).
+- `users.locale text NULL CHECK (locale IN ('en','es','pt'))` (migration `0035_users_locale.sql`).
   Classification: workforce preference (REQUIREMENTS §9.1, internal), not PHI.
 - Cookie `dd_locale` (see Decisions). No new endpoints; one server action `setLocale(formData)`.
 - No audit event: a display preference is not a PHI read or write. (Sign-in and session events are
@@ -117,14 +117,17 @@ date order change. Rule IDs and citations shown on screen stay as cited.
 - Right-to-left languages, per-practice default language, translating outbound documents (appeal
   letters, statements sent to patients) — a later spec when those documents exist.
 - Locale-aware money formatting (decided against, above) and number entry in other decimal styles.
+- DenialDesk University lesson and Wiki article content (`src/domain/university/**`): the University's
+  UI is translated; its long-form educational content stays English until the owner decides (OA-039),
+  since it is legal-adjacent text that needs the same review as OA-038.
 - Machine translation at runtime; every string is authored and reviewed.
 
 ## Open questions
 - Owner: should a practice administrator be able to set a practice-wide default language for new
   users (today: browser language until the user picks)? Added to `docs/owner/OWNER_ACTION_ITEMS.xlsx`
-  as OA-034.
+  as OA-037.
 - Owner: a native-speaker review of the Spanish and Portuguese billing terminology before launch
-  (OA-035), extended to counsel or compliance sign-off that the translated attestations and caveats
+  (OA-038), extended to counsel or compliance sign-off that the translated attestations and caveats
   (synthetic-data attestation, BAA recording labels, uncontestable-obligation alert, R-8.7
   suppression and residual-risk text) say the same thing in law. The glossary above is what the
   product uses until then. Pre-production holds synthetic data only, so this gates the Azure launch.

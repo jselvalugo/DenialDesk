@@ -5,6 +5,7 @@ export const welcome = {
   intro:
     "DenialDesk follows each claim from submission to payment: it classifies denials, ranks them by value and deadline, and keeps the Florida clocks that decide what can still be recovered.",
   openQueue: "Open denial queue",
+  universityPrompt: "New here? Start with DenialDesk University",
 
   "howItWorks.title": "How DenialDesk works",
   "howItWorks.description": "The path a claim takes through the platform",

@@ -49,6 +49,8 @@ export const claims: Messages["claims"] = {
 
   // Detalhe da reivindicação (app/(app)/claims/[id]/page.tsx)
   "detail.pageTitle": "Reivindicação",
+  "detail.filing.rolledNote":
+    "(pendente de parecer jurídico: {date}; a prorrogação por fim de semana ou feriado ainda não foi confirmada, portanto envie até a data acima)",
   "detail.breadcrumbClaims": "Reivindicações",
   "detail.subtitle": "data de atendimento {date} · versão {version}",
   "detail.field.dateOfService": "Data de atendimento",

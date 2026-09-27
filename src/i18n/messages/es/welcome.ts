@@ -6,6 +6,7 @@ export const welcome: Messages["welcome"] = {
   intro:
     "DenialDesk sigue cada reclamación desde su presentación hasta el pago: clasifica las denegaciones, las prioriza por valor y plazo, y mantiene los plazos de Florida que determinan qué se puede recuperar todavía.",
   openQueue: "Abrir la cola de denegaciones",
+  universityPrompt: "¿Es nuevo aquí? Empiece por la Universidad DenialDesk",
 
   "howItWorks.title": "Cómo funciona DenialDesk",
   "howItWorks.description": "El recorrido de una reclamación por la plataforma",

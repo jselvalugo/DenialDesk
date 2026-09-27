@@ -79,6 +79,7 @@ export const common = {
   "deadline.dueToday": "Due today",
   "deadline.left": "{count, plural, one {# day left} other {# days left}}",
   "deadline.noDeadline": "No deadline",
+  "deadline.pendingCounsel": "(pending counsel: {date})",
 
   // Form feedback (components/ui/FormAlert and forms)
   "form.error": "Error",

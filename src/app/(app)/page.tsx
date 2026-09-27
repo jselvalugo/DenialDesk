@@ -110,9 +110,14 @@ export default async function HomePage() {
           </h1>
           <p className="mt-0.5 max-w-3xl text-body text-muted">{t("intro")}</p>
         </div>
-        <Link href="/denials" className={primaryLinkButtonClass}>
-          {t("openQueue")}
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/university" className="text-body font-medium text-link hover:underline">
+            {t("universityPrompt")}
+          </Link>
+          <Link href="/denials" className={primaryLinkButtonClass}>
+            {t("openQueue")}
+          </Link>
+        </div>
       </header>
 
       <Panel title={t("howItWorks.title")} description={t("howItWorks.description")} flush>

@@ -33,6 +33,7 @@ Setup:
 - [ ] Practice, location, and provider setup (NPI, taxonomy, FL license) [§8.1]
 - [ ] Payer master with regulatory-regime tags [§8.1, §1.3]
 - [ ] Custom field values on patient, claim, denial, and payer records (sensitive fields masked, opened with a reason, audited) [R-3.5.1, R-7.5.1] — `specs/settings-and-custom-fields.md` S2; added to MVP by owner 2026-09-26
+- [~] DenialDesk University: in-app courses with per-user completion record, reachable from the header and user menu [R-10.4] — U1 catalog/lessons/completions done (`specs/denialdesk-university.md`); U2 knowledge checks, U3 practice training record planned
 
 Claims:
 - [x] Claim data model with immutable version history [R-3.10.3] — claims list/detail, corrections with reason, append-only `claim_versions` (`specs/claims.md` C1)
@@ -60,6 +61,10 @@ Appeals:
 - [ ] Corrected (freq 7) and void (freq 8) claims [§8.3]
 - [ ] Medicare 5-level appeal workflow [R-4.2.1]
 - [ ] Appeal outcome tracking (basic decision recording is in A1; a payer/category analytics view is A4)
+
+University:
+- [x] Wiki: reference articles with legal values read from the rules engine (`specs/university-wiki.md`) [R-10.4, R-15.6]
+- [ ] Rest of the University (owner to structure: OA-036) [R-10.4]
 
 Evidence and security:
 - [ ] OIR complaint evidence package export [R-3.1.7]

@@ -7,6 +7,7 @@ export const shell: Messages["shell"] = {
   "header.goTo": "Ir para um módulo ou página",
   "header.practice": "Clínica",
   "header.styleGuide": "Guia de estilo",
+  "header.university": "Universidade",
   "tabBar.switchModule": "{module}, trocar de módulo",
   "tabBar.switchModuleTitle": "{module} · trocar de módulo",
   "nav.primary": "Principal",
@@ -59,6 +60,7 @@ export const shell: Messages["shell"] = {
 
   "userMenu.practice": "Clínica",
   "userMenu.language": "Idioma",
+  "userMenu.university": "Universidade DenialDesk",
   "userMenu.signOut": "Sair",
 
   "timeout.title": "Sua sessão está prestes a terminar",

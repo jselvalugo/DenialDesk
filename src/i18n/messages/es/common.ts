@@ -72,6 +72,7 @@ export const common: Messages["common"] = {
   "deadline.dueToday": "Vence hoy",
   "deadline.left": "{count, plural, one {Queda # día} other {Quedan # días}}",
   "deadline.noDeadline": "Sin fecha límite",
+  "deadline.pendingCounsel": "(pendiente de asesoría legal: {date})",
 
   "form.error": "Error",
   "form.success": "Guardado",

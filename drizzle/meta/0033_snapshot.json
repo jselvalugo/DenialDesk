@@ -1,5 +1,5 @@
 {
-  "id": "e54bb1e8-a3eb-463e-8c42-476ccf9d0754",
+  "id": "d887785f-40c4-40f6-b081-31e3d98cbcf2",
   "prevId": "8d9f3383-67a4-4f76-8928-cc13e533a9da",
   "version": "7",
   "dialect": "postgresql",
@@ -5876,6 +5876,106 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.university_progress": {
+      "name": "university_progress",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lesson_id": {
+          "name": "lesson_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "university_progress_tenant_user_lesson_key": {
+          "name": "university_progress_tenant_user_lesson_key",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lesson_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "university_progress_tenant_id_tenants_id_fk": {
+          "name": "university_progress_tenant_id_tenants_id_fk",
+          "tableFrom": "university_progress",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "university_progress_user_id_users_id_fk": {
+          "name": "university_progress_user_id_users_id_fk",
+          "tableFrom": "university_progress",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.users": {
       "name": "users",
       "schema": "",
@@ -5949,12 +6049,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "locale": {
-          "name": "locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -5984,12 +6078,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "users_locale_check": {
-          "name": "users_locale_check",
-          "value": "\"users\".\"locale\" is null or \"users\".\"locale\" in ('en', 'es', 'pt')"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },

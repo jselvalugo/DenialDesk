@@ -6,6 +6,7 @@ export const shell = {
   "header.goTo": "Go to a module or page",
   "header.practice": "Practice",
   "header.styleGuide": "Style guide",
+  "header.university": "University",
   "tabBar.switchModule": "{module}, switch module",
   "tabBar.switchModuleTitle": "{module} · switch module",
   "nav.primary": "Primary",
@@ -58,6 +59,7 @@ export const shell = {
   // User menu
   "userMenu.practice": "Practice",
   "userMenu.language": "Language",
+  "userMenu.university": "DenialDesk University",
   "userMenu.signOut": "Sign out",
 
   // Session timeout dialog

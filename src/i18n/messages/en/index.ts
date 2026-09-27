@@ -11,6 +11,7 @@ import { remittances } from "./remittances";
 import { revenue } from "./revenue";
 import { settings } from "./settings";
 import { shell } from "./shell";
+import { university } from "./university";
 import { welcome } from "./welcome";
 
 export const en = {
@@ -28,4 +29,5 @@ export const en = {
   insight,
   settings,
   operator,
+  university,
 } as const;

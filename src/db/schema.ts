@@ -590,6 +590,26 @@ export const practiceSettings = pgTable(
   (t) => [uniqueIndex("practice_settings_tenant_key_key").on(t.tenantId, t.key)],
 );
 
+/**
+ * DenialDesk University lesson completions (docs/specs/denialdesk-university.md U1): one row per
+ * user per lesson, append-only (the app role has no UPDATE or DELETE), so the practice has a
+ * training record (R-10.4). `lessonId` is the "<course>/<lesson>" slug from
+ * src/domain/university/catalog.ts. Internal data: no PHI.
+ */
+export const universityProgress = pgTable(
+  "university_progress",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    lessonId: text("lesson_id").notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("university_progress_tenant_user_lesson_key").on(t.tenantId, t.userId, t.lessonId)],
+);
+
 // ---------------------------------------------------------------------------------------------
 // Remittances (835) and Florida prompt pay (docs/specs/remittances-and-prompt-pay.md). Restricted
 // PHI by linkage to claims. No patient names and no bank account or routing numbers are stored.

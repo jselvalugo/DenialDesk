@@ -11,6 +11,7 @@ import { remittances } from "./remittances";
 import { revenue } from "./revenue";
 import { settings } from "./settings";
 import { shell } from "./shell";
+import { university } from "./university";
 import { welcome } from "./welcome";
 import type { Messages } from "../types";
 
@@ -29,4 +30,5 @@ export const es: Messages = {
   insight,
   settings,
   operator,
+  university,
 };

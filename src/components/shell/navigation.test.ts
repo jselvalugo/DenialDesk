@@ -76,6 +76,8 @@ describe("locate", () => {
 
   it("does not match a path that only shares a prefix, and never a planned page", () => {
     expect(locate(apps, "/claimsx").item).toBeNull();
+    // The University (courses and wiki) is not a module (specs/denialdesk-university.md).
+    expect(locate(apps, "/university/wiki").item).toBeNull();
     expect(locate(apps, "/reports").item).toBeNull();
   });
 

@@ -21,6 +21,7 @@ describe("firstLevelDeadline", () => {
     });
     expect(deadline).toEqual({
       date: "2026-01-31",
+      rolledDate: null,
       basis: "payer_contract",
       citation: "Payer contract",
       verify: false,

@@ -6,6 +6,7 @@ export const welcome: Messages["welcome"] = {
   intro:
     "O DenialDesk acompanha cada reivindicação do envio ao pagamento: classifica as negativas, as prioriza por valor e prazo, e mantém os prazos da Flórida que determinam o que ainda pode ser recuperado.",
   openQueue: "Abrir a fila de negativas",
+  universityPrompt: "Novo por aqui? Comece pela Universidade DenialDesk",
 
   "howItWorks.title": "Como o DenialDesk funciona",
   "howItWorks.description": "O caminho que uma reivindicação percorre na plataforma",

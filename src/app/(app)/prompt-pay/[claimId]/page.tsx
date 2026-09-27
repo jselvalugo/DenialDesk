@@ -162,6 +162,11 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                       </Td>
                       <Td className="tabular">
                         {f.date(m.due)}
+                        {m.rolledDue && (
+                          <span className="block text-label text-muted">
+                            {tc("deadline.pendingCounsel", { date: f.date(m.rolledDue) })}
+                          </span>
+                        )}
                         {m.daysRemaining !== null && m.state === "open" && (
                           <span className="block text-label text-muted">
                             {tc("deadline.left", { count: m.daysRemaining })}
@@ -185,7 +190,14 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
               {clock.interest.length === 0 ? (
                 <p className="p-4 text-body text-muted">
                   {clock.paymentDue
-                    ? t("detail.interest.noneWithDue", { date: f.date(clock.paymentDue) })
+                    ? [
+                        t("detail.interest.noneWithDue", { date: f.date(clock.paymentDue) }),
+                        clock.paymentDueRolled
+                          ? tc("deadline.pendingCounsel", { date: f.date(clock.paymentDueRolled) })
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")
                     : t("detail.interest.noneNoDue")}
                 </p>
               ) : (
@@ -261,6 +273,11 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
                 {clock.providerResponseDue && (
                   <Field label={t("detail.claim.contestResponseDue")}>
                     <span className="tabular">{f.date(clock.providerResponseDue)}</span>
+                    {clock.providerResponseDueRolled && (
+                      <span className="block text-label text-muted">
+                        {tc("deadline.pendingCounsel", { date: f.date(clock.providerResponseDueRolled) })}
+                      </span>
+                    )}
                   </Field>
                 )}
               </dl>

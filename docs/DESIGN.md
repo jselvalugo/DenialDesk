@@ -132,11 +132,13 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 ## 8. Layout
 - **App shell (ERP layout, `specs/erp-shell.md`, ADR 0005):**
   - *Global header*, 56px white: logo, then the "Go to a module or page" field beside it (opens the
-    module switcher; Ctrl/⌘ K); practice name, demo badge, and the user menu (name, role, practice,
-    a language group listing English / Español / Português with the current one marked, sign out)
-    on the right. Every string on every screen comes from `src/i18n/` in all three languages
-    (`specs/internationalization.md`, `src/i18n/README.md`); dates follow the language, money stays
-    `$1,234.56`.
+    module switcher; Ctrl/⌘ K); a "University" link (graduation-cap glyph, text label), practice
+    name, and the user menu (name, role, practice, DenialDesk University, a language group listing
+    English / Español / Português with the current one marked, sign out) on the right. The University
+    (`specs/denialdesk-university.md`) is not a module: it has its own teal tile and "DenialDesk
+    University" eyebrow, and the tab bar keeps the current module's tabs. Every string on every
+    screen comes from `src/i18n/` in all three languages (`specs/internationalization.md`,
+    `src/i18n/README.md`); dates follow the language, money stays `$1,234.56`.
   - *Tab bar*, 44px navy: the white DenialDesk mark (logo icon, teal cross) with a chevron as the
     first control (accessible name "<Module>, switch module"; opens the switcher; the module name is
     carried by the tabs and the page-header eyebrow), then the module's shipped pages as tabs (`nav`
@@ -147,9 +149,12 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
     rows. Planned modules and pages are muted with a "Planned" tag, never links. Matches are
     highlighted; a footer shows the result count and keyboard hints.
   - Modules ("apps" in code): Denials, Patients, Claims, Revenue cycle (roles that can view it),
-    Insight, Settings (section tabs: General, Custom fields, and planned sections; the design
-    style guide in pre-production; `specs/settings-and-custom-fields.md`). Defined once in
-    `src/components/shell/navigation.ts`.
+    Insight, Settings (section tabs: General, Custom fields, and planned sections;
+    `specs/settings-and-custom-fields.md`). Defined once in `src/components/shell/navigation.ts`.
+  - *University Wiki articles* (`/university/wiki`, `src/components/university/ArticleBody.tsx`):
+    the University header, body text 14/20 in a 720px measure, h2 `title`, h3 `heading`, notes as a
+    left-ruled `surface-muted` aside (no colored callout boxes), tables in the DataTable header
+    style, legal values as mono number + unit + caption citation. Never imagery, never emoji.
 - **Page header:** white band (panel style) with the module tile, an uppercase "Module · Page"
   eyebrow, the serif title, a one-line description, and actions on the right.
 - **Preview banner:** 32px strip above everything in non-production (ADR 0003).
@@ -196,7 +201,7 @@ styled with our tokens (ADR 0004).
 ## 12. PHI-safe UI (REQUIREMENTS §7.4.8)
 - No PHI in URLs (use opaque IDs), page titles, browser notifications, or client logs.
 - Mask high-risk identifiers by default (`MaskedValue`).
-- Session timeout warning at 13 minutes idle, logout at 15 (R-7.2.7).
+- Session ends after 15 minutes idle with a warning shortly before (values in `src/auth/policy.ts` and `SessionTimeout.tsx`, R-7.2.7).
 - Print and export are explicit, audited actions.
 
 ## 13. Themes

@@ -242,6 +242,11 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                   daysRemaining={filing.daysRemaining}
                   dueSoonDays={FILING_WARNING_DAYS}
                 />
+                {filing.deadline.rolledDate && (
+                  <p className="text-label text-muted">
+                    {t("detail.filing.rolledNote", { date: f.date(filing.deadline.rolledDate) })}
+                  </p>
+                )}
                 {filing.state === "past_deadline" && (
                   <p className="text-body text-danger-fg">{t("detail.filing.pastDeadlineWarning")}</p>
                 )}
