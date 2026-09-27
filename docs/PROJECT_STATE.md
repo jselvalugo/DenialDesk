@@ -3,9 +3,19 @@
 Read this at the start of every session, after `CLAUDE.md`. Update it at the end of every session
 that changes decisions, status, or open questions. Keep it short: facts and links, not narrative.
 
-_Last updated: 2026-09-26_
+_Last updated: 2026-09-27_
 
 ## Where we are
+- Whole-codebase security review (2026-09-27, `docs/reviews/2026-09-27-security-review.md`): no
+  cross-tenant IDOR, no committed secrets, no unparameterized SQL; RLS enabled and forced everywhere
+  it should be. Two High findings need fixing: (1) the X12 tokenizer's segment trim regex
+  (`src/edi/x12/segments.ts:57`) is quadratic-or-worse on long CR/LF runs — a crafted 835 well under
+  the 5 MB cap can stall the event loop for any user who can post remittances; (2) the TOTP
+  enrollment secret (`src/auth/enrollment.ts:15-26`) is generated once and re-served unchanged to
+  anyone with a password-only session, and never rotates on confirmed enrollment — an attacker who
+  only has a victim's password can open the MFA setup page first, capture the secret, and hold a
+  permanent, undetectable second factor once the real user enrolls with the same secret. Several
+  Medium findings (see the review) sharpen or add to items already tracked below.
 - Appeals A1 (`specs/appeals.md`): `appeals` + `appeal_notes` tables (tenant RLS, isolation test,
   a DB trigger enforcing the status lifecycle draft → in_review → ready → submitted →
   awaiting_decision → decided, with withdrawn/dismissed reachable from submitted/awaiting_decision).
@@ -259,7 +269,36 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 4. **Synthetic NPIs** pass the check digit and could coincide with real NPIs. Keep, or use a
    reserved/marked range? (compliance #7)
 
+### Decisions from the 2026-09-27 security review (need a human)
+1. **Signed-agreement PDF uploads** (`src/domain/platform/agreements.ts:84`) get magic-byte/
+   extension/size checks only, no malware scan (R-7.4.6). Need a scanner vendor decision, confirmed
+   to run in U.S. regions.
+2. **Operator MFA skip** (`src/auth/operator-account.ts:110-112`) is gated on `APP_ENV !==
+   "production"` (a string match) rather than platform detection — a misconfigured Azure environment
+   (e.g. `APP_ENV=preview`) would run the admin console on a password alone. Revisit the 2026-09-26
+   "MFA off" decision before real tenants exist; requires R-15.9 sign-off to change.
+3. **Netlify Database region** (`netlify.toml`, `docs/decisions/0003-netlify-preproduction.md`) is
+   still unverified for U.S.-only residency (non-negotiable 3); nothing pins it. Confirm and record
+   in the ADR.
+
 ### Deferred review findings (tracked, not blocking pre-prod)
+- IP resolution (`src/lib/request-context.ts:92`) tries the Netlify header before the Azure one with
+  no platform check; on Azure a client-supplied `x-nf-client-connection-ip` would be trusted,
+  letting an attacker spoof the IP used for rate-limiting (password-spray past per-IP lockout) and
+  for the audit "where" field (R-7.5.1). Fix: select the header by `onNetlify()`, never fall through.
+- Encrypted fields (member ID, TOTP secret; `src/lib/crypto` call sites in `patients/queries.ts`,
+  `db/seed.ts`, `auth/enrollment.ts`, `auth/credentials.ts`) carry no AAD binding to tenant/record,
+  unlike custom field values (ADR 0007) — a ciphertext could be copied to another row/tenant and
+  still decrypt. Needs AAD binding plus a re-encryption migration.
+- 835 parsing (`src/edi/x12/835.ts`) and duplicate-claim detection
+  (`src/domain/remittances/records.ts:87,107`) have no bounds on amount digit counts / CARC-RARC
+  shape and use an O(n²) duplicate check that can also exceed Postgres's bind-parameter limit on a
+  maximal file (2026-09-27 security review).
+- No Postgres pool `ssl` option is set (`src/db/client.ts:25-30`); TLS depends entirely on
+  `sslmode` in the connection string (R-7.3.1) — needs an explicit `ssl` config before Azure cutover.
+- Rate limiting covers only sign-in/MFA/seed; remittance/monthly-file/deposit uploads and Insight
+  xlsx exports are unthrottled (`src/lib/rate-limit.ts:12`), compounding the parser/duplicate-check
+  cost findings above.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
