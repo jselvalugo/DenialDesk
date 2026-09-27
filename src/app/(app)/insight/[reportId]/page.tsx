@@ -199,15 +199,7 @@ export default async function ReportPage({
           </Button>
         </form>
       )}
-      {!canExport && (
-        <p className="text-right text-label text-muted">
-          {t("report.exportRestrictedRoles", {
-            admin: tc("role.admin"),
-            manager: tc("role.manager"),
-            compliance: tc("role.compliance"),
-          })}
-        </p>
-      )}
+      {!canExport && <p className="text-right text-label text-muted">{t("report.exportRestrictedRoles")}</p>}
     </div>
   );
 }

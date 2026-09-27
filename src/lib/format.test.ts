@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCents, formatDate, parseDollarsToCents } from "./format";
+import { formatCents, formatDate, formatDateOf, parseDollarsToCents } from "./format";
 
 describe("formatCents", () => {
   it.each([
@@ -52,5 +52,13 @@ describe("formatDate in other languages", () => {
     expect(formatDate("2026-12-31", "en")).toBe("12/31/2026");
     expect(formatDate("2026-12-31", "es")).toBe("31/12/2026");
     expect(formatDate("2026-12-31", "pt")).toBe("31/12/2026");
+  });
+});
+
+describe("formatDateOf", () => {
+  it("gives the Eastern calendar day of an instant, date only, in the language's order", () => {
+    const lateEvening = new Date("2026-07-05T03:30:00Z"); // 11:30 PM EDT on July 4
+    expect(formatDateOf(lateEvening, "en")).toBe("07/04/2026");
+    expect(formatDateOf(lateEvening, "pt")).toBe("04/07/2026");
   });
 });

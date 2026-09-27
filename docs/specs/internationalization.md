@@ -90,16 +90,16 @@ to any device, and is remembered by the browser for the sign-in pages too.
       placeholders (unit test); no plural message lacks an `other` branch.
 - [x] Shared domain labels (denial statuses, claim statuses, regimes, denial categories, roles) come
       from the `common` namespace via message keys, never from English literals in domain code.
-- [ ] Every page under `src/app/` (practice app, sign-in, operator console) and every component under
+- [x] Every page under `src/app/` (practice app, sign-in, operator console) and every component under
       `src/components/` shows no hard-coded English when the language is Spanish or Portuguese,
       including page titles (`generateMetadata`), `aria-label`s, empty states, and server-action
       error messages.
-- [ ] Dates on screen use the language's order; money stays `$1,234.56`.
-- [ ] The Insight .xlsx export's sheet names, column headers, About sheet, and "Suppressed (<11)"
+- [x] Dates on screen use the language's order; money stays `$1,234.56`.
+- [x] The Insight .xlsx export's sheet names, column headers, About sheet, and "Suppressed (<11)"
       marker are in the language of the user who exported it.
-- [ ] Existing e2e tests (English default) pass unchanged; a shell e2e test switches to Spanish from
+- [x] Existing e2e tests (English default) pass unchanged; a shell e2e test switches to Spanish from
       the user menu and sees the tab bar in Spanish, then back.
-- [ ] `docs/DESIGN.md` §8 mentions the language row in the user menu; `PROJECT_STATE.md` updated.
+- [x] `docs/DESIGN.md` §8 mentions the language row in the user menu; `PROJECT_STATE.md` updated.
 
 ## Data / API changes
 - `users.locale text NULL CHECK (locale IN ('en','es','pt'))` (migration `0033_users_locale.sql`).

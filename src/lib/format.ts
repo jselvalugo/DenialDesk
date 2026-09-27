@@ -73,3 +73,19 @@ function dateTimeFormat(locale: Locale): Intl.DateTimeFormat {
 export function formatDateTime(at: Date, locale: Locale = "en"): string {
   return dateTimeFormat(locale).format(at);
 }
+
+const dateOfFormats = new Map<Locale, Intl.DateTimeFormat>();
+/** The calendar day of an instant in Eastern time, in the language's date order (no time of day). */
+export function formatDateOf(at: Date, locale: Locale = "en"): string {
+  let format = dateOfFormats.get(locale);
+  if (!format) {
+    format = new Intl.DateTimeFormat(INTL_TAGS[locale], {
+      month: "2-digit",
+      day: "2-digit",
+      year: "numeric",
+      timeZone: "America/New_York",
+    });
+    dateOfFormats.set(locale, format);
+  }
+  return format.format(at);
+}

@@ -92,6 +92,7 @@ export const remittances: Messages["remittances"] = {
   "detail.denialsCaptured.description":
     "Adicionadas à fila de negativas quando esta remessa foi lançada. As categorias vêm do próprio mapeamento de códigos do DenialDesk, pendente de revisão.",
   "detail.history.title": "Histórico",
+  "detail.history.listLabel": "Histórico da remessa",
   "detail.history.description":
     "Cada alteração desta remessa: quem, quando e por quê. O histórico não pode ser editado.",
   "event.received": "Carregada",

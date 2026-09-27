@@ -82,6 +82,7 @@ export const promptPay: Messages["promptPay"] = {
   "detail.uncontestableAlert":
     "El pagador no pagó ni denegó esta reclamación para el hito de incontestabilidad. El pago podría ahora ser una obligación incontestable (R-3.1.4). Confirme con un abogado antes de enviar un reclamo.",
   "detail.milestones.title": "Hitos",
+  "detail.milestones.caption": "Hitos del pago puntual",
   "detail.milestones.description": "Contados en días calendario desde la fecha de recepción del pagador.",
   "detail.milestones.pendingVerification": "Pendiente de verificación legal",
   "detail.interest.title": "Hoja de cálculo de interés",

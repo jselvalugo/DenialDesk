@@ -42,7 +42,8 @@ export const insight = {
   "report.noDataDescription": "Try a wider date range or a different payer.",
   "report.noRowsMatch": "No rows match the current filters.",
   "report.downloadExcel": "Download Excel",
-  "report.exportRestrictedRoles": "Exporting this report is limited to {admin}, {manager}, and {compliance}.",
+  "report.exportRestrictedRoles": "Exporting this report is limited to admin, manager, and compliance roles.",
+  "report.plannedBadge": "Planned — see spec",
 
   // Filters (report detail page and export forms)
   "filters.from": "From",

@@ -80,6 +80,7 @@ export const promptPay = {
   "detail.uncontestableAlert":
     "The payer neither paid nor denied this claim by the uncontestable milestone. Payment may now be an uncontestable obligation (R-3.1.4). Confirm with counsel before sending a demand.",
   "detail.milestones.title": "Milestones",
+  "detail.milestones.caption": "Prompt-pay milestones",
   "detail.milestones.description": "Counted in calendar days from the payer's receipt date.",
   "detail.milestones.pendingVerification": "Pending counsel verification",
   "detail.interest.title": "Interest worksheet",

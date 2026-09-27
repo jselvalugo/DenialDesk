@@ -67,6 +67,7 @@ export const claims: Messages["claims"] = {
   "detail.table.claimLinesCaption": "Líneas de la reclamación",
   "detail.readOnlyNote": "Su rol tiene acceso de solo lectura a las reclamaciones.",
   "detail.history.title": "Historial de versiones",
+  "detail.history.listLabel": "Versiones de la reclamación",
   "detail.history.description":
     "Cada cambio de esta reclamación: quién, cuándo y por qué. El historial no se puede editar.",
   "detail.history.version": "Versión {version}",

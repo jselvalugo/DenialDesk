@@ -124,7 +124,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
             {chart.claims.length === 0 ? (
               <EmptyState title={t("detail.noClaimsTitle")} description={t("detail.noClaimsDescription")} />
             ) : (
-              <Table caption={t("detail.claims")}>
+              <Table caption={t("detail.claimsCaption")}>
                 <thead>
                   <tr>
                     <Th>{tc("word.claim")}</Th>
@@ -170,7 +170,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
             {chart.denials.length === 0 ? (
               <EmptyState title={t("detail.noDenialsTitle")} description={t("detail.noDenialsDescription")} />
             ) : (
-              <Table caption={t("detail.denials")}>
+              <Table caption={t("detail.denialsCaption")}>
                 <thead>
                   <tr>
                     <Th>{tc("word.reason")}</Th>

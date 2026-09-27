@@ -132,6 +132,8 @@ export const patients: Messages["patients"] = {
   "detail.openDenialsCount": "{count, plural, one {# denegación abierta} other {# denegaciones abiertas}}",
   "detail.denials": "Denegaciones",
   "detail.noClaimsTitle": "Sin reclamaciones para este paciente",
+  "detail.claimsCaption": "Reclamaciones de este paciente",
+  "detail.denialsCaption": "Denegaciones de este paciente",
   "detail.noClaimsDescription":
     "Las reclamaciones aparecerán aquí cuando se creen o se importen para este paciente.",
   "detail.noDenialsTitle": "Sin denegaciones para este paciente",

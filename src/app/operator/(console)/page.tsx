@@ -111,7 +111,7 @@ export default async function OperatorPage() {
                 </Td>
                 <Td numeric>{f.number(practice.teamSize)}</Td>
                 <Td numeric>{f.number(practice.openDenials)}</Td>
-                <Td className="tabular text-muted">{f.dateTime(practice.createdAt)}</Td>
+                <Td className="tabular text-muted">{f.dateOf(practice.createdAt)}</Td>
                 <Td className="text-right">
                   {practice.kind === "customer" && (
                     <SuspendToggle

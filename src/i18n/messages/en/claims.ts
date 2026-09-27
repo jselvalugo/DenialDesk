@@ -64,6 +64,7 @@ export const claims = {
   "detail.table.claimLinesCaption": "Claim lines",
   "detail.readOnlyNote": "You have read-only access to claims.",
   "detail.history.title": "Version history",
+  "detail.history.listLabel": "Claim versions",
   "detail.history.description": "Every change to this claim: who, when, and why. History can't be edited.",
   "detail.history.version": "Version {version}",
   "detail.history.formerTeamMember": "Former team member",

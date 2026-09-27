@@ -94,7 +94,7 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
             )}
           </dd>
           <dt className="text-muted">{tc("word.created")}</dt>
-          <dd className="tabular">{f.dateTime(practice.createdAt)}</dd>
+          <dd className="tabular">{f.dateOf(practice.createdAt)}</dd>
           <dt className="text-muted">{t("list.columns.team")}</dt>
           <dd className="tabular">{f.number(practice.teamSize)}</dd>
         </dl>
@@ -139,7 +139,7 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
                         <Td className="tabular">{f.date(a.signedOn)}</Td>
                         <Td>{a.practiceSigner}</Td>
                         <Td>{a.ourSigner}</Td>
-                        <Td className="tabular text-muted">{f.dateTime(a.createdAt)}</Td>
+                        <Td className="tabular text-muted">{f.dateOf(a.createdAt)}</Td>
                         <Td>
                           <a
                             href={`/operator/practices/${tenantId}/agreements/${a.id}/download`}

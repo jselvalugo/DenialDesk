@@ -38,7 +38,8 @@ export const insight: Messages["insight"] = {
   "report.noRowsMatch": "Nenhuma linha corresponde aos filtros atuais.",
   "report.downloadExcel": "Baixar Excel",
   "report.exportRestrictedRoles":
-    "A exportação deste relatório é restrita às funções de {admin}, {manager} e {compliance}.",
+    "A exportação deste relatório é limitada às funções de administrador, gerente e conformidade.",
+  "report.plannedBadge": "Planejado — ver especificação",
 
   "filters.from": "De",
   "filters.to": "Até",

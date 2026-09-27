@@ -186,7 +186,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
           </Panel>
 
           <Panel title={t("detail.history.title")} description={t("detail.history.description")}>
-            <ol className="flex flex-col divide-y divide-border" aria-label={t("detail.history.title")}>
+            <ol className="flex flex-col divide-y divide-border" aria-label={t("detail.history.listLabel")}>
               {detail.history.map((entry) => {
                 const previous = snapshots.get(entry.version - 1);
                 const changes = previous ? diffSnapshots(previous, entry.snapshot, t, tc) : [];

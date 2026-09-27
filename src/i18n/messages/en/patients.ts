@@ -127,6 +127,8 @@ export const patients = {
   "detail.openDenialsCount": "{count, plural, one {# open denial} other {# open denials}}",
   "detail.denials": "Denials",
   "detail.noClaimsTitle": "No claims for this patient",
+  "detail.claimsCaption": "Claims for this patient",
+  "detail.denialsCaption": "Denials for this patient",
   "detail.noClaimsDescription": "Claims appear here once they are created or imported for this patient.",
   "detail.noDenialsTitle": "No denials for this patient",
   "detail.noDenialsDescription": "Denials on this patient's claims appear here.",

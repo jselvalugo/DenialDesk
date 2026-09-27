@@ -1,10 +1,11 @@
-"use client";
-
 import Link from "next/link";
-import { useFormat, useT } from "@/i18n/client";
+import { getFormat, getT } from "@/i18n/server";
 
-/** DataTable pagination footer (DESIGN.md §9): counts on the left, previous / next on the right. */
-export function Pagination({
+/**
+ * DataTable pagination footer (DESIGN.md §9): counts on the left, previous / next on the right.
+ * A server component (it takes an `hrefFor` function), rendered from server pages only.
+ */
+export async function Pagination({
   page,
   pageSize,
   total,
@@ -15,8 +16,8 @@ export function Pagination({
   total: number;
   hrefFor: (page: number) => string;
 }) {
-  const t = useT("common");
-  const f = useFormat();
+  const t = await getT("common");
+  const f = await getFormat();
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const last = Math.min(page * pageSize, total);

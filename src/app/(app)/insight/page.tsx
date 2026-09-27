@@ -22,7 +22,6 @@ export default async function InsightPage() {
   const auth = await requireAuth();
   if (!canViewInsight(auth.role)) notFound();
   const t = await getT("insight");
-  const tc = await getT("common");
   const { dateFrom, dateTo } = defaultDateRange();
   return (
     <div className="flex flex-col gap-4">
@@ -57,7 +56,7 @@ export default async function InsightPage() {
                   {t("list.open")}
                 </Link>
               ) : (
-                <Badge tone="neutral">{tc("word.planned")}</Badge>
+                <Badge tone="neutral">{t("report.plannedBadge")}</Badge>
               )}
             </li>
           ))}

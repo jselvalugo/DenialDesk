@@ -138,7 +138,7 @@ export default async function PromptPayClockPage({ params }: { params: Promise<{
               description={t("detail.milestones.description")}
               flush
             >
-              <Table caption={t("detail.milestones.title")}>
+              <Table caption={t("detail.milestones.caption")}>
                 <thead>
                   <tr>
                     <Th>{t("table.milestone")}</Th>

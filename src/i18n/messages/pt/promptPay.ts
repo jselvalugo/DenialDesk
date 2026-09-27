@@ -82,6 +82,7 @@ export const promptPay: Messages["promptPay"] = {
   "detail.uncontestableAlert":
     "O pagador não pagou nem negou esta reivindicação até o marco de incontestabilidade. O pagamento agora pode ser uma obrigação incontestável (R-3.1.4). Confirme com um advogado antes de enviar uma cobrança.",
   "detail.milestones.title": "Marcos",
+  "detail.milestones.caption": "Marcos do pagamento pontual",
   "detail.milestones.description": "Contados em dias corridos a partir da data de recebimento pelo pagador.",
   "detail.milestones.pendingVerification": "Pendente de verificação jurídica",
   "detail.interest.title": "Planilha de juros",

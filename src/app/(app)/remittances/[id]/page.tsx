@@ -261,7 +261,7 @@ export default async function RemittancePage({ params }: { params: Promise<{ id:
             </Panel>
           )}
           <Panel title={t("detail.history.title")} description={t("detail.history.description")}>
-            <ol className="flex flex-col divide-y divide-border" aria-label={t("detail.history.title")}>
+            <ol className="flex flex-col divide-y divide-border" aria-label={t("detail.history.listLabel")}>
               {history.map((entry) => (
                 <li key={entry.id} className="py-3 first:pt-0 last:pb-0">
                   <p className="text-label text-muted">
