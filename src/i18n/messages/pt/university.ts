@@ -132,5 +132,5 @@ export const university: Messages["university"] = {
     "Os cursos ficam bloqueados até que o seu consultório tenha acesso à Universidade DenialDesk.",
   "access.lockedBadge": "Bloqueado",
   "access.lockedDescription": "Bloqueado até que o seu consultório tenha acesso à Universidade DenialDesk.",
-  "access.continue": "Continuar para os cursos",
+  "access.continue": "Ver o catálogo",
 };

@@ -260,6 +260,13 @@
       "when": 1790518693638,
       "tag": "0036_university_access",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790518694638,
+      "tag": "0037_university_access_columns",
+      "breakpoints": true
     }
   ]
 }

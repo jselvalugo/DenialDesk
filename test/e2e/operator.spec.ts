@@ -256,7 +256,9 @@ test.describe("as the platform operator", () => {
 
     await page.getByLabel("Why access is revoked").fill("Synthetic subscription ended.");
     await page.getByRole("button", { name: "Revoke access" }).click();
-    await expect(panel.getByRole("status").filter({ hasText: "Access revoked" })).toBeVisible();
+    // Only the latest outcome is shown.
+    await expect(panel.getByRole("status")).toHaveCount(1);
+    await expect(panel.getByRole("status")).toContainText("Access revoked");
     await expect(panel).toContainText("Revoked");
     await expect(panel).toContainText("Synthetic subscription ended.");
     await expect(page.getByRole("button", { name: "Grant access" })).toBeVisible();

@@ -143,5 +143,5 @@ export const university = {
   "access.locked": "The courses are locked until your practice has access to DenialDesk University.",
   "access.lockedBadge": "Locked",
   "access.lockedDescription": "Locked until your practice has access to DenialDesk University.",
-  "access.continue": "Continue to the courses",
+  "access.continue": "Browse the catalog",
 } as const;

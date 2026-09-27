@@ -5,7 +5,7 @@ import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
-import { getUniversityAccess, hasUniversityAccess } from "@/domain/university/access";
+import { getUniversityAccess, hasUniversityAccess, pendingRequestAt } from "@/domain/university/access";
 import { COURSES } from "@/domain/university/catalog";
 import { courseProgress, progressLabel, readingMinutes } from "@/domain/university/content";
 import { programSummary, UNIVERSITY_ACCESS_FROM_CENTS } from "@/domain/university/offer";
@@ -38,7 +38,7 @@ export default async function UniversityPage() {
         <AccessPrompt
           summary={programSummary()}
           priceFromCents={UNIVERSITY_ACCESS_FROM_CENTS}
-          requestedAt={access?.requestedAt ? access.requestedAt.toISOString() : null}
+          requestedAt={pendingRequestAt(access)?.toISOString() ?? null}
         />
       )}
       <UniversityHeader

@@ -205,7 +205,7 @@ test.describe("university locked", () => {
     await prompt.getByRole("button", { name: "Request access" }).click();
     await expect(prompt.getByRole("status")).toContainText("Request recorded for your practice");
     await expect(prompt.getByRole("button", { name: "Request access" })).toHaveCount(0);
-    await expect(prompt.getByRole("button", { name: "Continue to the courses" })).toBeFocused();
+    await expect(prompt.getByRole("button", { name: "Browse the catalog" })).toBeFocused();
     await page.reload();
     await expect(prompt.getByRole("status")).toContainText(/Access requested on \d{2}\/\d{2}\/\d{4}/);
   });

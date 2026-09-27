@@ -63,6 +63,6 @@ export async function openFromSwitcher(page: Page, name: string) {
 export async function dismissAccessPrompt(page: Page) {
   const prompt = page.getByRole("dialog", { name: "Get access to DenialDesk University" });
   await expect(prompt).toBeVisible();
-  await prompt.getByRole("button", { name: "Continue to the courses" }).click();
+  await prompt.getByRole("button", { name: "Browse the catalog" }).click();
   await expect(prompt).toBeHidden();
 }

@@ -86,8 +86,11 @@ lesson completions are kept per practice so the practice has a training record (
       one row per practice; RLS + FORCE with the shared tenant policy; the app role has SELECT and
       INSERT/UPDATE on the `requested_*` columns only, so a practice session can never grant
       itself access; grant/revoke run as the owner role under the same policy through
-      `withTenantAsPlatform`). Access = granted and not revoked. Tests in
-      `test/integration/university-access.test.ts`.
+      `withTenantAsPlatform` in `src/domain/platform/university-access.ts`, which practice code
+      never imports). Access = granted and not revoked. Practice sessions read only the state
+      columns (migration 0037 narrows SELECT; the operator's note, revoke reason, and grantor are
+      hidden). Tests in `test/integration/university-access.test.ts`, including an unfiltered
+      cross-practice read that the policy alone must hide.
 - [x] While the practice has no access, every visit to `/university` opens a modal dialog "Get
       access to DenialDesk University" (`AccessPrompt.tsx`, a native `<dialog>` like the module
       switcher): what the program is, how long it is (courses, lessons, reading minutes computed
@@ -98,18 +101,24 @@ lesson completions are kept per practice so the practice has a training record (
       courses" dismiss it; nothing is remembered, so it opens again next visit. Once access is
       granted the prompt is not rendered.
 - [x] "Request access" records the request on the practice's row (latest request wins) and audits
-      `university.access_requested` (entity `university_access`, metadata `{ priceFromCents }`);
-      the dialog confirms inline and, on later visits, shows "Access requested on <date>". No
-      promise of contact is made: the operator sees the request on the practice page.
+      `university.access_requested` (entity `university_access`, the row id, metadata
+      `{ priceFromCents }`); the dialog confirms inline and, on later visits, shows "Access requested
+      on <date>" while the request is pending. A repeat within a minute, or a request from a
+      practice that already has access, writes nothing. After a revoke the practice can request
+      again; that shows as a new pending request (state "Requested") for the operator. No promise of
+      contact is made: the operator sees the request on the practice page.
 - [x] Locked catalog: course titles are not links, "Open course" is replaced by a "Locked" mark,
-      and the course and lesson routes redirect to `/university`; `completeLesson` refuses with
-      "The courses are locked…". The Wiki is not gated.
+      and the course and lesson routes redirect to `/university`; the completion action refuses
+      with "The courses are locked…" through `completeLessonIfUnlocked` (integration-tested for
+      locked, granted, and revoked practices). The Wiki is not gated.
 - [x] Operator console, practice page: a "DenialDesk University" panel shows the state (Not
       requested / Requested on <date> / Access granted on <date> [+ note] / Revoked on <date>:
       reason) with "Grant access" (optional order/invoice note, audited
       `operator.university_access_granted`) and, once granted, "Revoke access" (reason of at least
-      five characters, audited `operator.university_access_revoked`). A revoked practice can be
-      granted again. Customer practices only.
+      five characters, audited `operator.university_access_revoked`). Only one grant can be active
+      (a repeat is refused so a stale tab can't erase the reference) and a row is revoked once; a
+      revoked practice can be granted again. Customer practices only, checked in the domain. The
+      panel shows only the latest outcome.
 - [x] Copy in the `university` (`access.*`) and `operator` (`university.*`) namespaces in all three
       languages; the modal is `aria-labelledby`/`aria-describedby` (the body paragraph), focus is
       contained by the native dialog and moves to "Continue" after a request.

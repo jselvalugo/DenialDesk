@@ -11,7 +11,7 @@ import {
   type RecordOutcome,
 } from "@/domain/platform/agreements";
 import { createPractice as create, PracticeError, setPracticeSuspended } from "@/domain/platform/practices";
-import { grantUniversityAccess, revokeUniversityAccess } from "@/domain/university/access";
+import { grantUniversityAccess, revokeUniversityAccess } from "@/domain/platform/university-access";
 import { getT } from "@/i18n/server";
 import { syntheticDataOnly } from "@/lib/env";
 
@@ -195,7 +195,6 @@ export async function grantUniversity(
     throw error;
   }
   revalidatePath(`/operator/practices/${parsed.data.tenantId}`);
-  revalidatePath("/university");
   return { granted: true };
 }
 
@@ -217,6 +216,5 @@ export async function revokeUniversity(
     throw error;
   }
   revalidatePath(`/operator/practices/${parsed.data.tenantId}`);
-  revalidatePath("/university");
   return { revoked: true };
 }

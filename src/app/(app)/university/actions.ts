@@ -4,14 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
-import {
-  getUniversityAccess,
-  hasUniversityAccess,
-  requestUniversityAccess as requestAccess,
-} from "@/domain/university/access";
+import { requestUniversityAccess as requestAccess } from "@/domain/university/access";
 import { findLesson } from "@/domain/university/catalog";
-import { recordLessonCompleted } from "@/domain/university/queries";
+import { completeLessonIfUnlocked } from "@/domain/university/queries";
 import { getT } from "@/i18n/server";
+import { log } from "@/lib/log";
 
 export interface CompleteLessonState {
   error?: string;
@@ -34,16 +31,14 @@ export async function completeLesson(
     return { error: t("complete.lessonGone") };
   }
 
-  const result = await withTenant(auth, async (tx) => {
-    // The courses are locked until the practice has access (spec: "Access").
-    if (!hasUniversityAccess(await getUniversityAccess(tx, auth.tenantId))) return null;
-    return recordLessonCompleted(tx, {
+  const result = await withTenant(auth, (tx) =>
+    completeLessonIfUnlocked(tx, {
       tenantId: auth.tenantId,
       userId: auth.userId,
       courseId: found.course.id,
       lessonId: found.lesson.id,
-    });
-  });
+    }),
+  );
   if (!result) {
     const t = await getT("university");
     return { error: t("access.locked") };
@@ -71,7 +66,11 @@ export async function requestUniversityAccess(): Promise<RequestAccessState> {
   const t = await getT("university");
   try {
     await withTenant(auth, (tx) => requestAccess(tx, { tenantId: auth.tenantId, userId: auth.userId }));
-  } catch {
+  } catch (error) {
+    log.error("university.access_request_failed", {
+      tenantId: auth.tenantId,
+      errorName: error instanceof Error ? error.name : "Unknown",
+    });
     return { error: t("access.failed") };
   }
   revalidatePath("/university");

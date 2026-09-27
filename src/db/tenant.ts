@@ -36,10 +36,13 @@ export async function withTenant<T>(ctx: TenantContext, fn: (tx: TenantTx) => Pr
 
 /**
  * Runs `fn` as the schema owner with `app.tenant_id` set but WITHOUT switching to the restricted
- * app role: the tenant policy still limits every statement to one practice, while column
- * privileges the app role lacks (e.g. `university_access.granted_at`) are available. For the
- * platform operator's writes to a practice's records only (spec: denialdesk-university.md, "Access");
- * never from a practice session. `userId` is the operator, recorded as `app.user_id`.
+ * app role, so column privileges the app role lacks (e.g. `university_access.granted_at`) are
+ * available. It has the owner's full privileges: tables without a tenant policy (users, tenants,
+ * memberships, audit_events) are fully writable, and a superuser or BYPASSRLS connection (local
+ * development, CI) ignores the policy altogether. The tenant policy is defense in depth only;
+ * every statement inside `fn` must name the practice explicitly. For the platform operator's
+ * writes to a practice's records (src/domain/platform/university-access.ts) only, never from a
+ * practice session. `userId` is the operator, recorded as `app.user_id`.
  */
 export async function withTenantAsPlatform<T>(
   ctx: TenantContext,

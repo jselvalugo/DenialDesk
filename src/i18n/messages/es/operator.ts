@@ -168,4 +168,6 @@ export const operator: Messages["operator"] = {
   "errors.universityFormInvalid": "Revise el formulario e inténtelo de nuevo.",
   "errors.universityRevokeReasonTooShort": "Indique un motivo de al menos cinco caracteres.",
   "errors.universityNotGranted": "Este consultorio no tiene acceso que revocar.",
+  "errors.universityAlreadyGranted":
+    "Este consultorio ya tiene acceso. Vuelva a cargar la página para verlo.",
 };

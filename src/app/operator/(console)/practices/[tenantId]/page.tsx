@@ -10,7 +10,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { agreementStatus, listAgreements, type AgreementStatus } from "@/domain/platform/agreements";
 import { getPractice } from "@/domain/platform/practices";
-import { getUniversityAccessForOperator, universityAccessState } from "@/domain/university/access";
+import { getUniversityAccessForOperator } from "@/domain/platform/university-access";
+import { hasUniversityAccess, universityAccessState } from "@/domain/university/access";
 import { getFormat, getT } from "@/i18n/server";
 import type { MessageKey } from "@/i18n/messages/types";
 import { auditSystem } from "@/lib/audit";
@@ -193,28 +194,28 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
             actions={<Badge tone={accessTone[accessState]}>{t(`university.status.${accessState}`)}</Badge>}
           >
             <div className="flex max-w-3xl flex-col gap-4">
-              <dl className="flex flex-col gap-1 text-body">
+              <ul className="flex flex-col gap-1 text-body">
                 {access?.requestedAt && (
-                  <dd className="text-muted">
+                  <li className="text-muted">
                     {t("university.requestedOn", { date: f.dateOf(access.requestedAt) })}
-                  </dd>
+                  </li>
                 )}
                 {access?.grantedAt && (
-                  <dd className="text-muted">
+                  <li className="text-muted">
                     {t("university.grantedOn", { date: f.dateOf(access.grantedAt) })}
                     {access.note && <span className="ml-2 text-label">{access.note}</span>}
-                  </dd>
+                  </li>
                 )}
                 {access?.revokedAt && access.revokeReason && (
-                  <dd className="text-danger-fg">
+                  <li className="text-danger-fg">
                     {t("university.revokedOn", {
                       date: f.dateOf(access.revokedAt),
                       reason: access.revokeReason,
                     })}
-                  </dd>
+                  </li>
                 )}
-              </dl>
-              <UniversityAccessForm tenantId={tenantId} granted={accessState === "granted"} />
+              </ul>
+              <UniversityAccessForm tenantId={tenantId} granted={hasUniversityAccess(access)} />
             </div>
           </Panel>
 

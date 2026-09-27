@@ -18,7 +18,8 @@ export function UniversityAccessForm({ tenantId, granted }: { tenantId: string; 
 
   return (
     <div className="flex flex-col gap-4">
-      {grantState.granted && (
+      {/* Only the outcome that matches the current state: grant then revoke never shows both. */}
+      {granted && grantState.granted && (
         <p
           role="status"
           className="rounded-panel border border-success-border bg-success-bg p-3 text-body text-success-fg"
@@ -26,7 +27,7 @@ export function UniversityAccessForm({ tenantId, granted }: { tenantId: string; 
           {t("university.granted")}
         </p>
       )}
-      {revokeState.revoked && (
+      {!granted && revokeState.revoked && (
         <p
           role="status"
           className="rounded-panel border border-warning-border bg-warning-bg p-3 text-body text-warning-fg"

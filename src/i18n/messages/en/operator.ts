@@ -163,4 +163,5 @@ export const operator = {
   "errors.universityFormInvalid": "Check the form and try again.",
   "errors.universityRevokeReasonTooShort": "Give a reason of at least five characters.",
   "errors.universityNotGranted": "This practice has no access to revoke.",
+  "errors.universityAlreadyGranted": "This practice already has access. Reload the page to see it.",
 } as const;
