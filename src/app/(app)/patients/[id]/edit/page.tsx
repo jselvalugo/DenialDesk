@@ -12,7 +12,7 @@ import { payerOptions } from "@/domain/denials/queries";
 import { getPatientForEdit } from "@/domain/patients/queries";
 import { activeCustomFields } from "@/domain/settings/queries";
 import { loadValuesForRecord } from "@/domain/custom-fields/values";
-import { toCustomFieldOptions } from "@/components/custom-fields/CustomFieldInputs";
+import { toCustomFieldOptions } from "@/components/custom-fields/options";
 import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";

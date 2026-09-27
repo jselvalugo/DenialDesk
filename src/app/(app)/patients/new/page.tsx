@@ -10,7 +10,7 @@ import { payerOptions } from "@/domain/denials/queries";
 import { activeCustomFields } from "@/domain/settings/queries";
 import { getT } from "@/i18n/server";
 import { syntheticDataOnly } from "@/lib/env";
-import { toCustomFieldOptions } from "@/components/custom-fields/CustomFieldInputs";
+import { toCustomFieldOptions } from "@/components/custom-fields/options";
 import { PatientForm } from "../PatientForm";
 
 export async function generateMetadata(): Promise<Metadata> {

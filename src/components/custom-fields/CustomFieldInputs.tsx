@@ -2,38 +2,15 @@
 
 import { useState } from "react";
 import { useT } from "@/i18n/client";
-import type { CustomFieldType } from "@/domain/settings/custom-fields";
-import type { CustomFieldRow } from "@/domain/settings/queries";
 import type { CustomFieldTypedValue, LoadedCustomFieldValue } from "@/domain/custom-fields/values";
+import type { CustomFieldOption } from "./options";
+
+export type { CustomFieldOption } from "./options";
 
 const fieldClass =
   "h-9 rounded-control border border-border-strong bg-surface px-3 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus";
 const textareaClass =
   "rounded-control border border-border-strong bg-surface px-3 py-2 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus";
-
-/** Active field rows (`activeCustomFields`) to the plain shape this component and its form action
- * need, dropping columns (tenant, sensitivity, position, timestamps) it has no business seeing. */
-export function toCustomFieldOptions(fields: CustomFieldRow[]): CustomFieldOption[] {
-  return fields.map((f) => ({
-    fieldId: f.id,
-    key: f.key,
-    label: f.label,
-    type: f.fieldType as CustomFieldType,
-    helpText: f.helpText,
-    required: f.required,
-    options: f.options,
-  }));
-}
-
-export interface CustomFieldOption {
-  fieldId: string;
-  key: string;
-  label: string;
-  type: CustomFieldType;
-  helpText: string | null;
-  required: boolean;
-  options: string[];
-}
 
 /** One field's control: text, long_text, number, date, checkbox, or select. Its `name` is
  * `cf.<fieldId>` (parsed server-side in the record's own create/update action). */
