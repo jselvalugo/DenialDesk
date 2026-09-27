@@ -6,12 +6,21 @@ import type { Regime, Rule } from "./types";
 // (and records `confirmedBy`). To change a value, add a new version with a new effectiveFrom and
 // close the old one — never edit history, so older claims are judged by the rule in force then.
 //
-// 2026-09-26 (billing review P1): anchor, rollForward and confirmedBy were added to the baseline
-// versions and the shared FL insurer/HMO rules were split into two rule sets. These record how
-// the same baseline law is read (owner decision; ⚠️ counsel), not a change in the law, so they are
-// applied to the baseline versions rather than as new effective-dated versions.
+// 2026-09-26/27 (billing review P1): anchor, rollForward, side and confirmedBy were added to the
+// baseline versions and the shared FL insurer/HMO rules were split into two rule sets. Applying
+// these to the baseline versions, rather than adding new effective-dated versions, was an
+// ENGINEERING choice (they record how the same baseline law is read, not a change in the law); it
+// is pending owner/counsel acceptance under OA-023. Roll-forward itself does not govern until
+// counsel confirms it (ROLL_FORWARD_POLICY in roll-forward.ts; owner decision 2026-09-27, option 1).
 
-const BASE = { effectiveFrom: null, effectiveTo: null, verify: true, confirmedBy: null } as const;
+// `side` defaults to "provider"; payer obligations set side: "payer" explicitly (roll-forward.ts).
+const BASE = {
+  effectiveFrom: null,
+  effectiveTo: null,
+  verify: true,
+  confirmedBy: null,
+  side: "provider",
+} as const;
 const FL = { ...BASE, rollForward: "fl_legal_holiday" } as const;
 const CMS = { ...BASE, rollForward: "federal_holiday" } as const;
 const REQ_VERIFY = "Flagged ⚠️ VERIFY in REQUIREMENTS §3.1.";
@@ -22,6 +31,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.promptpay.electronic.acknowledgment",
+    side: "payer",
     title: "Payer must acknowledge receipt of an electronic claim",
     citation: "Fla. Stat. § 627.6131(4)(a)",
     regimes: ["fl_insurer"],
@@ -34,6 +44,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.promptpay.electronic.pay_or_contest",
+    side: "payer",
     title: "Payer must pay, or notify that the claim is denied or contested",
     citation: "Fla. Stat. § 627.6131(4)(b)",
     regimes: ["fl_insurer"],
@@ -44,6 +55,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.promptpay.electronic.pay_or_deny",
+    side: "payer",
     title: "Payer must pay or deny",
     citation: "Fla. Stat. § 627.6131(4)(e)",
     regimes: ["fl_insurer"],
@@ -54,6 +66,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.promptpay.electronic.uncontestable",
+    side: "payer",
     title: "Failure to pay or deny creates an uncontestable obligation to pay",
     citation: "Fla. Stat. § 627.6131(4)(e)",
     regimes: ["fl_insurer"],
@@ -76,6 +89,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.promptpay.paper.acknowledgment",
+    side: "payer",
     title: "Payer must acknowledge receipt of a paper claim (or give electronic status access)",
     citation: "Fla. Stat. § 627.6131(5)(a)",
     regimes: ["fl_insurer"],
@@ -86,6 +100,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.promptpay.paper.pay_or_contest",
+    side: "payer",
     title: "Payer must pay, deny, or contest (paper claim)",
     citation: "Fla. Stat. § 627.6131(5)(b)",
     regimes: ["fl_insurer"],
@@ -96,6 +111,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.promptpay.paper.pay_or_deny",
+    side: "payer",
     title: "Payer must pay or deny (paper claim)",
     citation: "Fla. Stat. § 627.6131(5)",
     regimes: ["fl_insurer"],
@@ -107,6 +123,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.promptpay.paper.uncontestable",
+    side: "payer",
     title: "Uncontestable obligation to pay (paper claim)",
     citation: "Fla. Stat. § 627.6131(5)",
     regimes: ["fl_insurer"],
@@ -118,6 +135,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.promptpay.interest_rate",
+    side: "payer",
     title: "Interest on overdue payments",
     citation: "Fla. Stat. § 627.6131 (interest provision; subsection to confirm)",
     regimes: ["fl_insurer"],
@@ -165,6 +183,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.overpayment.payer_lookback",
+    side: "payer",
     title: "Payer must submit overpayment claims after payment",
     citation: "Fla. Stat. § 627.6131(6) (subsection to confirm)",
     regimes: ["fl_insurer"],
@@ -176,6 +195,7 @@ const insurer: Rule[] = [
   {
     ...FL,
     id: "fl.retroactive_denial.limit",
+    side: "payer",
     title: "Retroactive denial for ineligibility is limited after payment",
     citation: "Fla. Stat. § 627.6131(11)",
     regimes: ["fl_insurer"],
@@ -199,7 +219,7 @@ const hmo: Rule[] = insurer.map((rule) => ({
     `HMO subsection and value assumed to mirror § 627.6131 per REQUIREMENTS §3.1; confirm. ${rule.verifyNote ?? ""}`.trim(),
 }));
 
-const ALL_REGIMES: Regime[] = [
+export const ALL_REGIMES: Regime[] = [
   "fl_insurer",
   "fl_hmo",
   "erisa_self_funded",
@@ -237,7 +257,7 @@ export const catalog: Rule[] = [
     anchor: "overpayment_determined",
     effectiveFrom: "2026-01-01",
     verifyNote:
-      "REQUIREMENTS §3.6 (SB 1808). Applies to the practitioner whatever the payer; no earlier version.",
+      "REQUIREMENTS §3.6 (SB 1808). Applies to the practitioner whatever the payer; no earlier version. ⚠️ VERIFY: whether it applies to workers' compensation and PIP (auto) claims is not stated in REQUIREMENTS §3.6; confirm with counsel.",
   },
   // Medicare
   {

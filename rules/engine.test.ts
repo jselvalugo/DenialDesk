@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { catalog } from "./catalog";
+import { ALL_REGIMES, catalog } from "./catalog";
+import { ruleDueDate } from "./deadlines";
 import { resolveRule } from "./engine";
 import type { Rule } from "./types";
 
@@ -12,6 +13,7 @@ const base: Rule = {
   unit: "calendar_days",
   anchor: "payer_receipt",
   rollForward: "none",
+  side: "provider",
   confirmedBy: null,
   effectiveFrom: null,
   effectiveTo: "2027-01-01",
@@ -66,7 +68,8 @@ describe("catalog", () => {
       ).toBe(true);
     }
     for (const rule of catalog.filter((r) => r.id.startsWith("fl.") && !r.id.startsWith("fl.hmo."))) {
-      expect(rule.regimes.includes("fl_hmo") && rule.regimes.length < 9, rule.id).toBe(false);
+      if (rule.id === "fl.patient_refund") expect(rule.regimes).toEqual(ALL_REGIMES);
+      else expect(rule.regimes.includes("fl_hmo"), rule.id).toBe(false);
     }
   });
 
@@ -76,5 +79,48 @@ describe("catalog", () => {
         expect(rule.regimes.includes(regime), `${rule.id} ${regime}`).toBe(false);
       }
     }
+  });
+
+  it("has unique rule IDs across the insurer, HMO, Medicare and shared sets (one entry per ID and version)", () => {
+    const keys = catalog.map((r) => `${r.id}@${r.effectiveFrom ?? "baseline"}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    const hmo = catalog.filter((r) => r.id.startsWith("fl.hmo.")).map((r) => r.id);
+    const rest = new Set(catalog.filter((r) => !r.id.startsWith("fl.hmo.")).map((r) => r.id));
+    expect(hmo.length).toBeGreaterThan(0);
+    for (const id of hmo) expect(rest.has(id), id).toBe(false);
+  });
+
+  it("marks payer obligations side: payer and everything the practice files side: provider", () => {
+    const side = (id: string) => catalog.find((r) => r.id === id)!.side;
+    for (const id of [
+      "fl.promptpay.electronic.pay_or_contest",
+      "fl.hmo.promptpay.paper.uncontestable",
+      "fl.promptpay.interest_rate",
+    ])
+      expect(side(id), id).toBe("payer");
+    for (const id of [
+      "fl.timely_filing.initial",
+      "fl.timely_filing.secondary",
+      "fl.promptpay.electronic.provider_response",
+      "fl.overpayment.provider_response",
+      "fl.patient_refund",
+      "medicare.timely_filing",
+      "medicare.redetermination.filing_window",
+      "medicare.alj.filing_window",
+    ])
+      expect(side(id), id).toBe("provider");
+  });
+});
+
+describe("ruleDueDate", () => {
+  it.each(["fl.promptpay.electronic.acknowledgment", "fl.hmo.promptpay.electronic.acknowledgment"])(
+    "throws for an hours_after_next_business_day rule (%s)",
+    (id) => {
+      expect(() => ruleDueDate(resolveRule(id, "2026-09-26"), "2026-09-26")).toThrow(/not a date period/);
+    },
+  );
+
+  it("throws for a business_days rule", () => {
+    expect(() => ruleDueDate({ ...base, unit: "business_days" }, "2026-09-26")).toThrow(/not a date period/);
   });
 });

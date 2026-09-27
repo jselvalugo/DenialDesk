@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { FILING_WARNING_DAYS, filingStatus, isUnsubmitted } from "./status";
 
 // Florida: 6 months from 2026-03-31 → 2026-09-30 (fl.timely_filing.initial, ⚠️ VERIFY).
-// Medicare: 1 year from 2026-02-15 → 2027-02-15, Washington's Birthday (federal holiday) → rolls to
-// 2027-02-16 (medicare.timely_filing, ⚠️ VERIFY).
+// Medicare: 1 year from 2026-02-15 → 2027-02-15, Washington's Birthday (federal holiday). Until
+// counsel confirms roll-forward (OA-023, owner 2026-09-27 option 1) 02-15 governs; the rolled
+// 2027-02-16 is informational only (medicare.timely_filing, ⚠️ VERIFY).
 describe("timely-filing status (R-3.1.5)", () => {
   it.each([
     ["2026-09-29", "due_soon", 1], // day before the deadline
@@ -17,12 +18,13 @@ describe("timely-filing status (R-3.1.5)", () => {
   });
 
   it.each([
-    ["2027-02-15", "due_soon"],
-    ["2027-02-16", "due_soon"],
-    ["2027-02-17", "past_deadline"],
+    ["2027-02-14", "due_soon"], // day before the conservative date
+    ["2027-02-15", "due_soon"], // day of: holiday, but still the governing date
+    ["2027-02-16", "past_deadline"], // day after: the rolled date does not keep the claim open
   ])("Medicare claim on %s is %s", (today, state) => {
     const status = filingStatus("medicare", "2026-02-15", today);
-    expect(status.deadline?.date).toBe("2027-02-16");
+    expect(status.deadline?.date).toBe("2027-02-15");
+    expect(status.deadline?.rolledDate).toBe("2027-02-16");
     expect(status.state).toBe(state);
   });
 

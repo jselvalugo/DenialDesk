@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { catalog } from "./catalog";
 import { evaluatePromptPay, simpleInterestCents, type PayerResponse } from "./prompt-pay";
+import type { RollForwardPolicy } from "./roll-forward";
 import type { Regime, Rule } from "./types";
 
 // Received 2026-03-02. Electronic: 20 → 03-22, 90 → 05-31, 120 → 06-30.
@@ -250,7 +251,8 @@ describe("effective-dated rule resolution (injected catalog)", () => {
       today: "2026-03-02",
       rules,
     });
-    expect(before.milestones[0]!.due).toBe("2026-03-23"); // old value (20): Sat 03-21 rolls to Mon
+    expect(before.milestones[0]!.due).toBe("2026-03-21"); // old value (20): Sat 03-21 governs
+    expect(before.milestones[0]!.rolledDue).toBe("2026-03-23"); // Monday, pending counsel
     expect(on.milestones[0]!.due).toBe("2026-03-17"); // new value (15)
   });
 
@@ -284,38 +286,101 @@ describe("DST", () => {
   });
 });
 
-describe("weekend/holiday roll-forward (Fla. R. Gen. Prac. & Jud. Admin. 2.514, ⚠️ VERIFY)", () => {
-  const real = (responses: PayerResponse[], today: string) =>
-    run(responses, today, true, "fl_insurer", catalog);
+describe("weekend/holiday roll-forward (Fla. R. Gen. Prac. & Jud. Admin. 2.514, ⚠️ VERIFY; OA-023)", () => {
+  const CONFIRMED: RollForwardPolicy[] = [
+    {
+      confirmed: true,
+      confirmedBy: { by: "Test counsel", on: "2026-09-27" },
+      effectiveFrom: null,
+      effectiveTo: null,
+    },
+  ];
+  const real = (responses: PayerResponse[], today: string, rollPolicy?: RollForwardPolicy[]) =>
+    evaluatePromptPay({
+      regime: "fl_insurer",
+      electronic: true,
+      receivedDate: RECEIVED,
+      responses,
+      today,
+      rollPolicy,
+    });
 
-  it("a day-20 deadline on Sunday 2026-03-22 moves to Monday 03-23", () => {
-    expect(real([], RECEIVED).milestones.map((m) => m.due)).toEqual([
-      "2026-03-23",
-      "2026-06-01",
-      "2026-06-30",
+  it("pending counsel: Sunday 2026-03-22 governs; Monday 03-23 is informational", () => {
+    const c = real([], RECEIVED);
+    expect(c.milestones.map((m) => [m.due, m.rolledDue])).toEqual([
+      ["2026-03-22", "2026-03-23"],
+      ["2026-05-31", "2026-06-01"],
+      ["2026-06-30", null],
+    ]);
+    expect([c.paymentDue, c.paymentDueRolled]).toEqual(["2026-03-22", "2026-03-23"]);
+  });
+
+  it("confirmed: the rolled Monday governs and nothing is pending", () => {
+    const c = real([], RECEIVED, CONFIRMED);
+    expect(c.milestones.map((m) => [m.due, m.rolledDue])).toEqual([
+      ["2026-03-23", null],
+      ["2026-06-01", null],
+      ["2026-06-30", null],
     ]);
   });
 
   it.each([
+    ["2026-03-21", "met", 0],
     ["2026-03-22", "met", 0],
-    ["2026-03-23", "met", 0],
-    ["2026-03-24", "late", 1],
-  ] as const)("response on %s against the rolled due date: %s", (date, state, late) => {
+    ["2026-03-23", "late", 1],
+  ] as const)("pending counsel: response on %s against the unrolled due date: %s", (date, state, late) => {
     expect(real([{ kind: "denial", date }], "2026-12-31").milestones[0]).toMatchObject({
       state,
       daysLate: late,
     });
   });
 
-  it("interest starts the first calendar day after the rolled due date (owner, ⚠️ counsel)", () => {
-    expect(real([{ kind: "payment", date: "2026-03-23", cents: 100_000 }], "2026-12-31").interest).toEqual(
+  it.each([
+    ["2026-03-22", "met", 0],
+    ["2026-03-23", "met", 0],
+    ["2026-03-24", "late", 1],
+  ] as const)("confirmed: response on %s against the rolled due date: %s", (date, state, late) => {
+    expect(real([{ kind: "denial", date }], "2026-12-31", CONFIRMED).milestones[0]).toMatchObject({
+      state,
+      daysLate: late,
+    });
+  });
+
+  it("pending counsel: interest starts the day after the unrolled date (practice-favourable)", () => {
+    expect(real([{ kind: "payment", date: "2026-03-22", cents: 100_000 }], "2026-12-31").interest).toEqual(
       [],
     );
     expect(
-      real([{ kind: "payment", date: "2026-03-24", cents: 100_000 }], "2026-12-31").interest[0],
+      real([{ kind: "payment", date: "2026-03-23", cents: 100_000 }], "2026-12-31").interest[0],
     ).toMatchObject({
-      dueDate: "2026-03-23",
+      dueDate: "2026-03-22",
       daysLate: 1,
     });
+    expect(
+      real([{ kind: "payment", date: "2026-03-24", cents: 100_000 }], "2026-12-31").interest[0],
+    ).toMatchObject({
+      daysLate: 2,
+    });
+  });
+
+  it("confirmed: interest starts the day after the rolled date", () => {
+    expect(
+      real([{ kind: "payment", date: "2026-03-23", cents: 100_000 }], "2026-12-31", CONFIRMED).interest,
+    ).toEqual([]);
+    expect(
+      real([{ kind: "payment", date: "2026-03-24", cents: 100_000 }], "2026-12-31", CONFIRMED).interest[0],
+    ).toMatchObject({ dueDate: "2026-03-23", daysLate: 1 });
+  });
+
+  it("provider response to a contest: unrolled date governs, rolled pending counsel", () => {
+    // Contest on Fri 2026-03-06 + 35 = Fri 04-10 (business day): no pending date.
+    const weekday = real([{ kind: "contest", date: "2026-03-06" }], "2026-03-10");
+    expect([weekday.providerResponseDue, weekday.providerResponseDueRolled]).toEqual(["2026-04-10", null]);
+    // Contest on Sun 2026-03-08 + 35 = Sun 04-12 → Mon 04-13 pending counsel.
+    const weekend = real([{ kind: "contest", date: "2026-03-08" }], "2026-03-10");
+    expect([weekend.providerResponseDue, weekend.providerResponseDueRolled]).toEqual([
+      "2026-04-12",
+      "2026-04-13",
+    ]);
   });
 });

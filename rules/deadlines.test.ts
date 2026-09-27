@@ -1,14 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { catalog } from "./catalog";
+import type { RollForwardPolicy } from "./roll-forward";
 import type { Rule } from "./types";
 import {
   appealDeadline,
   daysUntil,
   payerResponseStatus,
+  pendingRolledDate,
   promptPayMilestones,
   rulesForBasis,
   timelyFilingDeadline,
 } from "./deadlines";
+
+/** Roll-forward as it would be once counsel confirms (OA-023): the rolled date governs. */
+const CONFIRMED: RollForwardPolicy[] = [
+  {
+    confirmed: true,
+    confirmedBy: { by: "Test counsel", on: "2026-09-27" },
+    effectiveFrom: null,
+    effectiveTo: null,
+  },
+];
 
 describe("Florida prompt-pay milestones (electronic)", () => {
   const milestones = promptPayMilestones({
@@ -17,26 +29,26 @@ describe("Florida prompt-pay milestones (electronic)", () => {
     receivedDate: "2026-03-02",
   })!;
 
-  it("counts 20, 90, and 120 days from payer receipt; Sundays 03-22 and 05-31 roll to Monday", () => {
-    expect(milestones.map((m) => [m.rule.id, m.date])).toEqual([
-      ["fl.promptpay.electronic.pay_or_contest", "2026-03-23"],
-      ["fl.promptpay.electronic.pay_or_deny", "2026-06-01"],
-      ["fl.promptpay.electronic.uncontestable", "2026-06-30"],
+  it("counts 20, 90, and 120 days from payer receipt; Sundays 03-22 and 05-31 govern, Monday rolls are pending counsel", () => {
+    expect(milestones.map((m) => [m.rule.id, m.date, m.rolledDate])).toEqual([
+      ["fl.promptpay.electronic.pay_or_contest", "2026-03-22", "2026-03-23"],
+      ["fl.promptpay.electronic.pay_or_deny", "2026-05-31", "2026-06-01"],
+      ["fl.promptpay.electronic.uncontestable", "2026-06-30", null],
     ]);
   });
 
   it.each([
-    ["2026-03-22", 1],
-    ["2026-03-23", 0],
-    ["2026-03-24", -1],
+    ["2026-03-21", 1],
+    ["2026-03-22", 0],
+    ["2026-03-23", -1],
   ])("20-day boundary: on %s, %i days remain", (today, remaining) => {
     expect(daysUntil(milestones[0]!.date, today)).toBe(remaining);
   });
 
   it.each([
-    ["2026-05-31", 1],
-    ["2026-06-01", 0],
-    ["2026-06-02", -1],
+    ["2026-05-30", 1],
+    ["2026-05-31", 0],
+    ["2026-06-01", -1],
   ])("90-day pay-or-deny boundary: on %s, %i days remain", (today, remaining) => {
     expect(daysUntil(milestones[1]!.date, today)).toBe(remaining);
   });
@@ -51,7 +63,8 @@ describe("Florida prompt-pay milestones (electronic)", () => {
 
   it("uses the paper-claim rules for paper claims", () => {
     const paper = promptPayMilestones({ regime: "fl_hmo", electronic: false, receivedDate: "2026-03-02" })!;
-    expect(paper.map((m) => m.date)).toEqual(["2026-04-13", "2026-06-30", "2026-07-20"]);
+    expect(paper.map((m) => m.date)).toEqual(["2026-04-11", "2026-06-30", "2026-07-20"]);
+    expect(paper.map((m) => m.rolledDate)).toEqual(["2026-04-13", null, null]);
   });
 
   it.each(["medicare", "medicare_advantage", "erisa_self_funded"] as const)(
@@ -75,9 +88,9 @@ describe("Florida prompt-pay milestones (paper)", () => {
   const paper = promptPayMilestones({ regime: "fl_insurer", electronic: false, receivedDate: "2026-03-02" })!;
 
   it.each([
-    ["2026-04-12", 1],
-    ["2026-04-13", 0],
-    ["2026-04-14", -1],
+    ["2026-04-10", 1],
+    ["2026-04-11", 0],
+    ["2026-04-12", -1],
   ])("40-day pay-or-contest boundary: on %s, %i days remain", (today, remaining) => {
     expect(daysUntil(paper[0]!.date, today)).toBe(remaining);
   });
@@ -100,21 +113,22 @@ describe("Florida prompt-pay milestones (paper)", () => {
 });
 
 describe("appeal deadlines", () => {
-  it("Medicare: 5-day receipt presumption plus 120 days; Sunday 10-04 rolls to Monday", () => {
+  it("Medicare: 5-day receipt presumption plus 120 days; Sunday 10-04 governs, Monday 10-05 pending counsel", () => {
     const deadline = appealDeadline({
       regime: "medicare",
       noticeDate: "2026-06-01",
       payerAppealWindowDays: null,
     })!;
-    expect(deadline.date).toBe("2026-10-05");
+    expect(deadline.date).toBe("2026-10-04");
+    expect(deadline.rolledDate).toBe("2026-10-05");
     expect(deadline.citation).toBe("42 CFR § 405.942(a)");
     expect(deadline.verify).toBe(true);
   });
 
   it.each([
-    ["2026-10-04", 1],
-    ["2026-10-05", 0],
-    ["2026-10-06", -1],
+    ["2026-10-03", 1],
+    ["2026-10-04", 0],
+    ["2026-10-05", -1],
   ])("Medicare boundary: on %s, %i days remain", (today, remaining) => {
     const deadline = appealDeadline({
       regime: "medicare",
@@ -175,8 +189,12 @@ describe("timely filing", () => {
     expect(timelyFilingDeadline("fl_insurer", "2026-03-31")?.date).toBe("2026-09-30");
   });
 
-  it("Medicare: 1 year from date of service; 2027-02-15 is Washington's Birthday, so 02-16", () => {
-    expect(timelyFilingDeadline("medicare", "2026-02-15")?.date).toBe("2027-02-16");
+  it("Medicare: 1 year from date of service; 2027-02-15 is Washington's Birthday (governs), 02-16 pending counsel", () => {
+    expect(timelyFilingDeadline("medicare", "2026-02-15")).toMatchObject({
+      date: "2027-02-15",
+      rolledDate: "2027-02-16",
+    });
+    expect(timelyFilingDeadline("medicare", "2026-02-15", catalog, CONFIRMED)?.date).toBe("2027-02-16");
   });
 
   it("does not guess for regimes without a rule", () => {
@@ -216,30 +234,62 @@ const boundary = (deadline: string, before: string, after: string) =>
   ].map(([today, n]) => daysUntil(deadline, today as string) === n);
 
 describe("roll-forward: Florida legal holidays vs federal holidays (⚠️ VERIFY calendars)", () => {
-  it("FL: day 20 on the Friday after Thanksgiving (FL holiday, not federal) rolls to Monday", () => {
+  it("FL: day 20 on the Friday after Thanksgiving (FL holiday, not federal): Friday governs, Monday pending", () => {
     const m = promptPayMilestones({ regime: "fl_insurer", electronic: true, receivedDate: "2026-11-07" })!;
-    expect(m[0]!.date).toBe("2026-11-30");
+    expect(m[0]).toMatchObject({ date: "2026-11-27", rolledDate: "2026-11-30" });
+    expect(boundary("2026-11-27", "2026-11-26", "2026-11-28")).toEqual([true, true, true]);
+    const confirmed = promptPayMilestones({
+      regime: "fl_insurer",
+      electronic: true,
+      receivedDate: "2026-11-07",
+      rollPolicy: CONFIRMED,
+    })!;
+    expect(confirmed[0]).toMatchObject({ date: "2026-11-30", rolledDate: null });
     expect(boundary("2026-11-30", "2026-11-29", "2026-12-01")).toEqual([true, true, true]);
   });
 
   it("FL: Juneteenth is not a Florida legal holiday, so a filing deadline on it stands", () => {
-    expect(timelyFilingDeadline("fl_insurer", "2025-12-19")?.date).toBe("2026-06-19");
+    expect(timelyFilingDeadline("fl_insurer", "2025-12-19")).toMatchObject({
+      date: "2026-06-19",
+      rolledDate: null,
+    });
+    expect(timelyFilingDeadline("fl_insurer", "2025-12-19", catalog, CONFIRMED)?.date).toBe("2026-06-19");
   });
 
-  it("Medicare: Juneteenth is a federal holiday, so filing rolls to Monday", () => {
-    expect(timelyFilingDeadline("medicare", "2025-06-19")?.date).toBe("2026-06-22");
+  it("Medicare: Juneteenth is a federal holiday; file by Friday 06-19, Monday 06-22 pending counsel", () => {
+    expect(timelyFilingDeadline("medicare", "2025-06-19")).toMatchObject({
+      date: "2026-06-19",
+      rolledDate: "2026-06-22",
+    });
+    expect(boundary("2026-06-19", "2026-06-18", "2026-06-20")).toEqual([true, true, true]);
+    expect(timelyFilingDeadline("medicare", "2025-06-19", catalog, CONFIRMED)?.date).toBe("2026-06-22");
     expect(boundary("2026-06-22", "2026-06-21", "2026-06-23")).toEqual([true, true, true]);
   });
 
   it("Medicare: the Friday after Thanksgiving is a federal workday; FL rolls past it", () => {
-    expect(timelyFilingDeadline("medicare", "2025-11-27")?.date).toBe("2026-11-27");
-    expect(timelyFilingDeadline("fl_hmo", "2026-05-27")?.date).toBe("2026-11-30");
+    expect(timelyFilingDeadline("medicare", "2025-11-27")).toMatchObject({
+      date: "2026-11-27",
+      rolledDate: null,
+    });
+    expect(timelyFilingDeadline("fl_hmo", "2026-05-27")).toMatchObject({
+      date: "2026-11-27",
+      rolledDate: "2026-11-30",
+    });
+    expect(timelyFilingDeadline("fl_hmo", "2026-05-27", catalog, CONFIRMED)?.date).toBe("2026-11-30");
   });
 
   it("Medicare appeal: presumption step does not roll; only the last day does", () => {
-    // 2026-06-29 + 5 = Sat 07-04 (not rolled); + 120 = Sun 11-01, rolled to Mon 11-02.
+    // 2026-06-29 + 5 = Sat 07-04 (never rolled); + 120 = Sun 11-01 (governs), Mon 11-02 pending counsel.
     expect(
-      appealDeadline({ regime: "medicare", noticeDate: "2026-06-29", payerAppealWindowDays: null })!.date,
+      appealDeadline({ regime: "medicare", noticeDate: "2026-06-29", payerAppealWindowDays: null }),
+    ).toMatchObject({ date: "2026-11-01", rolledDate: "2026-11-02" });
+    expect(
+      appealDeadline({
+        regime: "medicare",
+        noticeDate: "2026-06-29",
+        payerAppealWindowDays: null,
+        rollPolicy: CONFIRMED,
+      })!.date,
     ).toBe("2026-11-02");
   });
 
@@ -252,9 +302,14 @@ describe("roll-forward: Florida legal holidays vs federal holidays (⚠️ VERIF
 
 describe("month-end and leap years (end-of-month clamping; decision in rules-engine spec)", () => {
   it.each(["2026-08-29", "2026-08-30", "2026-08-31"])(
-    "FL %s + 6 months = Sun 2027-02-28, rolled to Mon 2027-03-01",
+    "FL %s + 6 months = Sun 2027-02-28 (governs), Mon 2027-03-01 pending counsel",
     (dos) => {
-      expect(timelyFilingDeadline("fl_insurer", dos)?.date).toBe("2027-03-01");
+      expect(timelyFilingDeadline("fl_insurer", dos)).toMatchObject({
+        date: "2027-02-28",
+        rolledDate: "2027-03-01",
+      });
+      expect(boundary("2027-02-28", "2027-02-27", "2027-03-01")).toEqual([true, true, true]);
+      expect(timelyFilingDeadline("fl_insurer", dos, catalog, CONFIRMED)?.date).toBe("2027-03-01");
       expect(boundary("2027-03-01", "2027-02-28", "2027-03-02")).toEqual([true, true, true]);
     },
   );
@@ -331,8 +386,47 @@ describe("effective-date switchover through the deadline functions", () => {
     const rules = split("medicare.redetermination.filing_window", "2026-06-02", 60);
     const due = (noticeDate: string) =>
       appealDeadline({ regime: "medicare", noticeDate, payerAppealWindowDays: null, rules })!.date;
-    expect(due("2026-06-01")).toBe("2026-10-05");
+    expect(due("2026-06-01")).toBe("2026-10-04");
     expect(due("2026-06-02")).toBe("2026-08-06");
     expect(due("2026-06-03")).toBe("2026-08-07");
+  });
+});
+
+describe("roll-forward policy switch (OA-023, owner 2026-09-27 option 1)", () => {
+  const withSwitch: RollForwardPolicy[] = [
+    { confirmed: false, confirmedBy: null, effectiveFrom: null, effectiveTo: "2027-01-01" },
+    { ...CONFIRMED[0]!, effectiveFrom: "2027-01-01" },
+  ];
+
+  it("confirmed without a recorded confirmation still does not roll", () => {
+    const unsigned: RollForwardPolicy[] = [{ ...CONFIRMED[0]!, confirmedBy: null }];
+    expect(timelyFilingDeadline("fl_insurer", "2026-08-30", catalog, unsigned)?.date).toBe("2027-02-28");
+  });
+
+  it("is effective-dated by the unrolled last day: before / on / after the switch", () => {
+    // Medicare DOS 2025-12-31 + 1 year = Thu 2026-12-31 (no roll either way).
+    expect(timelyFilingDeadline("medicare", "2025-12-31", catalog, withSwitch)?.date).toBe("2026-12-31");
+    // DOS 2026-01-01 + 1 year = Fri 2027-01-01 (New Year's Day): policy confirmed → Mon 01-04.
+    expect(timelyFilingDeadline("medicare", "2026-01-01", catalog, withSwitch)).toMatchObject({
+      date: "2027-01-04",
+      rolledDate: null,
+    });
+    // Same DOS under the current (unconfirmed) policy: New Year's Day governs.
+    expect(timelyFilingDeadline("medicare", "2026-01-01")).toMatchObject({
+      date: "2027-01-01",
+      rolledDate: "2027-01-04",
+    });
+    // DOS 2026-01-02 + 1 year = Sat 2027-01-02 → Mon 01-04 once confirmed.
+    expect(timelyFilingDeadline("medicare", "2026-01-02", catalog, withSwitch)?.date).toBe("2027-01-04");
+  });
+});
+
+describe("pendingRolledDate (stored appeal deadlines)", () => {
+  const basis = "medicare.redetermination.receipt_presumption+medicare.redetermination.filing_window";
+  it("returns the Monday behind a stored Sunday deadline, null on a business day or contract basis", () => {
+    expect(pendingRolledDate("2026-10-04", rulesForBasis(basis, "2026-06-01"))).toBe("2026-10-05");
+    expect(pendingRolledDate("2026-10-05", rulesForBasis(basis, "2026-06-01"))).toBeNull();
+    expect(pendingRolledDate("2026-10-04", [])).toBeNull();
+    expect(pendingRolledDate("2026-10-04", rulesForBasis(basis, "2026-06-01"), CONFIRMED)).toBeNull();
   });
 });

@@ -48,6 +48,13 @@ export interface Confirmation {
   note?: string;
 }
 
+/**
+ * Whose obligation the clock measures. "provider": the practice must act by the date (timely
+ * filing, appeals, responses, refunds). "payer": the payer must act (prompt-pay milestones,
+ * interest start). Used with ROLL_FORWARD_POLICY (rules/roll-forward.ts, owner 2026-09-27).
+ */
+export type RuleSide = "provider" | "payer";
+
 export interface Rule {
   /** Stable ID, e.g. "fl.insurer.electronic.pay_or_contest". Versions share the ID. */
   id: string;
@@ -60,6 +67,7 @@ export interface Rule {
   unit: RuleUnit;
   anchor: RuleAnchor | null;
   rollForward: RollForward;
+  side: RuleSide;
   /** First date this version applies (inclusive). Null = in force before our baseline; exact start unconfirmed. */
   effectiveFrom: string | null;
   /** Last date this version applies (exclusive). Null = still in force. */
