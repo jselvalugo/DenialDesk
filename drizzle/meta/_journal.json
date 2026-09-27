@@ -225,6 +225,13 @@
       "when": 1790467969344,
       "tag": "0031_insight_report_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790475142091,
+      "tag": "0032_purge_demo_practices",
+      "breakpoints": true
     }
   ]
 }

@@ -136,8 +136,10 @@ _Last updated: 2026-09-26_
 - The one-click demo practice was removed entirely (owner request, 2026-09-26); migration 0021
   archived any live demo practice and ended demo sessions; 0022 disabled demo-only accounts and
   audited each retired demo practice (`system.demo_retired`). Practices are created from the console.
-- Open item (owner decision): retention of the archived demo practices (synthetic). Proposed: keep
-  them until the Terminate → offboarding flow exists, then terminate them through it.
+- Archived demo practices purged (owner decision, 2026-09-26; ADR 0008): migration 0032 deletes
+  every demo practice, its synthetic data, and its demo-only users, so none appear in the console.
+  Audit events are kept (no longer foreign-keyed to tenants/users) and each purge is audited
+  (`system.demo_purged`, `system.demo_user_purged`).
 - Open item: the operator uses TOTP; R-7.2.2 requires phishing-resistant MFA (WebAuthn) for admins
   before production.
 - Open item (human decision): single-administrator risk acceptance with compensating controls
@@ -171,6 +173,7 @@ _Last updated: 2026-09-26_
 | 2026-09-26 | Every DB error sanitized where Drizzle creates it (system and tenant); kept messages opt-in (owner: fix both in PR #28) | ADR 0006 |
 | 2026-09-26 | Custom field values on records (settings S2) are in the Phase 1 MVP; sensitivity checkboxes hidden from the patient form (owner, 2026-09-26; R-3.5.1 tagging gap accepted, compliance sign-off pending) | `specs/settings-and-custom-fields.md` |
 | 2026-09-26 | Owner answers on the billing-structure review's open questions (§8) — **pending counsel confirmation; not yet implemented in rule logic**: (1) timely filing counts from the submission date, evidenced by the clearinghouse acknowledgement (not the payer's receipt date); (2) a deadline landing on a weekend or Florida/federal holiday rolls to the next business day; (4) Medicare Advantage is not under Florida prompt pay per the owner — MA payment timing follows the plan contract (⚠️ VERIFY: 42 CFR § 422.520 sets a 30-day clean-claim rule for non-contracted providers; counsel to confirm this doesn't reintroduce a statutory clock); (5) late-payment interest starts accruing the first calendar day after the prompt-pay deadline passes. Item (3), month-end clamping of the 6-/12-month timely-filing windows, is still open and being researched separately. | `docs/reviews/2026-09-26-billing-structure-review.md` §8 |
+| 2026-09-27 | Roll-forward pending counsel (OA-034), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-034 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -190,7 +193,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 6. Custom field values on records, settings S2 (MVP): ADR 0007 and threat model accepted; PR 1
    (encrypted storage, value history, role-gated reveal) merged as #53. Next: PR 2 patient form,
    PR 3 claims/denials, PR 4 payers.
-7. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
+7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
+   payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
+   timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.
+8. Re-seed pre-production data after PR #59 (P1 rules): `denials.appeal_deadline` rows written
+   before it hold the old rolled (later) date and show no "pending counsel" marker.
+9. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
 

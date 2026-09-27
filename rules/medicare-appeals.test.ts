@@ -94,6 +94,22 @@ describe("Medicare appeal chain", () => {
     expect(d?.date).toBe("2026-05-05");
   });
 
+  it("keeps the unrolled date governing while roll-forward is pending counsel (option 1)", () => {
+    // 2026-06-04 + 5 + 60 = Saturday 2026-08-08; federal-workday roll would give Monday 2026-08-10.
+    const d = medicareNextLevelDeadline({
+      regime: "medicare",
+      nextLevel: "alj_hearing",
+      priorDecisionDate: "2026-06-04",
+    });
+    expect(d?.date).toBe("2026-08-08");
+    expect(d?.rolledDate).toBe("2026-08-10");
+  });
+
+  it("does not roll the receipt presumption itself", () => {
+    const r = catalog.find((x) => x.id === "medicare.appeals.receipt_presumption")!;
+    expect(r.rollForward).toBe("none");
+  });
+
   it("uses the version in force on the decision date (effective-date switchover)", () => {
     const base = catalog.find((r) => r.id === "medicare.alj_hearing.filing_window")!;
     const versions: Rule[] = [

@@ -3,7 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { todayIn } from "@rules/calendar";
-import { daysUntil, payerResponseStatus, promptPayMilestones, rulesForBasis } from "@rules/deadlines";
+import {
+  daysUntil,
+  payerResponseStatus,
+  pendingRolledDate,
+  promptPayMilestones,
+  rulesForBasis,
+} from "@rules/deadlines";
 import { canWorkDenials } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
@@ -95,6 +101,7 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
       ? rulesForBasis(denial.appealDeadlineBasis, denial.noticeDate)
       : [];
   const deadlineVerify = basisRules.some((rule) => rule.verify);
+  const appealRolled = denial.appealDeadline ? pendingRolledDate(denial.appealDeadline, basisRules) : null;
   const milestonesVerify = milestones?.some(({ rule }) => rule.verify) ?? false;
 
   return (
@@ -323,6 +330,9 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                 ) : (
                   <span className="tabular text-body">{formatDate(denial.appealDeadline)}</span>
                 )}
+                {appealRolled && (
+                  <p className="text-label text-muted">(pending counsel: {formatDate(appealRolled)})</p>
+                )}
                 <p className="text-label text-muted">
                   {denial.appealDeadlineBasis === "payer_contract"
                     ? `From the payer contract: ${payer.appealWindowDays} days after the notice date${payer.appealWindowSource ? ` (${payer.appealWindowSource})` : ""}.`
@@ -346,7 +356,7 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
               description={`Counted from payer receipt (${formatDate(claim.payerReceivedDate!)}); compared with the denial notice (${formatDate(denial.noticeDate)}).`}
             >
               <ol className="flex flex-col gap-3">
-                {milestones.map(({ rule, date }) => {
+                {milestones.map(({ rule, date, rolledDate }) => {
                   // The denial notice is the payer's response; compare it to each obligation.
                   const response = payerResponseStatus(date, denial.noticeDate);
                   return (
@@ -359,6 +369,11 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                       </div>
                       <span className="shrink-0 text-right">
                         <span className="tabular block text-body">{formatDate(date)}</span>
+                        {rolledDate && (
+                          <span className="tabular block text-label text-muted">
+                            (pending counsel: {formatDate(rolledDate)})
+                          </span>
+                        )}
                         {response.met ? (
                           <span className="block text-label font-medium text-success-fg">Met</span>
                         ) : (

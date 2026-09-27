@@ -5,8 +5,11 @@ import {
   daysBetween,
   easternDayBoundsUtc,
   federalHolidays,
+  floridaHolidays,
+  holidayCalendars,
   isBusinessDay,
   isValidIsoDate,
+  rollForwardToBusinessDay,
   todayIn,
 } from "./calendar";
 
@@ -60,6 +63,35 @@ describe("calendar", () => {
     expect(isBusinessDay("2026-09-26")).toBe(false); // Saturday
     expect(isBusinessDay("2026-07-03")).toBe(false); // observed Independence Day
     expect(isBusinessDay("2021-12-31")).toBe(false); // observed New Year's Day 2022
+  });
+});
+
+describe("Florida legal holidays (§ 110.117 via Rule 2.514(a)(6), ⚠️ VERIFY)", () => {
+  it("lists 2026 state paid holidays with observance", () => {
+    expect(floridaHolidays(2026)).toEqual([
+      "2026-01-01",
+      "2026-01-19",
+      "2026-05-25",
+      "2026-07-03", // July 4 is a Saturday
+      "2026-09-07",
+      "2026-11-11",
+      "2026-11-26",
+      "2026-11-27",
+      "2026-12-25",
+    ]);
+  });
+
+  it.each([
+    ["2026-11-27", "fl_legal_holiday", "2026-11-30"],
+    ["2026-11-27", "federal_holiday", "2026-11-27"],
+    ["2026-06-19", "fl_legal_holiday", "2026-06-19"],
+    ["2026-06-19", "federal_holiday", "2026-06-22"],
+    ["2026-10-12", "federal_holiday", "2026-10-13"],
+    ["2026-10-12", "fl_legal_holiday", "2026-10-12"],
+    ["2026-03-07", "fl_legal_holiday", "2026-03-09"],
+    ["2026-03-09", "federal_holiday", "2026-03-09"],
+  ] as const)("%s rolls forward under %s to %s", (date, cal, expected) => {
+    expect(rollForwardToBusinessDay(date, holidayCalendars[cal])).toBe(expected);
   });
 });
 

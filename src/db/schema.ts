@@ -48,7 +48,7 @@ export const tenants = pgTable(
   {
     id: id(),
     name: text("name").notNull(),
-    /** "demo" = legacy one-click demo practice (removed 2026-09-26; archived rows only). */
+    /** "demo" = legacy one-click demo practice (removed and purged 2026-09-26; no rows remain). */
     kind: tenantKindEnum("kind").notNull().default("customer"),
     /** Set by the platform operator; blocks sign-in and existing sessions for the practice. */
     suspendedAt: timestamp("suspended_at", { withTimezone: true }),
@@ -1035,8 +1035,9 @@ export const auditEvents = pgTable(
   "audit_events",
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
-    tenantId: uuid("tenant_id").references(() => tenants.id),
-    actorUserId: uuid("actor_user_id").references(() => users.id),
+    // No foreign keys (ADR 0005): the log outlives purged practices and users, and is never rewritten.
+    tenantId: uuid("tenant_id"),
+    actorUserId: uuid("actor_user_id"),
     action: text("action").notNull(),
     entityType: text("entity_type"),
     entityId: uuid("entity_id"),
