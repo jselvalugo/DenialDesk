@@ -62,6 +62,10 @@ Appeals:
 - [ ] Medicare 5-level appeal workflow [R-4.2.1]
 - [ ] Appeal outcome tracking (basic decision recording is in A1; a payer/category analytics view is A4)
 
+University:
+- [x] Wiki: reference articles with legal values read from the rules engine (`specs/university-wiki.md`) [R-10.4, R-15.6]
+- [ ] Rest of the University (owner to structure: OA-036) [R-10.4]
+
 Evidence and security:
 - [ ] OIR complaint evidence package export [R-3.1.7]
 - [ ] Customer-facing audit log viewer and export [R-7.5.4]

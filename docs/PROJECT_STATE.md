@@ -18,6 +18,17 @@ _Last updated: 2026-09-27_
   audited as `university.lesson_completed`. Rules a lesson lists but the product does not compute
   yet (acknowledgment, secondary filing, Medicare levels 2–5) are tagged "Reference only". Next: U2
   knowledge checks, U3 practice training record/export (OA-035), U4 more courses.
+- University — Wiki (`specs/university-wiki.md`, 2026-09-27): a second University page at
+  `/university/wiki`, linked from the course catalog ("Open the Wiki") and linking back; same
+  "DenialDesk University" header, not a switcher module (U1 decision kept). Twelve reference articles
+  (getting started, denials and appeals, claims and payments, Florida and Medicare rules, data
+  safety, glossary) authored as TypeScript modules in `src/domain/university/wiki/articles/` in a
+  small Markdown subset rendered to React (no raw HTML). **No legal value is typed into an article:**
+  `{{rule:<id>}}` tokens render the rule version in force today from `rules/` with its citation and
+  an "unconfirmed" marker while `verify` is set; unit tests fail on a typed "N days/months/%", an
+  unknown rule ID, a dead internal link, or an SSN/MBI/phone/e-mail-shaped string. Search is a POST
+  action (no query in URLs). Every role can read it; nothing is audited (public product
+  documentation, no PHI). Further University structure is the owner's (OA-036).
 - Appeals A1 (`specs/appeals.md`): `appeals` + `appeal_notes` tables (tenant RLS, isolation test,
   a DB trigger enforcing the status lifecycle draft → in_review → ready → submitted →
   awaiting_decision → decided, with withdrawn/dismissed reachable from submitted/awaiting_decision).
@@ -186,6 +197,7 @@ _Last updated: 2026-09-27_
 | 2026-09-26 | Every DB error sanitized where Drizzle creates it (system and tenant); kept messages opt-in (owner: fix both in PR #28) | ADR 0006 |
 | 2026-09-26 | Custom field values on records (settings S2) are in the Phase 1 MVP; sensitivity checkboxes hidden from the patient form (owner, 2026-09-26; R-3.5.1 tagging gap accepted, compliance sign-off pending) | `specs/settings-and-custom-fields.md` |
 | 2026-09-26 | Owner answers on the billing-structure review's open questions (§8) — **pending counsel confirmation; not yet implemented in rule logic**: (1) timely filing counts from the submission date, evidenced by the clearinghouse acknowledgement (not the payer's receipt date); (2) a deadline landing on a weekend or Florida/federal holiday rolls to the next business day; (4) Medicare Advantage is not under Florida prompt pay per the owner — MA payment timing follows the plan contract (⚠️ VERIFY: 42 CFR § 422.520 sets a 30-day clean-claim rule for non-contracted providers; counsel to confirm this doesn't reintroduce a statutory clock); (5) late-payment interest starts accruing the first calendar day after the prompt-pay deadline passes. Item (3), month-end clamping of the 6-/12-month timely-filing windows, is still open and being researched separately. | `docs/reviews/2026-09-26-billing-structure-review.md` §8 |
+| 2026-09-27 | University Wiki: articles are code (PR-reviewed, no per-tenant or user-edited content), legal values only through rule tokens, search by POST; sits beside the U1 courses under the same header, not in the switcher; further structure waits for the owner (OA-036) | `specs/university-wiki.md` |
 | 2026-09-27 | Roll-forward pending counsel (OA-034), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-034 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best

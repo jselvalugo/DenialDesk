@@ -26,6 +26,14 @@ export default async function UniversityPage() {
         eyebrow="DenialDesk University"
         title="Courses"
         description="Short courses on how DenialDesk works, how to read a denial, the Florida clocks the product enforces, and how patient data is protected. Your completions are kept for your account."
+        actions={
+          <Link
+            href="/university/wiki"
+            className="inline-flex h-8 items-center rounded-control border border-border-strong bg-surface px-3 text-body font-medium text-text hover:bg-surface-muted"
+          >
+            Open the Wiki
+          </Link>
+        }
       />
 
       <Panel title="Courses" description={`${totalDone} of ${totalLessons} lessons completed`} flush>

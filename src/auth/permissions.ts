@@ -72,3 +72,8 @@ export function canVoidRemittances(role: Role): boolean {
 export function canRecordPromptPay(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "specialist";
 }
+
+/** University wiki: product documentation with no PHI, so every role can read it. */
+export function canViewUniversity(role: Role): boolean {
+  return Boolean(role);
+}

@@ -146,9 +146,12 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
     rows. Planned modules and pages are muted with a "Planned" tag, never links. Matches are
     highlighted; a footer shows the result count and keyboard hints.
   - Modules ("apps" in code): Denials, Patients, Claims, Revenue cycle (roles that can view it),
-    Insight, Settings (section tabs: General, Custom fields, and planned sections; the design
-    style guide in pre-production; `specs/settings-and-custom-fields.md`). Defined once in
-    `src/components/shell/navigation.ts`.
+    Insight, Settings (section tabs: General, Custom fields, and planned sections;
+    `specs/settings-and-custom-fields.md`). Defined once in `src/components/shell/navigation.ts`.
+  - *University Wiki articles* (`/university/wiki`, `src/components/university/ArticleBody.tsx`):
+    the University header, body text 14/20 in a 720px measure, h2 `title`, h3 `heading`, notes as a
+    left-ruled `surface-muted` aside (no colored callout boxes), tables in the DataTable header
+    style, legal values as mono number + unit + caption citation. Never imagery, never emoji.
 - **Page header:** white band (panel style) with the module tile, an uppercase "Module · Page"
   eyebrow, the serif title, a one-line description, and actions on the right.
 - **Preview banner:** 32px strip above everything in non-production (ADR 0003).
