@@ -33,7 +33,8 @@ platform works and where to start. Sign-in and the logo both land there.
       a customer-facing compliance representation: any change needs `compliance-checker` review.
       Data-residency wording is left off until counsel approves it and production is live
       (Fla. Stat. § 408.051(3) allows U.S., territories, or Canada; U.S.-only is our policy, R-3.3.1).
-- [x] A "New here? Start with DenialDesk University" link beside the primary action opens `/university`
+- [x] The "University of DenialDesk" logo button beside the primary action opens `/university`
+      (replaced the "New here? Start with DenialDesk University" text link on 2026-09-27)
 - [x] The "DenialDesk Wiki" wordmark button beside it opens `/university/wiki` (2026-09-27,
       `specs/university-wiki.md`)
       (`specs/denialdesk-university.md`, 2026-09-27). Per-user progress stays out of this page.

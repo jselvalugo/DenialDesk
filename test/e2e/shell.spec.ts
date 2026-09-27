@@ -173,8 +173,14 @@ test.describe("shell chrome with a long user name", () => {
     await page.setViewportSize({ width: 1024, height: 800 });
     await page.goto("/overview");
     await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
-    await expect(page.getByRole("banner").getByRole("link", { name: "DenialDesk Wiki" })).toBeVisible();
+    const banner = page.getByRole("banner");
+    await expect(banner.getByRole("link", { name: "DenialDesk Wiki" })).toBeVisible();
+    await expect(banner.getByRole("link", { name: "University of DenialDesk" })).toBeVisible();
+    // Below 1280px the practice name is in the user menu only; both logo buttons must fit.
+    await expect(banner.getByText("Practice", { exact: true })).toBeHidden();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1024);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(banner.getByText("Practice", { exact: true })).toBeVisible();
   });
 });
 
