@@ -29,8 +29,11 @@ lesson completions are kept per practice so the practice has a training record (
 ## Acceptance criteria
 
 ### U1 — catalog, lessons, and completion (this PR)
-- [x] Entry points: a "University" link (graduation-cap icon, text label) in the global header
-      beside the practice name, and a "DenialDesk University" item in the user menu above "Sign
+- [x] Entry points: the owner's "University of DenialDesk" logo as a button in the global header
+      beside the Wiki button (accessible name "University of DenialDesk"; background removed,
+      otherwise unaltered; `public/brand/university-of-denialdesk.png`; it replaced the
+      graduation-cap text link on 2026-09-27, matching the Wiki wordmark button), the same logo
+      button on the welcome page, and a "DenialDesk University" item in the user menu above "Sign
       out". Both go to `/university`. The University is not a module in the module switcher: it is
       not a place where practice records are worked, so the tab bar keeps the current module's
       tabs (on `/university` the bar falls back to the first module with no tab selected, as `/`

@@ -30,8 +30,9 @@ Everything you can open lives in a module. Each module's pages are the tabs in t
 | **Insight** | Standard reports on denial trends, recovery, and payer performance. |
 | **Settings** | The practice profile and custom fields (administrators change them; everyone else can view). |
 
-**DenialDesk University** is not a module: the "University" link in the header (and in your user
-menu) opens its short courses, and the courses page opens this wiki.
+**DenialDesk University** is not a module: the "University of DenialDesk" logo button in the header
+(or "DenialDesk University" in your user menu) opens its short courses, and the courses page opens
+this wiki.
 
 ## Moving around
 

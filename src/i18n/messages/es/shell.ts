@@ -7,7 +7,6 @@ export const shell: Messages["shell"] = {
   "header.goTo": "Ir a un módulo o página",
   "header.practice": "Consultorio",
   "header.styleGuide": "Guía de estilo",
-  "header.university": "Universidad",
   "tabBar.switchModule": "{module}, cambiar de módulo",
   "tabBar.switchModuleTitle": "{module} · cambiar de módulo",
   "nav.primary": "Principal",

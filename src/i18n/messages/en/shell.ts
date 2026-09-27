@@ -6,7 +6,6 @@ export const shell = {
   "header.goTo": "Go to a module or page",
   "header.practice": "Practice",
   "header.styleGuide": "Style guide",
-  "header.university": "University",
   "tabBar.switchModule": "{module}, switch module",
   "tabBar.switchModuleTitle": "{module} · switch module",
   "nav.primary": "Primary",
