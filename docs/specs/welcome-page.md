@@ -39,10 +39,23 @@ platform works and where to start. Sign-in and the logo both land there.
       `specs/university-wiki.md`)
       (`specs/denialdesk-university.md`, 2026-09-27). Per-user progress stays out of this page.
 - [x] Follows DESIGN.md §3: no gradients, imagery, emoji, or hero heading; panels with hairlines.
-- [x] E2E: the logo opens `/`, `/welcome` redirects there, and the page shows the four sections; record-flow steps 1 and 4 link, 2 and 3 are Planned.
+- [x] Revamp (owner request 2026-09-27, "more dynamic, modern look"): the header band carries a
+      live strip of four practice totals from the denial queue (open denials, amount at risk, due
+      in the "due soon" window, past deadline), each cell linking to the Overview or queue; the two
+      step flows are a connected pipeline (module tile per step, solid connector between shipped
+      steps, dashed wherever a planned step is on either end, whole shipped cell clickable, "N of M
+      steps available" computed from the list); "Your modules" is a card grid with each module's
+      page count and its pages as links. Hover feedback only (≤ 150ms, off under reduced motion).
+- [x] E2E: the logo opens `/`, `/welcome` redirects there, and the page shows the live totals strip and the four sections; record-flow steps 1 and 4 link, 2 and 3 are Planned.
 
 ## Data / API changes
-None. Reads only the session (name, practice). No PHI; no audit event (no PHI read).
+No schema change. Reads the session (name, practice) and `queueSummary()` (tenant-scoped via
+`withTenant`): practice-wide counts and sums only, no claim, patient, or payer rows, so no PHI is read
+and no audit event is written. The row-level Overview and queue pages keep their
+`denial.queue_viewed` audit. Unlike Insight reports (audited as PHI-adjacent), the strip has no
+filters, no drill-down, and no export, and every practice role can already open `/overview` and
+`/denials`; if a role without denial access is ever added, gate the strip for it (with one open
+denial, "Amount at risk" is that denial's amount).
 
 ## Legal rules used
 None.

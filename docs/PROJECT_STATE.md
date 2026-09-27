@@ -6,6 +6,10 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-27_
 
 ## Where we are
+- Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
+  of practice denial totals (`queueSummary`, aggregates only, no audit), the two step flows as a
+  connected pipeline (`src/components/home/FlowSteps.tsx`), and "Your modules" as a card grid with
+  page links. Within DESIGN.md §3 (no gradients, hairline panels, hover-only motion ≤ 150ms).
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
   (`RecordHeader`, `RecordLayout`, `FieldList`, `FormShell`) and `src/components/ui/`

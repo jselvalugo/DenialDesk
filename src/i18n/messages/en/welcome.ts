@@ -7,6 +7,10 @@ export const welcome = {
   openQueue: "Open denial queue",
   universityPrompt: "New here? Start with DenialDesk University",
 
+  "today.ariaLabel": "Open denials today",
+  "today.openDetail": "Across every payer and reason",
+  "flow.available": "{shipped} of {total} steps available",
+
   "howItWorks.title": "How DenialDesk works",
   "howItWorks.description": "The path a claim takes through the platform",
 
@@ -49,6 +53,7 @@ export const welcome = {
 
   "modules.title": "Your modules",
   "modules.description": "Also available from the module switcher (Ctrl K)",
+  "modules.pages": "{count, plural, one {# page} other {# pages}}",
 
   "safeguards.title": "Safeguards",
   "safeguards.description": "Security and compliance controls in place today",
