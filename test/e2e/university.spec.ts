@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { dismissAccessPrompt } from "./support";
 
 /**
  * DenialDesk University (docs/specs/denialdesk-university.md U1): reachable from the global header
@@ -16,6 +17,14 @@ test.describe("university", () => {
       page.getByRole("link", { name: "Open course: Getting started with DenialDesk" }),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Open course: Florida prompt pay" })).toBeVisible();
+  });
+
+  test("a practice with access sees no prompt and can open a course", async ({ page }) => {
+    await page.goto("/university");
+    await expect(page.getByRole("dialog", { name: "Get access to DenialDesk University" })).toHaveCount(0);
+    await expect(page.getByText("Locked", { exact: true })).toHaveCount(0);
+    await page.getByRole("link", { name: "Open course: Getting started with DenialDesk" }).click();
+    await expect(page).toHaveURL(/\/university\/getting-started$/);
   });
 
   test("the wordmark buttons in the header and on the welcome page open the wiki", async ({ page }) => {
@@ -147,4 +156,57 @@ test("a wiki article is never served without a session", async ({ request }) => 
   const response = await request.get("/university/wiki/glossary", { maxRedirects: 0 });
   expect([302, 303, 307, 404]).toContain(response.status());
   expect(await response.text()).not.toContain("Files and transactions");
+});
+
+// specs/denialdesk-university.md "Access": the manager practice has not bought access, so the
+// courses are locked behind the prompt; the Wiki stays open.
+test.describe("university locked", () => {
+  test.use({ storageState: "test/e2e/.auth/manager.json" });
+
+  test("the prompt opens on every visit with the program length and starting price, and courses are locked", async ({
+    page,
+  }) => {
+    await page.goto("/university");
+    const prompt = page.getByRole("dialog", { name: "Get access to DenialDesk University" });
+    await expect(prompt).toBeVisible();
+    await expect(prompt).toContainText("Access starts at $299.00");
+    await expect(prompt).toContainText(/about \d+ minutes/);
+    await expect(prompt.getByText("Courses", { exact: true })).toBeVisible();
+
+    // Escape, the close button, and the backdrop each dismiss it; nothing is remembered.
+    await page.keyboard.press("Escape");
+    await expect(prompt).toBeHidden();
+    await page.reload();
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole("button", { name: "Close" }).click();
+    await expect(prompt).toBeHidden();
+    await page.reload();
+    await expect(prompt).toBeVisible();
+    await page.mouse.click(8, 400);
+    await expect(prompt).toBeHidden();
+
+    // The catalog behind it is locked: names are not links, and a course URL returns to the catalog.
+    const main = page.getByRole("main");
+    await expect(main.getByText("Locked", { exact: true }).first()).toBeVisible();
+    await expect(main.getByRole("link", { name: /^Open course:/ })).toHaveCount(0);
+    await page.goto("/university/getting-started");
+    await expect(page).toHaveURL(/\/university$/);
+    await page.goto("/university/getting-started/finding-your-way");
+    await expect(page).toHaveURL(/\/university$/);
+    // The Wiki is not gated.
+    await dismissAccessPrompt(page);
+    await page.getByRole("link", { name: "Open the Wiki" }).click();
+    await expect(page).toHaveURL(/\/university\/wiki$/);
+  });
+
+  test("requesting access is recorded for the practice and remembered", async ({ page }) => {
+    await page.goto("/university");
+    const prompt = page.getByRole("dialog", { name: "Get access to DenialDesk University" });
+    await prompt.getByRole("button", { name: "Request access" }).click();
+    await expect(prompt.getByRole("status")).toContainText("Request recorded for your practice");
+    await expect(prompt.getByRole("button", { name: "Request access" })).toHaveCount(0);
+    await expect(prompt.getByRole("button", { name: "Browse the catalog" })).toBeFocused();
+    await page.reload();
+    await expect(prompt.getByRole("status")).toContainText(/Access requested on \d{2}\/\d{2}\/\d{4}/);
+  });
 });

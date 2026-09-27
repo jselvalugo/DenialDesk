@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { universityProgress } from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
 import { audit } from "@/lib/audit";
+import { getUniversityAccess, hasUniversityAccess } from "./access";
 import { lessonKey } from "./content";
 
 /** This user's completed lessons in this practice: "<course>/<lesson>" → completion time. */
@@ -43,4 +44,17 @@ export async function recordLessonCompleted(
     .from(universityProgress)
     .where(and(eq(universityProgress.userId, input.userId), eq(universityProgress.lessonId, key)));
   return { inserted: false, completedAt: existing!.completedAt };
+}
+
+/**
+ * Completes a lesson only while the practice has University access (spec: denialdesk-university.md,
+ * "Access"); returns null when the courses are locked. The server-side guard behind the course and
+ * lesson redirects: a direct call to the action can't record progress on a locked practice.
+ */
+export async function completeLessonIfUnlocked(
+  tx: TenantTx,
+  input: { tenantId: string; userId: string; courseId: string; lessonId: string },
+): Promise<{ inserted: boolean; completedAt: Date } | null> {
+  if (!hasUniversityAccess(await getUniversityAccess(tx, input.tenantId))) return null;
+  return recordLessonCompleted(tx, input);
 }

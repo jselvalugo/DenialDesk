@@ -97,7 +97,10 @@ export type AuditAction =
   | "prompt_pay.viewed"
   | "prompt_pay.response_recorded"
   | "prompt_pay.response_voided"
-  | "university.lesson_completed";
+  | "university.lesson_completed"
+  | "university.access_requested"
+  | "operator.university_access_granted"
+  | "operator.university_access_revoked";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
@@ -130,7 +133,8 @@ export interface AuditEvent {
     | "custom_field_value"
     | "remittance"
     | "prompt_pay_response"
-    | "university_lesson";
+    | "university_lesson"
+    | "university_access";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;

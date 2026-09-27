@@ -110,4 +110,27 @@ export const university: Messages["university"] = {
   "search.emptyDescription":
     "Tente uma palavra mais curta ou um tipo de código como CARC, ou explore as categorias abaixo.",
   "search.roleDenied": "Sua função não pode ler a wiki.",
+
+  // AccessPrompt.tsx (a oferta exibida em cada visita ao catálogo)
+  "access.title": "Obtenha acesso à Universidade DenialDesk",
+  "access.body":
+    "Um programa de treinamento no seu ritmo para a equipe do consultório: como o DenialDesk funciona, como ler uma negativa, os prazos de pagamento pontual e de recurso da Flórida que o produto aplica e como os dados dos pacientes são protegidos, além da Wiki de referência.",
+  "access.coursesLabel": "Cursos",
+  "access.lengthLabel": "Duração",
+  "access.lengthMinutes": "cerca de {count, plural, one {# minuto} other {# minutos}}",
+  "access.wikiLabel": "Artigos da Wiki",
+  "access.price": "Acesso a partir de {price}",
+  "access.unlocks":
+    "Quando o seu consultório tiver acesso, os cursos são desbloqueados para toda a equipe. A Wiki continua aberta para todos.",
+  "access.request": "Solicitar acesso",
+  "access.requested":
+    "Solicitação registrada para o seu consultório. Os cursos são desbloqueados quando o DenialDesk confirmar o acesso.",
+  "access.requestedOn":
+    "Acesso solicitado em {date}. Os cursos são desbloqueados quando o DenialDesk confirmar o acesso.",
+  "access.failed": "Não foi possível registrar a solicitação. Tente novamente.",
+  "access.locked":
+    "Os cursos ficam bloqueados até que o seu consultório tenha acesso à Universidade DenialDesk.",
+  "access.lockedBadge": "Bloqueado",
+  "access.lockedDescription": "Bloqueado até que o seu consultório tenha acesso à Universidade DenialDesk.",
+  "access.continue": "Ver o catálogo",
 };

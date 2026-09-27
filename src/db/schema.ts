@@ -610,6 +610,33 @@ export const universityProgress = pgTable(
   (t) => [uniqueIndex("university_progress_tenant_user_lesson_key").on(t.tenantId, t.userId, t.lessonId)],
 );
 
+/**
+ * DenialDesk University access per practice (docs/specs/denialdesk-university.md, "Access"): one
+ * row per practice. A practice user may only request (the app role can insert/update the
+ * `requested_*` columns); the platform operator grants and revokes through `withTenantAsPlatform`
+ * (owner role, still under the tenant policy). Access = granted and not revoked. Internal data.
+ */
+export const universityAccess = pgTable(
+  "university_access",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    requestedAt: timestamp("requested_at", { withTimezone: true }),
+    requestedBy: uuid("requested_by").references(() => users.id),
+    grantedAt: timestamp("granted_at", { withTimezone: true }),
+    /** The platform operator who recorded the purchase. */
+    grantedBy: uuid("granted_by").references(() => users.id),
+    /** Operator's note: order or invoice reference, never PHI. */
+    note: text("note"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => users.id),
+    revokeReason: text("revoke_reason"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("university_access_tenant_key").on(t.tenantId)],
+);
+
 // ---------------------------------------------------------------------------------------------
 // Remittances (835) and Florida prompt pay (docs/specs/remittances-and-prompt-pay.md). Restricted
 // PHI by linkage to claims. No patient names and no bank account or routing numbers are stored.
