@@ -1,8 +1,9 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { integrationSyncIssues, integrationSyncRuns } from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
+import { audit } from "@/lib/audit";
 import type { MessageKey } from "@/i18n/messages/types";
-import type { SyncRunStatus } from "./connections";
+import type { IntegrationActor, SyncRunStatus } from "./connections";
 
 // Sync history (docs/specs/patient-integrations.md PI2b, "Sync history"): what each sync run of a
 // connection did, as counts and codes. Runs and issues are Internal data (spec "Classification"), and
@@ -54,17 +55,23 @@ export interface SyncRunRow {
   issueCount: number;
 }
 
-/** One page of a connection's runs, newest first, and how many runs it has in all. */
+/**
+ * One page of a connection's runs, newest first, and how many runs it has in all. A page past the end
+ * (a stale link, a hand-edited address) is clamped to the last page, so the result never has runs
+ * hidden behind an empty page: `page` is the page actually returned.
+ */
 export async function listSyncRuns(
   tx: TenantTx,
   connectionId: string,
   page: number,
   pageSize: number = SYNC_RUNS_PAGE_SIZE,
-): Promise<{ runs: SyncRunRow[]; total: number }> {
+): Promise<{ runs: SyncRunRow[]; total: number; page: number }> {
   const [counted] = await tx
     .select({ total: sql<number>`count(*)::int` })
     .from(integrationSyncRuns)
     .where(eq(integrationSyncRuns.connectionId, connectionId));
+  const total = counted?.total ?? 0;
+  const shownPage = Math.min(Math.max(1, page), Math.max(1, Math.ceil(total / pageSize)));
   const rows = await tx
     .select({
       id: integrationSyncRuns.id,
@@ -84,7 +91,7 @@ export async function listSyncRuns(
     .where(eq(integrationSyncRuns.connectionId, connectionId))
     .orderBy(desc(integrationSyncRuns.queuedAt), desc(integrationSyncRuns.id))
     .limit(pageSize)
-    .offset(Math.max(0, page - 1) * pageSize);
+    .offset((shownPage - 1) * pageSize);
   const issueCounts =
     rows.length === 0
       ? []
@@ -101,7 +108,8 @@ export async function listSyncRuns(
   const countOf = new Map(issueCounts.map((row) => [row.runId, row.count]));
   return {
     runs: rows.map((row) => ({ ...row, issueCount: countOf.get(row.id) ?? 0 })),
-    total: counted?.total ?? 0,
+    total,
+    page: shownPage,
   };
 }
 
@@ -141,4 +149,28 @@ export async function getSyncRunIssues(
     .orderBy(asc(integrationSyncIssues.createdAt), asc(integrationSyncIssues.id))
     .limit(MAX_SYNC_ISSUES_SHOWN + 1);
   return { issues: rows.slice(0, MAX_SYNC_ISSUES_SHOWN), truncated: rows.length > MAX_SYNC_ISSUES_SHOWN };
+}
+
+/**
+ * Records that an administrator opened one run's issue rows: the connection, the run, and how many
+ * rows were shown (IDs and a count, never a code list or a patient ID). The rows are per-patient
+ * records, so the read is audited (R-7.5.1); the run list, which holds counts and codes only, is not.
+ * `reason` is a fixed code; `session_id` ties the read to the session that made it.
+ */
+export async function auditSyncRunViewed(
+  tx: TenantTx,
+  actor: Pick<IntegrationActor, "tenantId" | "userId" | "sessionId">,
+  connectionId: string,
+  runId: string,
+  rowCount: number,
+): Promise<void> {
+  await audit(tx, {
+    action: "integration.sync_run_viewed",
+    actorUserId: actor.userId,
+    tenantId: actor.tenantId,
+    entityType: "integration_sync_run",
+    entityId: runId,
+    reason: "sync_history",
+    metadata: { connection_id: connectionId, row_count: rowCount, session_id: actor.sessionId ?? null },
+  });
 }

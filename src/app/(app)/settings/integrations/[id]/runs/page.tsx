@@ -6,14 +6,15 @@ import { canManageIntegrations } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
-import { Code } from "@/components/ui/Code";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { getConnection } from "@/domain/integrations/connections";
+import { issueCodeLabelKey, runCodeLabelKeys } from "@/domain/integrations/sync-codes";
 import {
+  auditSyncRunViewed,
   getSyncRunIssues,
   listSyncRuns,
   MAX_SYNC_ISSUES_SHOWN,
@@ -22,6 +23,7 @@ import {
   SYNC_RUNS_PAGE_SIZE,
 } from "@/domain/integrations/sync-history";
 import { getFormat, getT } from "@/i18n/server";
+import { integrationActor } from "../../form-state";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT("integrations");
@@ -37,10 +39,12 @@ function pageNumber(value: string | undefined): number {
  * Sync history for one connection (docs/specs/patient-integrations.md PI2b): every run, newest
  * first, as counts and codes, and, for one run, its issue rows, each linking to the DenialDesk
  * patient. Administrators only (anyone else gets a 404, as on the connection page). Nothing on the
- * page is PHI: a run holds counts, a status, times, an HTTP status, and issue codes; an issue row
- * holds a code and an opaque DenialDesk patient ID. No name, MRN, external ID, or URL is selected
- * (`src/domain/integrations/sync-history.ts`), so the page is not audited (the connection page,
- * which shows configuration only, isn't either).
+ * page is a name or an identifier: a run holds counts, a status, times, an HTTP status, and issue
+ * codes; an issue row holds a code and a link to the DenialDesk patient. No name, MRN, external ID,
+ * or URL is selected (`src/domain/integrations/sync-history.ts`), and a stored code is shown only
+ * through the fixed allow-list in `sync-codes.ts` (translated; anything else reads "Other", never the
+ * raw string). The run list is not audited (counts and codes); opening one run's issue rows is
+ * (`integration.sync_run_viewed`: run ID and row count).
  */
 export default async function SyncHistoryPage({
   params,
@@ -53,15 +57,20 @@ export default async function SyncHistoryPage({
   if (!canManageIntegrations(auth.role)) notFound();
   const id = z.uuid().safeParse((await params).id);
   if (!id.success) notFound();
+  const actor = integrationActor(auth);
   const query = await searchParams;
-  const page = pageNumber(query.page);
+  const requestedPage = pageNumber(query.page);
   const selectedRun = z.uuid().safeParse(query.run ?? "");
 
   const loaded = await withTenant(auth, async (tx) => {
     const connection = await getConnection(tx, id.data);
     if (!connection) return null;
-    const history = await listSyncRuns(tx, id.data, page);
+    const history = await listSyncRuns(tx, id.data, requestedPage);
     const detail = selectedRun.success ? await getSyncRunIssues(tx, id.data, selectedRun.data) : null;
+    // The run's detail is a read of per-patient rows: audited with the run ID and the row count only.
+    if (selectedRun.success && detail) {
+      await auditSyncRunViewed(tx, actor, id.data, selectedRun.data, detail.issues.length);
+    }
     return { connection, history, detail };
   });
   if (!loaded) notFound();
@@ -89,7 +98,7 @@ export default async function SyncHistoryPage({
         ]}
       />
       <Panel title={t("runs.title")} description={t("runs.description")} flush>
-        {history.runs.length === 0 ? (
+        {history.total === 0 ? (
           <EmptyState title={t("runs.emptyTitle")} description={t("runs.emptyDescription")} />
         ) : (
           <>
@@ -136,8 +145,10 @@ export default async function SyncHistoryPage({
                         <span className="text-muted">{t("runs.noCodes")}</span>
                       ) : (
                         <span className="flex flex-wrap gap-1">
-                          {run.issueCodes.map((code) => (
-                            <Code key={code}>{code}</Code>
+                          {runCodeLabelKeys(run.issueCodes).map((key) => (
+                            <Badge key={key} dot={false}>
+                              {t(key)}
+                            </Badge>
                           ))}
                         </span>
                       )}
@@ -147,7 +158,10 @@ export default async function SyncHistoryPage({
                       {run.issueCount === 0 ? (
                         <span className="text-muted">{t("runs.noIssues")}</span>
                       ) : (
-                        <Link href={hrefFor(page, run.id)} className="font-medium text-link hover:underline">
+                        <Link
+                          href={hrefFor(history.page, run.id)}
+                          className="font-medium text-link hover:underline"
+                        >
                           {t("runs.viewIssues", { count: run.issueCount })}
                         </Link>
                       )}
@@ -157,7 +171,7 @@ export default async function SyncHistoryPage({
               </tbody>
             </Table>
             <Pagination
-              page={page}
+              page={history.page}
               pageSize={SYNC_RUNS_PAGE_SIZE}
               total={history.total}
               hrefFor={(target) => hrefFor(target)}
@@ -189,19 +203,14 @@ export default async function SyncHistoryPage({
                 <tbody>
                   {detail.issues.map((issue) => (
                     <Tr key={issue.id}>
-                      <Td>
-                        <Code>{issue.code}</Code>
-                      </Td>
+                      <Td>{t(issueCodeLabelKey(issue.code))}</Td>
                       <Td>
                         {issue.patientId ? (
                           <Link
                             href={`/patients/${issue.patientId}`}
                             className="font-medium text-link hover:underline"
                           >
-                            {t("runs.issues.openPatient")}{" "}
-                            <span className="font-mono text-label text-muted">
-                              {issue.patientId.slice(0, 8)}
-                            </span>
+                            {t("runs.issues.openPatient")}
                           </Link>
                         ) : (
                           <span className="text-muted">{t("runs.issues.noPatient")}</span>

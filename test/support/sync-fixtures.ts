@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { systemDb } from "@/db/client";
 import { integrationSyncIssues, patients, payers } from "@/db/schema";
 import { withTenant, withTenantAsPlatform } from "@/db/tenant";
 import { createTestTenant } from "../integration/helpers";
@@ -23,6 +22,15 @@ export async function practiceWithActiveConnection(
   label = "Sync UI",
 ): Promise<{ ctx: Ctx; connectionId: string }> {
   const ctx = await createTestTenant(`${label} ${randomUUID().slice(0, 6)}`);
+  return { ctx, connectionId: await activeConnectionIn(ctx) };
+}
+
+/**
+ * A new real connection that is `active` in an existing practice, with its own endpoint and client.
+ * Only one connection per practice may be outside draft/revoked, so a second one needs the first to
+ * be revoked (`revokeConnectionOf`) before this is called.
+ */
+export async function activeConnectionIn(ctx: Ctx): Promise<string> {
   const host = `ehr-${randomUUID().slice(0, 8)}.example.test`;
   const created = await withTenant(ctx, (tx) =>
     tx.execute<{ id: string }>(sql`
@@ -45,7 +53,11 @@ export async function practiceWithActiveConnection(
           us_residency_attested_by = ${ctx.userId}::uuid, us_residency_attested_at = now()
       where id = ${connectionId}::uuid
     `);
-    await tx.execute(sql`select integration_registry_claim(${connectionId}::uuid)`);
+    // A claim that didn't happen would only surface later as an unexplained refusal to activate.
+    const claim = await tx.execute<{ claimed: boolean }>(
+      sql`select integration_registry_claim(${connectionId}::uuid) as claimed`,
+    );
+    if (claim.rows[0]?.claimed !== true) throw new Error("fixture: the registry claim was refused");
   });
   // The operator's path: the connection owner's privileges with the practice's tenant set.
   await withTenantAsPlatform(ctx, (tx) =>
@@ -56,7 +68,16 @@ export async function practiceWithActiveConnection(
       where id = ${connectionId}::uuid
     `),
   );
-  return { ctx, connectionId };
+  return connectionId;
+}
+
+/** Revokes a connection as its practice's administrator does (a running run is abandoned by trigger). */
+export async function revokeConnectionOf(ctx: Ctx, connectionId: string): Promise<void> {
+  await withTenant(ctx, (tx) =>
+    tx.execute(
+      sql`update integration_connections set status = 'revoked', revoked_by = ${ctx.userId}::uuid, revoked_at = now() where id = ${connectionId}::uuid`,
+    ),
+  );
 }
 
 /** Queues and starts a run (`running`), as the sync engine will, returning its id. */
@@ -113,6 +134,7 @@ export async function syncedPatient(
   connectionId: string,
   runId: string,
   payorKey: string | null,
+  sourceStatus: "inactive" | "merged" | "gone" | null = null,
 ): Promise<string> {
   const covered = payorKey !== null;
   const [row] = await withTenant(ctx, async (tx) => {
@@ -131,6 +153,7 @@ export async function syncedPatient(
         externalId: `ext-${randomUUID().slice(0, 8)}`,
         coverageStatus: covered ? "unmapped" : "none",
         coveragePayorKey: payorKey,
+        sourceStatus,
         memberIdEnc: covered ? "SYN-ENCRYPTED" : null,
         memberIdLast4: covered ? "1234" : null,
       })
@@ -155,11 +178,35 @@ export async function issueRow(
   return row!.id;
 }
 
-/** A payer of the practice (owner insert: payers are practice reference data). */
+/** A payer of the practice, inserted as the practice's own role (the tenant policy applies). */
 export async function payerOf(ctx: Ctx, name: string): Promise<string> {
-  const [row] = await systemDb()
-    .insert(payers)
-    .values({ tenantId: ctx.tenantId, name })
-    .returning({ id: payers.id });
+  const [row] = await withTenant(ctx, (tx) =>
+    tx.insert(payers).values({ tenantId: ctx.tenantId, name }).returning({ id: payers.id }),
+  );
   return row!.id;
+}
+
+/**
+ * `count` finished (abandoned) runs of the connection, in one transaction: a cheap way
+ * to have more runs than fit on one page (they share the transaction's `queued_at`, so their order is
+ * by ID). Each is queued and then abandoned (allowed from `queued`,
+ * and the one-active-run index only concerns queued and running runs).
+ */
+export async function abandonedRuns(ctx: Ctx, connectionId: string, count: number): Promise<string[]> {
+  return withTenant(ctx, async (tx) => {
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const queued = await tx.execute<{ id: string }>(sql`
+        insert into integration_sync_runs (tenant_id, connection_id, trigger)
+        values (${ctx.tenantId}::uuid, ${connectionId}::uuid, 'scheduled')
+        returning id
+      `);
+      const id = queued.rows[0]!.id;
+      await tx.execute(
+        sql`update integration_sync_runs set status = 'abandoned', finished_at = now() where id = ${id}::uuid`,
+      );
+      ids.push(id);
+    }
+    return ids;
+  });
 }

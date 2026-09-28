@@ -36,10 +36,31 @@ type IntegrationsT = Translator<Messages["integrations"]>;
 type IntegrationsKey = MessageKey<"integrations">;
 const englishT: IntegrationsT = createTranslator(en.integrations, "en");
 
+/** The fixed `reason` code of both payer mapping audit events (no free text can reach the "why"). */
+export const PAYER_MAPPING_REASON = "payer_mapping";
+
+/**
+ * A payor key as the page shows it: invisible characters replaced by a visible marker and long keys
+ * cut, so a key that can't be saved is still readable and can't hide anything or break the layout.
+ */
+export function displayPayorKey(key: string): string {
+  const visible = key.replace(new RegExp(INVISIBLE_CHARS.source, "g"), "\ufffd");
+  return visible.length > 80 ? `${visible.slice(0, 80)}\u2026` : visible;
+}
+
 /** The most insurers one page lists and one save accepts. A practice has a handful; this is a bound. */
 export const MAX_PAYER_MAPPING_ROWS = 500;
 /** A payor key is a FHIR reference (`Organization/<id>`, id ≤ 64 characters); this is a generous cap. */
 const MAX_PAYOR_KEY_LENGTH = 256;
+
+/**
+ * The rules a payor key must satisfy to be saved from the page: 1 to 256 characters, no control,
+ * zero-width, or bidi characters. The sync mapper must enforce the same on write (spec PI2b), so a
+ * stored key normally passes; one that doesn't is shown read-only and can't be mapped.
+ */
+export function isSavablePayorKey(key: string): boolean {
+  return key.length > 0 && key.length <= MAX_PAYOR_KEY_LENGTH && !INVISIBLE_CHARS.test(key);
+}
 /** `updated_at` as the page round-trips it (ISO), or empty for an insurer with no decision yet. */
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -55,8 +76,18 @@ export interface PayerMappingRow {
   mappingId: string | null;
   /** The mapping's `updated_at` (ISO) as read, or "": the version a save is checked against. */
   version: string;
-  /** How many of this connection's synced patients carry the key. Counts only. */
+  /**
+   * How many of this connection's **live** synced patients carry the key (`source_status IS NULL`:
+   * not inactive, merged, or gone). Counts only. A key carried only by patients who are no longer
+   * live is still an insurer the connection reported, so it is listed, with 0.
+   */
   patientCount: number;
+  /**
+   * Whether the key satisfies the rules a save applies (`isSavablePayorKey`). A stored key that
+   * doesn't (too long, or with invisible characters) is listed read-only, never as a reason to refuse
+   * the whole form.
+   */
+  savable: boolean;
 }
 
 export interface PayerMappingList {
@@ -86,7 +117,7 @@ export async function listPayerMappings(tx: TenantTx, connectionId: string): Pro
   const counts = await tx
     .select({
       payorKey: patients.coveragePayorKey,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`(count(*) filter (where ${patients.sourceStatus} is null))::int`,
     })
     .from(patients)
     .where(and(eq(patients.sourceConnectionId, connectionId), isNotNull(patients.coveragePayorKey)))
@@ -103,6 +134,7 @@ export async function listPayerMappings(tx: TenantTx, connectionId: string): Pro
       mappingId: mapping.id,
       version: mapping.updatedAt.toISOString(),
       patientCount: 0,
+      savable: isSavablePayorKey(mapping.payorKey),
     });
   }
   for (const { payorKey, count } of counts) {
@@ -117,6 +149,7 @@ export async function listPayerMappings(tx: TenantTx, connectionId: string): Pro
         mappingId: null,
         version: "",
         patientCount: count,
+        savable: isSavablePayorKey(payorKey),
       });
     }
   }
@@ -161,9 +194,7 @@ function parseInputs(raw: unknown, t: IntegrationsT): PayerMappingInput[] {
       refuse(t, "error.unexpectedField");
     }
     if (
-      key.length === 0 ||
-      key.length > MAX_PAYOR_KEY_LENGTH ||
-      INVISIBLE_CHARS.test(key) ||
+      !isSavablePayorKey(key) ||
       seen.has(key) ||
       (payerId !== "" && !UUID.test(payerId)) ||
       (version !== "" && !ISO_TIMESTAMP.test(version))
@@ -307,7 +338,10 @@ export async function savePayerMappings(
   }
 
   const affected = await tx
-    .select({ payorKey: patients.coveragePayorKey, count: sql<number>`count(*)::int` })
+    .select({
+      payorKey: patients.coveragePayorKey,
+      count: sql<number>`(count(*) filter (where ${patients.sourceStatus} is null))::int`,
+    })
     .from(patients)
     .where(
       and(
@@ -328,6 +362,7 @@ export async function savePayerMappings(
       tenantId: actor.tenantId,
       entityType: "integration_payer_mapping",
       entityId: change.id,
+      reason: PAYER_MAPPING_REASON,
       metadata: {
         connection_id: connectionId,
         payer_id: change.next,
@@ -335,6 +370,7 @@ export async function savePayerMappings(
         change: change.next === null ? "cleared" : change.previous === null ? "mapped" : "changed",
         affected_patient_count: affectedByKey.get(change.key) ?? 0,
         step_up_verified_at: actor.stepUpVerifiedAt ?? null,
+        session_id: actor.sessionId ?? null,
       },
     });
   }
@@ -349,7 +385,7 @@ export async function savePayerMappings(
  */
 export async function auditPayerMappingsViewed(
   tx: TenantTx,
-  actor: Pick<IntegrationActor, "tenantId" | "userId">,
+  actor: Pick<IntegrationActor, "tenantId" | "userId" | "sessionId">,
   connectionId: string,
   list: PayerMappingList,
 ): Promise<void> {
@@ -359,7 +395,9 @@ export async function auditPayerMappingsViewed(
     tenantId: actor.tenantId,
     entityType: "integration_connection",
     entityId: connectionId,
+    reason: PAYER_MAPPING_REASON,
     metadata: {
+      session_id: actor.sessionId ?? null,
       insurer_count: list.rows.length,
       patient_count: list.rows.reduce((sum, row) => sum + row.patientCount, 0),
     },

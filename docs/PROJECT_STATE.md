@@ -431,8 +431,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   operator accounts before production; (h) **OA-073** an operator-realm step-up gating Approve before the Azure
   cutover (`step_up_verified_at` in the approve audit); not built, pending this owner decision.
 - **CI runs the integration suite as a PostgreSQL superuser, so FORCE ROW LEVEL SECURITY on the owner and
-  platform paths is never exercised (raised 2026-09-28 after PR #89; owner action item to be added, needs
-  a CI change, not made here).** A superuser (and any BYPASSRLS role) ignores every policy, even on FORCE
+  platform paths is never exercised (raised 2026-09-28 after PR #89; owner action item **OA-074**, an
+  R-15.9 decision; needs a CI change, not made here).** A superuser (and any BYPASSRLS role) ignores every policy, even on FORCE
   tables, so tests that pass in CI cannot show that `withTenantAsPlatform` (the connection owner with
   `app.tenant_id` set: operator approval, BAAs, University access) and the owner-role reads in tests
   (`systemDb()`) behave under the policy a non-superuser owner is subject to in Netlify and Azure. The
@@ -446,6 +446,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   assert in a test that the connection's role is neither `rolsuper` nor `rolbypassrls`. Expect some
   owner-path tests to need `app.tenant_id` set, which is the point. See spec `patient-integrations.md`,
   "Test infrastructure gap".
+- **Is a payor key detached from any patient's PHI? (OA-075, 2026-09-28.)** A payor key (`Organization/<id>`) names an insurer, but it sits on the synced patient row (`coverage_payor_key`, Restricted PHI) and is repeated in `integration_payer_mappings` (classified Confidential). The answer decides whether the mapping table is reclassified to Restricted. Until then the payer mapping page is audited and no audit event or log carries a key (`specs/patient-integrations.md`, Classification).
 - **TLS 1.3 minimum for the FHIR transport?** (2026-09-28, pending, `OA-062`.) R-7.3.1 is TLS 1.2+ (prefer 1.3); the transport enforces 1.2 with ECDHE + AEAD suites only and negotiates 1.3 when offered. A 1.3 minimum would refuse EHR vendors that only support 1.2. Must be decided before the first real endpoint is enabled.
 - Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter
   and BAA scope (OA-045); retire manual registration once connected (OA-046); phone/email not synced

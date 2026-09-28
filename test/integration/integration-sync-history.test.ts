@@ -1,11 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { isValidElement } from "react";
+import { isValidElement, type ReactElement } from "react";
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { closeDatabase } from "@/db/client";
+import { and, eq } from "drizzle-orm";
+import { closeDatabase, systemDb } from "@/db/client";
+import { auditEvents } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { integrationSyncIssues } from "@/db/schema";
-import { getSyncRunIssues, listSyncRuns, MAX_SYNC_ISSUES_SHOWN } from "@/domain/integrations/sync-history";
 import {
+  getSyncRunIssues,
+  listSyncRuns,
+  MAX_SYNC_ISSUES_SHOWN,
+  SYNC_RUNS_PAGE_SIZE,
+} from "@/domain/integrations/sync-history";
+import {
+  abandonedRuns,
   finishRun,
   issueRow,
   practiceWithActiveConnection,
@@ -22,7 +30,7 @@ import { createTestTenant } from "./helpers";
 // sync engine will write them (another slice), through the practice's role.
 
 type Role = "admin" | "manager" | "specialist" | "compliance";
-let auth: { tenantId: string; userId: string; role: Role; mfaVerifiedAt?: Date | null };
+let auth: { tenantId: string; userId: string; role: Role; mfaVerifiedAt?: Date | null; sessionId?: string };
 vi.mock("@/auth/session", () => ({ requireAuth: async () => auth }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => undefined }),
@@ -55,7 +63,7 @@ async function practiceWithRuns() {
     httpStatus: 200,
   });
   const second = await runningRun(ctx, connectionId);
-  await finishRun(ctx, second, { status: "failed", issueCodes: ["rate_limited"], httpStatus: 429 });
+  await finishRun(ctx, second, { status: "failed", issueCodes: ["throttled"], httpStatus: 429 });
   const third = await runningRun(ctx, connectionId);
   return { ctx, connectionId, first, second, third, patientId, skipped, linked };
 }
@@ -89,7 +97,7 @@ describe("listing a connection's sync runs", () => {
     expect(rows[1]).toMatchObject({
       status: "failed",
       httpStatus: 429,
-      issueCodes: ["rate_limited"],
+      issueCodes: ["throttled"],
       issueCount: 0,
     });
     expect(rows[0]).toMatchObject({ status: "running", finishedAt: null, httpStatus: null, issueCodes: [] });
@@ -122,18 +130,26 @@ describe("listing a connection's sync runs", () => {
     expect(one.runs.map((run) => run.id)).toEqual([third, second]);
     const two = await runs(ctx, connectionId, 2, 2);
     expect(two.runs.map((run) => run.id)).toEqual([first]);
-    expect((await runs(ctx, connectionId, 3, 2)).runs).toEqual([]);
+    expect(one.page).toBe(1);
+    expect(two.page).toBe(2);
+    // A page past the end is clamped to the last page: runs are never hidden behind an empty page.
+    const past = await runs(ctx, connectionId, 9, 2);
+    expect(past.page).toBe(2);
+    expect(past.runs.map((run) => run.id)).toEqual([first]);
+    expect(past.total).toBe(3);
+    // Nonsense pages read as the first.
+    for (const page of [0, -4]) expect((await runs(ctx, connectionId, page, 2)).page).toBe(1);
   });
 
   it("is empty for a connection that never synced", async () => {
     const { ctx, connectionId } = await practiceWithActiveConnection("Sync history empty");
-    expect(await runs(ctx, connectionId)).toEqual({ runs: [], total: 0 });
+    expect(await runs(ctx, connectionId)).toEqual({ runs: [], total: 0, page: 1 });
   });
 
   it("is tenant-scoped: another practice sees none of a connection's runs, issues, or counts", async () => {
     const { connectionId, first } = await practiceWithRuns();
     const other = await createTestTenant("Sync history other");
-    expect(await runs(other, connectionId)).toEqual({ runs: [], total: 0 });
+    expect(await runs(other, connectionId)).toEqual({ runs: [], total: 0, page: 1 });
     expect(await withTenant(other, (tx) => getSyncRunIssues(tx, connectionId, first))).toBeNull();
   });
 });
@@ -192,6 +208,21 @@ describe("the issues of one run", () => {
   });
 });
 
+/** Every element in a tree (the page's own JSX, before any component runs) whose props satisfy `match`. */
+function findElements(
+  node: unknown,
+  match: (props: Record<string, unknown>) => boolean,
+  found: ReactElement<Record<string, unknown>>[] = [],
+): ReactElement<Record<string, unknown>>[] {
+  if (Array.isArray(node)) {
+    for (const child of node) findElements(child, match, found);
+  } else if (isValidElement<Record<string, unknown>>(node)) {
+    if (match(node.props)) found.push(node);
+    for (const value of Object.values(node.props)) findElements(value, match, found);
+  }
+  return found;
+}
+
 /** The text and links of an element tree as the page built it (its children as literal JSX). */
 function collect(node: unknown, out: { text: string[]; hrefs: string[] }): void {
   if (node === null || node === undefined || typeof node === "boolean") return;
@@ -240,15 +271,17 @@ describe("the sync history page", () => {
 
     // The counts and codes of the runs, and the issue codes of the selected one.
     for (const expected of [
-      "mrn_missing",
-      "linked_to_source",
-      "rate_limited",
+      "No medical record number",
+      "Linked to an existing patient",
+      "The EHR/PM limited the request rate",
       "Succeeded",
       "Failed",
       "Running",
     ]) {
       expect(text).toContain(expected);
     }
+    // Codes are shown as their translated labels, never as the stored strings.
+    for (const raw of ["mrn_missing", "linked_to_source", "throttled"]) expect(text).not.toContain(raw);
     expect(shown.text).toContain("5");
     expect(shown.text).toContain("429");
     // An issue row links to the DenialDesk patient by its own ID, and to nothing else outside settings.
@@ -272,6 +305,97 @@ describe("the sync history page", () => {
     collect(await SyncHistoryPage(params(mine.connectionId, { run: theirs.first })), shown);
     expect(shown.text.join(" | ")).toContain("That run isn't part of this connection.");
     expect(shown.hrefs.some((href) => href.includes(theirs.patientId))).toBe(false);
+  });
+
+  it('shows a stored code that isn\'t on the allow-list as "Other", never the raw string', async () => {
+    const { ctx, connectionId } = await practiceWithActiveConnection("Sync history unknown code");
+    const run = await runningRun(ctx, connectionId);
+    const patientId = await syncedPatient(ctx, connectionId, run, "Organization/ins-alpha");
+    // Shapes the database accepts (`^[a-z_]{1,64}$`) but that the page must never echo: a sensitivity
+    // word on a patient-linked issue, and unlisted run-level codes next to a listed one.
+    await issueRow(ctx, run, "hiv_positive_flag", patientId);
+    await issueRow(ctx, run, "needs_review", patientId);
+    await finishRun(ctx, run, {
+      issueCodes: ["zz_unlisted_code", "part2_program_patient", "throttled"],
+    });
+    auth = { ...ctx, role: "admin" };
+    const shown = { text: [] as string[], hrefs: [] as string[] };
+    collect(await SyncHistoryPage(params(connectionId, { run })), shown);
+    const text = shown.text.join(" | ");
+
+    expect(text).not.toMatch(/hiv_positive_flag|zz_unlisted_code|part2_program_patient/);
+    // The unlisted issue code, and the unlisted run codes (once), read "Other"; listed codes keep their label.
+    expect(shown.text.filter((entry) => entry === "Other")).toHaveLength(2);
+    expect(text).toContain("The EHR/PM limited the request rate");
+    expect(text).toContain("Coverage needs review");
+  });
+
+  it("audits opening one run's issue rows with the run ID and row count, and nothing else opens it", async () => {
+    const { ctx, connectionId, first, second } = await practiceWithRuns();
+    auth = { ...ctx, role: "admin", sessionId: randomUUID() };
+    const events = async (runId: string) =>
+      systemDb()
+        .select()
+        .from(auditEvents)
+        .where(and(eq(auditEvents.action, "integration.sync_run_viewed"), eq(auditEvents.entityId, runId)));
+
+    // The run list alone (counts and codes) is not a read of per-patient rows.
+    await SyncHistoryPage(params(connectionId));
+    expect(await events(first)).toEqual([]);
+
+    await SyncHistoryPage(params(connectionId, { run: first }));
+    const recorded = await events(first);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      actorUserId: ctx.userId,
+      tenantId: ctx.tenantId,
+      entityType: "integration_sync_run",
+      entityId: first,
+      reason: "sync_history",
+    });
+    // IDs and a count only: no codes, no patient ID.
+    expect(recorded[0]!.metadata).toEqual({
+      connection_id: connectionId,
+      row_count: 2,
+      session_id: auth.sessionId,
+    });
+    expect(JSON.stringify(recorded[0])).not.toMatch(/mrn_missing|patients\//);
+
+    // A run with no issues is opened with a count of zero; a run that isn't this connection's is not audited.
+    await SyncHistoryPage(params(connectionId, { run: second }));
+    expect((await events(second))[0]!.metadata).toMatchObject({ row_count: 0 });
+    const other = await practiceWithRuns();
+    await SyncHistoryPage(params(connectionId, { run: other.first }));
+    expect(await events(other.first)).toEqual([]);
+  });
+
+  it("pages past the default page size: page 2 holds the rest, and a page past the end keeps the table and the pager", async () => {
+    const { ctx, connectionId } = await practiceWithActiveConnection("Sync history pages");
+    const all = await abandonedRuns(ctx, connectionId, SYNC_RUNS_PAGE_SIZE + 1);
+    auth = { ...ctx, role: "admin" };
+
+    const rowsOf = (page: unknown) =>
+      findElements(
+        page,
+        (props) => typeof props.caption === "string" && props.caption === "Sync runs, newest first",
+      ).flatMap((table) => findElements(table.props.children, (props) => "selected" in props)).length;
+    const pageOne = await SyncHistoryPage(params(connectionId));
+    const pageTwo = await SyncHistoryPage(params(connectionId, { page: "2" }));
+    expect(rowsOf(pageOne)).toBe(SYNC_RUNS_PAGE_SIZE);
+    expect(rowsOf(pageTwo)).toBe(1);
+    expect(all).toHaveLength(SYNC_RUNS_PAGE_SIZE + 1);
+
+    // A stale or hand-edited page number shows the last page, not the "nothing has synced" message.
+    for (const page of ["3", "999", "0", "abc"]) {
+      const shown = { text: [] as string[], hrefs: [] as string[] };
+      const past = await SyncHistoryPage(params(connectionId, { page }));
+      collect(past, shown);
+      expect(shown.text).not.toContain("No sync has run yet");
+      expect(rowsOf(past)).toBeGreaterThan(0);
+      const [pager] = findElements(past, (props) => "hrefFor" in props && "total" in props);
+      expect(pager!.props.total).toBe(SYNC_RUNS_PAGE_SIZE + 1);
+      expect(pager!.props.page).toBe(page === "0" || page === "abc" ? 1 : 2);
+    }
   });
 
   it("says what is missing and what happens next when nothing has synced yet", async () => {

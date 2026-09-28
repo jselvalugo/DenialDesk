@@ -17,6 +17,10 @@ export interface PayerMappingFormRow {
   payerId: string | null;
   version: string;
   patientCount: number;
+  /** False for a stored key a save would refuse: shown read-only, with a note, never submitted. */
+  savable: boolean;
+  /** The key as shown (invisible characters marked, long keys cut). */
+  displayKey: string;
 }
 
 /**
@@ -69,9 +73,13 @@ export function PayerMappingForm({
           {rows.map((row) => (
             <Tr key={row.payorKey}>
               <Td className="font-medium">
-                <Code>{row.payorKey}</Code>
-                <input type="hidden" name="key" value={row.payorKey} />
-                <input type="hidden" name="version" value={row.version} />
+                <Code>{row.displayKey}</Code>
+                {row.savable && (
+                  <>
+                    <input type="hidden" name="key" value={row.payorKey} />
+                    <input type="hidden" name="version" value={row.version} />
+                  </>
+                )}
               </Td>
               <Td>{row.payorName ?? "—"}</Td>
               <Td numeric>{f.number(row.patientCount)}</Td>
@@ -81,20 +89,24 @@ export function PayerMappingForm({
                 </Badge>
               </Td>
               <Td>
-                <select
-                  name="payer"
-                  defaultValue={row.payerId ?? ""}
-                  disabled={readOnly}
-                  aria-label={t("payers.selectLabel", { insurer: row.payorKey })}
-                  className="h-8 max-w-xs rounded-control border border-border-strong bg-surface pr-8 pl-2 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus"
-                >
-                  <option value="">{t("payers.notMapped")}</option>
-                  {payers.map((payer) => (
-                    <option key={payer.id} value={payer.id}>
-                      {payer.name}
-                    </option>
-                  ))}
-                </select>
+                {!row.savable ? (
+                  <span className="text-label text-muted">{t("payers.keyUnsupported")}</span>
+                ) : (
+                  <select
+                    name="payer"
+                    defaultValue={row.payerId ?? ""}
+                    disabled={readOnly}
+                    aria-label={t("payers.selectLabel", { insurer: row.displayKey })}
+                    className="h-8 max-w-xs rounded-control border border-border-strong bg-surface pr-8 pl-2 text-body text-text focus:border-focus focus:outline-2 focus:outline-offset-0 focus:outline-focus"
+                  >
+                    <option value="">{t("payers.notMapped")}</option>
+                    {payers.map((payer) => (
+                      <option key={payer.id} value={payer.id}>
+                        {payer.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </Td>
             </Tr>
           ))}

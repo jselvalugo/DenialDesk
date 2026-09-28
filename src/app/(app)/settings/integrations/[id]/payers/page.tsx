@@ -11,6 +11,7 @@ import { withTenant } from "@/db/tenant";
 import { getConnection } from "@/domain/integrations/connections";
 import {
   auditPayerMappingsViewed,
+  displayPayorKey,
   listMappablePayers,
   listPayerMappings,
   MAX_PAYER_MAPPING_ROWS,
@@ -102,7 +103,7 @@ export default async function PayerMappingPage({
           <>
             <PayerMappingForm
               connectionId={connection.id}
-              rows={list.rows}
+              rows={list.rows.map((row) => ({ ...row, displayKey: displayPayorKey(row.payorKey) }))}
               payers={payers}
               needsStepUp={!hasRecentMfa(auth.mfaVerifiedAt)}
               readOnly={revoked}
