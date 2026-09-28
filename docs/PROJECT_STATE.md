@@ -271,6 +271,18 @@ _Last updated: 2026-09-28_
   (independent log review, sealed break-glass holder) and R-7.2.6 alerting, before production.
 - Production branch on Netlify: `claude/quirky-feynman-ufql5a` (default). Each session works on its
   own branch and merges through a PR.
+- Security audit (2026-09-28, `docs/reviews/2026-09-28-security-audit.md`): full-codebase pass
+  against REQUIREMENTS §7, not tied to a diff. No new Critical findings. One High: the
+  pre-enrollment TOTP secret (`src/auth/enrollment.ts:19-22`) is reused across sessions and never
+  rotated, so a stolen or temporary password lets an attacker silently plant a working second
+  factor before the real user enrolls — sharpens the already-tracked MFA-enrollment item below.
+  Also 7 new Medium findings (forgeable client-IP header trusted regardless of platform; a shared
+  rate-limit bucket for requests with no IP; account lockout with no step-up letting anyone lock
+  out a known email; operator-issued temporary passwords that never expire; missing SAST/DAST/SBOM
+  and image scanning in CI; member IDs and TOTP secrets encrypted with no AAD, unlike custom-field
+  values; practice users have no WebAuthn option) and 9 Lows. Custom fields, payer records, and the
+  RecordHeader/RecordLayout merge held up with no new High/Medium findings. See the doc for fixes
+  and human-decision items, several of which extend items in the list below.
 
 ## Decisions made (details in `docs/decisions/`)
 | Date | Decision | Record |
@@ -413,13 +425,34 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 4. **Synthetic NPIs** pass the check digit and could coincide with real NPIs. Keep, or use a
    reserved/marked range? (compliance #7)
 
+### Decisions from the 2026-09-28 security audit (need a human)
+1. **Pre-enrollment TOTP secret reuse (sharpens #1 above):** the same secret is handed to every
+   password-authenticated session until enrollment and never rotated, so a stolen/temporary
+   password can plant a working second factor silently. Recommended: rotate the secret per
+   enrollment session, or move straight to the admin-issued expiring enrollment link. (security H1)
+2. **Operator-issued temporary passwords never expire** (`src/domain/platform/practices.ts:110-122`);
+   pairs with #1 — decide enrollment-link design and temp-password expiry together. (security M4)
+3. **Account lockout trade-off:** 5 wrong passwords locks an account 15 minutes with no CAPTCHA or
+   step-up, so anyone who knows a user's email can repeatedly lock them out. Progressive delays
+   instead of a hard lock, or an unlock path? (security M3)
+4. **CI security gates:** no SAST (e.g. CodeQL), DAST, SBOM, or container/IaC image scanning;
+   `pnpm audit` only fails on high; base images pinned by tag not digest. Sign-off needed under
+   R-15.9 before adding gates. (security M5)
+5. **WebAuthn scope:** R-7.2.2 requires phishing-resistant MFA for admins/PHI workforce; today only
+   the operator item is tracked (line above) — practice admins and PHI-access roles have TOTP only.
+   Add to the pre-production gate list? (security M7)
+6. **`exceljs` maintenance:** no release since 2023, pulls deprecated transitives and a moderate
+   `uuid` advisory. Keep or replace before Azure cutover? (security L9, R-15.7)
+
 ### Deferred review findings (tracked, not blocking pre-prod)
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
-- Member-ID reveal on a denial decrypts the patient's primary-payer member ID even when the claim was
-  billed to another payer (R-5.1.2); fix with coverage records (review §6.1), and until then reveal
-  only when the claim's payer is the patient's primary payer (2026-09-26 review, security).
+- Member-ID reveal on a denial or an appeal (`appeals/[id]/actions.ts:193-209` confirmed doing the
+  same thing, 2026-09-28 audit) decrypts the patient's primary-payer member ID even when the claim
+  was billed to another payer (R-5.1.2); fix with coverage records (review §6.1), and until then
+  reveal only when the claim's payer is the patient's primary payer (2026-09-26 review, security).
+  Neither reveal path checks `sensitivityTags` either, unlike custom-field reveals (2026-09-28 audit).
 - `claims.status` / `paid_cents` are not covered by the version trigger, and no DB CHECK enforces
   0 ≤ paid ≤ billed, 0 < denied ≤ billed, charges ≥ 0; must land with C3 / 835 posting, before the
   Azure cutover (2026-09-26 review, security; owner decision §8.4).
