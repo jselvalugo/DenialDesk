@@ -12,6 +12,7 @@ export const settings: Messages["settings"] = {
   "tabs.notifications": "Notificaciones",
   "tabs.integrations": "Integraciones",
   "tabs.sectionsLabel": "Secciones de configuración",
+  "nav.breadcrumb": "Ruta de navegación",
 
   // Página de configuración general
   "general.profileTitle": "Perfil del consultorio",

@@ -25,7 +25,15 @@ export function VoidResponseForm({ responseId }: { responseId: string }) {
     <form action={action} className="mt-2 flex flex-col gap-2" aria-label={t("void.button")}>
       <FormAlert message={state.error} />
       <input type="hidden" name="responseId" value={responseId} />
-      <TextareaField label={t("void.prompt")} name="reason" required minLength={5} maxLength={500} rows={2} />
+      <TextareaField
+        id={`void-reason-${responseId}`}
+        label={t("void.prompt")}
+        name="reason"
+        required
+        minLength={5}
+        maxLength={500}
+        rows={2}
+      />
       <div className="flex gap-2">
         <SubmitButton variant="danger" size="sm" pendingLabel={t("void.saving")}>
           {t("void.submit")}

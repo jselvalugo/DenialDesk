@@ -30,7 +30,7 @@ export default async function EditCustomFieldPage({ params }: { params: Promise<
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumbs
-        label={t("fields.recordTypesLabel")}
+        label={t("nav.breadcrumb")}
         items={[
           {
             label: customFieldEntityLabel(field.entity, t),

@@ -26,7 +26,7 @@ export default async function NewCustomFieldPage({
   return (
     <div className="flex flex-col gap-6">
       <Breadcrumbs
-        label={t("fields.recordTypesLabel")}
+        label={t("nav.breadcrumb")}
         items={[
           { label: customFieldEntityLabel(entity, t), href: `/settings/fields?records=${entity}` },
           { label: t("fields.newTitle") },
