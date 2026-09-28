@@ -148,8 +148,8 @@ interface UnsubmittedIndexRow {
   regime: Regime | null;
   serviceDate: string;
   billedCents: number;
-  /** Only read when sorting by `patientName` (minimum necessary, security review P4 item 6): the
-   * default urgency-ordered index never touches a patient's name. */
+  /** Only read when the `unsubmitted` group is sorted by `patientName` (minimum necessary, security
+   * review P4 item 6): every other index read never touches a patient's name. */
   patientFirst?: string;
   patientLast?: string;
 }
@@ -170,8 +170,9 @@ const unsubmittedBaseSelect = {
  * then not configured (no filing rule for the regime), with a stable id tie-break. Loads the columns
  * needed both for that urgency order and for an explicit column sort (P4): a practice's unsubmitted
  * backlog is a working set (capped at `UNSUBMITTED_LIMIT`), so sorting it in memory is cheap.
- * `needPatientName` joins `patients` and reads names only when the caller is about to sort by
- * `patientName` — the default (urgency) index never reads a patient's name (minimum necessary).
+ * `needPatientName` joins `patients` and reads names only when the caller is about to sort this
+ * index by `patientName` (the `unsubmitted` group) — otherwise it never reads a patient's name
+ * (minimum necessary).
  */
 async function unsubmittedIndex(tx: TenantTx, today: string, needPatientName: boolean) {
   const rows: UnsubmittedIndexRow[] = needPatientName
