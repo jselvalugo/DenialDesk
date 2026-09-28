@@ -97,7 +97,7 @@ describe("registering a patient", () => {
     const [row] = await withTenant(a, (tx) => tx.select().from(patients).where(eq(patients.id, id)));
     expect(row!.mrn).toMatch(/^SYN-\d{6}$/);
     expect(row!.memberIdEnc).not.toContain("SYN700000123");
-    expect(decryptField(row!.memberIdEnc)).toBe("SYN700000123");
+    expect(decryptField(row!.memberIdEnc!)).toBe("SYN700000123");
     expect(row!.memberIdLast4).toBe("0123");
     const [event] = await withTenant(a, (tx) =>
       tx
@@ -201,7 +201,7 @@ describe("updating a patient", () => {
     expect(result.changedFields).toEqual(["city", "sensitivityTags"]);
     const after = await withTenant(a, (tx) => tx.select().from(patients).where(eq(patients.id, id)));
     expect(after[0]!.city).toBe("Orlando");
-    expect(decryptField(after[0]!.memberIdEnc)).toBe("SYN7777");
+    expect(decryptField(after[0]!.memberIdEnc!)).toBe("SYN7777");
     const [event] = await withTenant(a, (tx) =>
       tx
         .select()

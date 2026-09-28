@@ -188,8 +188,121 @@ export const payers = pgTable(
 );
 
 // ---------------------------------------------------------------------------------------------
+// Patient integrations (docs/specs/patient-integrations.md, PI1a): the practice's EHR/PM connected
+// over FHIR R4, synced read-only into `patients`. `integration_connections` is declared before
+// `patients` so the composite FK below can reference it directly.
+// ---------------------------------------------------------------------------------------------
+
+export const integrationConnectionStatusEnum = pgEnum("integration_connection_status", [
+  "draft",
+  "pending_approval",
+  "active",
+  "paused",
+  "error",
+  "revoked",
+]);
+
+export const integrationConnections = pgTable(
+  "integration_connections",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    /** Only "patients" today (ADR 0010 scope); kept as a column for a future table. */
+    targetTable: text("target_table").notNull().default("patients"),
+    /** Only "fhir_r4" today; kept as a column for a future connector kind. */
+    kind: text("kind").notNull().default("fhir_r4"),
+    /** In-process synthetic sandbox: never registered, never a real endpoint (ADR 0010). */
+    isSandbox: boolean("is_sandbox").notNull().default(false),
+    displayName: text("display_name").notNull(),
+    baseUrl: text("base_url").notNull(),
+    /** WHATWG-normalized scheme+host+port+path of `baseUrl` (src/integrations/fhir/url-rules.ts, PI2a). */
+    endpointKey: text("endpoint_key").notNull(),
+    /** Discovered at test/submit time (PI2a); null until then. */
+    tokenEndpoint: text("token_endpoint"),
+    tokenEndpointKey: text("token_endpoint_key"),
+    issuer: text("issuer"),
+    clientId: text("client_id").notNull(),
+    mrnIdentifierSystem: text("mrn_identifier_system").notNull(),
+    /** Recorded by the operator at approval (PI1c); never inferred. */
+    mrnNineDigitsVerified: boolean("mrn_nine_digits_verified").notNull().default(false),
+    /** "per_connection" | "shared_vendor_exception" | "preprod_shared"; set by the operator (PI2a). */
+    keyMode: text("key_mode"),
+    keyRef: text("key_ref"),
+    keyExceptionReason: text("key_exception_reason"),
+    status: integrationConnectionStatusEnum("status").notNull().default("draft"),
+    statusReason: text("status_reason"),
+    /** "group_export" | "verified_filter"; set by the operator at approval (PI1c). */
+    populationScope: text("population_scope"),
+    usResidencyAttestedBy: uuid("us_residency_attested_by").references(() => users.id),
+    usResidencyAttestedAt: timestamp("us_residency_attested_at", { withTimezone: true }),
+    submittedBy: uuid("submitted_by").references(() => users.id),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    /** Operator-only (column grants, PI1c): never set by a practice session. */
+    approvedBy: uuid("approved_by").references(() => users.id),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvalMethod: text("approval_method"),
+    revokedBy: uuid("revoked_by").references(() => users.id),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    patientWatermark: timestamp("patient_watermark", { withTimezone: true }),
+    coverageWatermark: timestamp("coverage_watermark", { withTimezone: true }),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+    bulkGroupId: text("bulk_group_id"),
+    /** Set when the first sync page commits, never cleared (immutability trigger below). */
+    hasSynced: boolean("has_synced").notNull().default(false),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    updatedBy: uuid("updated_by")
+      .notNull()
+      .references(() => users.id),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    // Target of tenant-scoped foreign keys from patients, sync runs, and payer mappings.
+    uniqueIndex("integration_connections_tenant_id_key").on(t.tenantId, t.id),
+    // At most one connection per practice and target table outside draft/revoked.
+    uniqueIndex("integration_connections_one_active")
+      .on(t.tenantId, t.targetTable)
+      .where(sql`status not in ('draft', 'revoked')`),
+  ],
+);
+
+/**
+ * Global, cross-practice registry (confused-deputy defense, threat model S2/M-a/M-b): unique on
+ * (endpoint, client ID) and again on (discovered token endpoint, client ID), so two practices can
+ * never both claim the same real EHR client. No RLS and no grant to `denialdesk_app`: reached only
+ * through the SECURITY DEFINER functions below.
+ */
+export const integrationEndpointRegistry = pgTable(
+  "integration_endpoint_registry",
+  {
+    id: id(),
+    connectionId: uuid("connection_id").notNull(),
+    endpointKey: text("endpoint_key").notNull(),
+    clientId: text("client_id").notNull(),
+    /** Filled in once discovery (PI2a) runs; null until then. */
+    tokenEndpointKey: text("token_endpoint_key"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "integration_endpoint_registry_connection_fk",
+      columns: [t.connectionId],
+      foreignColumns: [integrationConnections.id],
+    }),
+    uniqueIndex("integration_endpoint_registry_connection_key").on(t.connectionId),
+    uniqueIndex("integration_endpoint_registry_endpoint_key").on(t.endpointKey, t.clientId),
+    uniqueIndex("integration_endpoint_registry_token_endpoint_key").on(t.tokenEndpointKey, t.clientId),
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------
 // Patients and claims (Restricted PHI, REQUIREMENTS §9.1)
 // ---------------------------------------------------------------------------------------------
+
+/** manual: staff-entered (today's behavior). fhir: synced read-only from the practice's EHR/PM. */
+export const patientSourceEnum = pgEnum("patient_source", ["manual", "fhir"]);
 
 export const patients = pgTable(
   "patients",
@@ -200,9 +313,12 @@ export const patients = pgTable(
     firstName: text("first_name").notNull(),
     lastName: text("last_name").notNull(),
     birthDate: date("birth_date", { mode: "string" }).notNull(),
-    /** Field-level encrypted (R-7.3.3). Never select into logs. */
-    memberIdEnc: text("member_id_enc").notNull(),
-    memberIdLast4: text("member_id_last4").notNull(),
+    /**
+     * Field-level encrypted (R-7.3.3). Never select into logs. Nullable: a synced patient without
+     * a mapped coverage has no member ID on file (patients_member_id_presence CHECK, drizzle/00NN).
+     */
+    memberIdEnc: text("member_id_enc"),
+    memberIdLast4: text("member_id_last4"),
     sensitivityTags: text("sensitivity_tags")
       .array()
       .notNull()
@@ -216,9 +332,30 @@ export const patients = pgTable(
     /** Two-letter state of residence (breach notification by state, R-3.4.3). */
     state: text("state"),
     postalCode: text("postal_code"),
+    /** Never synced (OA-047): the one field a synced patient keeps editable. */
     phone: text("phone"),
     /** Primary coverage; the member ID above belongs to this payer. */
     primaryPayerId: uuid("primary_payer_id"),
+    // -- Provenance (docs/specs/patient-integrations.md "Field mapping"; ADR 0010) --------------
+    source: patientSourceEnum("source").notNull().default("manual"),
+    sourceConnectionId: uuid("source_connection_id"),
+    /** `Patient.id` at the source. Required and unique per connection once `source = 'fhir'`. */
+    externalId: text("external_id"),
+    sourceVersionId: text("source_version_id"),
+    sourceLastUpdated: timestamp("source_last_updated", { withTimezone: true }),
+    syncedAt: timestamp("synced_at", { withTimezone: true }),
+    /** null = current; else "inactive" | "merged" (Patient.link replaced-by) | "gone" (404/410, PI3). */
+    sourceStatus: text("source_status"),
+    /** `Patient.meta.security`: R/V, an ActCode sensitivity code, or any unrecognized label (I4). */
+    sourceRestricted: boolean("source_restricted").notNull().default(false),
+    sourceSensitivity: text("source_sensitivity")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    /** "none" | "mapped" | "unmapped" | "needs_review" (primary Coverage selection). */
+    coverageStatus: text("coverage_status").notNull().default("none"),
+    /** The raw FHIR payor key (e.g. "Organization/123"); a payer_id is set only by explicit mapping. */
+    coveragePayorKey: text("coverage_payor_key"),
     createdAt: createdAt(),
     /** Stale-edit check for the patient form: every update must set it (updatePatient does). */
     updatedAt: updatedAt(),
@@ -232,6 +369,131 @@ export const patients = pgTable(
       columns: [t.tenantId, t.primaryPayerId],
       foreignColumns: [payers.tenantId, payers.id],
     }),
+    // A synced row's connection must belong to the same practice (FKs bypass RLS).
+    foreignKey({
+      name: "patients_source_connection_fk",
+      columns: [t.tenantId, t.sourceConnectionId],
+      foreignColumns: [integrationConnections.tenantId, integrationConnections.id],
+    }),
+    // Target of tenant-scoped foreign keys (e.g. integration_sync_issues.patient_id).
+    uniqueIndex("patients_tenant_id_key").on(t.tenantId, t.id),
+    // One row per (connection, external id); only meaningful for synced rows.
+    uniqueIndex("patients_tenant_connection_external_key")
+      .on(t.tenantId, t.sourceConnectionId, t.externalId)
+      .where(sql`source = 'fhir'`),
+  ],
+);
+
+export const integrationSyncRunStatusEnum = pgEnum("integration_sync_run_status", [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "abandoned",
+]);
+
+export const integrationSyncRuns = pgTable(
+  "integration_sync_runs",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    connectionId: uuid("connection_id").notNull(),
+    /** "manual" (Sync now) | "scheduled" (PI3). */
+    trigger: text("trigger").notNull(),
+    /** The admin who pressed Sync now; null for a scheduled run. */
+    triggeredBy: uuid("triggered_by").references(() => users.id),
+    status: integrationSyncRunStatusEnum("status").notNull().default("queued"),
+    queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
+    patientWatermark: timestamp("patient_watermark", { withTimezone: true }),
+    coverageWatermark: timestamp("coverage_watermark", { withTimezone: true }),
+    createdCount: integer("created_count").notNull().default(0),
+    updatedCount: integer("updated_count").notNull().default(0),
+    linkedCount: integer("linked_count").notNull().default(0),
+    skippedCount: integer("skipped_count").notNull().default(0),
+    /** Fixed vocabulary + R4 IssueType codes only; never `diagnostics` (I1). */
+    issueCodes: text("issue_codes")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    httpStatus: integer("http_status"),
+  },
+  (t) => [
+    foreignKey({
+      name: "integration_sync_runs_connection_fk",
+      columns: [t.tenantId, t.connectionId],
+      foreignColumns: [integrationConnections.tenantId, integrationConnections.id],
+    }),
+    uniqueIndex("integration_sync_runs_tenant_id_key").on(t.tenantId, t.id),
+    index("integration_sync_runs_connection_idx").on(t.tenantId, t.connectionId, t.queuedAt),
+    // At most one queued or running run per connection at a time.
+    uniqueIndex("integration_sync_runs_one_active")
+      .on(t.tenantId, t.connectionId)
+      .where(sql`status in ('queued', 'running')`),
+  ],
+);
+
+/** Append-only (INSERT + SELECT only): one row per skipped or linked resource in a run. */
+export const integrationSyncIssues = pgTable(
+  "integration_sync_issues",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    runId: uuid("run_id").notNull(),
+    code: text("code").notNull(),
+    patientId: uuid("patient_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: "integration_sync_issues_run_fk",
+      columns: [t.tenantId, t.runId],
+      foreignColumns: [integrationSyncRuns.tenantId, integrationSyncRuns.id],
+    }),
+    foreignKey({
+      name: "integration_sync_issues_patient_fk",
+      columns: [t.tenantId, t.patientId],
+      foreignColumns: [patients.tenantId, patients.id],
+    }),
+    index("integration_sync_issues_run_idx").on(t.tenantId, t.runId),
+  ],
+);
+
+/** One insurer → practice payer decision per connection (step-up UI, PI2b); unmapped when payerId is null. */
+export const integrationPayerMappings = pgTable(
+  "integration_payer_mappings",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    connectionId: uuid("connection_id").notNull(),
+    /** The FHIR payor key, e.g. "Organization/123". */
+    payorKey: text("payor_key").notNull(),
+    payorName: text("payor_name"),
+    payerId: uuid("payer_id"),
+    updatedBy: uuid("updated_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: "integration_payer_mappings_connection_fk",
+      columns: [t.tenantId, t.connectionId],
+      foreignColumns: [integrationConnections.tenantId, integrationConnections.id],
+    }),
+    foreignKey({
+      name: "integration_payer_mappings_payer_fk",
+      columns: [t.tenantId, t.payerId],
+      foreignColumns: [payers.tenantId, payers.id],
+    }),
+    uniqueIndex("integration_payer_mappings_tenant_connection_payor_key").on(
+      t.tenantId,
+      t.connectionId,
+      t.payorKey,
+    ),
   ],
 );
 

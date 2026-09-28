@@ -17,7 +17,7 @@ submission.
 |---|---|---|
 | **C1** (this PR) | Claims list, claim detail, immutable version history, correcting draft/rejected claims, timely-filing warnings | Claim data model; Timely-filing guardrail (warn) |
 | C2 | Charge capture via CSV import → draft claims (synthetic-only guard as in revenue cycle imports) | Charge capture via CSV import |
-| C3 | 837P generation and clearinghouse stub submission; submission **blocked** past the filing deadline unless an admin records an exception reason | 837P; Timely-filing guardrail (block) |
+| C3 | 837P generation and clearinghouse stub submission; submission **blocked** past the filing deadline unless an admin records an exception reason. Also blocked when the patient's member ID is null or unmapped (see note below) | 837P; Timely-filing guardrail (block) |
 | C4 | 999 / 277CA capture: accepted/rejected status and payer receipt date (starts prompt pay) | 999 / 277CA |
 
 ## User stories
@@ -87,6 +87,13 @@ submission.
 - Adding or removing claim lines (the app role can't delete lines; C2 decides how lines are voided).
 - Creating claims by hand; CSV import (C2). Submission and blocking (C3). Acknowledgments (C4).
 - Timely-filing exceptions (retro eligibility, COB) — needs counsel input; C3.
+- ⚠️ C3 note (patient-integrations PI1a, `docs/specs/patient-integrations.md`): once a practice has
+  an EHR/PM connection, `patients.member_id_enc`/`member_id_last4` are nullable and null unless
+  `coverage_status` is `mapped` or `unmapped` — a synced patient can have no member ID on file yet,
+  or one the sync team hasn't reviewed. The 837P builder (edi-x12-specialist) must refuse to
+  generate a claim for a patient whose member ID is null or whose `coverage_status` isn't `mapped`,
+  with a clear "no payer coverage on file for this patient" refusal, rather than emitting an 837P
+  with a blank/placeholder subscriber ID (837P loop 2010BA `NM109`).
 - Corrected/void claims to the payer (frequency 7/8) — Appeals phase.
 - Code validity against licensed code sets (AMA CPT license, CMS ICD-10 files) — format only today.
 
