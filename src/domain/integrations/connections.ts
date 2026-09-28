@@ -2,7 +2,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { canManageIntegrations } from "@/auth/permissions";
 import type { Role } from "@/auth/session";
-import { integrationConnections } from "@/db/schema";
+import { integrationConnectionStatusEnum, integrationConnections } from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
 import { en } from "@/i18n/messages/en";
 import type { MessageKey, Messages } from "@/i18n/messages/types";
@@ -32,6 +32,28 @@ import { audit } from "@/lib/audit";
 type IntegrationsT = Translator<Messages["integrations"]>;
 type IntegrationsKey = MessageKey<"integrations">;
 const englishT: IntegrationsT = createTranslator(en.integrations, "en");
+
+export type ConnectionStatus = (typeof integrationConnectionStatusEnum.enumValues)[number];
+
+/** Status labels (message keys) for the list, the detail page, and the tab-bar drop-down. */
+export const CONNECTION_STATUS_LABEL_KEYS = {
+  draft: "status.draft",
+  pending_approval: "status.pending_approval",
+  active: "status.active",
+  paused: "status.paused",
+  error: "status.error",
+  revoked: "status.revoked",
+} as const satisfies Record<ConnectionStatus, IntegrationsKey>;
+
+/** Badge tone per status; the label always carries the meaning, never the color alone. */
+export const CONNECTION_STATUS_TONE = {
+  draft: "neutral",
+  pending_approval: "info",
+  active: "success",
+  paused: "warning",
+  error: "danger",
+  revoked: "neutral",
+} as const satisfies Record<ConnectionStatus, "neutral" | "info" | "success" | "warning" | "danger">;
 
 /** A refusal with a translated message and, when it belongs to one, the form field it concerns. */
 export class IntegrationConnectionError extends Error {

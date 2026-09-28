@@ -12,7 +12,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { label: t("tabs.usersAndRoles"), href: "/settings/users", available: false },
     { label: t("tabs.security"), href: "/settings/security", available: false },
     { label: t("tabs.notifications"), href: "/settings/notifications", available: false },
-    { label: t("tabs.integrations"), href: "/settings/integrations", available: false },
+    { label: t("tabs.integrations"), href: "/settings/integrations", available: true },
   ];
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">

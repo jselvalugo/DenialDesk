@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
 // docs/specs/settings-and-custom-fields.md. Administrators' add/edit flow is covered by
@@ -25,5 +26,19 @@ test.describe("settings", () => {
     await expect(page.getByRole("heading", { name: "Claims fields" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Add field" })).toHaveCount(0);
     expect((await request.get("/settings/fields/new")).status()).toBe(404);
+  });
+
+  test("integrations: every role sees the connection summary; only administrators open or create one (PI1b-2)", async ({
+    page,
+    request,
+  }) => {
+    await page.goto("/settings");
+    const tabs = page.getByRole("navigation", { name: "Settings sections" });
+    await tabs.getByRole("link", { name: "Integrations" }).click();
+    await expect(tabs.getByRole("link", { name: "Integrations" })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("heading", { name: "EHR/PM connections" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "New connection" })).toHaveCount(0);
+    expect((await request.get("/settings/integrations/new")).status()).toBe(404);
+    expect((await request.get(`/settings/integrations/${randomUUID()}`)).status()).toBe(404);
   });
 });

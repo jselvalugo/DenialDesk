@@ -46,7 +46,8 @@ _Last updated: 2026-09-28_
   statements is still needed before this migration runs anywhere but a local/test database)**, PI1b
   Settings › Integrations + drop-down (split 2026-09-28: **PI1b-1 domain done** —
   `src/domain/integrations/connections.ts` create/edit/revoke with a strict allow-list, URL and
-  MRN-identifier-system rules in `src/integrations/fhir/`, environment rule at save; PI1b-2 pages,
+  MRN-identifier-system rules in `src/integrations/fhir/`, environment rule at save; **PI1b-2 Settings pages done** (list for every role, admin-only new/detail
+  pages, inline-confirmed revoke with offboarding steps, `docs/runbooks/integration-offboarding.md`),
   PI1b-3 drop-down; Submit/attestation/MFA step-up/pause-resume moved to PI2a, where Test
   connection first makes Submit possible; PI1c operator approval now follows PI2a, since it needs
   submitted connections), PI2a transport/discovery/keys/test connection + Submit, PI1c operator approval,
@@ -366,7 +367,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
    P2 coverage now comes from the EHR sync once a practice is connected (`specs/patient-integrations.md`).
-11. Patient integrations PI1a → PI1b (PI1b-1 done; PI1b-2 pages, PI1b-3 drop-down) → PI2a → PI1c → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
+11. Patient integrations PI1a → PI1b (PI1b-1, PI1b-2 done; PI1b-3 drop-down) → PI2a → PI1c → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
 
 ## Open questions for humans
