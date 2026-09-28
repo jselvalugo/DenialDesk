@@ -40,6 +40,7 @@ export type AuditAction =
   | "auth.password_changed"
   | "auth.step_up_verified"
   | "auth.step_up_failed"
+  | "auth.step_up_refused"
   | "security.rate_limited"
   | "operator.console_viewed"
   | "operator.login_succeeded"

@@ -311,7 +311,10 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       requires a passing Test connection in the last 24 h, the residency attestation (real only),
       and an MFA verification within the last 5 minutes (step-up; R-7.2.2; the gate and `/step-up`
       exist now, see "Step-up MFA" below: call `requireStepUp`). Tests: Submit refused without a
-      recent passing test, and without a recent step-up.
+      recent passing test, and without a recent step-up. Submit writes both stamps
+      (`submitted_at`, `us_residency_attested_at`) in the same UPDATE that changes status. Before
+      the first real connection, a later migration should require the stamps to be ≥
+      `transaction_timestamp()` and `attested_by` non-null (compliance N3; owner/counsel decision).
 - [ ] Residency attestation on Submit of a real connection: "This EHR/PM endpoint stores and
       processes data only in the United States" — stricter than § 408.051(3), which also allows
       territories and Canada (DenialDesk defaults to U.S.-only, R-3.3.1). Audited.
@@ -321,12 +324,16 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       (set at sign-in MFA and at each step-up; null on a session from before 0041, which must step
       up first); `hasRecentMfa` (`src/auth/step-up.ts`, 5-minute window from
       `MFA_STEP_UP_WINDOW_MS`, inclusive at 5:00; unit-tested at 4:59 / 5:00 / 5:01); `/step-up`
-      re-verifies the sign-in TOTP and returns to a `returnTo` that `safeInternalPath` keeps to an
-      allow-listed same-origin path (open-redirect fix, `src/lib/safe-path.ts`); a success rotates
+      re-verifies the sign-in TOTP and returns to a `returnTo` that `stepUpTarget` keeps to one of the
+      integrations pages (built on `safeInternalPath`, the open-redirect fix, `src/lib/safe-path.ts`); a success rotates
       the session token and cookie (`completeStepUpMfa`); it shares the sign-in attempt counter but
       refuses, before checking any code, the attempt that would reach the lockout limit
-      (`reserveStepUpAttempt`: a correct code must not lock the account, since a step-up doesn't
-      clear the counter), a
+      (`reserveStepUpAttempt`); that refused attempt is what sets the lock, for the usual 15
+      minutes, audited `auth.locked_out` (session, tenant, route, no code), so a correct code never
+      causes the lock and no guess is evaluated (a step-up doesn't clear the counter, so letting the
+      last attempt through would succeed and still leave the account locked); an attempt on an
+      account already locked is refused and audited `auth.step_up_refused` with `reason: locked`;
+      the message says the account is locked for up to the lockout time; a
       failure never resets the sign-in lockout counter, and a success keeps earlier failures
       (`claimTotp(..., resetLockout: false)`) while giving back only its own attempt
       (`releaseAttempt`), so successful step-ups can't add up to a lockout; audited
@@ -349,8 +356,11 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       untouched), environment-rule checked, stale-page checked. The endpoint is editable again once
       it is a draft, so a **second UPDATE clears the residency attestation**
       (`us_residency_attested_by/_at`; a separate statement, because the lifecycle trigger refuses
-      to change the attestation in the statement that leaves `pending_approval`) and a different
-      endpoint is attested afresh; the submission stamp (`submitted_by/_at`) stays as the record
+      to change the attestation in the statement that leaves `pending_approval`) and, in the
+      same statement, the discovered token endpoint, its registry key, and the issuer (they belong
+      to the old endpoint; Test connection finds them again), so a different endpoint is attested
+      and discovered afresh. The audit event records what was cleared (`previous_attested_by/_at`,
+      the previous token endpoint and issuer, normalized); the submission stamp (`submitted_by/_at`) stays as the record
       that it was submitted once, and the page shows "Submitted" only while the connection is not a
       draft. Database backstop (drizzle/0042): `draft → pending_approval` requires the attestation
       and submission stamps that are present to differ from the row's previous ones (the fresh-stamp
@@ -635,6 +645,15 @@ with no query string or fragment (configuration, not PHI);
 run-level `sync_completed` is the record of receipt for unchanged and skipped resources),
 `patient.synced_created|synced_updated|linked_to_source|source_inactivated|source_merged|source_gone`
 (patient, connection, run IDs; changed field names).
+
+_Audit change for SIEM consumers (PI2a lifecycle slice): withdraw is recorded as
+`integration.connection_withdrawn`, not `integration.connection_updated` with
+`transition: withdrawn` (the form #81 and the first version of this branch used). Revoke
+additionally carries `reason_code` in its metadata (the code is also in the audit `reason` column) and
+`previous_status_reason`; resume carries `previous_status_reason` and `step_up_verified_at`;
+step-up events carry `route`/`route_id` (a route template and a UUID, never the raw path), and a
+step-up refused at the lockout limit is `auth.locked_out` (`source: step_up`) or
+`auth.step_up_refused` (`reason: locked`)._
 
 ## Legal rules used
 None (no legal clock). Residency is enforced by attestation and environment rules.

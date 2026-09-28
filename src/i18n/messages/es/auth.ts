@@ -81,5 +81,6 @@ export const auth: Messages["auth"] = {
   "stepUp.title": "Verifique su identidad",
   "stepUp.subtitle": "Esta acción necesita un código nuevo de su aplicación autenticadora.",
   "stepUp.cancel": "Cancelar",
-  "error.tooManyAttempts": "Demasiados intentos. Vuelva a intentarlo en {minutes} minutos.",
+  "error.tooManyAttempts":
+    "Demasiados intentos. Esta cuenta está bloqueada por hasta {minutes} minutos; inténtelo de nuevo después.",
 };

@@ -82,5 +82,6 @@ export const auth = {
   "stepUp.title": "Verify your identity",
   "stepUp.subtitle": "This action needs a fresh code from your authenticator app.",
   "stepUp.cancel": "Cancel",
-  "error.tooManyAttempts": "Too many attempts. Try again in {minutes} minutes.",
+  "error.tooManyAttempts":
+    "Too many attempts. This account is locked for up to {minutes} minutes; try again after that.",
 } as const;

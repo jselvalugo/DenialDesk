@@ -83,26 +83,49 @@ export async function reserveAttempt(userId: string): Promise<boolean> {
   return row !== undefined;
 }
 
+/** What `reserveStepUpAttempt` decided about this attempt. */
+export type StepUpReservation =
+  /** Counted; go on and check the code. */
+  | "ok"
+  /** This attempt would have reached the limit: refused unchecked, and the account is now locked. */
+  | "locked_now"
+  /** The account was already locked: refused unchecked. */
+  | "locked";
+
 /**
- * The attempt reservation for a step-up (R-7.2.2): the same counter and limit as `reserveAttempt`,
- * but it never sets the lock. `reserveAttempt` lets the attempt that reaches the limit go on to be
- * checked and locks the account after it, which suits sign-in (a correct code then signs in and
- * clears the lock). A step-up doesn't clear the counter, so a correct code on that last attempt
- * would succeed and still leave the account locked. So when this attempt would reach the limit it
- * is refused before any code is checked, changing nothing: no guess is evaluated, the counter stays
- * where it was, and the account isn't locked by someone who just proved possession of the
- * authenticator. Also refused while locked. One UPDATE, so parallel attempts can't slip past.
+ * The attempt reservation for a step-up (R-7.2.2): the same counter, limit, and lock length as
+ * `reserveAttempt`, with one difference. `reserveAttempt` lets the attempt that reaches the limit go
+ * on to be checked and locks the account after it, which suits sign-in (a correct code then signs
+ * in and clears the lock). A step-up doesn't clear the counter, so a correct code on that last
+ * attempt would succeed and still leave the account locked. So the attempt that would reach the
+ * limit is refused before any code is checked (`locked_now`) and is what sets the lock, for the
+ * usual lock length, after which it expires on its own: a correct code never causes the lock, and no
+ * guess is evaluated. Also refused while already locked (`locked`), changing nothing. One
+ * statement over a locked row, so parallel attempts can't slip past.
  */
-export async function reserveStepUpAttempt(userId: string): Promise<boolean> {
-  const result = await systemDb().execute<{ id: string }>(sql`
-    update users set
-      failed_login_count = (case when locked_until <= now() then 0 else failed_login_count end) + 1,
-      locked_until = null
-    where id = ${userId}
-      and (locked_until is null or locked_until <= now())
-      and (case when locked_until <= now() then 0 else failed_login_count end) + 1 < ${MAX_FAILED_ATTEMPTS}
-    returning id`);
-  return result.rows.length > 0;
+export async function reserveStepUpAttempt(userId: string): Promise<StepUpReservation> {
+  const result = await systemDb().execute<{ was_locked: boolean; now_locked: boolean }>(sql`
+    with cur as (
+      select id,
+        (locked_until is not null and locked_until > now()) as was_locked,
+        (case when locked_until <= now() then 0 else failed_login_count end) as attempts_before
+      from users where id = ${userId}
+      for update
+    ), updated as (
+      update users u set
+        failed_login_count = case when cur.was_locked then u.failed_login_count else cur.attempts_before + 1 end,
+        locked_until = case
+          when cur.was_locked then u.locked_until
+          when cur.attempts_before + 1 >= ${MAX_FAILED_ATTEMPTS} then now() + make_interval(secs => ${LOCKOUT_MS / 1000})
+          else null end
+      from cur where u.id = cur.id
+      returning cur.was_locked,
+        (not cur.was_locked and cur.attempts_before + 1 >= ${MAX_FAILED_ATTEMPTS}) as now_locked
+    )
+    select was_locked, now_locked from updated`);
+  const row = result.rows[0];
+  if (!row || row.was_locked) return "locked";
+  return row.now_locked ? "locked_now" : "ok";
 }
 
 export async function recordFailure(userId: string, action: AuditAction): Promise<void> {

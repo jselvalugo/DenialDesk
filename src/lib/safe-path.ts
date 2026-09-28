@@ -3,6 +3,9 @@
 // Security review (PR #81): a backslash, a control character, or a second leading slash can all be
 // used by a browser to reach another origin even when the string "looks" like a path.
 
+// Only the path is checked against the allow-list. A query string on an allowed path is kept
+// as given, so any consumer that reads it must validate its own parameters (this function says
+// nothing about what the query string means or contains).
 const ALLOWED_PREFIXES = ["/settings/integrations", "/patients", "/"];
 
 function hasControlOrWhitespace(value: string): boolean {

@@ -88,7 +88,7 @@ describe("verifyStepUp", () => {
     completeStepUpMfa.mockReset();
     completeStepUpMfa.mockResolvedValue(true);
     auditSystem.mockClear();
-    reserveStepUpAttempt.mockResolvedValue(true);
+    reserveStepUpAttempt.mockResolvedValue("ok");
     claimTotp.mockClear();
     releaseAttempt.mockClear();
     limitCurrentRequest.mockClear();
@@ -186,11 +186,44 @@ describe("verifyStepUp", () => {
     expect(releaseAttempt).not.toHaveBeenCalled();
   });
 
-  it("refuses when the account is locked out, never reaching claimTotp", async () => {
-    reserveStepUpAttempt.mockResolvedValue(false);
-    const result = await verifyStepUp({}, form({ code: "123456" }));
-    expect(result.error).toBeTruthy();
+  it("refuses the attempt that would reach the limit before any code is checked, and audits the lock it sets", async () => {
+    reserveStepUpAttempt.mockResolvedValue("locked_now");
+    const result = await verifyStepUp({}, form({ code: "123456", returnTo: `/settings/integrations/${ID}` }));
+    expect(result.error).toMatch(/locked for up to 15 minutes/);
+    // No code was checked, nothing was verified, no attempt was given back.
     expect(claimTotp).not.toHaveBeenCalled();
     expect(completeStepUpMfa).not.toHaveBeenCalled();
+    expect(releaseAttempt).not.toHaveBeenCalled();
+    expect(auditSystem).toHaveBeenCalledTimes(1);
+    expect(auditSystem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "auth.locked_out",
+        actorUserId: auth.userId,
+        tenantId: auth.tenantId,
+        entityType: "session",
+        entityId: auth.sessionId,
+        metadata: { route: "/settings/integrations/[id]", route_id: ID, source: "step_up" },
+      }),
+    );
+    // The submitted code never reaches the log.
+    expect(JSON.stringify(auditSystem.mock.calls)).not.toContain("123456");
+  });
+
+  it("refuses an attempt on an already locked account, audited as refused, never reaching claimTotp", async () => {
+    reserveStepUpAttempt.mockResolvedValue("locked");
+    const result = await verifyStepUp({}, form({ code: "123456", returnTo: `/settings/integrations/${ID}` }));
+    expect(result.error).toMatch(/locked for up to 15 minutes/);
+    expect(claimTotp).not.toHaveBeenCalled();
+    expect(completeStepUpMfa).not.toHaveBeenCalled();
+    expect(auditSystem).toHaveBeenCalledTimes(1);
+    expect(auditSystem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "auth.step_up_refused",
+        actorUserId: auth.userId,
+        tenantId: auth.tenantId,
+        metadata: { route: "/settings/integrations/[id]", route_id: ID, reason: "locked" },
+      }),
+    );
+    expect(JSON.stringify(auditSystem.mock.calls)).not.toContain("123456");
   });
 });

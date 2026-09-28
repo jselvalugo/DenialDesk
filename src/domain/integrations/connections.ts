@@ -298,6 +298,21 @@ function endpointMetadata(
 }
 
 /**
+ * A URL as recorded in audit metadata: scheme, host, and path only (never a query string, fragment,
+ * or credentials), like the endpoint values `endpointMetadata` records. Null when there is none or
+ * it isn't a URL (an issuer needn't be one), so nothing unparsed is copied into the log.
+ */
+function normalizedUrlForAudit(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}${url.pathname === "/" ? "" : url.pathname}`.slice(0, 512);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Inserts a draft connection. The app role holds INSERT on a fixed column list only (drizzle/0039:
  * approval, key, and sync columns stay out of its reach), and Drizzle's `.insert()` names every
  * column (unset ones as DEFAULT), which PostgreSQL checks against the grant — so this is raw SQL
@@ -631,6 +646,16 @@ export async function withdrawConnection(
   t: IntegrationsT = englishT,
 ): Promise<void> {
   const current = await lockForTransition(tx, actor, id, expectedUpdatedAt, ["pending_approval"], t);
+  // What is about to be cleared, for the audit record (the row is locked, so this is what is cleared).
+  const [previous] = await tx
+    .select({
+      attestedBy: integrationConnections.usResidencyAttestedBy,
+      attestedAt: integrationConnections.usResidencyAttestedAt,
+      tokenEndpoint: integrationConnections.tokenEndpoint,
+      issuer: integrationConnections.issuer,
+    })
+    .from(integrationConnections)
+    .where(eq(integrationConnections.id, id));
   await writeStatus(tx, actor, id, { status: "draft" });
   // After the status change: the database function refuses to release while still pending.
   const registryReleased = await releaseRegistry(tx, id, current.isSandbox);
@@ -660,6 +685,10 @@ export async function withdrawConnection(
       registry_released: registryReleased,
       attestation_cleared: true,
       discovery_cleared: true,
+      previous_attested_by: previous?.attestedBy ?? null,
+      previous_attested_at: previous?.attestedAt?.toISOString() ?? null,
+      previous_token_endpoint: normalizedUrlForAudit(previous?.tokenEndpoint),
+      previous_issuer: normalizedUrlForAudit(previous?.issuer),
       ...endpointMetadata("", current),
     },
   });

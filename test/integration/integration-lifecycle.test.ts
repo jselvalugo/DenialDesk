@@ -482,6 +482,22 @@ describe("withdrawConnection", () => {
     });
   });
 
+  it("records in the audit event what it cleared: who attested and when, the old token endpoint and issuer", async () => {
+    const { ctx, id } = await realConnection("pending_approval");
+    const before = await stamps(id);
+    await withTenant(ctx, async (tx) =>
+      withdrawConnection(tx, admin(ctx), id, (await getConnection(tx, id))!.updatedAt.toISOString()),
+    );
+    const tokenUrl = new URL(before.tokenEndpoint!);
+    const issuerUrl = new URL(before.issuer!);
+    expect((await lastAudit(id)).metadata).toMatchObject({
+      previous_attested_by: ctx.userId,
+      previous_attested_at: before.attestedAt!.toISOString(),
+      previous_token_endpoint: `${tokenUrl.protocol}//${tokenUrl.host}${tokenUrl.pathname}`,
+      previous_issuer: `${issuerUrl.protocol}//${issuerUrl.host}`,
+    });
+  });
+
   it("clears the residency attestation and the old endpoint's discovery, keeps the record that it was submitted once", async () => {
     const { ctx, id } = await realConnection("pending_approval");
     const before = await stamps(id);

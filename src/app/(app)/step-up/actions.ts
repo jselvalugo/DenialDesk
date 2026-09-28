@@ -35,8 +35,10 @@ const auditMetadata = (target: StepUpTarget) => ({ route: target.route, route_id
  * retried.
  *
  * It shares the sign-in attempt counter (`reserveStepUpAttempt`), so codes can't be guessed here
- * without limit, and it refuses, before checking any code, the attempt that would reach the lockout
- * limit (a correct code there must not lock the account). A failure never clears the sign-in lockout counter, and a success doesn't erase
+ * without limit. The attempt that would reach the lockout limit is refused before any code is
+ * checked, and locks the account for the usual time (audited `auth.locked_out`), so a correct code
+ * never causes the lock; an attempt on an already locked account is refused and audited as
+ * `auth.step_up_refused`. A failure never clears the sign-in lockout counter, and a success doesn't erase
  * earlier failures either (`claimTotp(..., resetLockout: false)`); it only gives back its own
  * attempt (`releaseAttempt`).
  */
@@ -52,7 +54,31 @@ export async function verifyStepUp(_: FormState, formData: FormData): Promise<Fo
 
   const [user] = await systemDb().select().from(users).where(eq(users.id, auth.userId)).limit(1);
   if (!user?.totpSecretEnc || !user.mfaEnrolledAt) redirect("/login");
-  if (!(await reserveStepUpAttempt(user.id))) {
+  const reservation = await reserveStepUpAttempt(user.id);
+  if (reservation !== "ok") {
+    // Refused before any code is checked. Reaching the limit here locks the account (the same
+    // audited event as at sign-in); an attempt on an already locked account is audited as refused.
+    await auditSystem(
+      reservation === "locked_now"
+        ? {
+            action: "auth.locked_out",
+            actorUserId: user.id,
+            tenantId: auth.tenantId,
+            entityType: "session",
+            entityId: auth.sessionId,
+            ipAddress: await clientIp(),
+            metadata: { ...auditMetadata(target), source: "step_up" },
+          }
+        : {
+            action: "auth.step_up_refused",
+            actorUserId: user.id,
+            tenantId: auth.tenantId,
+            entityType: "session",
+            entityId: auth.sessionId,
+            ipAddress: await clientIp(),
+            metadata: { ...auditMetadata(target), reason: "locked" },
+          },
+    );
     return { error: t("error.tooManyAttempts", { minutes: LOCKOUT_MS / 60_000 }) };
   }
 

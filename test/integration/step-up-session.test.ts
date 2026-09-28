@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { claimTotp, releaseAttempt, reserveAttempt, reserveStepUpAttempt } from "@/auth/credentials";
-import { MFA_STEP_UP_WINDOW_MS, OPERATOR_SESSION_COOKIE, SESSION_COOKIE } from "@/auth/policy";
+import { LOCKOUT_MS, MFA_STEP_UP_WINDOW_MS, OPERATOR_SESSION_COOKIE, SESSION_COOKIE } from "@/auth/policy";
 import { currentStep, generateTotpSecret, totpAt } from "@/auth/totp";
 import { closeDatabase, systemDb } from "@/db/client";
 import { sessions, users } from "@/db/schema";
@@ -217,45 +217,54 @@ describe("the sign-in attempt counter under a step-up", () => {
     expect(after.lockedUntil).toBeNull();
   });
 
-  it("a step-up on 4 earlier failures is refused before any code is checked: it would reach the limit, and a correct code must not lock the account", async () => {
+  it("a step-up on 4 earlier failures is refused before any code is checked, locks the account for the usual time, and works again once the lock expires", async () => {
     await freshUser(4);
-    expect(await reserveStepUpAttempt(userId)).toBe(false);
-    const after = await user();
-    // Nothing changed: no attempt was counted, and the account isn't locked.
-    expect(after.failedLoginCount).toBe(4);
-    expect(after.lockedUntil).toBeNull();
-    // (Sign-in's own reservation, by contrast, counts the 5th attempt and locks after it.)
-    expect(await reserveAttempt(userId)).toBe(true);
-    expect((await user()).lockedUntil).not.toBeNull();
-  });
-
-  it("a step-up counts its attempt while below the limit, and never sets the lock itself", async () => {
-    await freshUser(2);
-    expect(await reserveStepUpAttempt(userId)).toBe(true);
-    expect((await user()).failedLoginCount).toBe(3);
-    expect(await reserveStepUpAttempt(userId)).toBe(true);
-    expect((await user()).failedLoginCount).toBe(4);
-    expect(await reserveStepUpAttempt(userId)).toBe(false);
-    const after = await user();
-    expect(after.failedLoginCount).toBe(4);
-    expect(after.lockedUntil).toBeNull();
-  });
-
-  it("a step-up is refused while the account is locked, and starts over once the lock has expired", async () => {
-    await freshUser(5);
-    const until = new Date(Date.now() + 10 * 60_000);
-    await systemDb().update(users).set({ lockedUntil: until }).where(eq(users.id, userId));
-    expect(await reserveStepUpAttempt(userId)).toBe(false);
+    const before = Date.now();
+    expect(await reserveStepUpAttempt(userId)).toBe("locked_now");
+    const locked = await user();
+    // The refused attempt is what sets the lock: the same length as sign-in's, expiring on its own.
+    expect(locked.failedLoginCount).toBe(5);
+    expect(locked.lockedUntil).not.toBeNull();
+    const lockMs = locked.lockedUntil!.getTime() - before;
+    expect(lockMs).toBeGreaterThan(LOCKOUT_MS - 60_000);
+    expect(lockMs).toBeLessThanOrEqual(LOCKOUT_MS + 60_000);
+    // While locked, a further step-up is refused and changes nothing.
+    expect(await reserveStepUpAttempt(userId)).toBe("locked");
+    expect((await user()).lockedUntil?.getTime()).toBe(locked.lockedUntil!.getTime());
     expect((await user()).failedLoginCount).toBe(5);
 
+    // The lock lapses (simulated by moving it into the past): the count starts over and step-up works.
     await systemDb()
       .update(users)
       .set({ lockedUntil: new Date(Date.now() - 1_000) })
       .where(eq(users.id, userId));
-    expect(await reserveStepUpAttempt(userId)).toBe(true);
+    expect(await reserveStepUpAttempt(userId)).toBe("ok");
     const restarted = await user();
     expect(restarted.failedLoginCount).toBe(1);
     expect(restarted.lockedUntil).toBeNull();
+    expect(await claimTotp(await claimable(), totpAt(secret, currentStep()), false, false)).toBe("ok");
+  });
+
+  it("a step-up counts its attempt while below the limit, and only the attempt that would reach it locks", async () => {
+    await freshUser(2);
+    expect(await reserveStepUpAttempt(userId)).toBe("ok");
+    expect((await user()).failedLoginCount).toBe(3);
+    expect(await reserveStepUpAttempt(userId)).toBe("ok");
+    const below = await user();
+    expect(below.failedLoginCount).toBe(4);
+    expect(below.lockedUntil).toBeNull();
+    expect(await reserveStepUpAttempt(userId)).toBe("locked_now");
+    expect((await user()).lockedUntil).not.toBeNull();
+  });
+
+  it("a step-up on an account already locked is refused as locked, changing nothing", async () => {
+    await freshUser(5);
+    const until = new Date(Date.now() + 10 * 60_000);
+    await systemDb().update(users).set({ lockedUntil: until }).where(eq(users.id, userId));
+    expect(await reserveStepUpAttempt(userId)).toBe("locked");
+    const still = await user();
+    expect(still.failedLoginCount).toBe(5);
+    expect(still.lockedUntil?.getTime()).toBe(until.getTime());
   });
 
   it("never goes below zero, and never unlocks a locked account", async () => {
