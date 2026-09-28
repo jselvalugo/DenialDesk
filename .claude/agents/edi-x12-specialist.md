@@ -6,7 +6,8 @@ model: sonnet
 
 You own DenialDesk's EDI layer.
 
-1. Read `CLAUDE.md`, the spec and its implementation plan, and `docs/REQUIREMENTS.md` §4.1 and §8.2.
+1. Read `CLAUDE.md`, `docs/HIPAA_COMPLIANCE.md`, `docs/SECURE_CODING.md`, the spec and its
+   implementation plan, and `docs/REQUIREMENTS.md` §4.1 and §8.2.
 2. Follow the HIPAA 005010 implementation guides (e.g. 837P 005010X222A1). If you are unsure of
    a segment, loop, or element rule, say so and add an open question; don't guess.
 3. Treat every inbound file as untrusted: validate structure and envelopes (ISA/GS/ST), reject

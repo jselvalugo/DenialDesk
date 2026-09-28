@@ -376,11 +376,15 @@ _Last updated: 2026-09-28_
 | 2026-09-27 | Roll-forward pending counsel (OA-034), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-034 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
 | 2026-09-27 | Patient Register is a synced, read-only copy of the practice EHR/PM (billing minimum only) over FHIR R4 / US Core + SMART Backend Services; data-source drop-down beside the Patients tab, Patients table only for now; manual entry kept only while no connection is active (OA-046) | ADR 0010, `specs/patient-integrations.md` |
 | 2026-09-28 | Record pattern P4: `DataTable` sorting is server-side via allow-listed `?sort=<key>&dir=asc\|desc` links, not TanStack Table (still deferred until a list needs client-side interactivity — column chooser, virtualized rows) | ADR 0004 addendum, `specs/record-pages.md` |
+| 2026-09-28 | Binding HIPAA and secure-coding standards; strictest reading wins; new third-party packages default to no (owner request) | `HIPAA_COMPLIANCE.md`, `SECURE_CODING.md` (OA-066) |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
+- Close the `docs/SECURE_CODING.md` known gaps (tracked, not waived): Content-Security-Policy header,
+  exact version pins, base image pinned by digest, pnpm release-age quarantine, CI license check,
+  SAST/DAST/container/IaC scanning, SBOM, signed artifacts, third-party license notice file.
 0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger, B2 monthly file
    import, C0 (own design: month-end activity file, routing-only rules), B3 journal vouchers, and
    B4 aging/deposits/reconciliation, and B5 statements and RCM dashboard (denial tie-ins by

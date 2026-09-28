@@ -22,6 +22,8 @@ Look for:
   handled without tags and stricter access (R-3.5.1, R-4.5.1).
 - Retention or deletion that ignores legal hold (R-9.2.1).
 - Legal deadlines outside `rules/`, or ⚠️ VERIFY flags removed without counsel sign-off.
+- Any `MUST` rule in `docs/HIPAA_COMPLIANCE.md` broken by the diff; cite the rule ID (`HC-x.y`).
+  Where rules differ, apply the strictest reading.
 
 Also list the SOC 2 controls the change touches (CC6, CC7, CC8, PI1, …) and the
 data-classification impact, for the PR description.
