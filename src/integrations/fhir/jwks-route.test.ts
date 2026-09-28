@@ -71,10 +71,14 @@ describe("handleJwksRequest (/.well-known/jwks.json, spec PI2a 'JWKS routes')", 
     }
   });
 
-  it("is 404 where real data is allowed, without even building the key store", async () => {
+  it("L5: is 404 where real data is allowed, before rate limiting and without building the key store", async () => {
     const store = vi.fn(() => new AzureKeyVaultKeyStore());
-    const response = await handleJwksRequest({ limit: allowed, synthetic: () => false, store });
+    const limit = vi.fn(allowed);
+    const response = await handleJwksRequest({ limit, synthetic: () => false, store });
     expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    // No rate-limit hit (a database write) for an anonymous request that can never be served.
+    expect(limit).not.toHaveBeenCalled();
     expect(store).not.toHaveBeenCalled();
   });
 

@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { onNetlify } from "./env";
 
 /**
  * Where a request came from, for audit events (R-7.5.1 "where").
@@ -15,7 +16,10 @@ export async function requestContext(): Promise<{ ip: string | null; userAgent: 
       ?.split(",")
       .map((part) => part.trim())
       .filter(Boolean);
-    const ip = h.get("x-nf-client-connection-ip") ?? h.get("x-azure-clientip") ?? forwarded?.at(-1) ?? null;
+    // `x-nf-client-connection-ip` is set by Netlify's edge and is only trustworthy there; anywhere
+    // else a client could send it, so it is ignored.
+    const netlifyIp = onNetlify() ? h.get("x-nf-client-connection-ip") : null;
+    const ip = netlifyIp ?? h.get("x-azure-clientip") ?? forwarded?.at(-1) ?? null;
     const userAgent = h.get("user-agent")?.slice(0, 256) ?? null;
     return { ip, userAgent };
   } catch {

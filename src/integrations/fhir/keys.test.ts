@@ -1,4 +1,5 @@
 import { createPublicKey, generateKeyPairSync, verify as cryptoVerify, type KeyObject } from "node:crypto";
+import { inspect } from "node:util";
 import { describe, expect, it } from "vitest";
 import { signJwt } from "@/lib/crypto/jwt-sign";
 import {
@@ -95,6 +96,31 @@ describe("thumbprintKid", () => {
     expect(kid).toBe(thumbprintKid(publicKey));
     expect(kid).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(thumbprintKid(generateKeyPairSync("ec", { namedCurve: "secp384r1" }).privateKey)).not.toBe(kid);
+  });
+
+  // Known-answer tests: the expected values do not come from this implementation.
+  it("matches the RFC 7638 section 3.1 RSA example", () => {
+    // The public key and thumbprint printed in RFC 7638 section 3.1 (https://www.rfc-editor.org/rfc/rfc7638#section-3.1).
+    const jwk = {
+      kty: "RSA",
+      n: "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw",
+      e: "AQAB",
+    };
+    expect(thumbprintKid(createPublicKey({ key: jwk, format: "jwk" }))).toBe(
+      "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs",
+    );
+  });
+
+  it("matches an EC P-384 vector whose expected value was computed independently (SHA-256 of the RFC 7638 canonical JSON, in Python)", () => {
+    const jwk = {
+      kty: "EC",
+      crv: "P-384",
+      x: "KNUzHIB4tqauE-6q0PbMfjrw68yAPA--QoY7m8YzVnB8c2L7le-hfn07vLNyQi6F",
+      y: "nPRGqziHjiK199xVjyPy4xf6e-CBy01asYRgf_A68YsZ2crvYBJMligU5sRbA46s",
+    };
+    expect(thumbprintKid(createPublicKey({ key: jwk, format: "jwk" }))).toBe(
+      "mMV_Up0Ie3-XPDx42VfK9SaNg7nbY-KaS1B_nQYSDHE",
+    );
   });
 });
 
@@ -205,6 +231,44 @@ describe("EnvSharedKeyStore (pre-production, INTEGRATION_SIGNING_KEY)", () => {
     process.env[SIGNING_KEY_ENV] = pkcs8Pem(privateKey);
     try {
       expect((await new EnvSharedKeyStore(synthetic).signer()).kid).toBe(thumbprintKid(privateKey));
+    } finally {
+      if (saved === undefined) delete process.env[SIGNING_KEY_ENV];
+      else process.env[SIGNING_KEY_ENV] = saved;
+    }
+  });
+
+  it("M1: the store never serializes the key: not through inspect, JSON, or structuredClone, before or after use", async () => {
+    const privateKey = es384();
+    const pem = pkcs8Pem(privateKey);
+    const body = pem.replace(/-----[A-Z ]+-----/g, "").replace(/\s+/g, "");
+    const store = new EnvSharedKeyStore(synthetic, pem);
+    const shown = () =>
+      [
+        inspect(store, { depth: 6, showHidden: true }),
+        JSON.stringify(store),
+        String(Object.keys(store)),
+        String(Object.getOwnPropertyNames(store)),
+        String(Object.getOwnPropertySymbols(store).map(String)),
+      ].join("|");
+    for (const phase of ["before", "after"]) {
+      const text = shown();
+      expect(text, phase).not.toContain("PRIVATE KEY");
+      expect(text, phase).not.toContain(body.slice(20, 60));
+      expect(Object.keys(store), phase).toEqual([]);
+      if (phase === "before") await store.signer(); // load the key, then look again
+    }
+    // structuredClone of a class instance keeps only own enumerable data: nothing to leak either.
+    expect(JSON.stringify(structuredClone(store))).not.toContain("PRIVATE KEY");
+  });
+
+  it("M1: the environment variable is read on use, not at construction, and never kept as a property", async () => {
+    const saved = process.env[SIGNING_KEY_ENV];
+    delete process.env[SIGNING_KEY_ENV];
+    try {
+      const store = new EnvSharedKeyStore(synthetic);
+      process.env[SIGNING_KEY_ENV] = pkcs8Pem(es384());
+      await expect(store.signer()).resolves.toMatchObject({ alg: "ES384" });
+      expect(inspect(store, { showHidden: true })).not.toContain("PRIVATE KEY");
     } finally {
       if (saved === undefined) delete process.env[SIGNING_KEY_ENV];
       else process.env[SIGNING_KEY_ENV] = saved;

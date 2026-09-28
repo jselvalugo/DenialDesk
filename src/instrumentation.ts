@@ -8,6 +8,26 @@ import { serverEnv } from "@/lib/env";
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     serverEnv();
+    // Production refuses to start integrations with an environment signing key present (spec PI2a
+    // "Keys", R-7.3.5: Key Vault only). Throwing here fails the boot; the security event and log
+    // line carry no value.
+    const { assertNoEnvSigningKeyInProduction, SigningKeyStoreError } =
+      await import("@/integrations/fhir/keys");
+    try {
+      assertNoEnvSigningKeyInProduction();
+    } catch (error) {
+      if (error instanceof SigningKeyStoreError) {
+        const { log } = await import("@/lib/log");
+        log.error("integrations.env_signing_key_in_production");
+        try {
+          const { auditSystem } = await import("@/lib/audit");
+          await auditSystem({ action: "security.env_signing_key_in_production", reason: "startup" });
+        } catch {
+          // The database may not be reachable this early; the refusal below is what matters.
+        }
+      }
+      throw error;
+    }
     // Fails the boot if a Drizzle upgrade removed the method errors are sanitized in (ADR 0006).
     const { installQueryErrorSanitizer } = await import("@/db/errors");
     installQueryErrorSanitizer();

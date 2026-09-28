@@ -27,6 +27,10 @@ const notFound = () =>
   });
 
 export async function handleJwksRequest(deps: JwksRouteDeps): Promise<Response> {
+  // Where real data is allowed nothing is published here (keys are per connection, in Key Vault, at
+  // `/.well-known/jwks/<connection-uuid>.json`, Azure cutover): answer before touching the rate-limit
+  // table, so an anonymous request there costs no database write.
+  if (!(deps.synthetic ?? syntheticDataOnly)()) return notFound();
   const limited = await deps.limit();
   if (!limited.allowed) {
     return new Response(null, {
@@ -34,10 +38,6 @@ export async function handleJwksRequest(deps: JwksRouteDeps): Promise<Response> 
       headers: { "retry-after": String(Math.max(1, limited.retryAfterSeconds)), "cache-control": "no-store" },
     });
   }
-  // Where real data is allowed there is no shared key: keys are per connection, in Key Vault, at
-  // `/.well-known/jwks/<connection-uuid>.json` (Azure cutover). Nothing is published here.
-  if (!(deps.synthetic ?? syntheticDataOnly)()) return notFound();
-
   let keys;
   try {
     keys = await (deps.store ?? getSigningKeyStore)().publicJwks("shared");

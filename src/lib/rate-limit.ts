@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isIPv6 } from "node:net";
 import { lt, sql } from "drizzle-orm";
 import { systemDb } from "@/db/client";
 import { rateLimits } from "@/db/schema";
@@ -69,10 +70,40 @@ export async function hit(bucket: Bucket, key: string, now: Date = new Date()): 
   return { allowed: (row?.hits ?? 1) <= limit, retryAfterSeconds };
 }
 
-/** Rate-limits the current request by client IP (all unknown-IP requests share one bucket). */
+/**
+ * A client IPv6 address's /64 (the network a single subscriber controls: one host can rotate through
+ * 2^64 addresses inside it), written as its first four hextets; anything else is returned unchanged.
+ */
+export function ipv6Network64(ip: string): string {
+  if (!isIPv6(ip)) return ip;
+  const [head = "", tail] = ip.split("%")[0]!.split("::") as [string, string?];
+  const groups = (part: string) => (part === "" ? [] : part.split(":"));
+  const left = groups(head);
+  const right = tail === undefined ? [] : groups(tail);
+  const gap = tail === undefined ? 0 : 8 - left.length - right.length;
+  const full = [...left, ...Array<string>(gap).fill("0"), ...right];
+  // An embedded IPv4 tail (::ffff:1.2.3.4) is two hextets; it is never in the first four.
+  return full
+    .slice(0, 4)
+    .map((group) => parseInt(group || "0", 16).toString(16))
+    .join(":")
+    .concat("::/64");
+}
+
+/**
+ * Rate-limits the current request by client IP (all unknown-IP requests share one bucket). The public
+ * `jwks` bucket keys an IPv6 client by its /64 so one subscriber can't multiply its allowance by
+ * rotating addresses; the other buckets are unchanged.
+ */
 export async function limitCurrentRequest(bucket: Bucket): Promise<RateLimitResult> {
   const { ip } = await requestContext();
-  return hit(bucket, ip ?? "unknown");
+  return hit(bucket, clientKey(bucket, ip));
+}
+
+/** The key one client is counted under in `bucket` (exported for tests). */
+export function clientKey(bucket: Bucket, ip: string | null): string {
+  if (!ip) return "unknown";
+  return bucket === "jwks" ? ipv6Network64(ip) : ip;
 }
 
 export function retryMessage(what: string, result: RateLimitResult): string {

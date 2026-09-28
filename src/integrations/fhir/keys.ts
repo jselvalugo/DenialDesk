@@ -99,18 +99,20 @@ export interface SigningKeyStore {
  * without it. Literal `\n` sequences are accepted for hosts that flatten multi-line secrets.
  */
 export class EnvSharedKeyStore implements SigningKeyStore {
-  private loaded: { key: KeyObject; alg: JwtAlg; kid: string } | undefined;
+  // True `#private` fields (not TypeScript `private`): neither the PEM nor the parsed key is an own
+  // property, so `JSON.stringify`, `util.inspect`, `structuredClone`, and a logger that walks the
+  // object can never reach them. The variable is read inside `#load()`, on first use.
+  readonly #source: () => string | undefined;
+  #loaded: { key: KeyObject; alg: JwtAlg; kid: string } | undefined;
 
-  constructor(
-    synthetic: () => boolean = syntheticDataOnly,
-    private readonly pem: string | undefined = process.env[SIGNING_KEY_ENV],
-  ) {
+  constructor(synthetic: () => boolean = syntheticDataOnly, pem?: string) {
     if (!synthetic()) throw new SigningKeyStoreError("not_permitted");
+    this.#source = pem === undefined ? () => process.env[SIGNING_KEY_ENV] : () => pem;
   }
 
-  private load(): { key: KeyObject; alg: JwtAlg; kid: string } {
-    if (this.loaded) return this.loaded;
-    const text = this.pem?.replace(/\\n/g, "\n").trim();
+  #load(): { key: KeyObject; alg: JwtAlg; kid: string } {
+    if (this.#loaded) return this.#loaded;
+    const text = this.#source()?.replace(/\\n/g, "\n").trim();
     if (!text) throw new SigningKeyStoreError("not_configured");
     try {
       // PKCS#8 only (spec): a SEC1 "EC PRIVATE KEY" or "RSA PRIVATE KEY" block is refused.
@@ -118,21 +120,21 @@ export class EnvSharedKeyStore implements SigningKeyStore {
       const key = createPrivateKey({ key: text, format: "pem" });
       const alg = algForKey(key);
       if (!alg) throw new Error("not allowed");
-      this.loaded = { key, alg, kid: thumbprintKid(key) };
+      this.#loaded = { key, alg, kid: thumbprintKid(key) };
     } catch {
       // Say nothing about why: the parser's message can quote the PEM.
       throw new SigningKeyStoreError("key_unreadable");
     }
-    return this.loaded;
+    return this.#loaded;
   }
 
   async signer(): Promise<JwtSigner> {
-    const { key, kid } = this.load();
+    const { key, kid } = this.#load();
     return signerForPrivateKey(key, kid);
   }
 
   async publicJwks(): Promise<PublicJwk[]> {
-    const { key, alg, kid } = this.load();
+    const { key, alg, kid } = this.#load();
     return [toPublicJwk(key, kid, alg)];
   }
 }
