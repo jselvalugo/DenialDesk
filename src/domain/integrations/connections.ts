@@ -1,9 +1,10 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { TenantTx } from "@/db/tenant";
 import { integrationConnections } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { en } from "@/i18n/messages/en";
+import type { Locale } from "@/i18n/config";
 import type { MessageKey, Messages } from "@/i18n/messages/types";
 import { createTranslator, type Translator } from "@/i18n/translate";
 import { isRefusedMrnIdentifierSystem } from "@/integrations/fhir/identifier-rules";
@@ -56,9 +57,18 @@ export class ConnectionError extends Error {
 // issuer, key reference, tenant, and approval fields never come from the client.
 // ---------------------------------------------------------------------------------------------
 
+// C0/C1 controls plus the Unicode bidi/format control characters an attacker could use to make a
+// connection name render misleadingly (security review PR #81, item 11).
+const CONTROL_OR_FORMAT_CHARS = /[\u0000-\u001F\u007F-\u009F​-‏‪-‮⁦-⁩﻿]/;
+
 export const connectionInputSchema = z
   .object({
-    displayName: z.string().trim().min(1).max(80),
+    displayName: z
+      .string()
+      .trim()
+      .min(1)
+      .max(80)
+      .refine((value) => !CONTROL_OR_FORMAT_CHARS.test(value)),
     baseUrl: z.string().trim().min(1).max(2048),
     clientId: z.string().trim().min(1).max(255),
     mrnIdentifierSystem: z.string().trim().min(1).max(255),
@@ -110,7 +120,12 @@ interface Actor {
   userId: string;
   /** A step-up-gated action (Submit's attestation, Resume, Revoke) needs this true (R-7.2.2). */
   recentMfa: boolean;
+  /** Recorded with a fresh attestation (`usResidencyAttestationLocale`), never with a cleared one. */
+  locale: Locale;
 }
+
+/** Bump when the attestation sentence's own wording changes (OA-057). */
+export const ATTESTATION_TEXT_VERSION = "2026-09-28";
 
 /**
  * Whether a submitted base URL + client ID names the built-in sandbox: the zod allow-list has no
@@ -182,7 +197,40 @@ async function insertConnectionRow(tx: TenantTx, row: NewConnectionRow): Promise
 
 type ConnectionSetValue = string | boolean | Date | null;
 
-function setClause(fields: Record<string, ConnectionSetValue>) {
+/**
+ * Exactly the columns drizzle/0039/0042's `GRANT UPDATE (...)` names for `denialdesk_app` — the
+ * only ones this raw SQL is ever allowed to set. A column left out of this union is a compile-time
+ * error here rather than a runtime permission failure from Postgres (security/correctness review
+ * PR #81, item 20): the union is the type-level mirror of the grant list, kept in the same order.
+ */
+type GrantedConnectionColumn =
+  | "display_name"
+  | "base_url"
+  | "endpoint_key"
+  | "token_endpoint"
+  | "token_endpoint_key"
+  | "issuer"
+  | "client_id"
+  | "mrn_identifier_system"
+  | "us_residency_attested_by"
+  | "us_residency_attested_at"
+  | "us_residency_attestation_version"
+  | "us_residency_attestation_locale"
+  | "status"
+  | "status_reason"
+  | "submitted_by"
+  | "submitted_at"
+  | "revoked_by"
+  | "revoked_at"
+  | "has_synced"
+  | "patient_watermark"
+  | "coverage_watermark"
+  | "last_success_at"
+  | "bulk_group_id"
+  | "updated_by"
+  | "updated_at";
+
+function setClause(fields: Partial<Record<GrantedConnectionColumn, ConnectionSetValue>>) {
   return sql.join(
     Object.entries(fields).map(([column, value]) => sql`${sql.raw(column)} = ${value}`),
     sql`, `,
@@ -194,7 +242,7 @@ async function updateConnectionRow(
   tx: TenantTx,
   connectionId: string,
   actorUserId: string,
-  fields: Record<string, ConnectionSetValue>,
+  fields: Partial<Record<GrantedConnectionColumn, ConnectionSetValue>>,
 ): Promise<void> {
   const set = setClause({ ...fields, updated_by: actorUserId, updated_at: new Date() });
   await tx.execute(sql`update integration_connections set ${set} where id = ${connectionId}::uuid`);
@@ -258,6 +306,8 @@ export async function createConnection(
     await updateConnectionRow(tx, id, actor.userId, {
       us_residency_attested_by: actor.userId,
       us_residency_attested_at: new Date(),
+      us_residency_attestation_version: ATTESTATION_TEXT_VERSION,
+      us_residency_attestation_locale: actor.locale,
     });
   }
 
@@ -284,9 +334,38 @@ async function lockConnection(tx: TenantTx, connectionId: string): Promise<Conne
 }
 
 /**
- * Edits a draft connection (display name always; the endpoint fields only while still draft, per
- * the DB trigger — enforced again here so the error is a clear one). The connection's sandbox/real
- * identity can't change (matches `is_sandbox cannot change`, drizzle/0039).
+ * True when another Patients connection for this tenant is already live (outside draft/revoked).
+ * The DB's own partial unique index (`integration_connections_one_active`, drizzle/0039) is the
+ * real backstop — a race between two concurrent activations still ends in a unique-violation the
+ * action layer maps to a friendly message (`failure()`, settings/integrations/actions.ts) — but
+ * checking here first turns the common case into a clear, specific error instead (security review
+ * PR #81, item 4).
+ */
+async function anotherLiveConnectionExists(tx: TenantTx, connectionId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: integrationConnections.id })
+    .from(integrationConnections)
+    .where(
+      and(
+        eq(integrationConnections.targetTable, "patients"),
+        ne(integrationConnections.id, connectionId),
+        sql`status not in ('draft', 'revoked')`,
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
+ * Edits a connection. Display name always changes (spec "Editability"); the endpoint set (base
+ * URL, client ID, MRN identifier system) only while still draft — enforced here first (a clear
+ * error) and again by the DB trigger (defense in depth). The connection's sandbox/real identity
+ * can't change (matches `is_sandbox cannot change`, drizzle/0039).
+ *
+ * The residency attestation is cleared (never silently kept) whenever the endpoint changes or the
+ * box is unticked, unless the admin re-attests in this same request with a recent step-up
+ * (security/compliance review PR #81, item 5): an attestation is about a specific endpoint, so a
+ * different one — or withdrawing consent — must not leave a stale "attested" mark on file.
  */
 export async function updateConnection(
   tx: TenantTx,
@@ -299,42 +378,89 @@ export async function updateConnection(
 ): Promise<void> {
   const current = await lockConnection(tx, connectionId);
   if (!current) throw new ConnectionError(t("integrations.error.notFound"));
-  if (current.status !== "draft") throw new ConnectionError(t("integrations.error.editLockedNotDraft"));
+  if (current.status === "revoked") throw new ConnectionError(t("integrations.error.editLockedNotDraft"));
 
   const sandbox = isSandboxRequest(input);
   if (sandbox !== current.isSandbox) {
     throw new ConnectionError(t("integrations.error.cannotChangeConnectionType"), "baseUrl");
   }
-
   assertEnvironmentAllows(sandbox, env, t);
 
+  const draft = current.status === "draft";
   let baseUrl = current.baseUrl;
   let endpointKey = current.endpointKey;
   let clientId = current.clientId;
+  let mrnIdentifierSystem = current.mrnIdentifierSystem;
+
+  if (draft) {
+    if (!sandbox) {
+      const validated = validateBaseUrl(input.baseUrl, allowedPortsRaw);
+      if (!validated.ok) throw new ConnectionError(t(URL_ERROR_KEYS[validated.error]), "baseUrl");
+      baseUrl = validated.normalized;
+      endpointKey = validated.endpointKey;
+      clientId = input.clientId.trim();
+    }
+    if (isRefusedMrnIdentifierSystem(input.mrnIdentifierSystem)) {
+      throw new ConnectionError(t("integrations.error.mrnSystemRefused"), "mrnIdentifierSystem");
+    }
+    mrnIdentifierSystem = input.mrnIdentifierSystem.trim();
+  } else {
+    // Outside draft, only the display name may change (spec "Editability"); the DB trigger locks
+    // the rest regardless, but this gives a clearer, field-specific error first.
+    const endpointUnchanged =
+      input.baseUrl.trim() === current.baseUrl &&
+      input.clientId.trim() === current.clientId &&
+      input.mrnIdentifierSystem.trim() === current.mrnIdentifierSystem;
+    if (!endpointUnchanged) {
+      throw new ConnectionError(t("integrations.error.editLockedNotDraft"), "baseUrl");
+    }
+  }
+
+  const endpointChanged =
+    baseUrl !== current.baseUrl || endpointKey !== current.endpointKey || clientId !== current.clientId;
+
+  let attestationChange: "none" | "set" | "clear" = "none";
   if (!sandbox) {
-    const validated = validateBaseUrl(input.baseUrl, allowedPortsRaw);
-    if (!validated.ok) throw new ConnectionError(t(URL_ERROR_KEYS[validated.error]), "baseUrl");
-    baseUrl = validated.normalized;
-    endpointKey = validated.endpointKey;
-    clientId = input.clientId.trim();
+    const wantsAttested = input.usResidencyAttested;
+    const currentlyAttested = current.usResidencyAttestedAt !== null;
+    if (endpointChanged) {
+      attestationChange = wantsAttested ? "set" : "clear";
+    } else if (wantsAttested && !currentlyAttested) {
+      attestationChange = "set";
+    } else if (!wantsAttested && currentlyAttested) {
+      attestationChange = "clear";
+    }
   }
-
-  if (isRefusedMrnIdentifierSystem(input.mrnIdentifierSystem)) {
-    throw new ConnectionError(t("integrations.error.mrnSystemRefused"), "mrnIdentifierSystem");
-  }
-
-  const attestNow = !sandbox && input.usResidencyAttested && !current.usResidencyAttestedAt;
-  if (attestNow && !actor.recentMfa) {
+  if (attestationChange === "set" && !actor.recentMfa) {
     throw new ConnectionError(t("integrations.error.stepUpRequired"), undefined, true);
   }
 
   await updateConnectionRow(tx, connectionId, actor.userId, {
     display_name: input.displayName,
-    base_url: baseUrl,
-    endpoint_key: endpointKey,
-    client_id: clientId,
-    mrn_identifier_system: input.mrnIdentifierSystem.trim(),
-    ...(attestNow ? { us_residency_attested_by: actor.userId, us_residency_attested_at: new Date() } : {}),
+    ...(draft
+      ? {
+          base_url: baseUrl,
+          endpoint_key: endpointKey,
+          client_id: clientId,
+          mrn_identifier_system: mrnIdentifierSystem,
+        }
+      : {}),
+    ...(attestationChange === "set"
+      ? {
+          us_residency_attested_by: actor.userId,
+          us_residency_attested_at: new Date(),
+          us_residency_attestation_version: ATTESTATION_TEXT_VERSION,
+          us_residency_attestation_locale: actor.locale,
+        }
+      : {}),
+    ...(attestationChange === "clear"
+      ? {
+          us_residency_attested_by: null,
+          us_residency_attested_at: null,
+          us_residency_attestation_version: null,
+          us_residency_attestation_locale: null,
+        }
+      : {}),
   });
 
   await audit(tx, {
@@ -346,6 +472,8 @@ export async function updateConnection(
     metadata: {
       ...endpointAuditFields("old", current.baseUrl, current.clientId),
       ...endpointAuditFields("new", baseUrl, clientId),
+      attested: attestationChange === "set",
+      attestationCleared: attestationChange === "clear",
     },
   });
 }
@@ -361,6 +489,7 @@ export async function withdrawConnection(
   tx: TenantTx,
   actor: Actor,
   connectionId: string,
+  env: ConnectionEnvironment,
   t: SettingsT = englishSettingsT,
 ): Promise<void> {
   const current = await lockConnection(tx, connectionId);
@@ -368,6 +497,7 @@ export async function withdrawConnection(
   if (current.status !== "pending_approval") {
     throw new ConnectionError(t("integrations.error.invalidTransition"));
   }
+  assertEnvironmentAllows(current.isSandbox, env, t);
   await updateConnectionRow(tx, connectionId, actor.userId, { status: "draft" });
   if (!current.isSandbox) await releaseRegistry(tx, connectionId);
   await audit(tx, {
@@ -384,11 +514,13 @@ export async function pauseConnection(
   tx: TenantTx,
   actor: Actor,
   connectionId: string,
+  env: ConnectionEnvironment,
   t: SettingsT = englishSettingsT,
 ): Promise<void> {
   const current = await lockConnection(tx, connectionId);
   if (!current) throw new ConnectionError(t("integrations.error.notFound"));
   if (current.status !== "active") throw new ConnectionError(t("integrations.error.invalidTransition"));
+  assertEnvironmentAllows(current.isSandbox, env, t);
   await updateConnectionRow(tx, connectionId, actor.userId, { status: "paused" });
   await audit(tx, {
     action: "integration.connection_paused",
@@ -407,6 +539,7 @@ export async function resumeConnection(
   tx: TenantTx,
   actor: Actor,
   connectionId: string,
+  env: ConnectionEnvironment,
   t: SettingsT = englishSettingsT,
 ): Promise<void> {
   const current = await lockConnection(tx, connectionId);
@@ -414,6 +547,7 @@ export async function resumeConnection(
   if (current.status !== "paused" && current.status !== "error") {
     throw new ConnectionError(t("integrations.error.invalidTransition"));
   }
+  assertEnvironmentAllows(current.isSandbox, env, t);
   if (!actor.recentMfa) throw new ConnectionError(t("integrations.error.stepUpRequired"), undefined, true);
   await updateConnectionRow(tx, connectionId, actor.userId, { status: "active" });
   await audit(tx, {
@@ -435,11 +569,13 @@ export async function revokeConnection(
   actor: Actor,
   connectionId: string,
   reasonCode: RevokeReasonCode,
+  env: ConnectionEnvironment,
   t: SettingsT = englishSettingsT,
 ): Promise<void> {
   const current = await lockConnection(tx, connectionId);
   if (!current) throw new ConnectionError(t("integrations.error.notFound"));
   if (current.status === "revoked") throw new ConnectionError(t("integrations.error.invalidTransition"));
+  assertEnvironmentAllows(current.isSandbox, env, t);
   if (!actor.recentMfa) throw new ConnectionError(t("integrations.error.stepUpRequired"), undefined, true);
   await updateConnectionRow(tx, connectionId, actor.userId, {
     status: "revoked",
@@ -454,6 +590,7 @@ export async function revokeConnection(
     tenantId: actor.tenantId,
     entityType: "integration_connection",
     entityId: connectionId,
+    reason: reasonCode,
     metadata: { reasonCode },
   });
 }
@@ -461,8 +598,10 @@ export async function revokeConnection(
 /**
  * draft -> active for the built-in sandbox only, with no operator approval (spec "PI1b": the CHECK
  * `integration_connections_approved_when_live` is satisfied because `is_sandbox` is true, and the
- * lifecycle trigger allows `draft -> active` only when `is_sandbox`). Not step-up gated: not one of
- * the four actions the spec lists (Submit, resume, attestation, Revoke).
+ * lifecycle trigger allows `draft -> active` only when `is_sandbox`). Treated as this connection's
+ * Submit-equivalent in the lifecycle (spec "Connection lifecycle": "Submit: passing test..., ...,
+ * MFA step-up"; correctness review PR #81, item 6) — it skips the test-connection and the
+ * attestation because the sandbox is synthetic, not because it skips step-up too.
  */
 export async function activateSandboxConnection(
   tx: TenantTx,
@@ -477,6 +616,10 @@ export async function activateSandboxConnection(
   if (!current.isSandbox || current.status !== "draft") {
     throw new ConnectionError(t("integrations.error.invalidTransition"));
   }
+  if (await anotherLiveConnectionExists(tx, connectionId)) {
+    throw new ConnectionError(t("integrations.error.anotherConnectionLive"));
+  }
+  if (!actor.recentMfa) throw new ConnectionError(t("integrations.error.stepUpRequired"), undefined, true);
   await updateConnectionRow(tx, connectionId, actor.userId, { status: "active" });
   await audit(tx, {
     action: "integration.connection_activated",
@@ -508,6 +651,21 @@ export async function getConnection(tx: TenantTx, id: string): Promise<Connectio
     .where(eq(integrationConnections.id, id))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * Just the name, for a spot that only ever shows "Synced from {name}" (the patient chart) and has
+ * no business reading a connection's base URL, client ID, or attestation/approval history to
+ * render it (security/correctness review PR #81, item 18: narrower than `getConnection`'s full
+ * row for a read that doesn't need it).
+ */
+export async function getConnectionDisplayName(tx: TenantTx, id: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ displayName: integrationConnections.displayName })
+    .from(integrationConnections)
+    .where(eq(integrationConnections.id, id))
+    .limit(1);
+  return row?.displayName ?? null;
 }
 
 export interface PatientsConnectionSummary {

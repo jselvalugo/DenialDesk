@@ -241,6 +241,12 @@ export const integrationConnections = pgTable(
     populationScope: text("population_scope"),
     usResidencyAttestedBy: uuid("us_residency_attested_by").references(() => users.id),
     usResidencyAttestedAt: timestamp("us_residency_attested_at", { withTimezone: true }),
+    /** Which wording version and language the attestation text was shown in (drizzle/0042; review
+     * PR #81, OA-057): lets a later wording change (owner/counsel, OA-057) be told apart from an
+     * older one already on file. Both null together with the attestation itself; set only via the
+     * same follow-up UPDATE that sets `usResidencyAttestedBy`/`_at`. */
+    usResidencyAttestationVersion: text("us_residency_attestation_version"),
+    usResidencyAttestationLocale: text("us_residency_attestation_locale"),
     submittedBy: uuid("submitted_by").references(() => users.id),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     /** Operator-only (column grants, PI1c): never set by a practice session. */

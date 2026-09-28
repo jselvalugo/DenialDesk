@@ -295,6 +295,13 @@
       "when": 1790610921176,
       "tag": "0041_session_step_up_mfa",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1790615597512,
+      "tag": "0042_integration_attestation_version",
+      "breakpoints": true
     }
   ]
 }

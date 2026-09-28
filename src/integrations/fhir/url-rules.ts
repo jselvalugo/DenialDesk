@@ -37,16 +37,22 @@ export interface InvalidBaseUrl {
   error: UrlRuleError;
 }
 
-const BLOCKED_SUFFIXES = [".local", ".internal", ".home.arpa"];
+// .home.arpa is covered by the general .arpa suffix below (security review PR #81).
+const BLOCKED_SUFFIXES = [".local", ".internal", ".arpa", ".onion", ".test", ".example"];
 const SANDBOX_HOST = new URL(SANDBOX_BASE_URL).hostname;
+const PORT_DIGITS = /^\d{1,5}$/;
 
-/** Parses `INTEGRATION_ALLOWED_PORTS` defensively; 443 is always included regardless of input. */
+/** Parses `INTEGRATION_ALLOWED_PORTS` defensively; 443 is always included regardless of input. Each
+ * entry must be 1–5 plain digits (no sign, decimal point, or exponent) before it's even considered
+ * as a number, so a value like "1e2" or "+80" is dropped rather than silently accepted. */
 export function parseAllowedPorts(raw: string | undefined): Set<number> {
   const ports = new Set<number>([443]);
   if (!raw) return ports;
   for (const part of raw.split(",")) {
-    const n = Number(part.trim());
-    if (Number.isInteger(n) && n > 0 && n <= 65535) ports.add(n);
+    const trimmed = part.trim();
+    if (!PORT_DIGITS.test(trimmed)) continue;
+    const n = Number(trimmed);
+    if (n > 0 && n <= 65535) ports.add(n);
   }
   return ports;
 }
@@ -59,11 +65,19 @@ function isIpLiteral(host: string): boolean {
 }
 
 /**
- * https, hostname-only (no IP literal, userinfo, query, or fragment), not localhost/.local/
- * .internal/.home.arpa/.invalid (except the pinned sandbox host), not a single-label name, no
+ * https, hostname-only (no IP literal, userinfo, query, or fragment), not localhost (or any
+ * `*.localhost`)/.local/.internal/.arpa/.onion/.test/.example, not a single-label name, no
  * trailing dot, and a port of 443 or one from `allowedPortsRaw` (`INTEGRATION_ALLOWED_PORTS`).
+ * `.invalid` is refused too, **except** the one pinned sandbox host, and only when the caller
+ * passes `allowSandboxHost: true` (security review PR #81) — connections.ts never calls this
+ * function for the sandbox path at all (it uses the pinned constants directly), so the exemption
+ * defaults to off: a real endpoint can never coincidentally validate as "the sandbox".
  */
-export function validateBaseUrl(raw: string, allowedPortsRaw?: string): ValidatedBaseUrl | InvalidBaseUrl {
+export function validateBaseUrl(
+  raw: string,
+  allowedPortsRaw?: string,
+  allowSandboxHost = false,
+): ValidatedBaseUrl | InvalidBaseUrl {
   let url: URL;
   try {
     url = new URL(raw);
@@ -78,12 +92,19 @@ export function validateBaseUrl(raw: string, allowedPortsRaw?: string): Validate
   const host = url.hostname;
   if (isIpLiteral(host)) return { ok: false, error: "ip_literal" };
   if (host.endsWith(".")) return { ok: false, error: "trailing_dot" };
-  if (host === "localhost" || BLOCKED_SUFFIXES.some((suffix) => host.endsWith(suffix))) {
+  if (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    BLOCKED_SUFFIXES.some((suffix) => host.endsWith(suffix))
+  ) {
     return { ok: false, error: "blocked_host" };
   }
-  if (host.endsWith(".invalid") && host !== SANDBOX_HOST) return { ok: false, error: "blocked_host" };
+  if (host.endsWith(".invalid") && !(allowSandboxHost && host === SANDBOX_HOST)) {
+    return { ok: false, error: "blocked_host" };
+  }
   if (!host.includes(".")) return { ok: false, error: "single_label" };
 
+  if (url.port && !PORT_DIGITS.test(url.port)) return { ok: false, error: "port_not_allowed" };
   const port = url.port ? Number(url.port) : 443;
   if (!parseAllowedPorts(allowedPortsRaw).has(port)) return { ok: false, error: "port_not_allowed" };
 

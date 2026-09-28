@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { parseAllowedPorts, SANDBOX_BASE_URL, validateBaseUrl, type UrlRuleError } from "./url-rules";
 
-function errorOf(raw: string, allowedPorts?: string): UrlRuleError | "ok" {
-  const result = validateBaseUrl(raw, allowedPorts);
+function errorOf(raw: string, allowedPorts?: string, allowSandboxHost?: boolean): UrlRuleError | "ok" {
+  const result = validateBaseUrl(raw, allowedPorts, allowSandboxHost);
   return result.ok ? "ok" : result.error;
 }
 
@@ -18,8 +18,13 @@ describe("validateBaseUrl", () => {
     });
   });
 
-  it("accepts the built-in sandbox host despite the .invalid TLD", () => {
-    expect(errorOf(SANDBOX_BASE_URL)).toBe("ok");
+  it("accepts the built-in sandbox host despite the .invalid TLD, only when allowSandboxHost is set", () => {
+    expect(errorOf(SANDBOX_BASE_URL, undefined, true)).toBe("ok");
+  });
+
+  it("refuses the sandbox host by default (security review PR #81: exempt only when asked)", () => {
+    expect(errorOf(SANDBOX_BASE_URL)).toBe("blocked_host");
+    expect(errorOf(SANDBOX_BASE_URL, undefined, false)).toBe("blocked_host");
   });
 
   it("lower-cases only the endpoint key, keeping the stored URL's path case", () => {
@@ -40,9 +45,14 @@ describe("validateBaseUrl", () => {
     ["https://198.51.100.10/r4", "ip_literal"],
     ["https://[2001:db8::1]/r4", "ip_literal"],
     ["https://localhost/r4", "blocked_host"],
+    ["https://foo.localhost/r4", "blocked_host"],
     ["https://ehr.local/r4", "blocked_host"],
     ["https://ehr.internal/r4", "blocked_host"],
     ["https://ehr.home.arpa/r4", "blocked_host"],
+    ["https://ehr.arpa/r4", "blocked_host"],
+    ["https://ehr.onion/r4", "blocked_host"],
+    ["https://ehr.test/r4", "blocked_host"],
+    ["https://ehr.example.example/r4", "blocked_host"],
     ["https://ehr.example.invalid/r4", "blocked_host"],
     ["https://ehr/r4", "single_label"],
     ["https://ehr.example.com./r4", "trailing_dot"],
@@ -78,5 +88,12 @@ describe("parseAllowedPorts", () => {
 
   it("drops out-of-range or non-numeric entries safely", () => {
     expect(parseAllowedPorts("0, 70000, -1, abc, 8443")).toEqual(new Set([443, 8443]));
+  });
+
+  it("only accepts 1-5 plain digits (security review PR #81): no sign, decimal, or exponent form", () => {
+    expect(parseAllowedPorts("1e2")).toEqual(new Set([443]));
+    expect(parseAllowedPorts("+80")).toEqual(new Set([443]));
+    expect(parseAllowedPorts("80.0")).toEqual(new Set([443]));
+    expect(parseAllowedPorts("999999")).toEqual(new Set([443]));
   });
 });
