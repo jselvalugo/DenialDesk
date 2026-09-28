@@ -469,6 +469,7 @@ describe("revokeConnection", () => {
     await withTenant(c, (tx) => revokeConnection(tx, admin(c, true), id, stamp, "no_longer_used"));
     expect((await detail(c, id)).status).toBe("revoked");
     expect((await lastAudit(id)).metadata).toEqual({
+      reason_code: "no_longer_used",
       previous_status: "active",
       sandbox: true,
       registry_released: false,
