@@ -246,10 +246,15 @@ describe("migrations raise only listed, value-free trigger messages", () => {
     missing: "int",
     "OLD.status": "voucherStatus",
     "NEW.status": "voucherStatus",
+    p_connection_id: "uuid",
   };
   // "OLD.status"/"NEW.status" name a different enum in this migration's own trigger.
   const FILE_EXPRESSION_SLOTS: Record<string, Record<string, TriggerSlot>> = {
     "0029_appeals.sql": { "OLD.status": "appealStatus", "NEW.status": "appealStatus" },
+    "0039_patient_integrations_data_layer.sql": {
+      "OLD.status": "integrationConnectionStatus",
+      "NEW.status": "integrationConnectionStatus",
+    },
   };
 
   it("parses every RAISE strictly (no E'', quoted '' or USING forms slip past the checks)", () => {

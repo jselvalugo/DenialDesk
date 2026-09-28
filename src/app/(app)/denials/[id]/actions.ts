@@ -171,7 +171,7 @@ export async function revealMemberId(
       .innerJoin(claims, eq(claims.id, denials.claimId))
       .innerJoin(patients, eq(patients.id, claims.patientId))
       .where(eq(denials.id, parsed.data.denial));
-    if (!row) return { error: t("error.revealNotFound") };
+    if (!row || !row.memberIdEnc) return { error: t("error.revealNotFound") };
     await audit(tx, {
       action: "patient.member_id_revealed",
       actorUserId: auth.userId,

@@ -194,7 +194,8 @@ export async function getDenial(tx: TenantTx, denialId: string) {
         lastName: patients.lastName,
         birthDate: patients.birthDate,
         mrn: patients.mrn,
-        memberIdLast4: patients.memberIdLast4,
+        // Null on a synced patient without a mapped coverage (PI1a); shown the same as self-pay.
+        memberIdLast4: sql<string>`coalesce(${patients.memberIdLast4}, '')`,
       },
       payer: payers,
       providerName: providers.name,

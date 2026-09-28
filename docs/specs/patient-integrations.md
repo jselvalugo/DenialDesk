@@ -102,19 +102,20 @@ when the run succeeds, so a failed first run still locks the endpoint.
 - [x] Revised after security/compliance review (2026-09-28).
 
 ### PI1a — data layer (no network calls, no UI)
-- [ ] Migration adds provenance to `patients` and the new tables (Data changes); existing patients
+- [x] Migration adds provenance to `patients` and the new tables (Data changes); existing patients
       become `source = 'manual'`. Every new table has `tenant_id`, RLS ENABLE + FORCE, a tenant
       policy, composite `(tenant_id, x)` FKs for every reference, tenant in every unique key, no
       DELETE grant, and an isolation test (read, insert, update across tenants).
-- [ ] Trigger `patients_synced_readonly` refuses INSERT of a `fhir` row, any change to a synced
+      (`drizzle/0039_patient_integrations_data_layer.sql`, `test/integration/patient-integrations.test.ts`)
+- [x] Trigger `patients_synced_readonly` refuses INSERT of a `fhir` row, any change to a synced
       column, and any change of `source`/`source_connection_id`/`external_id`, unless
       `app.sync_run_id` names a `running` run of `app.sync_connection_id` in the current tenant and
       that connection owns the row. `fhir → manual` is always refused. Message added to
       `TRIGGER_MESSAGE_FORMATS` (ADR 0006).
-- [ ] Trigger on `integration_connections` enforces the lifecycle and editability rules above; the
+- [x] Trigger on `integration_connections` enforces the lifecycle and editability rules above; the
       app role cannot write approval columns or move `pending_approval → active` (column grants +
       trigger); `revoked` is terminal.
-- [ ] Endpoint registry `integration_endpoint_registry` (no RLS, no grants to `denialdesk_app`):
+- [x] Endpoint registry `integration_endpoint_registry` (no RLS, no grants to `denialdesk_app`):
       unique `(endpoint_key, client_id)` over all practices, reached only through SECURITY DEFINER
       `integration_registry_claim(connection_id)` / `_release(connection_id)` returning a boolean.
       `endpoint_key` = WHATWG-normalized scheme + host + port + path (no trailing slash; path compared
@@ -124,10 +125,13 @@ when the run succeeds, so a failed first run still locks the endpoint.
       `SET search_path = pg_catalog, public`, and release only on a transition to `draft`
       (withdraw/reject) or `revoked`, enforced in the database; isolation test: practice A cannot
       claim or release practice B's entry (M-a). Sandbox connections are not registered.
-- [ ] Domain refusals (before the triggers): `updatePatient` on synced patients; register/edit while
+      ⚠️ The WHATWG-normalization algorithm itself is `src/integrations/fhir/url-rules.ts` (PI2a);
+      PI1a stores whatever `endpoint_key`/`token_endpoint_key` the caller computes.
+- [x] Domain refusals (before the triggers): `updatePatient` on synced patients; register/edit while
       a connection is outside `draft`/`revoked`. Sensitivity tags (administrators) and custom field
-      values stay editable on synced patients.
-- [ ] `canManageIntegrations` (admin only).
+      values stay editable on synced patients (new `updatePatientSensitivityTags`, separate from
+      `updatePatient`, since the latter is refused outright on a synced patient).
+- [x] `canManageIntegrations` (admin only).
 
 ### PI1b — Settings › Integrations and the tab-bar drop-down
 - [ ] Integrations tab live: list (name, status, last sync); "New connection" →

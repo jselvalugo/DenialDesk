@@ -26,10 +26,15 @@ _Last updated: 2026-09-27_
   principal as audit actor; deny-by-default SSRF guard; real endpoints refused on Netlify whatever
   `APP_ENV` says; endpoints immutable once data is synced; SSN/MBI identifier systems refused as MRN;
   practice-scoped population only in production; EHR sensitivity labels mark a patient restricted.
-  Phases: PI0 docs (done), PI1a data layer, PI1b Settings › Integrations + drop-down, PI1c operator
-  approval, PI2a transport/discovery/keys/test connection, PI2b sync engine + sandbox + jobs + history
-  + payer mapping, PI3 scheduled sync + source-state hardening, PI4 Bulk Data before the first real
-  practice. Owner questions OA-045–OA-057; data source DS-12 in `docs/data-sources.xlsx`.
+  Phases: PI0 docs (done), **PI1a data layer (done, `drizzle/0039_patient_integrations_data_layer.sql`:
+  patients provenance + read-only trigger, `integration_connections` lifecycle/editability trigger,
+  the endpoint registry with SECURITY DEFINER claim/release, sync runs/issues, payer mappings;
+  `canManageIntegrations`; domain refusals in `src/domain/patients/queries.ts`)**, PI1b Settings ›
+  Integrations + drop-down, PI1c operator approval, PI2a transport/discovery/keys/test connection,
+  PI2b sync engine + sandbox + jobs + history + payer mapping (includes `withTenantAsSystem`,
+  `denialdesk_jobs`, the integration service principal — deferred from PI1a per the spec's own phase
+  split), PI3 scheduled sync + source-state hardening, PI4 Bulk Data before the first real practice.
+  Owner questions OA-045–OA-057; data source DS-12 in `docs/data-sources.xlsx`.
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
   (`RecordHeader`, `RecordLayout`, `FieldList`, `FormShell`) and `src/components/ui/`

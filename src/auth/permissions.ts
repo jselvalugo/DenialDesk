@@ -77,3 +77,12 @@ export function canRecordPromptPay(role: Role): boolean {
 export function canViewUniversity(role: Role): boolean {
   return Boolean(role);
 }
+
+/**
+ * Connecting, testing, submitting, pausing, resuming, revoking, and payer-mapping an EHR/PM
+ * integration (docs/specs/patient-integrations.md): administrators only, same as other practice
+ * configuration (canConfigureSettings).
+ */
+export function canManageIntegrations(role: Role): boolean {
+  return role === "admin";
+}
