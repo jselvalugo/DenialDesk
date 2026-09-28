@@ -86,6 +86,8 @@ describe("checkBaseUrl (PI1b URL rules on save)", () => {
     ["https://fhir.example.com/./r4", "path_characters"],
     ["https://fhir.example.com/John Smith/r4", "path_characters"],
     ["https://fhir.example.com/r4/$export", "path_characters"],
+    ["https://ehr.example.com\\..\\admin", "path_characters"],
+    ["https://ehr.example.com/r4\\x", "path_characters"],
   ])("refuses %s (%s)", (raw, code) => {
     expect(checkBaseUrl(raw, ports443)).toEqual({ ok: false, code });
   });

@@ -149,6 +149,8 @@ describe("createConnection", () => {
       { baseUrl: "https://sandbox.fhir.denialdesk.invalid/other" },
       { baseUrl: `${SANDBOX_BASE_URL}/x` },
       { mrnIdentifierSystem: "https://sandbox.fhir.denialdesk.invalid/mrn" },
+      { mrnIdentifierSystem: "HTTPS://SANDBOX.fhir.denialdesk.invalid/mrn/" },
+      { mrnIdentifierSystem: "http://sandbox.fhir.denialdesk.invalid/other" },
     ]) {
       const error = await refusal(withTenant(a, (tx) => createConnection(tx, admin(a), endpoint(override))));
       expect(error.field).toBe(Object.keys(override)[0]);

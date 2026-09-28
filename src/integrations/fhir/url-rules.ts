@@ -73,6 +73,8 @@ export function checkBaseUrl(raw: string, ports: Set<number> = allowedPorts()): 
   if (text.length > MAX_BASE_URL_LENGTH) return { ok: false, code: "too_long" };
   // Checked on the raw text too: the parser drops an empty "?" or "#", which should still refuse.
   if (/[?#]/.test(text)) return { ok: false, code: "query_or_fragment" };
+  // A backslash is read as "/" by the WHATWG parser, so "host\..\x" would be silently rewritten.
+  if (text.includes("\\")) return { ok: false, code: "path_characters" };
   let url: URL;
   try {
     url = new URL(text);

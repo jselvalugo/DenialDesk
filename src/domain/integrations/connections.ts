@@ -9,6 +9,7 @@ import type { MessageKey, Messages } from "@/i18n/messages/types";
 import { createTranslator, type Translator } from "@/i18n/translate";
 import {
   checkMrnIdentifierSystem,
+  identifierSystemHost,
   INVISIBLE_CHARS,
   MAX_IDENTIFIER_SYSTEM_LENGTH,
 } from "@/integrations/fhir/identifier-rules";
@@ -142,7 +143,8 @@ export function parseEndpointInput(
   if (!CLIENT_ID.test(clientId)) fail(t, "error.clientIdInvalid", "clientId");
   const system = checkMrnIdentifierSystem(input.mrnIdentifierSystem);
   if (!system.ok) fail(t, `error.mrnSystem.${system.code}`, "mrnIdentifierSystem");
-  if (system.system.toLowerCase() === SANDBOX_MRN_SYSTEM) {
+  // Any identifier system on the sandbox host, in any spelling (security re-check).
+  if (identifierSystemHost(system.system) === SANDBOX_HOST) {
     fail(t, "error.mrnSystem.invalid", "mrnIdentifierSystem");
   }
   return {

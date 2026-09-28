@@ -53,12 +53,29 @@ function canonicalSystem(system: string): string | null {
   } catch {
     return null;
   }
-  if (url.port !== "" || !SYSTEM_PATH.test(url.pathname) || /\/\/./.test(url.pathname)) return null;
+  if (
+    url.port !== "" ||
+    url.hostname.endsWith(".") ||
+    !SYSTEM_PATH.test(url.pathname) ||
+    /\/\/./.test(url.pathname)
+  ) {
+    return null;
+  }
   // The raw path must be what the parser kept: no escapes or dot segments it silently rewrote.
   const rawPath = system.replace(/^https?:\/\/[^/]*/i, "") || "/";
   if (rawPath !== url.pathname && `${rawPath}/` !== url.pathname) return null;
   const host = url.hostname.replace(/^www\./, "");
   return `http://${host}${url.pathname.replace(/\/+$/, "")}`.toLowerCase();
+}
+
+/** The host of an http(s) identifier system (lowercased), or null for a URN or unparsable value. */
+export function identifierSystemHost(system: string): string | null {
+  if (!/^https?:\/\//i.test(system)) return null;
+  try {
+    return new URL(system).hostname.replace(/\.$/, "");
+  } catch {
+    return null;
+  }
 }
 
 export function checkMrnIdentifierSystem(raw: string): IdentifierSystemResult {

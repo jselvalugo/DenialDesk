@@ -51,6 +51,7 @@ describe("checkMrnIdentifierSystem (PI1b)", () => {
     ["http://hl7.org:8080/fhir/sid/us-ssn", "invalid"],
     ["http://user@hl7.org/fhir/sid/us-ssn", "invalid"],
     ["http://hl7.org/fhir;v=1/sid/us-ssn", "invalid"],
+    ["http://hl7.org./fhir/sid/us-ssn", "invalid"],
     // Invisible and bidi characters (security review L-4).
     ["http://ehr.example.com/m\u202ern", "invalid"],
     ["http://ehr.example.com/\u200bmrn", "invalid"],
