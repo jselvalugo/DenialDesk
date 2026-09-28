@@ -47,28 +47,36 @@ expression is DenialDesk's own and does not reproduce any vendor's shell (ADR 00
 
 ### Data-source drop-down (owner decision 2026-09-27; `specs/patient-integrations.md`, ADR 0010)
 "A drop-down in the nav bar beside the table … so we can connect to this table only."
-- [ ] `NavItem` gains an optional `dataSource?: { table: "patients" }` slot; only the Patients tab sets
+- [x] `NavItem` gains an optional `dataSource?: { table: "patients" }` slot; only the Patients tab sets
       it today. Other tables opt in later by setting the slot (no shell redesign).
-- [ ] In the navy tab bar, directly after a tab with a `dataSource`, a menu button (Radix menu,
-      `data-chrome="dark"` focus ring) reads "Source: Manual ▾", or "Source: <connection name> ·
-      Synced <relative time> ▾", "Sync running", "Awaiting approval", "Paused", "Needs attention"
-      (error), or "Revoked". Accessible name "Patients data source: <state>"; the status is text,
-      never color alone.
-- [ ] Every role sees the current state, last successful sync, and last run outcome. Administrators
-      (`canManageIntegrations`) also get "Sync now", "Pause sync" / "Resume sync", "Sync history"
-      (→ `/settings/integrations/[id]/runs`), and "Connect an integration…" (→ Settings ›
-      Integrations; shown when no connection exists or the last one is revoked). Revoke lives on
-      the connection page only, not in the menu.
-- [ ] "Sync now" and pause/resume are server actions (POST), never links; resume requires an MFA
-      verification within the last 5 minutes (step-up, as in `specs/patient-integrations.md`); the
-      menu shows the result as a status message.
-- [ ] The summary (connection name, status, last sync time, run state) is loaded by `AppShell` for
-      the tenant in one indexed query and passed through `ShellProvider`; it holds no PHI, no
-      counts of patients, and nothing is placed in URLs or client storage (R-7.4.8).
-- [ ] Relative time and all labels come from `src/i18n/` in en/es/pt (R-11.1).
-- [ ] The tab bar still fits 1024px without horizontal page scroll; a long connection name truncates
+- [x] In the navy tab bar, directly after a tab with a `dataSource`, a menu button (`data-chrome="dark"`
+      focus ring) reads "Source: Manual ▾", or "Source: <connection name> · Synced <relative time> ▾",
+      "Awaiting approval", "Paused", "Needs attention" (error), or "Revoked". Accessible name
+      "Patients data source: <state>"; the status is text, never color alone. No Radix (not a project
+      dependency): the panel follows the app's own menu pattern (`UserMenu`/`OperatorLanguageMenu` —
+      a `role="menu"` panel, `data-chrome="light"`, Escape/click-outside/focus-out to close), extended
+      with arrow-key/Home/End roving focus, and portaled to `document.body` so the tab bar's own
+      `overflow-x-auto` can never clip it (positioned from the trigger's own rect, not DOM ancestry).
+      "Sync running" is a defined but unreachable state before PI2b's sync engine exists.
+- [x] Every role sees the current state and last successful sync (the full connection name too, not
+      only its truncated on-button label). **PI2b**: last run outcome (no sync runs exist before the
+      sync engine ships) and "Sync now" (out of scope for PI1b by the builder's own task). Administrators
+      (`canManageIntegrations`) get "Pause sync" / "Resume sync", "Sync history" (→
+      `/settings/integrations/[id]/runs`, always empty until PI2b), and "Connect an integration…"
+      (→ Settings › Integrations; shown when no connection exists or the last one is revoked). Revoke
+      lives on the connection page only, not in the menu.
+- [x] Pause/resume are server actions (POST), never links; resume requires an MFA verification within
+      the last 5 minutes (step-up, as in `specs/patient-integrations.md`); the menu shows the result as
+      a status message. **PI2b**: "Sync now".
+- [x] The summary (connection name, status, last sync time) is loaded by `AppShell` for the tenant in
+      one indexed query and passed through `ShellProvider`; it holds no PHI, no counts of patients,
+      and nothing is placed in URLs or client storage (R-7.4.8). **PI2b**: run state (no runs exist yet).
+- [x] Relative time and all labels come from `src/i18n/` in en/es/pt (R-11.1); the menu re-renders in
+      the request's language, not always English. Computed client-side from a post-mount clock (never
+      the server's render time), so a hydration mismatch can't occur.
+- [x] The tab bar still fits 1024px without horizontal page scroll; a long connection name truncates
       with the full name in the menu.
-- [ ] Menu visibility is not access control: every action re-checks the role on the server.
+- [x] Menu visibility is not access control: every action re-checks the role on the server.
 
 ## Data / API changes
 None for navigation: it is computed client-side from role flags already passed to the shell; no

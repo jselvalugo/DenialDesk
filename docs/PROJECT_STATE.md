@@ -57,15 +57,21 @@ _Last updated: 2026-09-28_
   with a confirm dialog and reason code/Activate sandbox), the `DataSourceMenu` beside the Patients
   tab (`dataSourceState` in `src/components/shell/data-source.ts`, an `AppShell`-loaded summary
   query through `ShellContext`), Patients pages reflecting a blocked register and "Synced from …".
-  Step-up MFA (R-7.2.2) gates Submit's attestation, Resume, and Revoke: `hasRecentMfa` (5-minute
-  window) plus a small `/step-up` re-verification page/action reusing the sign-in TOTP flow — the
-  smallest addition that worked, since no "recent verification" timestamp existed before. Sandbox
-  activation (draft → active, no operator approval) satisfies the CHECK/trigger pair from 0039/0040
-  because `is_sandbox` is true, so `integration_connections_approved_when_live` never asks for
-  approval fields and the lifecycle trigger's own `draft → active` branch is gated on `is_sandbox`,
-  not on the caller's role. Real-endpoint creation and Submit are refused/disabled respectively:
-  PI2a's test-connection and discovery don't exist yet, so a real connection stays `draft` forever
-  in this PR by design.)**, PI1c operator approval, PI2a transport/discovery/keys/test connection,
+  Step-up MFA (R-7.2.2) gates the U.S.-residency attestation, Resume, and Revoke: `hasRecentMfa`
+  (5-minute window) plus a small `/step-up` re-verification page/action reusing the sign-in TOTP
+  flow — the smallest addition that worked, since no "recent verification" timestamp existed
+  before. The attestation itself moved to **create/edit of a real connection** (its own
+  step-up-gated write, audited with `connection_created`/`connection_updated`), not Submit: PI1b's
+  Submit is shown disabled, so nothing yet drives an attestation from an actual Submit click;
+  changing the endpoint, or unchecking the box, clears any prior attestation so the record never
+  claims a stale one (security review PR #81, item 5). Sandbox activation (draft → active, no
+  operator approval, no test/attestation since the sandbox is synthetic, not a real endpoint) also
+  requires step-up and satisfies the CHECK/trigger pair from 0039/0040 because `is_sandbox` is
+  true, so `integration_connections_approved_when_live` never asks for approval fields and the
+  lifecycle trigger's own `draft → active` branch is gated on `is_sandbox`, not on the caller's
+  role. Real-endpoint creation and Submit are refused/disabled respectively: PI2a's test-connection
+  and discovery don't exist yet, so a real connection stays `draft` forever in this PR by design.)**,
+  PI1c operator approval, PI2a transport/discovery/keys/test connection,
   PI2b sync engine + sandbox + jobs + history + payer mapping (includes `withTenantAsSystem`,
   `denialdesk_jobs`, the integration service principal — deferred from PI1a per the spec's own phase
   split), PI3 scheduled sync + source-state hardening, PI4 Bulk Data before the first real practice.

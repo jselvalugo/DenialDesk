@@ -191,7 +191,12 @@ when the run succeeds, so a failed first run still locks the endpoint.
       `actor.canTag` and validates the tag against the known vocabulary at runtime) and stay
       editable on synced patients — separate from `updatePatient`, since the latter is refused
       outright on a synced patient. Custom field values also stay editable on a synced patient.
-- [x] `canManageIntegrations` (admin only).
+- [x] `canManageIntegrations` (admin only). On `/settings/integrations/[id]`, a non-admin sees only
+      the connection's name and status badge — the configuration panel (base URL, client ID, MRN
+      identifier system) and the lifecycle panel (attestation, submitted/approved/revoked dates)
+      are admin-only, since a role that can't act on any of it has no need to see it (security
+      review PR #81, item 9). The tab-bar drop-down's own state is unaffected: "Menu visibility is
+      not access control" (below) already applies there.
 - [x] `src/lib/log.ts`'s redaction helpers additionally drop any `*Id`-shaped field whose value isn't
       a UUID, and refuse a small deny-list of identifier keys outright (`externalId`, `memberId`,
       `clientId`, `sourceVersionId`) so a raw FHIR/member identifier can never reach a log record
@@ -227,6 +232,15 @@ when the run succeeds, so a failed first run still locks the endpoint.
       disabled — PI2a's test-connection doesn't exist yet, so there is nothing to gate) and
       **payer mapping** (PI2b). Activation does not yet notify practice administrators (no
       Notifications feature; sandbox activation has no operator step to notify about either).
+      Step-up hardening (security review PR #81, item 12; owner-confirmable defaults, OA-061): a
+      successful step-up rotates the session token/cookie the same way a fresh sign-in does
+      (`completeStepUpMfa`); it shares the sign-in attempt-limiting counter (`reserveAttempt`) so
+      the two can't be used to bypass each other's lockout, but a successful step-up does **not**
+      reset that counter, unlike a sign-in (`claimTotp`'s `resetLockout` parameter) — a step-up is
+      re-proving an already-authenticated session, not starting a new one. The factor is TOTP, the
+      same as sign-in; R-7.2.2 calls for phishing-resistant MFA (e.g. WebAuthn) for this kind of
+      re-verification, which is a known gap tracked in OA-061, to close before the first real
+      (non-sandbox) EHR connection.
 - [x] Revoke (admin, confirm dialog, reason code) → `revoked`; the page shows the offboarding steps
       (deregister the client at the EHR).
 - [x] Drop-down per `specs/erp-shell.md`; states include Awaiting approval and Revoked. "Sync
@@ -423,12 +437,18 @@ outside the §9.1 data classes, R-7.3.5).
 **Audit events** (never MRNs, names, external ids, tokens, query strings):
 `integration.connection_created|updated|submitted|tested|activated|paused|resumed|errored|revoked`
 with old/new base URL, token endpoint host + path, and client ID — always the normalized value
-with no query string or fragment (configuration, not PHI);
+with no query string or fragment (configuration, not PHI); withdraw (pending_approval → draft)
+reuses `integration.connection_updated` with `metadata.transition: "withdrawn"` rather than its
+own event name; an attestation set or cleared on `connection_created`/`connection_updated` carries
+`metadata.attested`/`attestationCleared` flags (PI1b, security/compliance review PR #81, item 13);
 `integration.registry_conflict`, `integration.payer_mapping_changed`,
 `operator.integration_approved|rejected`, `integration.sync_started|completed|failed` (counts; the
 run-level `sync_completed` is the record of receipt for unchanged and skipped resources),
 `patient.synced_created|synced_updated|linked_to_source|source_inactivated|source_merged|source_gone`
-(patient, connection, run IDs; changed field names).
+(patient, connection, run IDs; changed field names). The step-up re-verification itself (PI1b) is
+audited separately, not scoped to a connection: `auth.step_up_verified`/`auth.step_up_failed`
+(`src/app/(app)/step-up/actions.ts`), each carrying the session's tenant ID and the `path` the
+admin was trying to return to — never the TOTP code.
 
 ## Legal rules used
 None (no legal clock). Residency is enforced by attestation and environment rules.
