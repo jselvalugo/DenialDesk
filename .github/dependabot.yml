@@ -1,4 +1,6 @@
 # Keeps GitHub Actions and npm dependencies patched (R-7.4.2, REQUIREMENTS §7.6 SLAs).
+# Every ecosystem holds a new release for 7 days before proposing it (SC-A4.3), matching pnpm's
+# minimumReleaseAge. Cooldown applies to version updates only; security updates still open at once.
 version: 2
 updates:
   # ci.yml pins actions to full commit SHAs with a `# vX.Y.Z` comment; Dependabot updates the
@@ -7,8 +9,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
