@@ -90,8 +90,10 @@ destroyed; offboarding runbook). At most one connection per practice and target 
 
 **Editability.** Display name: always. `draft`: every client-settable field. `pending_approval`:
 none (withdraw → `draft`). Once the connection has synced any patient, **base URL, token endpoint,
-issuer, and MRN identifier system are immutable** — a different endpoint is a new connection;
-a client ID change (`paused` only) goes back to `pending_approval`.
+issuer, MRN identifier system, and client ID are immutable** — a different endpoint or client
+registration is a new connection (re-review 2026-09-28, M-c: on shared vendor clouds a new client ID
+can mean another organization's patients). "Has synced" is set when the first page commits, not
+when the run succeeds, so a failed first run still locks the endpoint.
 
 ## Acceptance criteria
 
@@ -115,8 +117,13 @@ a client ID change (`paused` only) goes back to `pending_approval`.
 - [ ] Endpoint registry `integration_endpoint_registry` (no RLS, no grants to `denialdesk_app`):
       unique `(endpoint_key, client_id)` over all practices, reached only through SECURITY DEFINER
       `integration_registry_claim(connection_id)` / `_release(connection_id)` returning a boolean.
-      `endpoint_key` = WHATWG-normalized scheme + host + port + path (no trailing slash). Sandbox
-      connections are not registered.
+      `endpoint_key` = WHATWG-normalized scheme + host + port + path (no trailing slash; path compared
+      case-insensitively). A second unique key covers the normalized **discovered token endpoint** +
+      client ID, so a vanity hostname or CNAME for the same server can't bypass the registry (M-b).
+      Both functions require `connection.tenant_id = current_setting('app.tenant_id')`, run with
+      `SET search_path = pg_catalog, public`, and release only on a transition to `draft`
+      (withdraw/reject) or `revoked`, enforced in the database; isolation test: practice A cannot
+      claim or release practice B's entry (M-a). Sandbox connections are not registered.
 - [ ] Domain refusals (before the triggers): `updatePatient` on synced patients; register/edit while
       a connection is outside `draft`/`revoked`. Sensitivity tags (administrators) and custom field
       values stay editable on synced patients.
@@ -185,7 +192,9 @@ a client ID change (`paused` only) goes back to `pending_approval`.
       non-exportable Azure Key Vault key per connection at creation, published at
       `/.well-known/jwks/<connection-uuid>.json`; a shared key only as a documented per-vendor
       exception (`key_mode = shared_vendor_exception` + reason code; e.g. a vendor with one client
-      per app, ⚠️ VERIFY). Pre-production uses one shared key from a functions-only hosting secret,
+      per app, ⚠️ VERIFY), set only by the operator at approval (never client-settable) and audited.
+      Connection creation is rate-limited per practice (each one creates a Key Vault key).
+      Pre-production uses one shared key from a functions-only hosting secret,
       distinct from production. Production refuses to start integrations if an env signing key is
       present (Key Vault only). Annual rotation with current + next `kid`.
 - [ ] JWKS routes: public-field allow-list (`kty`, `crv`, `x`, `y`, `n`, `e`, `kid`, `alg`, `use`),
@@ -198,12 +207,15 @@ a client ID change (`paused` only) goes back to `pending_approval`.
 - [ ] Jobs: payload `{ runId }` only, with an HMAC-SHA256 header (body + timestamp, 5-min window)
       keyed by `INTEGRATION_JOB_SECRET`. The worker claims the run with SECURITY DEFINER
       `integration_claim_run(run_id)` (only a `queued` run; returns `tenant_id, connection_id`;
-      EXECUTE granted to a `denialdesk_jobs` role, not `denialdesk_app`). Tests: unsigned call,
+      EXECUTE granted to a `denialdesk_jobs` role, not `denialdesk_app`; also requires the
+      connection to be `active`; HMAC compared in constant time). Tests: unsigned call,
       stale timestamp, and forged or already-claimed `runId` refused.
 - [ ] All sync reads and writes run as `denialdesk_app` under a new
       `withTenantAsSystem(tenantId, runId)` (sets tenant, run, and connection settings; never
       `withTenantAsPlatform` or `systemDb`). Audit actor: a fixed per-environment integration
-      service-principal UUID in reviewed code; the admin who pressed Sync now in
+      service-principal UUID in reviewed code, seeded by migration as a `users` row that cannot
+      sign in, has no memberships and no roles (keeps the `audit_events.actor_user_id` FK; a test
+      asserts the FK stays); the admin who pressed Sync now in
       `metadata.triggeredBy`; reason `ehr_sync`; "where" = runtime function id and host.
 - [ ] Every run first checks the connection's issuer against discovery; a mismatch fails the run
       before any upsert (`issuer_mismatch`); a changed token endpoint sets `error`.
@@ -323,7 +335,8 @@ outside the §9.1 data classes, R-7.3.5).
 
 **Audit events** (never MRNs, names, external ids, tokens, query strings):
 `integration.connection_created|updated|submitted|tested|activated|paused|resumed|errored|revoked`
-with old/new base URL, token endpoint host + path, and client ID (configuration, not PHI);
+with old/new base URL, token endpoint host + path, and client ID — always the normalized value
+with no query string or fragment (configuration, not PHI);
 `integration.registry_conflict`, `integration.payer_mapping_changed`,
 `operator.integration_approved|rejected`, `integration.sync_started|completed|failed` (counts; the
 run-level `sync_completed` is the record of receipt for unchanged and skipped resources),

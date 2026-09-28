@@ -64,5 +64,6 @@ Resources and tokens exist only in memory.
 - Practice-scoped population (I3): Bulk Data Group export or operator-verified filter.
 - Sensitivity masking for restricted-in-source patients (I4), and the Part 2 program question.
 - Key Vault per-connection keys, rotation and compromise runbooks, JWKS rotation test (S3).
-- Owner answers: residency and vendor screening (I6), OA-057 decisions.
+- Owner/counsel answers: residency and vendor screening (I6), customer BAA covers the EHR pull
+  (OA-045), OA-057 decisions including single-person operator approval and any `shared_vendor_exception`.
 - Egress NSG and SIEM alerts (R-7.5.3) at the Azure cutover.
