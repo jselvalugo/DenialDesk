@@ -292,7 +292,7 @@ get their own tests in PI2a.
 - [ ] Approve records how it was verified with the practice's EHR administrator (method code, date,
       and the contact's role at the practice; **the operator also verifies, outside the app, that the
       practice owns the `client_id`** — pre-production signs every connection with one shared key
-      (owner decision), so the key alone doesn't tie a client registration to a practice), the population scope (`group_export` or
+      (coordinator decision pending owner confirmation, OA-065), so the key alone doesn't tie a client registration to a practice), the population scope (`group_export` or
       `verified_filter`), and optionally "MRNs are 9 digits (verified)"; Reject records a reason
       code. Writes via `withTenantAsPlatform`; audited `operator.integration_approved|rejected`.
 - [ ] Activation (Approve) notifies every practice administrator (in-app notice now; e-mail once
@@ -305,8 +305,8 @@ is now PI2a → PI1c (approval has nothing to approve before Submit exists); san
 possible only in PI2b, which adds the in-process sandbox a test can pass against.
 - [ ] Resume from `error` requires a passing Test connection first (the error usually means the
       endpoint, key, or registration changed; resuming blindly restarts the failure). Resume from
-      `paused` doesn't. (PI2a-2, once Test connection exists; today Resume from `error` needs only the
-      step-up.)
+      `paused` doesn't. (PI2a Submit PR: Test connection exists since #87 but nothing calls
+      `hasRecentPassingTest` yet; today Resume from `error` needs only the step-up.)
 - [ ] Submit (admin, draft → `pending_approval` for a real connection, → `active` for the sandbox;
       stamps `submitted_by/_at` in both cases — the drop-down treats a revoked connection as a past
       source only if it was ever submitted or synced):
@@ -509,8 +509,8 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       is PI2b (`AccessTokenCache.invalidate` is ready for it).
 - [x] Keys, pre-production (R-7.3.4, R-7.3.5; decided 2026-09-28: follow the spec, no migration, no
       grant). **A pre-production exception, production control deferred:** R-7.3.4/R-7.3.5 call for
-      per-connection, non-exportable keys; the shared environment key below is an owner-accepted
-      pre-production exception (residual risk in the threat model, S3), and the production control
+      per-connection, non-exportable keys; the shared environment key below is a pre-production exception
+      (coordinator decision pending owner confirmation, OA-065) (residual risk in the threat model, S3), and the production control
       (Key Vault per connection) is the unticked item after this one.
       **One shared key from a functions-only hosting secret**, `INTEGRATION_SIGNING_KEY` (a PKCS#8
       ES384 PEM; RS384 also accepted; literal `\n` accepted for hosts that flatten multi-line
@@ -523,9 +523,11 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `not_configured`/`key_unreadable` at use, so the app and the JWKS route start without it), keeps
       the key in a true `#private` field (it can't be serialized by `JSON.stringify`, `util.inspect`,
       or a logger), and never writes `key_mode`/`key_ref` or any other column. **Production refuses
-      to start integrations if the variable is present** (`assertNoEnvSigningKeyInProduction`, run by
-      `getSigningKeyStore` and by `register()` in `src/instrumentation.ts` at boot; each emits a
-      `security.env_signing_key_in_production` event, no value; Key Vault only). The `AzureKeyVaultKeyStore` stub fails closed. Tests
+      to start integrations if the variable is present** (`assertNoEnvSigningKeyInProduction`, thrown by
+      `getSigningKeyStore` and checked by `register()` in `src/instrumentation.ts` at boot; the
+      `security.env_signing_key_in_production` event, no value, is written at boot and by Test
+      connection when it meets the refusal; the JWKS route answers 404 in production before it
+      reaches the store; Key Vault only). The `AzureKeyVaultKeyStore` stub fails closed. Tests
       generate their keys at test time; no PEM is committed. `.env.example` carries an empty
       `INTEGRATION_SIGNING_KEY=`. Rotation (current + next `kid`) is still open.
 - [ ] Keys, production, **per connection — for the Azure cutover; needs human sign-off (R-15.9)**:

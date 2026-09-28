@@ -67,10 +67,10 @@ _Last updated: 2026-09-28_
   `INTEGRATION_SIGNING_KEY`, OA-064; a **pre-production exception, production control deferred** relative to R-7.3.4/R-7.3.5; production refuses it at use and at boot; register it only with synthetic-data vendor sandboxes, never a live practice EHR; Key Vault stub fails closed), the public
   `/.well-known/jwks.json` route (allow-list, `jwks` bucket), and Test connection (domain service,
   admin action, button on the connection page; result from the audit log via `hasRecentPassingTest`,
-  Submit's gate: the newest test for the connection must be a pass within 24 h, bound to the current base URL, client ID, token endpoint, issuer, and signing `kid`; coordinator decision pending owner confirmation). **Open for the Azure cutover (R-15.9
+  Submit's gate: the newest test for the connection must be a pass within 24 h, bound to the current base URL, client ID, token endpoint, token endpoint key, issuer, and signing `kid`; coordinator decision pending owner confirmation, OA-065). **Open for the Azure cutover (R-15.9
   sign-off):** per-connection Key Vault keys, the grant on `key_mode`/`key_ref`, SECURITY DEFINER
   `integration_jwks_lookup`, `/.well-known/jwks/<uuid>.json`, key rotation and compromise runbooks.
-  Still open in PI2a: Submit, the residency attestation, and the Submit registry claim. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  Still open in PI2a: Submit, the residency attestation, the Submit registry claim, and Resume from `error` requiring a passing Test connection. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
   **PI2a lifecycle + step-up slice done** (PR #86, ported from closed #81 onto the
   #82/#84/#85 domain layer; Submit, the residency attestation, and the Submit registry claim wait on
   Test connection, PI2a-2): step-up MFA (R-7.2.2) — migration 0041 `sessions.mfa_verified_at`,
@@ -400,6 +400,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Open questions for humans
 
+- **Confirm two PI2a coordinator decisions (OA-065, 2026-09-28):** (a) Submit's gate is stricter than the spec's plain wording: the newest Test connection must be a pass within 24 h, bound to the tested configuration and signing `kid` (a later failure or transport refusal voids it); (b) pre-production signs every connection with one shared key (`INTEGRATION_SIGNING_KEY`), a residual risk recorded in threat model S3, mitigated by the operator verifying `client_id` ownership at approval (PI1c).
 - **TLS 1.3 minimum for the FHIR transport?** (2026-09-28, pending, `OA-062`.) R-7.3.1 is TLS 1.2+ (prefer 1.3); the transport enforces 1.2 with ECDHE + AEAD suites only and negotiates 1.3 when offered. A 1.3 minimum would refuse EHR vendors that only support 1.2. Must be decided before the first real endpoint is enabled.
 - Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter
   and BAA scope (OA-045); retire manual registration once connected (OA-046); phone/email not synced
