@@ -113,6 +113,7 @@ export const promptPay = {
   "newContest.description":
     "The payer contested this claim or asked for more information. This meets the pay-or-contest milestone only; the pay-or-deny clock keeps running.",
   "newContest.breadcrumbRecordContest": "Record contest",
+  "newContest.sectionTitle": "Contest details",
   "contestForm.dateLabel": "Date on the payer's notice",
   "contestForm.dateHint": "The date the payer contested the claim or asked for information.",
   "contestForm.noteLabel": "What did the payer ask for?",

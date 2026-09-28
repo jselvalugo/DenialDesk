@@ -51,6 +51,7 @@ export const remittances = {
   "new.backToRemittances": "Back to remittances",
 
   // Upload form (app/(app)/remittances/new/UploadRemittanceForm.tsx)
+  "upload.sectionTitle": "Remittance file",
   "upload.fileLabel": "835 remittance file (one payment, up to 5 MB)",
   "upload.fileHint":
     "The payer must be set up with its EDI payer ID, and every claim in the file must already be in DenialDesk. Nothing changes on a claim until you post the remittance.",

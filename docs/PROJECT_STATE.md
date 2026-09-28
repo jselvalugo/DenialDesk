@@ -37,8 +37,9 @@ _Last updated: 2026-09-27_
   all four Patient screens (list with toolbar/count/age/location/coverage, chart with header meta
   strip and Record panel, sectioned register/edit forms). `ageOn()` pure helper with boundary tests;
   `PageEyebrow` takes a `page` override and no longer prints "Patients · Patients" on form pages.
-  Next: P2 move Claims and Denials record headers onto `RecordHeader`; P3 the other forms onto
-  `FormShell`; P4 sortable `DataTable`. Open (owner): which column replaces Sex on the list.
+  P3 done 2026-09-28 (Appeals, Remittances, Prompt pay, Settings › Custom fields, Operator ›
+  Practices forms on `FormShell`). Next: P2 Claims and Denials record headers onto `RecordHeader`;
+  P4 sortable `DataTable`. Open (owner): which column replaces Sex on the list.
 - Internationalization (`specs/internationalization.md`, ADR 0009, R-11.1): the whole product (practice
   app, sign-in, operator console, Insight .xlsx export) reads in English, Spanish, or Portuguese. Own
   module in `src/i18n/` (no dependency): typed dictionaries per namespace in

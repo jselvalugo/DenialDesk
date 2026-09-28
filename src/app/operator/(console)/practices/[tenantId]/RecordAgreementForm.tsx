@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
+import { FormRow } from "@/components/records/FormShell";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
@@ -58,7 +59,7 @@ export function RecordAgreementForm({
             className="text-body text-text file:mr-3 file:h-8 file:rounded-control file:border file:border-border-strong file:bg-surface file:px-3 file:text-body file:font-medium file:text-text hover:file:bg-surface-muted"
           />
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <FormRow columns="grid-cols-3">
           <TextField
             label={t("agreementForm.effectiveDateLabel")}
             name="effectiveDate"
@@ -72,8 +73,8 @@ export function RecordAgreementForm({
             hint={t("agreementForm.expiresOnHint")}
           />
           <TextField label={t("agreementForm.signedOnLabel")} name="signedOn" type="date" required />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
+        </FormRow>
+        <FormRow columns="grid-cols-2">
           <TextField
             label={t("agreementForm.practiceSignerLabel")}
             name="practiceSigner"
@@ -88,7 +89,7 @@ export function RecordAgreementForm({
             maxLength={160}
             hint={t("agreementForm.nameAndTitleHint")}
           />
-        </div>
+        </FormRow>
         <TextField
           label={t("agreementForm.noteLabel")}
           name="note"
