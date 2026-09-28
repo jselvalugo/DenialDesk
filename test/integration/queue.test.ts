@@ -199,7 +199,7 @@ describe("listDenials", () => {
   });
 
   it("holds the awaiting-action-first priority for a descending deadline sort too, with nulls last (P4 review)", async () => {
-    // Ids run opposite to the expected order, so an id-only order fails too.
+    // Ids are not in the expected order (which is id-descending), so an id-ascending order fails too.
     const { payerId, ids } = await freshDenials([
       { id: uuidWithPrefix("1"), status: "appeal_submitted", appealDeadline: addCalendarDays(today, 10) },
       { id: uuidWithPrefix("3"), status: "new", appealDeadline: addCalendarDays(today, 2) },
@@ -220,8 +220,9 @@ describe("listDenials", () => {
   });
 
   it("sorts by notice date, in either direction (restored, P4 review)", async () => {
-    // Distinct notice dates, inserted out of date order, with ids running opposite to date order,
-    // so neither insertion order nor the id tie-break can pass for a missing or flipped date sort.
+    // Distinct notice dates, inserted out of date order, with ids running opposite to date order:
+    // the ascending check fails for a missing sort (id order) or a flipped one, and the descending
+    // check for a flipped one.
     const { payerId, ids } = await freshDenials([
       { id: uuidWithPrefix("2"), noticeDate: addCalendarDays(today, -20) },
       { id: uuidWithPrefix("3"), noticeDate: addCalendarDays(today, -30) },

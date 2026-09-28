@@ -112,7 +112,7 @@ a masked identifier (member ID, SSN) — those stay in the aside behind `MaskedV
         in Postgres, whose text order follows the database collation — byte-wise under `C`,
         linguistic under `en_US.utf8` — so it can differ from the in-memory `CLAIM_NAME_COLLATOR` on
         case, accents, or punctuation); the "Filing deadline" header's hint says "sort in default
-        order" and is omitted while that order is already shown; default-order tie-break tests insert
+        order" and is omitted when no column sort is applied; default-order tie-break tests insert
         rows with explicit ids running opposite to the expected order, so an id-only regression fails
         on every run; queue sort tests insert their own denials instead of mutating seeded ones.
 
