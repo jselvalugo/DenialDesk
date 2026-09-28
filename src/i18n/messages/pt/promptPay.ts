@@ -117,6 +117,7 @@ export const promptPay: Messages["promptPay"] = {
   "newContest.description":
     "O pagador contestou esta reivindicação ou pediu mais informações. Isso cumpre apenas o marco de pagar ou contestar; o relógio de pagar ou negar continua correndo.",
   "newContest.breadcrumbRecordContest": "Registrar contestação",
+  "newContest.sectionTitle": "Detalhes da contestação",
   "contestForm.dateLabel": "Data do aviso do pagador",
   "contestForm.dateHint": "A data em que o pagador contestou a reivindicação ou pediu informações.",
   "contestForm.noteLabel": "O que o pagador pediu?",

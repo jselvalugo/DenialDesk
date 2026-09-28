@@ -11,6 +11,7 @@ export const settings = {
   "tabs.notifications": "Notifications",
   "tabs.integrations": "Integrations",
   "tabs.sectionsLabel": "Settings sections",
+  "nav.breadcrumb": "Breadcrumb",
 
   // General settings page
   "general.profileTitle": "Practice profile",

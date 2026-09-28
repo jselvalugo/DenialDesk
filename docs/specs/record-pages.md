@@ -50,8 +50,13 @@ a masked identifier (member ID, SSN) — those stay in the aside behind `MaskedV
 - [x] Every new string is a key in English, Spanish, and Portuguese.
 - [ ] P2 — Claims and Denials record pages move to `RecordHeader` / `RecordLayout` (their headers
       are hand-built today).
-- [ ] P3 — Appeals, Remittances, Prompt pay, Settings › Custom fields, Operator › Practices forms
-      move to `FormShell`.
+- [x] P3 — Appeals, Remittances, Prompt pay, Settings › Custom fields, Operator › Practices forms
+      move to `FormShell`: the "new" create-flow pages (appeal, remittance, prompt-pay contest,
+      custom field, practice) now use `Breadcrumbs` + `FormSection`/`FormRow`/`FormActions`/
+      `FormNotices` inside `<Panel flush>`; appeal submission/decision, the remittance void reason,
+      the prompt-pay void-in-error reason, and the BAA agreement dates now use `FormRow`,
+      `SelectField`, `TextField`, and `TextareaField` in place of hand-rolled grids and inputs,
+      unchanged behavior and unchanged accessible names.
 - [ ] P4 — `DataTable` gains sortable headers and a compact density (TanStack, ADR 0004).
 
 ## Data / API changes
