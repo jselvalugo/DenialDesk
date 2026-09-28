@@ -72,20 +72,37 @@ export async function hit(bucket: Bucket, key: string, now: Date = new Date()): 
 
 /**
  * A client IPv6 address's /64 (the network a single subscriber controls: one host can rotate through
- * 2^64 addresses inside it), written as its first four hextets; anything else is returned unchanged.
+ * 2^64 addresses inside it), written as its first four hextets. An IPv4-mapped (`::ffff:a.b.c.d`) or
+ * IPv4-compatible (`::a.b.c.d`) address is keyed by its embedded IPv4, so IPv4 clients reported in
+ * mapped form don't all share one bucket. Anything that isn't IPv6 is returned unchanged.
  */
 export function ipv6Network64(ip: string): string {
   if (!isIPv6(ip)) return ip;
-  const [head = "", tail] = ip.split("%")[0]!.split("::") as [string, string?];
+  const address = ip.split("%")[0]!;
+  // An embedded dotted IPv4 tail is two hextets; expand it before counting groups for "::".
+  const dotted = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(address);
+  const hex = dotted
+    ? address.slice(0, dotted.index) +
+      [
+        ((Number(dotted[1]) << 8) | Number(dotted[2])).toString(16),
+        ((Number(dotted[3]) << 8) | Number(dotted[4])).toString(16),
+      ].join(":")
+    : address;
+  const [head = "", tail] = hex.split("::") as [string, string?];
   const groups = (part: string) => (part === "" ? [] : part.split(":"));
   const left = groups(head);
   const right = tail === undefined ? [] : groups(tail);
   const gap = tail === undefined ? 0 : 8 - left.length - right.length;
-  const full = [...left, ...Array<string>(gap).fill("0"), ...right];
-  // An embedded IPv4 tail (::ffff:1.2.3.4) is two hextets; it is never in the first four.
+  const full = [...left, ...Array<string>(gap).fill("0"), ...right].map((group) =>
+    parseInt(group || "0", 16),
+  );
+  const embedsIpv4 = full.slice(0, 5).every((group) => group === 0) && (full[5] === 0xffff || full[5] === 0);
+  if (embedsIpv4 && (full[6] !== 0 || (full[7] ?? 0) > 1)) {
+    return [full[6]! >> 8, full[6]! & 0xff, full[7]! >> 8, full[7]! & 0xff].join(".");
+  }
   return full
     .slice(0, 4)
-    .map((group) => parseInt(group || "0", 16).toString(16))
+    .map((group) => group.toString(16))
     .join(":")
     .concat("::/64");
 }

@@ -421,6 +421,8 @@ export async function testConnection(
  * the `connection_tested` metadata and compared by `hasRecentPassingTest`, so editing any of them, or
  * rotating the key, voids the pass. Exported so a test pins the coupling.
  */
+// `token_endpoint_key` is redundant with `token_endpoint` by construction (0041: key = lower(url));
+// it stays as a cheap belt-and-braces check.
 export const PASS_BINDING_METADATA_KEYS = [
   "base_url",
   "client_id",

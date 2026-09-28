@@ -67,3 +67,4 @@ Resources and tokens exist only in memory.
 - Owner/counsel answers: residency and vendor screening (I6), customer BAA covers the EHR pull
   (OA-045), OA-057 decisions including single-person operator approval and any `shared_vendor_exception`.
 - Egress NSG and SIEM alerts (R-7.5.3) at the Azure cutover.
+- `x-azure-clientip` is trusted off Netlify (`src/lib/request-context.ts`); at the Azure cutover the origin must be reachable only through Front Door (`X-Azure-FDID` check or Private Link), or a client can forge it and dodge the sign-in, MFA, and JWKS rate limits (PR #87 review).

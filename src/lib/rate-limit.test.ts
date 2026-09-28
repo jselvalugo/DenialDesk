@@ -25,7 +25,13 @@ describe("ipv6Network64 (the public jwks bucket keys an IPv6 client by its /64)"
   });
 
   it("handles an embedded IPv4 tail and a zone id", () => {
-    expect(ipv6Network64("::ffff:192.0.2.1")).toBe("0:0:0:0::/64");
+    // IPv4-mapped and IPv4-compatible addresses are keyed by the embedded IPv4, not one shared /64.
+    expect(ipv6Network64("::ffff:192.0.2.1")).toBe("192.0.2.1");
+    expect(ipv6Network64("::ffff:c000:201")).toBe("192.0.2.1");
+    expect(ipv6Network64("::ffff:198.51.100.7")).not.toBe(ipv6Network64("::ffff:192.0.2.1"));
+    expect(ipv6Network64("::192.0.2.1")).toBe("192.0.2.1");
+    // A dotted tail counts as two hextets when "::" is expanded.
+    expect(ipv6Network64("1::2:3:4:1.2.3.4")).toBe("1:0:0:2::/64");
     expect(ipv6Network64("fe80::1%eth0")).toBe("fe80:0:0:0::/64");
   });
 

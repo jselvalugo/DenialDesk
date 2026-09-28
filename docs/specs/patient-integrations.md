@@ -313,7 +313,10 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       requires a passing Test connection in the last 24 h, the residency attestation (real only),
       and an MFA verification within the last 5 minutes (step-up; R-7.2.2; the gate and `/step-up`
       exist now, see "Step-up MFA" below: call `requireStepUp`). Tests: Submit refused without a
-      recent passing test, and without a recent step-up. Submit writes both stamps
+      recent passing test, and without a recent step-up. Submit locks the row `FOR UPDATE` and calls
+      `hasRecentPassingTest` (with the live signing `kid`) in the same transaction as the status
+      change, so a concurrent test can't land between the check and the move (PR #87 review); the
+      app role can write these columns directly, so the gate is app-enforced. Submit writes both stamps
       (`submitted_at`, `us_residency_attested_at`) in the same UPDATE that changes status. Before
       the first real connection, a later migration should require the stamps to be ≥
       `transaction_timestamp()` and `attested_by` non-null (compliance N3; owner/counsel decision).
