@@ -200,7 +200,7 @@ when the run succeeds, so a failed first run still locks the endpoint.
       even under a plausible-looking key name.
 
 ### PI1b — Settings › Integrations and the tab-bar drop-down
-Split into PRs (2026-09-28): **PI1b-1** domain (below, done), **PI1b-2** Settings pages (done), **PI1b-3**
+Split into PRs (2026-09-28): **PI1b-1** domain (below, done), **PI1b-2** Settings pages (done), **PI1b-3** (done)
 drop-down. Re-sequenced: Submit needs "a passing test in the last 24 h", and Test connection is
 PI2a (discovery + token request) — so **Submit, the residency attestation, the MFA step-up, and
 pause/resume move to PI2a**, where Submit first becomes possible. Until then no code path moves a
@@ -250,9 +250,10 @@ get their own tests in PI2a.
       checkbox, checked on the server too) rather than a modal (DESIGN.md §3); the page shows the
       offboarding steps before and after revoking (real connections); runbook
       `docs/runbooks/integration-offboarding.md`.
-- [ ] PI1b-3: Drop-down per `specs/erp-shell.md`; states include Awaiting approval and Revoked.
-- [ ] Every string in en/es/pt (R-11.1) — PI1b-1's refusal messages and PI1b-2's pages are in all
-      three; PI1b-3's drop-down to follow.
+- [x] PI1b-3: Drop-down per `specs/erp-shell.md`; states include Awaiting approval and Revoked (every
+      state that exists today; the sync actions join it in PI2a/PI2b).
+- [x] Every string in en/es/pt (R-11.1): PI1b-1's refusal messages, PI1b-2's pages, PI1b-3's
+      drop-down.
 - [x] PI1b-2: the server actions pass `syntheticDataOnly()` as the actor's `syntheticOnly` (never a
       client value), with a test (`form-state.test.ts`, incl. `APP_ENV=production` on Netlify); and
       map database errors from a connection write to a generic message — PostgreSQL's CHECK/unique
@@ -263,7 +264,9 @@ get their own tests in PI2a.
 - PI1b follow-ups (compliance review of PI1b-2, not yet scheduled): an audited "offboarding
   confirmed by/at" record for the EHR-side deregistration (SOC 2 CC6.2/CC6.3 evidence); notify the
   practice's other administrators on revoke (CC7.3), alongside the activation notice (PI1c).
-  The new page offers only the built-in sandbox where only synthetic data is allowed, so a reviewed
+  The Patients list still shows "Register patient" while a connection is outside draft/revoked
+  (registering is refused then, PI1a): hide or explain it with the drop-down's state (PI2a, when a
+  connection can first leave draft). The new page offers only the built-in sandbox where only synthetic data is allowed, so a reviewed
   vendor sandbox (`VENDOR_SANDBOX_HOSTS`, empty, OA-049) has no UI path yet: add one with the first
   host. Residual risk accepted for now: the connection name is free text shown to every role (the list
   and the drop-down); its only guard against patient information is the "no patient information"
@@ -285,7 +288,9 @@ get their own tests in PI2a.
 Also carries PI1b's Submit, attestation, step-up, and pause/resume (re-sequenced 2026-09-28). Order
 is now PI2a → PI1c (approval has nothing to approve before Submit exists); sandbox Submit becomes
 possible only in PI2b, which adds the in-process sandbox a test can pass against.
-- [ ] Submit (admin, draft → `pending_approval` for a real connection, → `active` for the sandbox):
+- [ ] Submit (admin, draft → `pending_approval` for a real connection, → `active` for the sandbox;
+      stamps `submitted_by/_at` in both cases — the drop-down treats a revoked connection as a past
+      source only if it was ever submitted or synced):
       requires a passing Test connection in the last 24 h, the residency attestation (real only),
       and an MFA verification within the last 5 minutes (step-up; R-7.2.2). Tests: Submit refused
       without a recent passing test, and without a recent step-up.
@@ -520,7 +525,7 @@ real vendor endpoints in pre-production.
 **builder** builds everything; **edi-x12-specialist** reviews the mapping for 837P fit (DMG03,
 N3/N4, NM109) and the C3 snapshot dependency; **florida-rules-engine** not involved (no legal
 values). PRs (< ~400 lines each): PI1a data layer → PI1b Settings UI + drop-down (PI1b-1 domain,
-PI1b-2 pages (done), PI1b-3 drop-down) → PI2a transport, guard, discovery, keys, JWKS, test,
+PI1b-2 pages, PI1b-3 drop-down; all done) → PI2a transport, guard, discovery, keys, JWKS, test,
 Submit/attestation/step-up/pause-resume → PI1c operator approval (needs submitted connections) →
 PI2b sync, jobs, sandbox, history, payer mapping (sandbox Submit needs the in-process sandbox to
 test against) → PI3 → PI4. Runbooks with PI2a: key rotation and **integration key compromise**

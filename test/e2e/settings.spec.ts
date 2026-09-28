@@ -52,21 +52,24 @@ test.describe("settings", () => {
       returning id
     `);
     const id = inserted.rows[0]!.id;
-
-    await page.goto("/settings");
-    const tabs = page.getByRole("navigation", { name: "Settings sections" });
-    await tabs.getByRole("link", { name: "Integrations" }).click();
-    await expect(tabs.getByRole("link", { name: "Integrations" })).toHaveAttribute("aria-current", "page");
-    await expect(page.getByRole("heading", { name: "EHR/PM connections" })).toBeVisible();
-    // Every role sees the summary row, but not as a link to the configuration.
-    const row = page.getByRole("row", { name: new RegExp(name) });
-    await expect(row).toContainText("Built-in test sandbox");
-    await expect(row).toContainText("Draft");
-    await expect(row.getByRole("link")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "New connection" })).toHaveCount(0);
-    expect((await request.get("/settings/integrations/new")).status()).toBe(404);
-    expect((await request.get(`/settings/integrations/${id}`)).status()).toBe(404);
-    // Leave the shared worker practice as it was (test fixture only; the app itself never deletes).
-    await systemDb().execute(sql`delete from integration_connections where id = ${id}::uuid`);
+    try {
+      await page.goto("/settings");
+      const tabs = page.getByRole("navigation", { name: "Settings sections" });
+      await tabs.getByRole("link", { name: "Integrations" }).click();
+      await expect(tabs.getByRole("link", { name: "Integrations" })).toHaveAttribute("aria-current", "page");
+      await expect(page.getByRole("heading", { name: "EHR/PM connections" })).toBeVisible();
+      // Every role sees the summary row, but not as a link to the configuration.
+      const row = page.getByRole("row", { name: new RegExp(name) });
+      await expect(row).toContainText("Built-in test sandbox");
+      await expect(row).toContainText("Draft");
+      await expect(row.getByRole("link")).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "New connection" })).toHaveCount(0);
+      expect((await request.get("/settings/integrations/new")).status()).toBe(404);
+      expect((await request.get(`/settings/integrations/${id}`)).status()).toBe(404);
+    } finally {
+      // Leave the shared worker practice as it was, even if an assertion failed (test fixture only;
+      // the app itself never deletes).
+      await systemDb().execute(sql`delete from integration_connections where id = ${id}::uuid`);
+    }
   });
 });

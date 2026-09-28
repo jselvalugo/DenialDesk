@@ -5,6 +5,7 @@ import { closeDatabase, systemDb } from "@/db/client";
 import { auditEvents, integrationConnections, integrationEndpointRegistry } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import {
+  connectionSummary,
   createConnection,
   createSandboxConnection,
   getConnection,
@@ -509,5 +510,85 @@ describe("revokeConnection", () => {
     );
     expect(error.message).toMatch(/administrator/);
     expect((await detail(a, id)).status).toBe("draft");
+  });
+});
+
+/** Stand-in for sandbox Submit (PI2b): draft → active, stamped as submitted like the real one. */
+function activateSandboxStandIn(tx: Parameters<Parameters<typeof withTenant>[1]>[0], ctx: Ctx, id: string) {
+  return tx.execute(sql`
+    update integration_connections
+    set status = 'active', submitted_by = ${ctx.userId}::uuid, submitted_at = now()
+    where id = ${id}::uuid
+  `);
+}
+
+describe("connectionSummary (the tab-bar drop-down)", () => {
+  it("is manual until a connection is a source, then follows its state and latest run", async () => {
+    const c = await createTestTenant("Connections summary");
+    const summaryOf = () => withTenant(c, (tx) => connectionSummary(tx, "patients"));
+    expect(await summaryOf()).toBeNull();
+
+    // A draft is not a source, and neither is a draft revoked before it was ever submitted.
+    const { id: draftId } = await withTenant(c, (tx) =>
+      createSandboxConnection(tx, admin(c, true), { displayName: "Never used" }),
+    );
+    expect(await summaryOf()).toBeNull();
+    await withTenant(c, async (tx) =>
+      revokeConnection(
+        tx,
+        admin(c, true),
+        draftId,
+        (await getConnection(tx, draftId))!.updatedAt.toISOString(),
+      ),
+    );
+    expect(await summaryOf()).toBeNull();
+
+    // Live (sandbox draft → active, as sandbox Submit will do in PI2b), then a queued run.
+    const { id } = await withTenant(c, (tx) =>
+      createSandboxConnection(tx, admin(c, true), { displayName: "Live sandbox" }),
+    );
+    await withTenant(c, (tx) => activateSandboxStandIn(tx, c, id));
+    expect(await summaryOf()).toEqual({
+      connectionId: id,
+      displayName: "Live sandbox",
+      status: "active",
+      lastSuccessAt: null,
+      lastRunStatus: null,
+    });
+    await withTenant(c, (tx) =>
+      tx.execute(sql`
+        insert into integration_sync_runs (tenant_id, connection_id, trigger, triggered_by)
+        values (${c.tenantId}::uuid, ${id}::uuid, 'manual', ${c.userId}::uuid)
+      `),
+    );
+    expect((await summaryOf())!.lastRunStatus).toBe("queued");
+
+    // Revoked after being live: still shown (synced patients came from it), until another is live.
+    await withTenant(c, async (tx) =>
+      revokeConnection(tx, admin(c, true), id, (await getConnection(tx, id))!.updatedAt.toISOString()),
+    );
+    expect(await summaryOf()).toMatchObject({
+      connectionId: id,
+      status: "revoked",
+      lastRunStatus: "abandoned",
+    });
+    const { id: nextId } = await withTenant(c, (tx) =>
+      createSandboxConnection(tx, admin(c, true), { displayName: "Next sandbox" }),
+    );
+    await withTenant(c, (tx) => activateSandboxStandIn(tx, c, nextId));
+    expect(await summaryOf()).toMatchObject({ connectionId: nextId, status: "active" });
+  });
+
+  it("never shows another practice's connection", async () => {
+    const c = await createTestTenant("Connections summary isolation");
+    const { id } = await withTenant(b, (tx) =>
+      createSandboxConnection(tx, admin(b, true), { displayName: "Practice B live" }),
+    );
+    await withTenant(b, (tx) => activateSandboxStandIn(tx, b, id));
+    expect(await withTenant(c, (tx) => connectionSummary(tx, "patients"))).toBeNull();
+    // Leave practice B with no live connection for the other tests in this file.
+    await withTenant(b, async (tx) =>
+      revokeConnection(tx, admin(b, true), id, (await getConnection(tx, id))!.updatedAt.toISOString()),
+    );
   });
 });

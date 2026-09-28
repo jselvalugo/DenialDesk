@@ -244,6 +244,32 @@ test.describe("signed in", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 
+  test("beside the Patients tab, every role sees where patient data comes from (data-source drop-down)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 800 });
+    await page.goto("/patients");
+    // The worker practice has no EHR/PM connection, so the source is manual.
+    const source = page
+      .getByRole("navigation", { name: "Primary" })
+      .getByRole("button", { name: "Patients data source: Manual" });
+    await expect(source).toHaveAttribute("aria-expanded", "false");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1024);
+    await source.click();
+    await expect(source).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByText("Staff register patients by hand in DenialDesk.")).toBeVisible();
+    // Not an administrator: no connect or settings link (and the pages would 404 anyway).
+    await expect(page.getByRole("link", { name: /Connect an integration|Connection settings/ })).toHaveCount(
+      0,
+    );
+    await page.keyboard.press("Escape");
+    await expect(source).toHaveAttribute("aria-expanded", "false");
+    await expect(source).toBeFocused();
+    // Only a table with a data source gets the drop-down.
+    await page.goto("/claims");
+    await expect(page.getByRole("button", { name: /data source/ })).toHaveCount(0);
+  });
+
   test("the logo opens the home page, and /welcome redirects there", async ({ page }) => {
     await page.goto("/welcome");
     await expect.poll(() => new URL(page.url()).pathname).toBe("/");

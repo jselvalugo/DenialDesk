@@ -33,6 +33,12 @@ export interface NavItem {
   icon: LucideIcon;
   /** False until the feature ships; listed in the module switcher as "Planned", never a link. */
   available: boolean;
+  /**
+   * The table this tab lists can be synced from an external system: the tab bar shows its data-source
+   * drop-down right after it (specs/erp-shell.md; ADR 0010). Only Patients today; other tables opt
+   * in by setting this, no shell redesign.
+   */
+  dataSource?: { table: "patients" };
 }
 
 /** A module ("app" in code) groups related pages: switched from the module switcher, its pages are tabs. */
@@ -79,7 +85,15 @@ export function navApps(
       description: t("module.patients.description"),
       icon: Users,
       tone: "slate",
-      items: [{ label: t("page.patients"), href: "/patients", icon: Users, available: true }],
+      items: [
+        {
+          label: t("page.patients"),
+          href: "/patients",
+          icon: Users,
+          available: true,
+          dataSource: { table: "patients" },
+        },
+      ],
     },
     {
       id: "claims",

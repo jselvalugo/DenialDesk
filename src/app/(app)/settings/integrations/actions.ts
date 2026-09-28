@@ -56,7 +56,8 @@ export async function createConnectionAction(
   } catch (error) {
     return connectionFormFailure(error, t);
   }
-  revalidatePath("/settings/integrations");
+  // The whole signed-in layout: the tab-bar data-source drop-down reads the connection too.
+  revalidatePath("/", "layout");
   redirect(`/settings/integrations/${id}`);
 }
 
@@ -84,7 +85,8 @@ export async function updateConnectionAction(
   } catch (error) {
     return connectionFormFailure(error, t);
   }
-  revalidatePath("/settings/integrations");
+  // The whole signed-in layout: the tab-bar data-source drop-down reads the connection too.
+  revalidatePath("/", "layout");
   redirect(`/settings/integrations/${id.data}`);
 }
 
@@ -98,13 +100,14 @@ export async function revokeConnectionAction(
   const id = uuid.safeParse(text(formData, "id", 40));
   if (!id.success) return { error: t("error.notFound") };
   // Inline confirmation (DESIGN.md §3), checked on the server too.
-  if (formData.get("confirm") !== "on") return { error: t("error.confirmRevoke") };
+  if (formData.get("confirm") !== "on") return { error: t("error.confirmRevoke"), field: "confirm" };
   const actor = integrationActor(auth);
   try {
     await withTenant(auth, (tx) => revokeConnection(tx, actor, id.data, text(formData, "updatedAt", 40), t));
   } catch (error) {
     return connectionFormFailure(error, t);
   }
-  revalidatePath("/settings/integrations");
+  // The whole signed-in layout: the tab-bar data-source drop-down reads the connection too.
+  revalidatePath("/", "layout");
   redirect(`/settings/integrations/${id.data}`);
 }
