@@ -107,7 +107,8 @@ export type AuditAction =
   | "integration.connection_updated"
   | "integration.connection_revoked"
   | "integration.connection_tested"
-  | "integration.transport_refused";
+  | "integration.transport_refused"
+  | "security.env_signing_key_in_production";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).

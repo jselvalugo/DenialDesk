@@ -124,6 +124,9 @@ export async function requestAccessToken(input: TokenRequestInput): Promise<Acce
   if (!parsed.success || parsed.data.token_type.toLowerCase() !== "bearer") {
     throw new FhirConnectError("smart_config_invalid", undefined, "bad_token_response");
   }
+  // TODO(wildcard scopes): a server may grant `system/*.rs` (or `system/Patient.*`) instead of the
+  // resource scopes we asked for. That is reported as `scope_insufficient` for now, because matching
+  // wildcards correctly (v1 vs v2 syntax, per-resource grants) needs vendor evidence. ⚠️ VERIFY.
   const granted = new Set((parsed.data.scope ?? "").split(/\s+/).filter(Boolean));
   if (
     !input.scopes

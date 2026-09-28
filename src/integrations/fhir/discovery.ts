@@ -29,7 +29,16 @@ export const SCOPES_BY_STYLE: Record<ScopeStyle, string> = {
 };
 
 export interface DiscoveryResult {
-  /** Normalized token endpoint (no trailing slash), to be pinned on the connection. */
+  /**
+   * The token endpoint **exactly as the server advertised it** (after `checkBaseUrl` validated it):
+   * the client assertion's `aud` and the POST URL use this string, because that is what the server
+   * compares. Never use the normalized form there.
+   */
+  tokenEndpointAdvertised: string;
+  /**
+   * Normalized token endpoint (host lower-cased, no trailing slash), to be pinned on the connection
+   * and compared with the pin; also the basis of `tokenEndpointKey`.
+   */
   tokenEndpoint: string;
   /** Registry key of the token endpoint (`url-rules.ts`), same normalization as the base URL's. */
   tokenEndpointKey: string;
@@ -52,7 +61,8 @@ const smartConfigSchema = z.object({
   token_endpoint: z.string().max(2048),
   token_endpoint_auth_methods_supported: z.array(z.string()),
   token_endpoint_auth_signing_alg_values_supported: z.array(z.string()),
-  capabilities: z.array(z.string()),
+  // Optional: a server that doesn't advertise `permission-v2` is treated as v1 (spec "Discovery").
+  capabilities: z.array(z.string()).optional(),
 });
 
 const searchParamSchema = z.object({ name: z.string() });
@@ -64,6 +74,7 @@ const capabilityStatementSchema = z.object({
     .array(
       z.object({
         mode: z.string(),
+        searchParam: z.array(searchParamSchema).optional(),
         resource: z
           .array(
             z.object({
@@ -102,14 +113,22 @@ async function getJson(
 }
 
 /** Whether the server advertises searching `type` by `param` (and search at all, when it lists interactions). */
-function supportsSearch(statement: CapabilityStatement, type: string, param: string): boolean {
+function supportsSearch(
+  statement: CapabilityStatement,
+  type: string,
+  param: string,
+  serverWide = false,
+): boolean {
   return (statement.rest ?? [])
     .filter((rest) => rest.mode === "server")
     .some((rest) =>
       (rest.resource ?? []).some(
         (resource) =>
           resource.type === type &&
-          (resource.searchParam ?? []).some((p) => p.name === param) &&
+          ((resource.searchParam ?? []).some((p) => p.name === param) ||
+            // Servers may declare a parameter once for every resource type, at `rest.searchParam`
+            // (allowed only for the base search parameter `_lastUpdated`, never for `patient`).
+            (serverWide && (rest.searchParam ?? []).some((p) => p.name === param))) &&
           (resource.interaction === undefined || resource.interaction.some((i) => i.code === "search-type")),
       ),
     );
@@ -167,15 +186,13 @@ export async function discover(
     throw new FhirConnectError("smart_config_invalid");
   }
 
-  const scopeStyle: ScopeStyle | null = smart.capabilities.includes("permission-v2")
-    ? "v2"
-    : smart.capabilities.includes("permission-v1")
-      ? "v1"
-      : null;
-  if (!scopeStyle) throw new FhirConnectError("smart_config_invalid");
+  // `permission-v2` -> v2 scopes; anything else is treated as v1 (`.read`). ⚠️ VERIFY per vendor: a
+  // server that supports v2 but doesn't advertise it would need `.rs` scopes, and would answer
+  // `capability_missing` (scope_insufficient) at the token request, not a silent wrong grant.
+  const scopeStyle: ScopeStyle = (smart.capabilities ?? []).includes("permission-v2") ? "v2" : "v1";
 
   if (
-    !supportsSearch(statement, "Patient", "_lastUpdated") ||
+    !supportsSearch(statement, "Patient", "_lastUpdated", true) ||
     !supportsSearch(statement, "Coverage", "patient")
   ) {
     throw new FhirConnectError("capability_missing");
@@ -185,6 +202,7 @@ export async function discover(
   const issuer = implementation?.ok ? `${base.baseUrl} ${implementation.baseUrl}` : base.baseUrl;
 
   return {
+    tokenEndpointAdvertised: smart.token_endpoint,
     tokenEndpoint: token.baseUrl,
     tokenEndpointKey: token.endpointKey,
     algs,

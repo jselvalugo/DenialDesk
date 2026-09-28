@@ -24,7 +24,13 @@ export class FhirConnectError extends Error {
     /** The transport-level code behind an `unreachable`/`tls_failed` outcome, for security events. */
     readonly transportCode?: TransportErrorCode,
     /** Why, when the outcome alone is ambiguous (`scope_insufficient` collapses to `capability_missing`). */
-    readonly detail?: "scope_insufficient" | "bad_token_response" | "token_endpoint_changed",
+    readonly detail?:
+      | "scope_insufficient"
+      | "bad_token_response"
+      | "token_endpoint_changed"
+      | "issuer_changed"
+      | "config_changed"
+      | "token_host_not_permitted",
   ) {
     super(outcome);
     this.name = "FhirConnectError";
@@ -52,7 +58,7 @@ export function isSecurityTransportCode(code: TransportErrorCode | undefined): b
 /**
  * Collapses a transport error into an outcome. `fallback` is what an unusable *answer* means for the
  * call at hand (a wrong Content-Type, an oversized body): `not_fhir_r4` for `metadata`,
- * `smart_config_invalid` for `smart-configuration`, `auth_refused` for the token endpoint. A refused
+ * `smart_config_invalid` for `smart-configuration` and for the token endpoint. A refused
  * address or redirect reads as `unreachable` to the administrator (no oracle) but keeps its code.
  */
 export function outcomeForTransportError(error: unknown, fallback: FailureOutcome): FhirConnectError {

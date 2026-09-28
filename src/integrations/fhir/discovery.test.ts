@@ -46,6 +46,7 @@ describe("discover — success", () => {
     const transport = server();
     const result = await discover(transport, FAKE_BASE_URL);
     expect(result).toEqual({
+      tokenEndpointAdvertised: FAKE_TOKEN_ENDPOINT,
       tokenEndpoint: FAKE_TOKEN_ENDPOINT,
       tokenEndpointKey: FAKE_TOKEN_ENDPOINT,
       algs: ["ES384", "RS384"],
@@ -109,13 +110,58 @@ describe("discover — success", () => {
     }
   });
 
-  it("normalizes the token endpoint (trailing slash dropped, host lower-cased) into its registry key", async () => {
-    const result = await discover(
-      server({ smart: { token_endpoint: "https://AUTH.Example.com/OAuth2/Token/" } }),
-      FAKE_BASE_URL,
-    );
+  it("returns the token endpoint exactly as advertised (for aud and the POST) and the normalized form (for the pin and its key)", async () => {
+    const advertised = "https://AUTH.Example.com/OAuth2/Token/";
+    const result = await discover(server({ smart: { token_endpoint: advertised } }), FAKE_BASE_URL);
+    expect(result.tokenEndpointAdvertised).toBe(advertised);
     expect(result.tokenEndpoint).toBe("https://auth.example.com/OAuth2/Token");
     expect(result.tokenEndpointKey).toBe("https://auth.example.com/oauth2/token");
+  });
+
+  it("does not use permission-v2 scopes unless the server advertises permission-v2 (anything else is v1)", async () => {
+    for (const capabilities of [["launch-standalone"], [], undefined, ["permission-v1"]]) {
+      const result = await discover(server({ smart: { capabilities } }), FAKE_BASE_URL);
+      expect(result.scopeStyle).toBe("v1");
+      expect(result.scopes).toBe(SCOPES_BY_STYLE.v1);
+    }
+  });
+
+  it("accepts _lastUpdated declared once for the whole server (rest.searchParam), not only per resource", async () => {
+    const statement = {
+      rest: [
+        {
+          mode: "server",
+          searchParam: [{ name: "_lastUpdated", type: "date" }],
+          resource: [
+            {
+              type: "Patient",
+              interaction: [{ code: "search-type" }],
+              searchParam: [{ name: "identifier" }],
+            },
+            { type: "Coverage", interaction: [{ code: "search-type" }], searchParam: [{ name: "patient" }] },
+          ],
+        },
+      ],
+    };
+    await expect(discover(server({ statement }), FAKE_BASE_URL)).resolves.toMatchObject({ scopeStyle: "v2" });
+  });
+
+  it("does not let a server-wide declaration stand in for Coverage `patient`, or for a missing Patient resource", async () => {
+    const wide = (resource: object[]) => ({
+      rest: [
+        {
+          mode: "server",
+          searchParam: [{ name: "_lastUpdated" }, { name: "patient" }],
+          resource,
+        },
+      ],
+    });
+    const patient = { type: "Patient", interaction: [{ code: "search-type" }] };
+    const coverage = { type: "Coverage", interaction: [{ code: "search-type" }] };
+    expect((await outcomeOf(server({ statement: wide([patient, coverage]) }))).outcome).toBe(
+      "capability_missing",
+    );
+    expect((await outcomeOf(server({ statement: wide([coverage]) }))).outcome).toBe("capability_missing");
   });
 });
 
@@ -159,8 +205,6 @@ describe("discover — smart_config_invalid", () => {
     ["auth methods missing", { token_endpoint_auth_methods_supported: undefined }],
     ["no allowed algorithm", { token_endpoint_auth_signing_alg_values_supported: ["RS256", "ES256"] }],
     ["algorithm list missing", { token_endpoint_auth_signing_alg_values_supported: undefined }],
-    ["no permission-v1/v2", { capabilities: ["launch-standalone"] }],
-    ["capabilities missing", { capabilities: undefined }],
     ["token_endpoint missing", { token_endpoint: undefined }],
     ["token_endpoint not a string", { token_endpoint: 42 }],
   ])("%s", async (_name, smart) => {
@@ -248,7 +292,12 @@ describe("discover — capability_missing", () => {
   });
 
   it("is checked after the SMART configuration, so an unusable SMART config wins", async () => {
-    const error = await outcomeOf(server({ statement: withSearch([], []), smart: { capabilities: [] } }));
+    const error = await outcomeOf(
+      server({
+        statement: withSearch([], []),
+        smart: { token_endpoint_auth_methods_supported: ["client_secret_basic"] },
+      }),
+    );
     expect(error.outcome).toBe("smart_config_invalid");
   });
 });
