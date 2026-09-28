@@ -86,7 +86,8 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
 - **SC-A4.2 MUST** GitHub Actions are pinned to a full commit SHA with a version comment (as
   `ci.yml` does today). Container images — the `Dockerfile` base and CI service containers — are
   pinned by digest. Tools fetched at build time (such as pnpm through corepack) are version- and
-  hash-pinned.
+  hash-pinned (`packageManager` in `package.json`). Enforced by
+  `src/supply-chain/image-digests.test.ts`; Dependabot proposes new base-image digests.
 - **SC-A4.3 MUST** A dependency update is a code change: full CI and `security-reviewer`. Read the
   changelog for major versions. Do not adopt a release younger than 7 days unless it fixes a
   security advisory (defends against hijacked publishes); pnpm and Dependabot are both configured
@@ -258,7 +259,6 @@ exception.
 | SC-B10.1 | No Content-Security-Policy header in `next.config.ts`. |
 | SC-B7.1 | Member IDs (`src/domain/patients/queries.ts`, `src/db/seed.ts`) and TOTP secrets (`src/auth/enrollment.ts`) are encrypted without AAD; only custom field values bind AAD. |
 | SC-A4.1 | Some existing ranges are not exact (`server-only`, `@types/*`, `eslint`, `tsx`, `typescript-eslint`). |
-| SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest, and `corepack enable` fetches pnpm without a hash check; CI's `postgres:16` service images are tag-only. |
 | SC-A4.3 | No release-age quarantine configured for pnpm, and no `cooldown` in `.github/dependabot.yml`. |
 | SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
 | SC-A2.2 | No automated license check in CI. |
