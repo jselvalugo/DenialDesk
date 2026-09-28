@@ -59,8 +59,20 @@ _Last updated: 2026-09-28_
   **PI2a part 1 done** (`src/integrations/fhir/transport.ts`, `address-guard.ts`, `limits.ts`):
   `HttpsTransport` (explicit TLS ≥ 1.2, no env proxies, no redirects, content-type allow-list,
   10 MB/30 s caps), the deny-by-default SSRF address guard (IANA special-purpose ranges + embedded
-  IPv4 decode, checked on every resolved address at connect), and the run/bundle/paging limit helpers (wired into the sync loop in PI2b) —
-  discovery, keys, JWKS, and test connection (PI2a part 2) still open (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded). Review fixes on PR #83: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  IPv4 decode, checked on every resolved address at connect), and the run/bundle/paging limit helpers (wired into the sync loop in PI2b).
+  **PI2a part 2, first commit set (branch `pi2a-discovery`, no migration):** transport N3 resolved
+  (a non-2xx resolves with its status and the body is discarded unread, whatever the Content-Type),
+  discovery (`discovery.ts`), the SMART token request (`auth.ts`, `src/lib/crypto/jwt-sign.ts`,
+  redacting `AccessToken`, in-memory cache), signing-key adapter (`keys.ts`: encrypted local store for
+  `syntheticDataOnly()`, Azure Key Vault stub that fails closed, public-JWK allow-list) and the Test
+  connection domain service (`src/domain/integrations/test-connection.ts`: own rate-limit buckets,
+  audit, ID-only security events, pin of the token endpoint on a draft, and `hasRecentPassingTest`
+  derived from the audit log). **Blocked on a migration (human decision, R-15.9):** the app role has
+  no grant on `key_mode`/`key_ref`, so keys can't be provisioned; the unauthenticated JWKS route needs a
+  SECURITY DEFINER lookup because RLS is FORCEd; so the JWKS route, key provisioning at creation and
+  destruction on revoke, and the Test connection action/button wait for it. Integration tests
+  (`test/integration/test-connection.test.ts`) were written but not run where this was built (no
+  PostgreSQL could be started). (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes on PR #83: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
   Owner questions OA-045 onward; data source DS-12 in `docs/data-sources.xlsx`.
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
@@ -381,7 +393,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Open questions for humans
 
-- **TLS 1.3 minimum for the FHIR transport?** (2026-09-28, pending; owner row to be added in the next PI2a PR.) R-7.3.1 is TLS 1.2+ (prefer 1.3); the transport enforces 1.2 with ECDHE + AEAD suites only and negotiates 1.3 when offered. A 1.3 minimum would refuse EHR vendors that only support 1.2. Must be decided before the first real endpoint is enabled.
+- **TLS 1.3 minimum for the FHIR transport?** (2026-09-28, pending, `OA-062`.) R-7.3.1 is TLS 1.2+ (prefer 1.3); the transport enforces 1.2 with ECDHE + AEAD suites only and negotiates 1.3 when offered. A 1.3 minimum would refuse EHR vendors that only support 1.2. Must be decided before the first real endpoint is enabled.
 - Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter
   and BAA scope (OA-045); retire manual registration once connected (OA-046); phone/email not synced
   (OA-047); disconnect/switch EHR (OA-048); vendor sandboxes (OA-049); Bulk Data before first real

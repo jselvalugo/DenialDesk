@@ -390,25 +390,41 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       a non-2xx response body**, and must emit `address_refused`, `tls_failed` and
       `redirect_refused` as security events (audit/alert, IDs only, no URL or host). Not built in
       part 1; carried into those PRs' acceptance criteria.
-- [ ] Decide before PI2a part 2 (reviewer N3, PR #83): the transport checks `Content-Type` before
-      status, so a 401/403/5xx with `text/html` surfaces as `content_type_refused` and the caller
-      can't tell `auth_refused` apart. Part 2 either resolves non-2xx with the status (body
-      discarded) regardless of type, or rejects carrying the status. Also still open from #83's
-      reviews: an exact-cap boundary test, isolated tests for each timeout path, refusing a set
-      `NODE_EXTRA_CA_CERTS` in production, and the IPv4 AS112/AMT ranges (⚠️ VERIFY with the
-      registry pass).
-- [ ] Discovery: `.well-known/smart-configuration` and `metadata`; require `fhirVersion` 4.0.1,
+- [x] Decided (reviewer N3, PR #83): **a non-2xx response resolves with its status and the body is
+      discarded unread, whatever its `Content-Type` or `Content-Encoding`** (`transport.ts`; a 3xx is
+      still `redirect_refused`; a 2xx with a wrong type is still `content_type_refused`). So a
+      401/403/5xx is no longer reported as `content_type_refused`, callers branch on `status`
+      (`outcomeForStatus` in `outcomes.ts`), and an error body can't reach memory, a log, or an error.
+      `TransportResponse.body` is `""` for every non-2xx. Tests: `transport.test.ts` ("non-2xx
+      responses"). Still open from #83's reviews: an exact-cap boundary test, isolated tests for each
+      timeout path, refusing a set `NODE_EXTRA_CA_CERTS` in production, and the IPv4 AS112/AMT ranges
+      (⚠️ VERIFY with the registry pass).
+- [x] Discovery (`src/integrations/fhir/discovery.ts`, `discovery.test.ts`): `.well-known/smart-configuration` and `metadata`; require `fhirVersion` 4.0.1,
       `private_key_jwt`, an allowed alg (ES384 or RS384), a token endpoint passing the URL rules,
       Patient `_lastUpdated` search, Coverage `patient` search. Scope style from `capabilities`:
       `permission-v2` → `system/Patient.rs system/Coverage.rs system/Organization.rs`; else
       `permission-v1` → `.read`. Issuer recorded (normalized base URL + CapabilityStatement
-      `implementation.url` when present).
-- [ ] Token: assertion `iss = sub = client_id`, `aud` = pinned token endpoint, `iat`, `exp` ≤ iat +
+      `implementation.url` when present). Built as: `metadata` first, then `smart-configuration`, both
+      through the injected `Transport`; issuer is `<base URL>` or `<base URL> <implementation.url>`
+      (the second only when it passes the URL rules); the discovered token endpoint must pass
+      `checkBaseUrl` and may use the sandbox host only for a sandbox connection; the connection's key
+      algorithm must be in the server's list. Test connection pins `token_endpoint`,
+      `token_endpoint_key`, and `issuer` on a still-draft connection; past draft a different token
+      endpoint is refused (`smart_config_invalid`, audit detail `token_endpoint_changed`).
+- [x] Token (`auth.ts`, `src/lib/crypto/jwt-sign.ts`): assertion `iss = sub = client_id`, `aud` = pinned token endpoint, `iat`, `exp` ≤ iat +
       5 min, unique `jti`, header `alg` from the allow-list {ES384, RS384}, `kid`, `typ: JWT`;
       node:crypto signing. Response must have `token_type` bearer and granted scopes including the
-      required ones (`scope_insufficient` otherwise). Token in memory only, re-requested on expiry
-      or one 401.
-- [ ] Keys (R-7.3.4, R-7.3.5): **per-connection key by default** — production creates a
+      required ones (`scope_insufficient` otherwise, reported as the `capability_missing` outcome).
+      Token in memory only, re-requested on expiry or one 401 (`AccessTokenCache`; the sync loop that
+      uses it is PI2b). `exp` is `iat + 4 min` (skew margin under the 5-minute cap); `AccessToken`
+      redacts itself under JSON, string, template, and `util.inspect`.
+- [ ] Keys (R-7.3.4, R-7.3.5) — **partly built, blocked on a migration (PI2a part 2 report):** the
+      adapter (`keys.ts`: `SigningKeyStore`, `LocalEncryptedKeyStore` for `syntheticDataOnly()` —
+      ES384 per connection, PKCS#8 encrypted with the field-encryption helpers and bound by AAD to its
+      connection, the ciphertext being `key_ref` — and an `AzureKeyVaultKeyStore` stub that fails
+      closed) exists and is tested; what's missing is writing `key_mode`/`key_ref` (no app-role
+      grant, drizzle/0039) at connection creation and clearing them on revoke.
+      **Per-connection key by default** — production creates a
       non-exportable Azure Key Vault key per connection at creation, published at
       `/.well-known/jwks/<connection-uuid>.json`; a shared key only as a documented per-vendor
       exception (`key_mode = shared_vendor_exception` + reason code; e.g. a vendor with one client
@@ -417,11 +433,24 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       Pre-production uses one shared key from a functions-only hosting secret,
       distinct from production. Production refuses to start integrations if an env signing key is
       present (Key Vault only). Annual rotation with current + next `kid`.
-- [ ] JWKS routes: public-field allow-list (`kty`, `crv`, `x`, `y`, `n`, `e`, `kid`, `alg`, `use`),
+- [ ] JWKS routes — **allow-list built (`pickPublicJwkFields`, tested that `d`, `p`, `q`, `dp`, `dq`,
+      `qi`, `k` never appear); the route is blocked on a migration**: it is unauthenticated, so it has
+      no tenant to set, and `integration_connections` is `FORCE ROW LEVEL SECURITY`, so it needs a
+      SECURITY DEFINER lookup returning only `(status, key_ref)` for one connection id. Public-field allow-list (`kty`, `crv`, `x`, `y`, `n`, `e`, `kid`, `alg`, `use`),
       own rate-limit bucket, `Cache-Control: public, max-age=300`; 404 for unknown or revoked.
-- [ ] Test connection: discovery + one token request, no patient data; its own rate-limit bucket
+- [ ] Test connection — **domain service built** (`src/domain/integrations/test-connection.ts`; unit
+      tests for discovery/token, integration tests in `test/integration/test-connection.test.ts`;
+      the Settings action and button wait for key provisioning): discovery + one token request, no patient data; its own rate-limit bucket
       (per connection and per practice); outcomes collapsed to `ok`, `unreachable`, `tls_failed`,
-      `not_fhir_r4`, `smart_config_invalid`, `auth_refused`, `capability_missing`; audited.
+      `not_fhir_r4`, `smart_config_invalid`, `auth_refused`, `capability_missing`; audited
+      (`integration.connection_tested`, configuration and codes only; `integration.transport_refused`
+      with `{ code }` for `address_refused`, `tls_failed`, `redirect_refused`; `security.rate_limited`).
+      Buckets `integration_test_connection` (5 per 10 min) and `integration_test_practice` (20 per
+      10 min). The network calls run with no database transaction open. **Record of the result:** no
+      column exists, so "a passing test in the last 24 h" is derived from the audit log
+      (`hasRecentPassingTest`: newest `ok` event in the window whose base URL, client ID, and token
+      endpoint still match the connection; a later failing test doesn't cancel it); Submit will call it.
+      Messages in en/es/pt (`integrations.test.*`).
 
 ### PI2b — sync engine, sandbox, jobs, history, payer mapping
 - [ ] The transport is chosen from `is_sandbox` only (never the host), and a sandbox run is refused
