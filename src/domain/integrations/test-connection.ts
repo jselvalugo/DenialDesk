@@ -35,9 +35,11 @@ export interface TestConnectionDeps {
   /**
    * The transport for this connection. Chosen from `is_sandbox` alone, never from the host
    * (spec PI2b: the sandbox's in-process transport must not be reachable by naming its host).
+   * `null` means no transport exists yet (the built-in sandbox arrives in PI2b).
    */
-  transportFor(connection: { isSandbox: boolean }): Transport;
-  keyStore: SigningKeyStore;
+  transportFor(connection: { isSandbox: boolean }): Transport | null;
+  /** Called per test, so a store that can't be built here (production with an env key) is a refusal, not a crash. */
+  keyStore(): SigningKeyStore;
   /** The clock the rate-limit window is computed from (tests pin it so a window can't roll mid-test). */
   now?: () => Date;
 }
@@ -80,7 +82,6 @@ const targetColumns = {
   tokenEndpoint: integrationConnections.tokenEndpoint,
   tokenEndpointKey: integrationConnections.tokenEndpointKey,
   issuer: integrationConnections.issuer,
-  keyRef: integrationConnections.keyRef,
 };
 
 async function loadTarget(tx: TenantTx, id: string, t: IntegrationsT) {
@@ -124,12 +125,21 @@ async function enforceRateLimits(
   }
 }
 
-async function signerFor(store: SigningKeyStore, target: Target, t: IntegrationsT): Promise<JwtSigner> {
-  if (!target.keyRef) refuse(t, "test.error.noKey");
+/** The signer, or a translated refusal: nothing configured, or a key that can't be used. Never key detail. */
+async function signerFor(
+  keyStore: () => SigningKeyStore,
+  target: Target,
+  t: IntegrationsT,
+): Promise<JwtSigner> {
   try {
-    return await store.signer(target.id, target.keyRef);
+    return await keyStore().signer(target.id);
   } catch (error) {
-    if (error instanceof SigningKeyStoreError) refuse(t, "test.error.keyUnavailable");
+    if (error instanceof SigningKeyStoreError) {
+      refuse(
+        t,
+        error.code === "not_configured" ? "test.error.keyNotConfigured" : "test.error.keyUnavailable",
+      );
+    }
     throw error;
   }
 }
@@ -253,9 +263,12 @@ export async function testConnection(
 ): Promise<TestConnectionResult> {
   if (!canManageIntegrations(actor.role)) refuse(t, "error.notAdmin");
   const target = await run((tx) => loadTarget(tx, id, t));
-  await enforceRateLimits(run, actor, id, t, deps.now?.());
+  // Refusals that dial nothing come before the rate limit, so they don't spend it.
+  const transport = deps.transportFor(target);
+  if (!transport) refuse(t, "test.error.sandboxUnavailable");
   const signer = await signerFor(deps.keyStore, target, t);
-  const result = await attempt(target, signer, deps.transportFor(target));
+  await enforceRateLimits(run, actor, id, t, deps.now?.());
+  const result = await attempt(target, signer, transport);
   await run((tx) => record(tx, actor, id, result));
   return { outcome: result.outcome, message: outcomeMessage(result.outcome, t) };
 }

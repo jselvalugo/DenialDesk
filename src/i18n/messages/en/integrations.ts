@@ -128,6 +128,17 @@ export const integrations = {
   "test.outcome.capability_missing":
     "The server can't do what DenialDesk needs: search Patient by last-updated date, search Coverage by patient, and grant read access to Patient, Coverage, and Organization.",
   "test.error.rateLimited": "Too many connection tests. Wait a few minutes and try again.",
-  "test.error.noKey": "This connection has no signing key yet, so it can't be tested.",
-  "test.error.keyUnavailable": "This connection's signing key isn't available right now. Try again later.",
+  "test.error.keyNotConfigured":
+    "DenialDesk's signing key isn't configured in this environment, so connections can't be tested. Ask the platform operator to set it up.",
+  "test.error.keyUnavailable":
+    "DenialDesk's signing key isn't usable right now. Ask the platform operator to check it.",
+  "test.error.sandboxUnavailable": "The built-in test sandbox can't be tested yet.",
+  "test.error.failed": "The test couldn't be completed. Reload the page and try again.",
+  "test.title": "Test connection",
+  "test.description":
+    "Checks that DenialDesk can reach the server, read its SMART configuration, and get an access token. No patient information is requested.",
+  "test.submit": "Test connection",
+  "test.pending": "Testing…",
+  "test.resultOk": "Test passed",
+  "test.resultFailed": "Test failed",
 } as const;

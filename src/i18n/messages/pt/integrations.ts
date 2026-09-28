@@ -131,7 +131,17 @@ export const integrations: Messages["integrations"] = {
   "test.outcome.capability_missing":
     "O servidor não consegue fazer o que o DenialDesk precisa: pesquisar Patient por data da última atualização, pesquisar Coverage por paciente e conceder acesso de leitura a Patient, Coverage e Organization.",
   "test.error.rateLimited": "Testes de conexão demais. Aguarde alguns minutos e tente novamente.",
-  "test.error.noKey": "Esta conexão ainda não tem uma chave de assinatura, então não pode ser testada.",
+  "test.error.keyNotConfigured":
+    "A chave de assinatura do DenialDesk não está configurada neste ambiente, então as conexões não podem ser testadas. Peça ao operador da plataforma que a configure.",
   "test.error.keyUnavailable":
-    "A chave de assinatura desta conexão não está disponível agora. Tente novamente mais tarde.",
+    "A chave de assinatura do DenialDesk não pode ser usada agora. Peça ao operador da plataforma que a verifique.",
+  "test.error.sandboxUnavailable": "O ambiente de testes integrado ainda não pode ser testado.",
+  "test.error.failed": "Não foi possível concluir o teste. Recarregue a página e tente novamente.",
+  "test.title": "Testar conexão",
+  "test.description":
+    "Verifica se o DenialDesk consegue alcançar o servidor, ler sua configuração SMART e obter um token de acesso. Nenhuma informação de pacientes é solicitada.",
+  "test.submit": "Testar conexão",
+  "test.pending": "Testando…",
+  "test.resultOk": "Teste bem-sucedido",
+  "test.resultFailed": "Teste com falha",
 };

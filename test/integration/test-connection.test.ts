@@ -1,4 +1,4 @@
-import { createPublicKey, randomBytes, randomUUID, verify as cryptoVerify } from "node:crypto";
+import { createPublicKey, generateKeyPairSync, randomUUID, verify as cryptoVerify } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, asc, eq } from "drizzle-orm";
 import { closeDatabase, systemDb } from "@/db/client";
@@ -21,7 +21,7 @@ import {
   type TxRunner,
 } from "@/domain/integrations/test-connection";
 import { TransportError, type TransportErrorCode } from "@/integrations/fhir/errors";
-import { LocalEncryptedKeyStore } from "@/integrations/fhir/keys";
+import { EnvSharedKeyStore, SigningKeyStoreError } from "@/integrations/fhir/keys";
 import {
   capabilityStatement,
   FAKE_ACCESS_TOKEN,
@@ -37,8 +37,9 @@ import { createTestTenant } from "./helpers";
 // patient data), its rate limits, audit, and the "passing test in the last 24 h" record Submit will
 // require. R-7.5.1 (audit), R-7.2.4 (tenant isolation), R-7.4.7 (rate limiting).
 //
-// Key provisioning (writing key_ref) has no app-role grant yet (see the PI2a part 2 report), so these
-// tests stand in for it by writing `key_ref` as the database owner.
+// Keys come from the environment (one shared pre-production key, spec "Keys"): these tests hand the
+// service an `EnvSharedKeyStore` over a key generated here, so nothing is written to `key_ref` and no
+// owner-role write is needed.
 
 type Ctx = { tenantId: string; userId: string };
 let a: Ctx;
@@ -50,13 +51,17 @@ const runner =
   (fn) =>
     withTenant(ctx, fn);
 
-const keyStore = new LocalEncryptedKeyStore(() => true, randomBytes(32));
+const signingKey = generateKeyPairSync("ec", { namedCurve: "secp384r1" }).privateKey;
+const keyStore = new EnvSharedKeyStore(
+  () => true,
+  signingKey.export({ format: "pem", type: "pkcs8" }).toString(),
+);
 
 /** Pinned once per file run: every rate-limit hit lands in one window, so a window can't roll mid-test. */
 const CLOCK = new Date();
 
-function deps(transport: FakeFhirTransport, store: LocalEncryptedKeyStore = keyStore): TestConnectionDeps {
-  return { transportFor: () => transport, keyStore: store, now: () => CLOCK };
+function deps(transport: FakeFhirTransport | null, store: EnvSharedKeyStore = keyStore): TestConnectionDeps {
+  return { transportFor: () => transport, keyStore: () => store, now: () => CLOCK };
 }
 
 beforeAll(async () => {
@@ -66,8 +71,8 @@ beforeAll(async () => {
 
 afterAll(() => closeDatabase());
 
-/** A draft against the fake server's base URL, with a provisioned key unless `withKey` is false. */
-async function draft(ctx: Ctx = a, withKey = true): Promise<{ id: string; clientId: string }> {
+/** A draft against the fake server's base URL. */
+async function draft(ctx: Ctx = a): Promise<{ id: string; clientId: string }> {
   const clientId = `client-${randomUUID().slice(0, 8)}`;
   const { id } = await withTenant(ctx, (tx) =>
     createConnection(tx, admin(ctx), {
@@ -77,13 +82,6 @@ async function draft(ctx: Ctx = a, withKey = true): Promise<{ id: string; client
       mrnIdentifierSystem: "https://fhir.example.com/mrn",
     }),
   );
-  if (withKey) {
-    const created = await keyStore.create(id);
-    await systemDb()
-      .update(integrationConnections)
-      .set({ keyRef: created.keyRef, keyMode: "per_connection" })
-      .where(eq(integrationConnections.id, id));
-  }
   return { id, clientId };
 }
 
@@ -166,7 +164,7 @@ describe("testConnection — success", () => {
     expect(transport.requests.some((r) => /Patient|Coverage|Organization/.test(r.url.pathname))).toBe(false);
   });
 
-  it("signs the assertion with the connection's own key, for the pinned token endpoint and client ID", async () => {
+  it("signs the assertion with the shared key, for the pinned token endpoint and client ID", async () => {
     const { id, clientId } = await draft();
     const transport = FakeFhirTransport.healthy();
     await testConnection(runner(a), admin(a), id, deps(transport));
@@ -174,8 +172,7 @@ describe("testConnection — success", () => {
     const [h, p, s] = assertion.split(".") as [string, string, string];
     const decode = (x: string) =>
       JSON.parse(Buffer.from(x, "base64url").toString("utf8")) as Record<string, unknown>;
-    const stored = await row(id);
-    const [jwk] = await keyStore.publicJwks(id, stored.keyRef!);
+    const [jwk] = await keyStore.publicJwks();
     expect(decode(h)).toEqual({ alg: "ES384", kid: jwk!.kid, typ: "JWT" });
     expect(decode(p)).toMatchObject({ iss: clientId, sub: clientId, aud: FAKE_TOKEN_ENDPOINT });
     expect(
@@ -196,7 +193,7 @@ describe("testConnection — success", () => {
     const everything = JSON.stringify({
       result,
       audit: await audits(id),
-      row: { ...(await row(id)), keyRef: null },
+      row: await row(id),
     });
     expect(everything).not.toContain(FAKE_ACCESS_TOKEN);
     expect(everything).not.toContain(assertion);
@@ -378,26 +375,43 @@ describe("testConnection — refusals before any network call", () => {
     expect(transport.requests).toHaveLength(0);
   });
 
-  it("a connection with no signing key can't be tested", async () => {
-    const { id } = await draft(a, false);
+  it("without INTEGRATION_SIGNING_KEY the test is a translated refusal, not a crash, and dials nothing", async () => {
+    const { id } = await draft(a);
     const transport = FakeFhirTransport.healthy();
-    const error = await refusal(testConnection(runner(a), admin(a), id, deps(transport)));
-    expect(error.message).toMatch(/no signing key/);
+    const unconfigured = new EnvSharedKeyStore(() => true, "");
+    const error = await refusal(testConnection(runner(a), admin(a), id, deps(transport, unconfigured)));
+    expect(error.message).toMatch(/signing key isn't configured/);
+    expect(transport.requests).toHaveLength(0);
+    // ...and it doesn't spend the rate limit: five more tests with a key still pass.
+    for (let i = 0; i < 5; i++) {
+      await testConnection(runner(a), admin(a), id, deps(FakeFhirTransport.healthy()));
+    }
+  });
+
+  it("an unreadable key, or a key store that can't be built here, is reported without detail", async () => {
+    const { id } = await draft(a);
+    const transport = FakeFhirTransport.healthy();
+    const unreadable = new EnvSharedKeyStore(() => true, "not a pem");
+    const error = await refusal(testConnection(runner(a), admin(a), id, deps(transport, unreadable)));
+    expect(error.message).toMatch(/signing key isn't usable/);
+    expect(error.message).not.toContain("pem");
+
+    const broken = {
+      transportFor: () => transport,
+      keyStore: () => {
+        throw new SigningKeyStoreError("env_key_in_production");
+      },
+    };
+    const refused = await refusal(testConnection(runner(a), admin(a), id, broken));
+    expect(refused.message).toMatch(/signing key isn't usable/);
     expect(transport.requests).toHaveLength(0);
   });
 
-  it("a key that can't be read (another connection's key reference) is reported without detail", async () => {
-    const { id } = await draft(a, false);
-    const other = await keyStore.create(randomUUID());
-    await systemDb()
-      .update(integrationConnections)
-      .set({ keyRef: other.keyRef })
-      .where(eq(integrationConnections.id, id));
-    const transport = FakeFhirTransport.healthy();
-    const error = await refusal(testConnection(runner(a), admin(a), id, deps(transport)));
-    expect(error.message).toMatch(/signing key isn't available/);
-    expect(error.message).not.toContain(other.keyRef);
-    expect(transport.requests).toHaveLength(0);
+  it("the built-in sandbox has no transport yet: a translated refusal, nothing dialed or audited", async () => {
+    const { id } = await draft(a);
+    const error = await refusal(testConnection(runner(a), admin(a), id, deps(null)));
+    expect(error.message).toMatch(/sandbox can't be tested yet/);
+    expect((await audits(id)).some((event) => event.action === "integration.connection_tested")).toBe(false);
   });
 });
 

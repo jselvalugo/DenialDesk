@@ -132,7 +132,17 @@ export const integrations: Messages["integrations"] = {
   "test.outcome.capability_missing":
     "El servidor no puede hacer lo que DenialDesk necesita: buscar Patient por fecha de última actualización, buscar Coverage por paciente y conceder acceso de lectura a Patient, Coverage y Organization.",
   "test.error.rateLimited": "Demasiadas pruebas de conexión. Espere unos minutos e inténtelo de nuevo.",
-  "test.error.noKey": "Esta conexión aún no tiene una clave de firma, por lo que no se puede probar.",
+  "test.error.keyNotConfigured":
+    "La clave de firma de DenialDesk no está configurada en este entorno, por lo que no se pueden probar las conexiones. Pida al operador de la plataforma que la configure.",
   "test.error.keyUnavailable":
-    "La clave de firma de esta conexión no está disponible en este momento. Inténtelo más tarde.",
+    "La clave de firma de DenialDesk no se puede usar en este momento. Pida al operador de la plataforma que la revise.",
+  "test.error.sandboxUnavailable": "El entorno de pruebas integrado todavía no se puede probar.",
+  "test.error.failed": "No se pudo completar la prueba. Recargue la página e inténtelo de nuevo.",
+  "test.title": "Probar conexión",
+  "test.description":
+    "Comprueba que DenialDesk puede comunicarse con el servidor, leer su configuración SMART y obtener un token de acceso. No se solicita información de pacientes.",
+  "test.submit": "Probar conexión",
+  "test.pending": "Probando…",
+  "test.resultOk": "Prueba exitosa",
+  "test.resultFailed": "Prueba fallida",
 };
