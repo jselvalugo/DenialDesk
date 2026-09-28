@@ -82,7 +82,7 @@ export const integrations = {
   "lifecycle.paused":
     "Sync is paused. Resuming restarts it, and needs you to verify your identity with your authenticator app first.",
   "lifecycle.error":
-    "DenialDesk stopped syncing after an error. Once it's fixed with your EHR/PM administrator, resume. Resuming needs you to verify your identity with your authenticator app first, and a passing Test connection.",
+    "DenialDesk stopped syncing after an error. Once your EHR/PM administrator has fixed it, run Test connection and get a pass, then resume. Resuming also needs you to verify your identity with your authenticator app first.",
   "lifecycle.pending_approval":
     "This connection is waiting for approval. Withdrawing it returns it to a draft you can edit and submit again.",
   "pause.submit": "Pause sync",
@@ -193,4 +193,9 @@ export const integrations = {
   "error.attestationRequired":
     "Confirm that the endpoint stores and processes data only in the United States.",
   "error.registryConflict": "This endpoint and client ID are already connected",
+  "error.localeChanged":
+    "The page language changed since you opened it. Reload the page, read the confirmation again, and submit.",
+  "error.submitRateLimited": "Too many submit attempts. Wait a few minutes and try again.",
+  "error.anotherConnectionLive":
+    "Another connection is already submitted or active. Withdraw or revoke it first.",
 } as const;

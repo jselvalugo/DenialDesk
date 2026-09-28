@@ -16,6 +16,7 @@ import {
   withdrawConnection,
   type ConnectionStatus,
   type IntegrationActor,
+  resolveSigningKid,
   type SigningDeps,
 } from "@/domain/integrations/connections";
 import { REVOKE_REASON_CODES } from "@/domain/integrations/revoke-reasons";
@@ -192,7 +193,7 @@ async function recordPassingTest(ctx: Ctx, id: string) {
         sandbox: false,
         base_url: connection!.baseUrl,
         client_id: connection!.clientId,
-        kid: (await signing.keyStore().signer(id)).kid,
+        kid: await signing.keyStore().kid(id),
         token_endpoint: connection!.tokenEndpoint,
         token_endpoint_key: connection!.tokenEndpointKey,
         issuer: connection!.issuer,
@@ -387,7 +388,7 @@ describe("resumeConnection (step-up, R-7.2.2)", () => {
         id,
         (await getConnection(tx, id))!.updatedAt.toISOString(),
         undefined,
-        signing,
+        await resolveSigningKid(signing, id),
       ),
     );
     expect((await lastAudit(id)).metadata).toEqual({
@@ -395,7 +396,7 @@ describe("resumeConnection (step-up, R-7.2.2)", () => {
       previous_status_reason: "auth_failed",
       sandbox: false,
       step_up_verified_at: verifiedAt,
-      test_kid: (await signing.keyStore().signer(id)).kid,
+      test_kid: await signing.keyStore().kid(id),
     });
   });
 
@@ -414,7 +415,7 @@ describe("resumeConnection (step-up, R-7.2.2)", () => {
         id,
         (await getConnection(tx, id))!.updatedAt.toISOString(),
         undefined,
-        signing,
+        await resolveSigningKid(signing, id),
       ),
     );
     const detailed = await detail(ctx, id);

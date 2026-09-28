@@ -84,7 +84,7 @@ export const integrations: Messages["integrations"] = {
   "lifecycle.paused":
     "A sincronização está pausada. Retomá-la a reinicia e exige que você verifique sua identidade com o aplicativo autenticador antes.",
   "lifecycle.error":
-    "O DenialDesk parou de sincronizar por causa de um erro. Depois que o administrador do seu EHR/PM resolver, retome. Retomar exige que você verifique sua identidade com o aplicativo autenticador antes e um teste de conexão aprovado.",
+    "O DenialDesk parou de sincronizar por causa de um erro. Depois que o administrador do seu EHR/PM resolver, execute Testar conexão e obtenha uma aprovação, e então retome. Retomar também exige que você verifique sua identidade com o aplicativo autenticador antes.",
   "lifecycle.pending_approval":
     "Esta conexão está aguardando aprovação. Retirá-la a devolve a um rascunho que você pode editar e enviar de novo.",
   "pause.submit": "Pausar sincronização",
@@ -199,4 +199,8 @@ export const integrations: Messages["integrations"] = {
   "error.attestationRequired":
     "Confirme que o endpoint armazena e processa dados somente nos Estados Unidos.",
   "error.registryConflict": "Este endpoint e este ID de cliente já estão conectados",
+  "error.localeChanged":
+    "O idioma da página mudou desde que você a abriu. Recarregue a página, leia a confirmação de novo e envie.",
+  "error.submitRateLimited": "Muitas tentativas de envio. Aguarde alguns minutos e tente novamente.",
+  "error.anotherConnectionLive": "Já existe outra conexão enviada ou ativa. Retire-a ou revogue-a primeiro.",
 };

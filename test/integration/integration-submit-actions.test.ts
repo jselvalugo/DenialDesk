@@ -144,7 +144,7 @@ async function passTest(id: string) {
 }
 
 const submitForm = async (id: string, extra: Record<string, string> = {}) =>
-  form({ id, updatedAt: await stampOf(id), attest: "on", ...extra });
+  form({ id, updatedAt: await stampOf(id), attest: "on", locale: language, ...extra });
 
 /** The operator's approval (PI1c has not shipped): table-owner privileges, as in the lifecycle tests. */
 async function approve(ctx: Ctx, id: string) {
@@ -275,6 +275,47 @@ describe("submitConnectionAction (PI2a)", () => {
     expect(event!.metadata).toMatchObject({ attestation_locale: "es", attestation_version: 1 });
   });
 
+  it("refuses a form whose displayed language no longer matches the request's, or that names none", async () => {
+    const { id } = await realDraft();
+    await passTest(id);
+    // The page was rendered in Spanish; the language was switched to English before the click.
+    for (const locale of ["es", "pt", "fr", ""]) {
+      const result = await run(submitConnectionAction, await submitForm(id, { locale }));
+      expect(errorOf(result)).toMatch(/page language changed/);
+    }
+    const data = await submitForm(id);
+    data.delete("locale");
+    expect(errorOf(await run(submitConnectionAction, data))).toMatch(/page language changed/);
+    expect(await row(id)).toMatchObject({ status: "draft", submittedAt: null, usResidencyAttestedAt: null });
+    // Refused before anything else happens: not counted against the practice's Submit limit, no audit.
+    expect(await audits(id, "integration.connection_submitted")).toEqual([]);
+    expect(errorOf(await run(submitConnectionAction, await submitForm(id)))).toBeUndefined();
+  });
+
+  it("refuses in words while another connection of the practice is submitted or active, and shows no save error", async () => {
+    const first = await realDraft();
+    await passTest(first.id);
+    await run(submitConnectionAction, await submitForm(first.id));
+
+    // A second draft in the same practice (still signed in as its administrator).
+    const created = await run(
+      createConnectionAction,
+      form({
+        displayName: "Second EHR",
+        baseUrl: FAKE_BASE_URL,
+        clientId: `client-${randomUUID().slice(0, 8)}`,
+        mrnIdentifierSystem: "https://fhir.example.com/mrn",
+      }),
+    );
+    const second = created.redirectedTo!.replace("/settings/integrations/", "");
+    await passTest(second);
+    const refused = await run(submitConnectionAction, await submitForm(second));
+    expect(errorOf(refused)).toMatch(/Another connection is already submitted or active/);
+    expect(errorOf(refused)).not.toMatch(/couldn't be saved/);
+    expect(await row(second)).toMatchObject({ status: "draft", submittedAt: null });
+    expect((await row(first.id)).status).toBe("pending_approval");
+  });
+
   it("refuses a second practice's identical endpoint and client ID in the spec's words, and audits it", async () => {
     const clientId = `shared-${randomUUID().slice(0, 8)}`;
     const first = await realDraft(clientId);
@@ -331,7 +372,7 @@ describe("resumeConnectionAction from error (PI2a)", () => {
     await approve(draft.ctx, draft.id);
     await withTenant(draft.ctx, (tx) =>
       tx.execute(sql`
-        update integration_connections set status = 'error', status_reason = 'auth_failed'
+        update integration_connections set status = 'error', status_reason = 'auth_failed', updated_at = now()
         where id = ${draft.id}::uuid
       `),
     );
@@ -352,6 +393,18 @@ describe("resumeConnectionAction from error (PI2a)", () => {
     const resumed = await run(resumeConnectionAction, form({ id, updatedAt: await stampOf(id) }));
     expect(resumed.redirectedTo).toBe(`/settings/integrations/${id}`);
     expect(await row(id)).toMatchObject({ status: "active", statusReason: null });
+  });
+
+  it("is refused right after the error, since the pass on record came before it; a new pass allows it", async () => {
+    const { id } = await erroredConnection();
+    const refused = await run(resumeConnectionAction, form({ id, updatedAt: await stampOf(id) }));
+    expect(errorOf(refused)).toMatch(/Run Test connection and get a pass before resuming/);
+    expect(await row(id)).toMatchObject({ status: "error", statusReason: "auth_failed" });
+
+    await passTest(id);
+    const resumed = await run(resumeConnectionAction, form({ id, updatedAt: await stampOf(id) }));
+    expect(resumed.redirectedTo).toBe(`/settings/integrations/${id}`);
+    expect((await row(id)).status).toBe("active");
   });
 
   it("still needs the step-up, and says so", async () => {

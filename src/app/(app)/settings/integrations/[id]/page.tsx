@@ -14,10 +14,12 @@ import {
   CONNECTION_STATUS_TONE,
   endpointEditable,
   getConnection,
-  hasPassingTestNow,
+  resolveSigningKid,
+  submitBlockedReason,
 } from "@/domain/integrations/connections";
 import { getFormat, getT } from "@/i18n/server";
 import { ConnectionForm } from "../ConnectionForm";
+import { integrationActor } from "../form-state";
 import { connectionTestDeps } from "../test-deps";
 import { ConnectionLifecycleButton } from "./ConnectionLifecycle";
 import { RevokeConnectionForm } from "./RevokeConnectionForm";
@@ -41,15 +43,17 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
   if (!id.success) notFound();
   const connection = await withTenant(auth, (tx) => getConnection(tx, id.data));
   if (!connection) notFound();
-  // Whether Submit can go through the test gate right now (a pass in the last 24 h, for this
-  // configuration and the live key): only a draft can be submitted. Submit checks it again itself.
-  const testPassed =
-    connection.status === "draft"
-      ? await withTenant(auth, (tx) =>
-          hasPassingTestNow(tx, auth.tenantId, connection.id, connectionTestDeps()),
-        )
-      : false;
   const t = await getT("integrations");
+  // Why Submit is unavailable right now, if it is (environment, another live connection, no passing
+  // test in the last 24 h for this configuration and the live key): only a draft can be submitted.
+  // Submit checks all of it again itself. The key is identified from public material only (`kid`).
+  let submitBlocked: string | null = null;
+  if (connection.status === "draft") {
+    const signing = await resolveSigningKid(connectionTestDeps(), connection.id);
+    const actor = integrationActor(auth);
+    const reason = await withTenant(auth, (tx) => submitBlockedReason(tx, actor, connection, signing));
+    submitBlocked = reason ? t(reason) : null;
+  }
   const ts = await getT("settings");
   const format = await getFormat();
   const revoked = connection.status === "revoked";
@@ -175,7 +179,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                 id={connection.id}
                 updatedAt={updatedAt}
                 sandbox={connection.isSandbox}
-                testPassed={testPassed}
+                blockedReason={submitBlocked}
                 needsStepUp={!hasRecentMfa(auth.mfaVerifiedAt)}
               />
             </Panel>

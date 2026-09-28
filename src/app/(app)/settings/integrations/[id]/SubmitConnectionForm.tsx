@@ -4,15 +4,16 @@ import { startTransition, useActionState } from "react";
 import { StepUpLink } from "@/components/auth/StepUpLink";
 import { Button } from "@/components/ui/Button";
 import { FormAlert } from "@/components/ui/FormAlert";
-import { useT } from "@/i18n/client";
+import { useLocale, useT } from "@/i18n/client";
 import { submitConnectionAction } from "../actions";
 import type { ConnectionFormState } from "../form-state";
 
 /**
  * Submit (docs/specs/patient-integrations.md PI2a). A real connection carries the U.S.-residency
  * attestation (the checkbox holds the exact wording); the built-in sandbox is synthetic and has none.
- * The button is disabled, with the reason shown beside it, until a passing Test connection is on
- * record; the step-up link appears when the session's last MFA is too old, and again if the server
+ * The button is disabled, with the reason (from the server) shown beside it, while the environment,
+ * another live connection, or a missing passing test would make Submit refuse. The step-up link
+ * appears when the session's last MFA is too old, and again if the server
  * refuses for that reason (the window can close between page load and click). The server checks all
  * of it again: nothing here is access control.
  */
@@ -20,18 +21,19 @@ export function SubmitConnectionForm({
   id,
   updatedAt,
   sandbox,
-  testPassed,
+  blockedReason,
   needsStepUp,
 }: {
   id: string;
   updatedAt: string;
   sandbox: boolean;
-  testPassed: boolean;
+  blockedReason: string | null;
   needsStepUp: boolean;
 }) {
   const t = useT("integrations");
+  const locale = useLocale();
   const [state, action, pending] = useActionState<ConnectionFormState, FormData>(submitConnectionAction, {});
-  const blocked = !testPassed;
+  const blocked = blockedReason !== null;
   return (
     // noValidate: the translated refusal (checked on the server) shows instead of the browser's bubble.
     <form
@@ -45,12 +47,14 @@ export function SubmitConnectionForm({
     >
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="updatedAt" value={updatedAt} />
+      {/* The language the attestation is shown in: the server refuses the form if it has changed. */}
+      <input type="hidden" name="locale" value={locale} />
       <p className="text-body text-muted">
         {sandbox ? t("submit.descriptionSandbox") : t("submit.descriptionReal")}
       </p>
       {blocked && (
         <p id="submit-blocked" role="note" className="text-body text-text">
-          {sandbox ? t("submit.blocked.sandbox") : t("submit.blocked.noPassingTest")}
+          {blockedReason}
         </p>
       )}
       <FormAlert message={state.error} id="submit-error" />

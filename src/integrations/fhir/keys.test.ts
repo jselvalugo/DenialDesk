@@ -139,7 +139,27 @@ describe("EnvSharedKeyStore (pre-production, INTEGRATION_SIGNING_KEY)", () => {
       const store = new EnvSharedKeyStore(synthetic, pem);
       await expect(store.signer()).rejects.toMatchObject({ code: "not_configured" });
       await expect(store.publicJwks()).rejects.toMatchObject({ code: "not_configured" });
+      await expect(store.kid()).rejects.toMatchObject({ code: "not_configured" });
     }
+  });
+
+  it("kid() is the public key's thumbprint: the signer's and the JWKS entry's kid, with no signer created", async () => {
+    const privateKey = es384();
+    const store = new EnvSharedKeyStore(synthetic, pkcs8Pem(privateKey));
+    const kid = await store.kid();
+    expect(kid).toBe(thumbprintKid(privateKey));
+    expect(kid).toBe((await store.signer()).kid);
+    expect(kid).toBe((await store.publicJwks())[0]!.kid);
+    // Nothing but a string comes back: no key object, no signing function.
+    expect(typeof kid).toBe("string");
+  });
+
+  it("kid() reports an unreadable key by code only", async () => {
+    const store = new EnvSharedKeyStore(
+      synthetic,
+      "-----BEGIN PRIVATE KEY-----\nnot a key\n-----END PRIVATE KEY-----",
+    );
+    await expect(store.kid()).rejects.toMatchObject({ code: "key_unreadable" });
   });
 
   it("signs with the key and publishes the matching public key (round trip)", async () => {
@@ -283,7 +303,7 @@ describe("EnvSharedKeyStore (pre-production, INTEGRATION_SIGNING_KEY)", () => {
 });
 
 describe("AzureKeyVaultKeyStore (production stub)", () => {
-  it.each(["signer", "publicJwks"] as const)("%s fails closed as not configured", async (method) => {
+  it.each(["signer", "publicJwks", "kid"] as const)("%s fails closed as not configured", async (method) => {
     const vault = new AzureKeyVaultKeyStore();
     const call = vault[method]();
     await expect(call).rejects.toMatchObject({ code: "not_configured" });

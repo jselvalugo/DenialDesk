@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { auditEvents, integrationConnections } from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
 
@@ -37,6 +37,13 @@ export const PASS_BINDING_METADATA_KEYS = [
  * address/TLS/redirect, voids the pass (coordinator decision 2026-09-28, pending owner confirmation).
  * The tenant is checked explicitly as well as by row-level security. Callers: Submit and Resume from
  * `error` (`connections.ts`), each under the row lock, with the live signing key's `kid`.
+ *
+ * `options.afterLastChange` (Resume from `error`): the pass must also be newer than the connection's
+ * last change (`updated_at`, which the move into `error` sets), so a pass recorded while the
+ * connection was still `active` can't clear the error it came before. Compared in the database
+ * (microseconds, strictly greater), not in JavaScript. Test connection never bumps `updated_at` on a
+ * connection that isn't a draft (only a draft may pin the endpoint), so a fresh test always counts;
+ * a later rename of the connection does bump it and asks for a new test, which is the safe side.
  */
 export async function hasRecentPassingTest(
   tx: TenantTx,
@@ -44,6 +51,7 @@ export async function hasRecentPassingTest(
   id: string,
   kid: string,
   now: Date = new Date(),
+  options: { afterLastChange?: boolean } = {},
 ): Promise<boolean> {
   const cutoff = new Date(now.getTime() - TEST_VALIDITY_MS);
   const [event] = await tx
@@ -51,6 +59,10 @@ export async function hasRecentPassingTest(
       action: auditEvents.action,
       metadata: auditEvents.metadata,
       occurredAt: auditEvents.occurredAt,
+      afterLastChange: sql<boolean | null>`${auditEvents.occurredAt} > (
+        select c.updated_at from integration_connections c
+        where c.id = ${id}::uuid and c.tenant_id = ${tenantId}::uuid
+      )`,
     })
     .from(auditEvents)
     .where(
@@ -65,6 +77,7 @@ export async function hasRecentPassingTest(
     .limit(1);
   if (!event?.metadata || event.action !== "integration.connection_tested") return false;
   if (event.metadata.outcome !== "ok" || event.occurredAt < cutoff || !kid) return false;
+  if (options.afterLastChange && event.afterLastChange !== true) return false;
 
   const [row] = await tx
     .select({

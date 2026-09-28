@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomUUID } from "node:crypto";
+import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { asc, eq, sql } from "drizzle-orm";
 import { closeDatabase, systemDb } from "@/db/client";
@@ -9,8 +9,10 @@ import {
   createSandboxConnection,
   getConnection,
   IntegrationConnectionError,
+  resolveSigningKid,
   resumeConnection,
   revokeConnection,
+  submitBlockedReason,
   submitConnection,
   updateConnection,
   US_RESIDENCY_ATTESTATION_VERSION,
@@ -21,10 +23,13 @@ import {
   type SubmitInput,
 } from "@/domain/integrations/connections";
 import {
+  TEST_VALIDITY_MS,
   testConnection,
   type TestConnectionDeps,
   type TxRunner,
 } from "@/domain/integrations/test-connection";
+import { es } from "@/i18n/messages/es";
+import { pt } from "@/i18n/messages/pt";
 import { EnvSharedKeyStore } from "@/integrations/fhir/keys";
 import { SANDBOX_BASE_URL, SANDBOX_CLIENT_ID } from "@/integrations/fhir/url-rules";
 import { FAKE_BASE_URL, FAKE_TOKEN_ENDPOINT, FakeFhirTransport } from "../support/fake-fhir-transport";
@@ -240,7 +245,7 @@ describe("submitConnection — a real connection", () => {
       status: "pending_approval",
       sandbox: false,
       step_up_verified_at: VERIFIED_AT,
-      test_kid: (await keyStore.signer()).kid,
+      test_kid: await keyStore.kid(),
       base_url: FAKE_BASE_URL,
       client_id: clientId,
       mrn_identifier_system: "https://fhir.example.com/mrn",
@@ -248,18 +253,39 @@ describe("submitConnection — a real connection", () => {
       registry_claimed: true,
       us_residency_attested: true,
       attestation_version: US_RESIDENCY_ATTESTATION_VERSION,
+      // The displayed language, and a hash of the exact text shown in it.
       attestation_locale: "es",
+      attestation_text_sha256: createHash("sha256")
+        .update(es.integrations["submit.attestation"])
+        .digest("hex"),
     });
     // Nothing from the fake server's responses, and no other practice, is in the record.
     expect(JSON.stringify(events[0]!.metadata)).not.toContain(b.tenantId);
   });
 
-  it("records the language as English when it isn't a language the app has", async () => {
+  it("clears a leftover status reason in the same UPDATE", async () => {
     const { id } = await draft();
     await passTest(a, id);
-    await submit(a, id, { input: { locale: "fr" as never } });
+    await systemDb()
+      .update(integrationConnections)
+      .set({ statusReason: "auth_failed" })
+      .where(eq(integrationConnections.id, id));
+    await submit(a, id);
+    expect(await row(id)).toMatchObject({ status: "pending_approval", statusReason: null });
+  });
+
+  it("records the hash of the text shown in the displayed language, and refuses a language the app doesn't have", async () => {
+    const { id } = await draft();
+    await passTest(a, id);
+    const error = await refusal(submit(a, id, { input: { locale: "fr" as never } }));
+    expect(error.message).toMatch(/page language changed/);
+    await expectUntouchedDraft(id);
+    await submit(a, id, { input: { locale: "pt" } });
     expect((await audits(id, "integration.connection_submitted"))[0]!.metadata).toMatchObject({
-      attestation_locale: "en",
+      attestation_locale: "pt",
+      attestation_text_sha256: createHash("sha256")
+        .update(pt.integrations["submit.attestation"])
+        .digest("hex"),
     });
   });
 
@@ -485,6 +511,177 @@ describe("submitConnection — the endpoint registry", () => {
   });
 });
 
+describe("submitConnection — two practices at once", () => {
+  it("of two practices submitting the same endpoint and client ID at the same time, exactly one claims", async () => {
+    const clientId = `race-client-${randomUUID().slice(0, 8)}`;
+    const first = await draft(a, clientId);
+    const second = await draft(b, clientId);
+    await passTest(a, first.id);
+    await passTest(b, second.id);
+    const outcomes = await Promise.allSettled([submit(a, first.id), submit(b, second.id)]);
+    const won = outcomes.filter((o) => o.status === "fulfilled");
+    const lost = outcomes.filter((o): o is PromiseRejectedResult => o.status === "rejected");
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+    expect(lost[0]!.reason).toBeInstanceOf(IntegrationConnectionError);
+    expect(lost[0]!.reason.message).toBe("This endpoint and client ID are already connected");
+
+    const claims = [...(await registryRows(first.id)), ...(await registryRows(second.id))];
+    expect(claims).toHaveLength(1);
+    // The loser is a draft again, with its conflict on record; the winner is pending.
+    const statuses = [(await row(first.id)).status, (await row(second.id)).status].sort();
+    expect(statuses).toEqual(["draft", "pending_approval"]);
+    const conflicts = [
+      ...(await audits(first.id, "integration.registry_conflict")),
+      ...(await audits(second.id, "integration.registry_conflict")),
+    ];
+    expect(conflicts).toHaveLength(1);
+  });
+});
+
+describe("submitConnection — one connection outside draft/revoked per practice", () => {
+  const anotherLive = /Another connection is already submitted or active/;
+
+  it("refuses in words, not a save error, while another connection is submitted, and touches nothing", async () => {
+    const first = await draft();
+    await passTest(a, first.id);
+    await submit(a, first.id);
+
+    const second = await draft();
+    await passTest(a, second.id);
+    const error = await refusal(submit(a, second.id));
+    expect(error.message).toMatch(anotherLive);
+    expect(error.stepUpRequired).toBe(false);
+    await expectUntouchedDraft(second.id);
+    expect(await audits(second.id, "integration.registry_conflict")).toEqual([]);
+    expect((await row(first.id)).status).toBe("pending_approval");
+  });
+
+  it("refuses while the other connection is active, too", async () => {
+    const first = await draft();
+    await passTest(a, first.id);
+    await submit(a, first.id);
+    await approve(a, first.id);
+    const second = await draft();
+    await passTest(a, second.id);
+    expect((await refusal(submit(a, second.id))).message).toMatch(anotherLive);
+    await expectUntouchedDraft(second.id);
+  });
+
+  it("allows it once the other is withdrawn back to a draft or revoked", async () => {
+    const first = await draft();
+    await passTest(a, first.id);
+    await submit(a, first.id);
+    const second = await draft();
+    await passTest(a, second.id);
+    await refusal(submit(a, second.id));
+
+    await withTenant(a, async (tx) => withdrawConnection(tx, admin(a), first.id, await stamp(a, first.id)));
+    expect((await submit(a, second.id)).status).toBe("pending_approval");
+
+    const third = await draft();
+    await passTest(a, third.id);
+    expect((await refusal(submit(a, third.id))).message).toMatch(anotherLive);
+    await withTenant(a, async (tx) =>
+      revokeConnection(tx, admin(a), second.id, await stamp(a, second.id), "other"),
+    );
+    expect((await submit(a, third.id)).status).toBe("pending_approval");
+  });
+
+  it("is per practice: another practice's live connection doesn't block", async () => {
+    const other = await draft(b);
+    await passTest(b, other.id);
+    await submit(b, other.id);
+    const mine = await draft(a);
+    await passTest(a, mine.id);
+    expect((await submit(a, mine.id)).status).toBe("pending_approval");
+  });
+
+  it("two drafts of one practice submitted at once: one wins, the other is refused in the same words", async () => {
+    const first = await draft();
+    const second = await draft();
+    await passTest(a, first.id);
+    await passTest(a, second.id);
+    const outcomes = await Promise.allSettled([submit(a, first.id), submit(a, second.id)]);
+    expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
+    const lost = outcomes.find((o): o is PromiseRejectedResult => o.status === "rejected")!;
+    // Whether the loser was refused by the check or by the unique index it races into, it is this refusal.
+    expect(lost.reason).toBeInstanceOf(IntegrationConnectionError);
+    expect(lost.reason.message).toMatch(anotherLive);
+    const statuses = [(await row(first.id)).status, (await row(second.id)).status].sort();
+    expect(statuses).toEqual(["draft", "pending_approval"]);
+  });
+});
+
+describe("submitConnection — the test's age, the rate limit, and the panel's reason", () => {
+  it("is refused when the pass is more than 24 h old by the injected clock, and allowed just inside", async () => {
+    const { id } = await draft();
+    await passTest(a, id);
+    const [passed] = (await audits(id, "integration.connection_tested")).slice(-1);
+    const later = (ms: number): SigningDeps => ({
+      keyStore: () => keyStore,
+      now: () => new Date(passed!.occurredAt.getTime() + ms),
+    });
+    const error = await refusal(submit(a, id, { deps: later(TEST_VALIDITY_MS + 1000) }));
+    expect(error.message).toMatch(/Test connection has to pass first/);
+    await expectUntouchedDraft(id);
+    expect((await submit(a, id, { deps: later(TEST_VALIDITY_MS - 1000) })).status).toBe("pending_approval");
+  });
+
+  it("limits Submit attempts per practice, audits the refusal, and leaves other practices alone", async () => {
+    const { id } = await draft();
+    // A pinned clock keeps every attempt in one rate-limit window. Ten attempts are allowed (each is
+    // refused for the missing test), the eleventh is rate limited.
+    const clock = new Date();
+    const pinned: SigningDeps = { keyStore: () => keyStore, now: () => clock };
+    for (let attempt = 1; attempt <= 10; attempt++) {
+      const error = await refusal(submit(a, id, { deps: pinned }));
+      expect(error.message, `attempt ${attempt}`).toMatch(/Test connection has to pass first/);
+    }
+    const limited = await refusal(submit(a, id, { deps: pinned }));
+    expect(limited.message).toMatch(/Too many submit attempts/);
+    await expectUntouchedDraft(id);
+    const [event] = await audits(id, "security.rate_limited");
+    expect(event).toMatchObject({
+      actorUserId: a.userId,
+      tenantId: a.tenantId,
+      entityType: "integration_connection",
+      reason: "connection_submit",
+      metadata: { bucket: "integration_submit" },
+    });
+
+    const other = await draft(b);
+    const stillAllowed = await refusal(submit(b, other.id, { deps: pinned }));
+    expect(stillAllowed.message).toMatch(/Test connection has to pass first/);
+  });
+
+  it("explains, in order, why the panel's button is disabled: environment, another connection, no test", async () => {
+    const { id } = await draft();
+    const info = { id, targetTable: "patients", isSandbox: false };
+    const reason = async (actor: IntegrationActor, connection = info) =>
+      withTenant(a, async (tx) =>
+        submitBlockedReason(tx, actor, connection, await resolveSigningKid(signing, connection.id)),
+      );
+
+    expect(await reason(admin(a, { synthetic: true }))).toBe("error.realEndpointRefused");
+    expect(await reason(admin(a, { synthetic: false }), { ...info, isSandbox: true })).toBe(
+      "error.sandboxRefused",
+    );
+    expect(await reason(admin(a))).toBe("submit.blocked.noPassingTest");
+    expect(await reason(admin(a, { synthetic: true }), { ...info, isSandbox: true })).toBe(
+      "submit.blocked.sandbox",
+    );
+
+    await passTest(a, id);
+    expect(await reason(admin(a))).toBeNull();
+
+    const live = await draft();
+    await passTest(a, live.id);
+    await submit(a, live.id);
+    expect(await reason(admin(a))).toBe("error.anotherConnectionLive");
+  });
+});
+
 describe("submitConnection — withdraw, then submit again", () => {
   it("needs a fresh test and a fresh attestation, and writes fresh stamps", async () => {
     const { id } = await draft();
@@ -561,7 +758,7 @@ describe("submitConnection — the built-in sandbox", () => {
           sandbox: true,
           base_url: SANDBOX_BASE_URL,
           client_id: SANDBOX_CLIENT_ID,
-          kid: (await keyStore.signer()).kid,
+          kid: await keyStore.kid(),
           token_endpoint: SANDBOX_TOKEN_ENDPOINT,
           token_endpoint_key: SANDBOX_TOKEN_ENDPOINT,
           issuer: SANDBOX_ISSUER,
@@ -665,9 +862,48 @@ describe("resumeConnection from error — a passing Test connection first", () =
         id,
         await stamp(a, id),
         undefined,
-        options.deps === null ? undefined : (options.deps ?? signing),
+        // Resolved before the transaction, as the action does: the key's kid, from public material.
+        options.deps === null ? undefined : await resolveSigningKid(options.deps ?? signing, id),
       ),
     );
+
+  it("is refused right after the error: the pass from before it doesn't count, a new one does", async () => {
+    const id = await errored();
+    // `errored()` tested the draft, submitted, approved, and only then went to error.
+    const error = await refusal(resume(id));
+    expect(error.message).toMatch(/Run Test connection and get a pass before resuming/);
+    expect((await row(id)).status).toBe("error");
+    expect(await audits(id, "integration.connection_resumed")).toEqual([]);
+
+    await passTest(a, id);
+    await resume(id);
+    expect((await row(id)).status).toBe("active");
+  });
+
+  it("is refused when the only pass was recorded while the connection was still active", async () => {
+    const { id } = await draft();
+    await passTest(a, id);
+    await submit(a, id);
+    await approve(a, id);
+    // A fresh pass while active: the newest test, bound to the same configuration and key...
+    await passTest(a, id);
+    // ...then the connection errors. That pass came before the error and can't clear it.
+    await setStatus(a, id, "error", "auth_failed");
+    const error = await refusal(resume(id));
+    expect(error.message).toMatch(/get a pass before resuming/);
+    expect((await row(id)).status).toBe("error");
+  });
+
+  it("counts a test run after the error: Test connection never bumps updated_at on a connection past draft", async () => {
+    const id = await errored();
+    const before = (await row(id)).updatedAt.toISOString();
+    await passTest(a, id);
+    await testConnection(runner(a), admin(a), id, testDeps(failingToken()));
+    await passTest(a, id);
+    expect((await row(id)).updatedAt.toISOString()).toBe(before);
+    await resume(id);
+    expect((await row(id)).status).toBe("active");
+  });
 
   it("is refused when the newest test failed, then allowed after a new pass", async () => {
     const id = await errored();
@@ -688,7 +924,7 @@ describe("resumeConnection from error — a passing Test connection first", () =
       previous_status: "error",
       previous_status_reason: "auth_failed",
       step_up_verified_at: VERIFIED_AT,
-      test_kid: (await keyStore.signer()).kid,
+      test_kid: await keyStore.kid(),
     });
   });
 
@@ -700,7 +936,7 @@ describe("resumeConnection from error — a passing Test connection first", () =
       .set({
         tokenEndpoint: FAKE_TOKEN_ENDPOINT,
         tokenEndpointKey: FAKE_TOKEN_ENDPOINT,
-        issuer: `${FAKE_BASE_URL} ${FAKE_BASE_URL}`,
+        issuer: FAKE_BASE_URL,
       })
       .where(eq(integrationConnections.id, id));
     await withTenant(a, async (tx) => {
@@ -721,6 +957,7 @@ describe("resumeConnection from error — a passing Test connection first", () =
 
   it("is refused when the pass was for another signing key", async () => {
     const id = await errored();
+    await passTest(a, id); // a valid pass after the error, for the key that signed it
     const error = await refusal(resume(id, { deps: { keyStore: () => otherKeyStore } }));
     expect(error.message).toMatch(/get a pass before resuming/);
     expect((await row(id)).status).toBe("error");
@@ -728,6 +965,7 @@ describe("resumeConnection from error — a passing Test connection first", () =
 
   it("fails closed when the caller gives no way to identify the key", async () => {
     const id = await errored();
+    await passTest(a, id); // a valid pass after the error: only the missing key stands in the way
     const error = await refusal(resume(id, { deps: null }));
     expect(error.message).toMatch(/get a pass before resuming/);
     expect((await row(id)).status).toBe("error");
@@ -757,7 +995,16 @@ describe("resumeConnection from error — a passing Test connection first", () =
   it("is not found across practices", async () => {
     const id = await errored();
     const error = await refusal(
-      withTenant(b, (tx) => resumeConnection(tx, admin(b), id, new Date().toISOString(), undefined, signing)),
+      withTenant(b, async (tx) =>
+        resumeConnection(
+          tx,
+          admin(b),
+          id,
+          new Date().toISOString(),
+          undefined,
+          await resolveSigningKid(signing, id),
+        ),
+      ),
     );
     expect(error.message).toMatch(/not found/);
     expect((await row(id)).status).toBe("error");

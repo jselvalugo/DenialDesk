@@ -87,6 +87,13 @@ export class SigningKeyStoreError extends Error {
 export interface SigningKeyStore {
   /** A signer for the connection's key (the pre-production store has one key for every connection). */
   signer(connectionId: string): Promise<JwtSigner>;
+  /**
+   * The `kid` of the key `signer()` would use, and nothing else: public material only, never a signing
+   * handle, so Submit, Resume, and the connection page can bind a Test connection pass to "the key in
+   * use" without touching the private key (and before any transaction or row lock is opened). Adapters
+   * keep it cheap (in-process cache or a metadata read); rotation changes it.
+   */
+  kid(connectionId: string): Promise<string>;
   /** Every currently published key (current, and `next` once rotation ships), public fields only. */
   publicJwks(connectionId: string): Promise<PublicJwk[]>;
 }
@@ -133,6 +140,12 @@ export class EnvSharedKeyStore implements SigningKeyStore {
     return signerForPrivateKey(key, kid);
   }
 
+  async kid(): Promise<string> {
+    // The thumbprint of the public half, computed once when the key is first parsed and cached with
+    // it; no signer is created and the key is not handed out.
+    return this.#load().kid;
+  }
+
   async publicJwks(): Promise<PublicJwk[]> {
     const { key, alg, kid } = this.#load();
     return [toPublicJwk(key, kid, alg)];
@@ -145,6 +158,9 @@ export class EnvSharedKeyStore implements SigningKeyStore {
  */
 export class AzureKeyVaultKeyStore implements SigningKeyStore {
   signer(): Promise<JwtSigner> {
+    return Promise.reject(new SigningKeyStoreError("not_configured"));
+  }
+  kid(): Promise<string> {
     return Promise.reject(new SigningKeyStoreError("not_configured"));
   }
   publicJwks(): Promise<PublicJwk[]> {

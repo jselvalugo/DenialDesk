@@ -1,4 +1,5 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { and, desc, eq, ne, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { canManageIntegrations } from "@/auth/permissions";
 import type { Role } from "@/auth/session";
@@ -7,9 +8,10 @@ import {
   integrationConnections,
   integrationSyncRunStatusEnum,
 } from "@/db/schema";
-import type { TenantTx } from "@/db/tenant";
+import { isUniqueViolation, type DatabaseError, type TenantTx } from "@/db/tenant";
 import { isLocale, type Locale } from "@/i18n/config";
 import { en } from "@/i18n/messages/en";
+import { messages } from "@/i18n/messages";
 import type { MessageKey, Messages } from "@/i18n/messages/types";
 import { createTranslator, type Translator } from "@/i18n/translate";
 import {
@@ -29,6 +31,8 @@ import {
 import { SigningKeyStoreError, type SigningKeyStore } from "@/integrations/fhir/keys";
 import { VENDOR_SANDBOX_HOSTS } from "@/integrations/fhir/vendor-sandboxes";
 import { audit } from "@/lib/audit";
+import { log } from "@/lib/log";
+import { hit } from "@/lib/rate-limit";
 import { hasRecentPassingTest } from "./passing-test";
 import { isRevokeReasonCode } from "./revoke-reasons";
 
@@ -243,8 +247,48 @@ export function assertEnvironmentAllows(
   actor: Pick<IntegrationActor, "syntheticOnly">,
   t: IntegrationsT = englishT,
 ): void {
-  if (isSandbox && !actor.syntheticOnly) fail(t, "error.sandboxRefused");
-  if (!isSandbox && actor.syntheticOnly) fail(t, "error.realEndpointRefused");
+  const refusal = environmentRefusalKey(isSandbox, actor);
+  if (refusal) fail(t, refusal);
+}
+
+/**
+ * The message key `assertEnvironmentAllows` would refuse with, or null when the environment allows
+ * the connection. Shared with the connection page so the Submit panel shows the reason instead of a
+ * button the server would refuse.
+ */
+export function environmentRefusalKey(
+  isSandbox: boolean,
+  actor: Pick<IntegrationActor, "syntheticOnly">,
+): IntegrationsKey | null {
+  if (isSandbox && !actor.syntheticOnly) return "error.sandboxRefused";
+  if (!isSandbox && actor.syntheticOnly) return "error.realEndpointRefused";
+  return null;
+}
+
+/**
+ * Whether another connection for this table is already submitted or live (any status but `draft` or
+ * `revoked`): the database allows only one per practice and table (`integration_connections_one_active`),
+ * and Submit is what would take a second one out of `draft`.
+ */
+export async function hasAnotherLiveConnection(
+  tx: TenantTx,
+  tenantId: string,
+  targetTable: string,
+  id: string,
+): Promise<boolean> {
+  const [other] = await tx
+    .select({ id: integrationConnections.id })
+    .from(integrationConnections)
+    .where(
+      and(
+        eq(integrationConnections.tenantId, tenantId),
+        eq(integrationConnections.targetTable, targetTable),
+        ne(integrationConnections.id, id),
+        notInArray(integrationConnections.status, ["draft", "revoked"]),
+      ),
+    )
+    .limit(1);
+  return other !== undefined;
 }
 
 /** Columns safe to show an administrator: configuration only (no key reference or exception text). */
@@ -645,13 +689,31 @@ export interface SigningDeps {
   now?: () => Date;
 }
 
-/** The live signing key's `kid`, or a translated refusal (never key detail) when no key is usable. */
-async function liveSigningKid(id: string, deps: SigningDeps, t: IntegrationsT): Promise<string> {
+/**
+ * The live signing key's `kid`, resolved **before** any transaction or row lock is opened and from
+ * public material only (`SigningKeyStore.kid`, never a signer). `kid` is null, with the translated
+ * reason, when no key is usable. The pass-binding comparison under the lock still catches a rotation
+ * that happens between this call and the transaction: the recorded pass carries the old `kid`.
+ */
+export interface ResolvedSigningKid {
+  kid: string | null;
+  /** Why there is no `kid`: a message key, never key detail. */
+  refusal: IntegrationsKey | null;
+  now?: () => Date;
+}
+
+/** Resolves the key in use for a connection; a store that can't say is a refusal, not an error. */
+export async function resolveSigningKid(deps: SigningDeps, id: string): Promise<ResolvedSigningKid> {
   try {
-    return (await deps.keyStore().signer(id)).kid;
+    return { kid: await deps.keyStore().kid(id), refusal: null, now: deps.now };
   } catch (error) {
     if (error instanceof SigningKeyStoreError) {
-      fail(t, error.code === "not_configured" ? "test.error.keyNotConfigured" : "test.error.keyUnavailable");
+      return {
+        kid: null,
+        refusal:
+          error.code === "not_configured" ? "test.error.keyNotConfigured" : "test.error.keyUnavailable",
+        now: deps.now,
+      };
     }
     throw error;
   }
@@ -659,44 +721,66 @@ async function liveSigningKid(id: string, deps: SigningDeps, t: IntegrationsT): 
 
 /**
  * Whether a passing Test connection is on record right now (the Submit panel's enabled state). The
- * same check Submit itself makes under the row lock, so the page and the action agree; a key store
- * that can't produce a key means no pass can count, so it is `false` rather than an error.
+ * same check Submit itself makes under the row lock, so the page and the action agree; no usable
+ * key means no pass can count, so it is `false` rather than an error.
  */
 export async function hasPassingTestNow(
   tx: TenantTx,
   tenantId: string,
   id: string,
-  deps: SigningDeps,
+  signing: ResolvedSigningKid,
 ): Promise<boolean> {
-  let kid: string;
-  try {
-    kid = (await deps.keyStore().signer(id)).kid;
-  } catch (error) {
-    if (error instanceof SigningKeyStoreError) return false;
-    throw error;
+  if (!signing.kid) return false;
+  return hasRecentPassingTest(tx, tenantId, id, signing.kid, signing.now?.());
+}
+
+/**
+ * Why the Submit panel shows a disabled button instead of an enabled one, as a message key, or null
+ * when nothing known now would make the server refuse (the step-up and the attestation are asked for
+ * in the panel itself). The same rules Submit applies, in the same order: the environment, another
+ * live connection, a passing test.
+ */
+export async function submitBlockedReason(
+  tx: TenantTx,
+  actor: Pick<IntegrationActor, "tenantId" | "syntheticOnly">,
+  connection: { id: string; targetTable: string; isSandbox: boolean },
+  signing: ResolvedSigningKid,
+): Promise<IntegrationsKey | null> {
+  const environment = environmentRefusalKey(connection.isSandbox, actor);
+  if (environment) return environment;
+  if (await hasAnotherLiveConnection(tx, actor.tenantId, connection.targetTable, connection.id)) {
+    return "error.anotherConnectionLive";
   }
-  return hasRecentPassingTest(tx, tenantId, id, kid, deps.now?.());
+  if (!(await hasPassingTestNow(tx, actor.tenantId, connection.id, signing))) {
+    return connection.isSandbox ? "submit.blocked.sandbox" : "submit.blocked.noPassingTest";
+  }
+  return null;
 }
 
 /**
  * The gate shared by Submit and Resume from `error`: a passing Test connection in the last 24 h,
  * for this configuration and the live signing key (`hasRecentPassingTest`). Called under the row
  * lock, in the transaction that then changes the status, so a concurrent test can't land between
- * the check and the move. Returns the `kid` the pass was checked against, for the audit record.
+ * the check and the move. `afterLastChange` (Resume) also requires the pass to be newer than the
+ * connection's last change. Returns the `kid` the pass was checked against, for the audit record.
  */
 async function requirePassingTest(
   tx: TenantTx,
   actor: IntegrationActor,
   id: string,
-  deps: SigningDeps | undefined,
+  signing: ResolvedSigningKid | undefined,
   refusal: IntegrationsKey,
   t: IntegrationsT,
+  afterLastChange = false,
 ): Promise<string> {
   // No way to identify the key means no pass can be verified: fail closed.
-  if (!deps) fail(t, refusal);
-  const kid = await liveSigningKid(id, deps, t);
-  if (!(await hasRecentPassingTest(tx, actor.tenantId, id, kid, deps.now?.()))) fail(t, refusal);
-  return kid;
+  if (!signing) fail(t, refusal);
+  if (!signing.kid) fail(t, signing.refusal ?? "test.error.keyUnavailable");
+  const passed = await hasRecentPassingTest(tx, actor.tenantId, id, signing.kid, signing.now?.(), {
+    afterLastChange,
+  });
+  if (!passed) fail(t, refusal);
+  return signing.kid;
 }
 
 /**
@@ -706,8 +790,10 @@ async function requirePassingTest(
  *
  * Resume from `error` also needs a passing Test connection (spec PI2a): the error usually means the
  * endpoint, the key, or the registration changed, and resuming blindly restarts the failure. Resume
- * from `paused` doesn't: nothing is known to be wrong. `signing` is how the live key is found for
- * that check; without it an `error` connection can't be resumed (fail closed).
+ * from `paused` doesn't: nothing is known to be wrong. The pass must be **newer than the move into
+ * `error`** (the connection's `updated_at`), so one recorded while it was still `active` can't clear
+ * the error. `signing` is the live key's `kid`, resolved by the caller before this transaction
+ * (`resolveSigningKid`); without it an `error` connection can't be resumed (fail closed).
  */
 export async function resumeConnection(
   tx: TenantTx,
@@ -715,13 +801,13 @@ export async function resumeConnection(
   id: string,
   expectedUpdatedAt: string,
   t: IntegrationsT = englishT,
-  signing?: SigningDeps,
+  signing?: ResolvedSigningKid,
 ): Promise<void> {
   const current = await lockForTransition(tx, actor, id, expectedUpdatedAt, ["paused", "error"], t);
   requireStepUp(actor, t);
   const testKid =
     current.status === "error"
-      ? await requirePassingTest(tx, actor, id, signing, "error.testRequiredToResume", t)
+      ? await requirePassingTest(tx, actor, id, signing, "error.testRequiredToResume", t, true)
       : null;
   await writeStatus(tx, actor, id, { status: "active", statusReason: null });
   await audit(tx, {
@@ -752,8 +838,17 @@ export const US_RESIDENCY_ATTESTATION_VERSION = 1;
 export interface SubmitInput {
   /** The attestation checkbox, as the server read it. Only `true` counts; a real connection needs it. */
   attested: boolean;
-  /** The language the wording was shown in, recorded with the attestation. */
+  /**
+   * The language the attestation was shown in (the form carries it; the action refuses a form whose
+   * language no longer matches the request's). Recorded with the attestation, with a hash of the
+   * exact text in that language.
+   */
   locale: Locale;
+}
+
+/** SHA-256 (hex) of the attestation text exactly as shown in `locale`, recorded in the audit event. */
+export function attestationTextSha256(locale: Locale): string {
+  return createHash("sha256").update(messages[locale].integrations["submit.attestation"]).digest("hex");
 }
 
 /** A refused registry claim: carries what the audit event records, so the caller can write it after the rollback. */
@@ -768,8 +863,38 @@ class RegistryConflictError extends IntegrationConnectionError {
 }
 
 /**
+ * A light per-practice limit on Submit attempts (bucket `integration_submit`, alongside the Test
+ * connection buckets): every attempt counts, so Submit can't be used to probe the endpoint registry
+ * faster than Test connection can be used to probe hosts. A refusal is audited (`security.rate_limited`,
+ * IDs and the bucket only) in its own transaction, since nothing else is written.
+ */
+async function enforceSubmitRateLimit(
+  run: TxRunner,
+  actor: IntegrationActor,
+  id: string,
+  now: Date | undefined,
+  t: IntegrationsT,
+) {
+  const result = await hit("integration_submit", `practice:${actor.tenantId}`, now);
+  if (result.allowed) return;
+  await run((tx) =>
+    audit(tx, {
+      action: "security.rate_limited",
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      entityType: "integration_connection",
+      entityId: id,
+      reason: "connection_submit",
+      metadata: { bucket: "integration_submit" },
+    }),
+  );
+  fail(t, "error.submitRateLimited");
+}
+
+/**
  * Submit (spec PI2a; `draft` → `pending_approval` for a real connection, → `active` for the built-in
- * sandbox). Administrator only, in one transaction:
+ * sandbox). Administrator only. Before the transaction: the rate limit, and the live signing key's
+ * `kid` from public material (never under the lock). Then, in one transaction:
  *
  * 1. lock the row `FOR UPDATE`, refuse another practice's (not found), a stale page, a status other
  *    than `draft`, and the wrong environment;
@@ -798,14 +923,25 @@ export async function submitConnection(
   t: IntegrationsT = englishT,
 ): Promise<{ status: "pending_approval" | "active" }> {
   assertAdmin(actor, t);
+  // A language the app doesn't have can't have been shown the attestation.
+  if (!isLocale(input.locale)) fail(t, "error.localeChanged");
+  const locale = input.locale;
+  await enforceSubmitRateLimit(run, actor, id, signing.now?.(), t);
+  // The key in use, from public material, before any transaction or lock (a key that changes in
+  // between is caught by the pass binding under the lock).
+  const resolved = await resolveSigningKid(signing, id);
   try {
     return await run(async (tx) => {
       const current = await lockForTransition(tx, actor, id, expectedUpdatedAt, ["draft"], t);
+      // One connection outside draft/revoked per practice and table: refuse in words here (the
+      // unique index is the backstop, and is mapped to the same refusal below for a race).
+      if (await hasAnotherLiveConnection(tx, actor.tenantId, current.targetTable, id)) {
+        fail(t, "error.anotherConnectionLive");
+      }
       requireStepUp(actor, t);
-      const testKid = await requirePassingTest(tx, actor, id, signing, "error.testRequired", t);
+      const testKid = await requirePassingTest(tx, actor, id, resolved, "error.testRequired", t);
       const sandbox = current.isSandbox;
       if (!sandbox && input.attested !== true) fail(t, "error.attestationRequired", "attestation");
-      const locale = isLocale(input.locale) ? input.locale : "en";
       const next = sandbox ? "active" : "pending_approval";
 
       // The stamps are the database's clock (`now()`), in the same statement as the status change.
@@ -813,6 +949,7 @@ export async function submitConnection(
         .update(integrationConnections)
         .set({
           status: next,
+          statusReason: null,
           submittedBy: actor.userId,
           submittedAt: sql`now()`,
           ...(sandbox ? {} : { usResidencyAttestedBy: actor.userId, usResidencyAttestedAt: sql`now()` }),
@@ -825,8 +962,12 @@ export async function submitConnection(
         const claim = await tx.execute<{ claimed: boolean }>(
           sql`select integration_registry_claim(${id}::uuid) as claimed`,
         );
-        // Under the lock and after the checks above, the practice, the status, and the pinned token
-        // endpoint are all as the function needs, so a refusal here is another practice's claim.
+        // The function also returns false for a connection it can't find in this practice, one that
+        // isn't `pending_approval`, and one with no pinned token endpoint key. Every one of those is
+        // unreachable here: the row is locked and ours, the UPDATE above just made it
+        // `pending_approval`, and the passing-test gate above requires a pinned token endpoint key.
+        // That is the only reason a false is reported as a conflict (another practice's claim) and
+        // not as an unknown failure; if a check above is ever relaxed, revisit this.
         if (claim.rows[0]?.claimed !== true) {
           throw new RegistryConflictError(t("error.registryConflict"), current);
         }
@@ -855,25 +996,42 @@ export async function submitConnection(
                 us_residency_attested: true,
                 attestation_version: US_RESIDENCY_ATTESTATION_VERSION,
                 attestation_locale: locale,
+                attestation_text_sha256: attestationTextSha256(locale),
               }),
         },
       });
       return { status: next };
     });
   } catch (error) {
+    // Two drafts racing to leave `draft` in one practice: the loser hits the unique index.
+    if (
+      isUniqueViolation(error) &&
+      (error as DatabaseError).constraint === "integration_connections_one_active"
+    ) {
+      throw new IntegrationConnectionError(t("error.anotherConnectionLive"));
+    }
     if (error instanceof RegistryConflictError) {
-      // The submission was rolled back with its transaction; this records that it was tried.
-      await run((tx) =>
-        audit(tx, {
-          action: "integration.registry_conflict",
-          actorUserId: actor.userId,
+      // The submission was rolled back with its transaction; this records that it was tried. If the
+      // record can't be written the administrator must still see the conflict, not a database error:
+      // log the failure (IDs only) and rethrow the conflict either way.
+      try {
+        await run((tx) =>
+          audit(tx, {
+            action: "integration.registry_conflict",
+            actorUserId: actor.userId,
+            tenantId: actor.tenantId,
+            entityType: "integration_connection",
+            entityId: id,
+            reason: "connection_submit",
+            metadata: { sandbox: false, ...endpointMetadata("", error.endpoint) },
+          }),
+        );
+      } catch {
+        log.error("integration.registry_conflict_audit_failed", {
           tenantId: actor.tenantId,
-          entityType: "integration_connection",
-          entityId: id,
-          reason: "connection_submit",
-          metadata: { sandbox: false, ...endpointMetadata("", error.endpoint) },
-        }),
-      );
+          connectionId: id,
+        });
+      }
     }
     throw error;
   }
