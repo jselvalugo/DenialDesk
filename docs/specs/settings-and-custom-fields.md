@@ -19,8 +19,8 @@ tab per section; administrators add their own fields to patients, claims, denial
 ## Acceptance criteria
 - [x] The module switcher's "Setup" module is renamed **Settings**; it holds "Settings" (signed-in
       users). (The "Design system" page was removed 2026-09-26, owner request.)
-- [x] `/settings` has section tabs: General, Custom fields, Users and roles (planned), Security
-      (planned), Notifications (planned), Integrations (planned).
+- [x] `/settings` has section tabs: General, Custom fields, Payers, Users and roles (planned),
+      Security (planned), Notifications (planned), Integrations (planned).
       Planned tabs are labelled "Planned" and are never links.
 - [x] General shows practice name, environment, data residency, and the signed-in user's name,
       email, role, and whether they can change settings.
@@ -46,18 +46,20 @@ tab per section; administrators add their own fields to patients, claims, denial
       that view only, and writes an audit event (field ID, record ID, reason; never the value).
       Sensitive values are left out of lists, search, exports, and snapshots unless opened.
       Field-level encryption at rest for sensitive values and free-text types.
-- [ ] S2: record forms (patient, claim, denial, payer) render active fields and store values.
+- [x] S2: record forms (patient, claim, denial, payer) render active fields and store values.
       (PR 2 done for patients: `/patients/new`, `/patients/[id]/edit`, `/patients/[id]`. PR 3 done
       for claims and denials, but as their own "edit custom fields" pages rather than folded into
       the claim/denial's own edit flow — see the PR 3 note below — since custom fields are
       practice-internal and must never create a claim version: `/claims/[id]/fields`,
-      `/denials/[id]/fields`, and both detail pages show a read-only "Custom fields" panel. Payers
-      (PR 4) still open.)
-- [ ] S2: non-sensitive custom fields marked *Show in list* appear as columns on the record list;
+      `/denials/[id]/fields`, and both detail pages show a read-only "Custom fields" panel. PR 4
+      done for payers, the same standalone-page pattern, under Settings rather than a module of
+      its own since there is no payer screen yet (`/settings/payers/[id]/fields`,
+      `/settings/payers/[id]` read-only "Custom fields" panel) — see the PR 4 note below.)
+- [x] S2: non-sensitive custom fields marked *Show in list* appear as columns on the record list;
       sensitive fields never appear in lists, search, or exports. At most 5 list columns per record
       type (`MAX_LIST_COLUMNS`, `src/domain/settings/custom-fields.ts`). Done for patients (PR 2,
       `src/domain/custom-fields/list-values.ts`, `PatientTable`) and for claims and denials (PR 3,
-      `/claims`, `/denials`, shared `ListCell`). Payers (PR 4) still open.
+      `/claims`, `/denials`, shared `ListCell`). Done for payers (PR 4, `/settings/payers`).
 - [ ] S3: Users and roles tab (invite, change role, disable), then Security and Notifications.
 
 ## Data / API changes
@@ -91,6 +93,20 @@ None.
   `custom_field_value_versions` table (ADR 0007 addendum) — reversing the earlier "no history yet"
   plan below. Also resolved: revealing a locked value uses the exact same roles as the member ID
   reveal (`canWorkDenials`).
+- Open (PR 4, builder default, owner to confirm — **OA-059**): who may change a payer's own custom
+  field values. Payers have no natural "the people who bill" owner the way claims and patients do,
+  so PR 4 used a new, narrower permission (`canEditPayerFields`: admin, manager) rather than reusing
+  `canCorrectClaims`/`canEditPatients` (which also include specialists) — payers are practice
+  configuration, closer to the custom field definitions themselves (administrators only) than to a
+  record a front-line biller corrects. The owner may want specialists included, or may want this to
+  match `canConfigureSettings` (administrators only) instead. OA-059 also asks the owner to confirm
+  that a specialist may still *reveal* a locked payer value even though they can't edit it (reveal
+  keeps the one shared `canWorkDenials` rule, ADR 0007, rather than following `canEditPayerFields`);
+  whether payer custom field values are Confidential business data or PHI (free text on a payer
+  field could still hold patient details); and whether the six patient-oriented sensitivity
+  categories (HIV, mental health, SUD, genetic, minor, reproductive health) are the right lock for a
+  payer field at all, or whether a generic "confidential" category should be added for payers (and
+  other non-patient entities) instead.
 
 ## Implementation plan (S2)
 
@@ -101,7 +117,16 @@ Ship as small PRs in this order: **PR 1** crypto AAD + table + domain (done); **
 record-level sensitivity extended to claim -> patient and denial -> claim -> patient; detail-page
 panel and reveal; a standalone "edit custom fields" page per module, since custom fields are
 practice-internal and must never create a `claim_versions` row, with its own values-table
-concurrency token; list columns); **PR 4** payers.
+concurrency token; list columns); **PR 4** payers (done: a new, minimal read-only payer record
+under Settings — `/settings/payers` list, `/settings/payers/[id]` detail,
+`/settings/payers/[id]/fields` edit — since there is no payer screen yet outside Settings; its new
+read-only query module (`src/domain/payers/queries.ts`) reuses the generic values domain
+unchanged, and payer name, EDI payer ID, and regime stay uneditable here (payer-catalog P2's job).
+Payers have no linked patient, so they have no record-level sensitivity (`recordIsSensitive`
+returns `false` for `payer`, tested). New permission `canEditPayerFields` (admin, manager — an
+owner-confirmable choice, since payers are practice configuration rather than a record a biller
+corrects) gates the fields edit page and action; reveal keeps the same `canWorkDenials` roles as
+every other entity).
 
 ### Data model: `drizzle/0027_custom_field_values.sql` (values and value history in one migration) (+ `src/db/schema` entry)
 `custom_field_values`: `id uuid pk`, `tenant_id uuid not null -> tenants`, `field_id uuid not null

@@ -8,6 +8,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
   const tabs: SettingsTab[] = [
     { label: t("tabs.general"), href: "/settings", available: true },
     { label: t("tabs.customFields"), href: "/settings/fields", available: true },
+    { label: t("tabs.payers"), href: "/settings/payers", available: true },
     { label: t("tabs.usersAndRoles"), href: "/settings/users", available: false },
     { label: t("tabs.security"), href: "/settings/security", available: false },
     { label: t("tabs.notifications"), href: "/settings/notifications", available: false },

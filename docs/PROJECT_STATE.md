@@ -3,7 +3,7 @@
 Read this at the start of every session, after `CLAUDE.md`. Update it at the end of every session
 that changes decisions, status, or open questions. Keep it short: facts and links, not narrative.
 
-_Last updated: 2026-09-27_
+_Last updated: 2026-09-28_
 
 ## Where we are
 - Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
@@ -121,8 +121,8 @@ _Last updated: 2026-09-27_
   denials (4 steps; charge import and 837P/835 marked Planned) and lists more safeguards (MFA,
   field encryption, BAA on file). Wording passed `compliance-checker`; owner sign-off on copy pending.
 - Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
-  section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
-  planned). The `/design` style-guide page was removed 2026-09-26 (owner request). Administrators define custom fields on patients,
+  section tabs (General, Custom fields, Payers; Users and roles, Security, Notifications,
+  Integrations planned). The `/design` style-guide page was removed 2026-09-26 (owner request). Administrators define custom fields on patients,
   claims, denials, and payers (`custom_fields`, migration 0023, RLS + isolation test, audited).
   S2 values: PR 1 (crypto AAD, `custom_field_values` + `custom_field_value_versions` tables,
   migration 0027, domain `src/domain/custom-fields/values.ts`) done and merged. PR 2 (patients UI)
@@ -145,9 +145,19 @@ _Last updated: 2026-09-27_
   `claims`/`denials` column change, no `claim_versions` row — confirmed by an integration test), so
   its stale-edit check is a new values-table concurrency token (`customFieldValuesToken` /
   `saveValuesForRecord`'s `expectedValuesToken`) instead of the record's own `updatedAt`; `/claims`
-  and `/denials` gained list columns via the same `loadListValues` module. `pnpm test`,
-  `test:integration` (371/371), `lint`, `typecheck`, `format:check` all green. Next: PR 4 payers; an
-  e2e admin user fixture doesn't exist yet (`test/e2e/global-setup.ts` seeds
+  and `/denials` gained list columns via the same `loadListValues` module. PR 4 (payers) done: since
+  there is no payer screen yet outside Settings, a new, minimal, read-only payer record was added
+  there instead — `/settings/payers` (table: name, EDI payer ID or "Not verified", regime label or
+  "Regime not verified", source, plus up to 5 non-sensitive `show_in_list` payer fields via the same
+  `loadListValues`), `/settings/payers/[id]` (`RecordHeader`/`RecordLayout`/`FieldList`, a "Custom
+  fields" panel with masked reveal via `revealPayerCustomField`), and `/settings/payers/[id]/fields`
+  (the same standalone edit-page pattern and values-table concurrency token as PR 3). Payers have no
+  linked patient, so they carry no record-level sensitivity (`recordIsSensitive` returns `false` for
+  `payer`, tested). New permission `canEditPayerFields` (admin, manager) gates the fields edit page
+  and action — an owner-confirmable choice noted as an open question in the spec, since payers have
+  no natural "biller" role the way claims and patients do. `pnpm test` (833/833),
+  `test:integration` (376/376), `lint`, `typecheck`, `format:check` all green. Next: S3 (Users and
+  roles tab); an e2e admin user fixture doesn't exist yet (`test/e2e/global-setup.ts` seeds
   specialist/compliance/manager only), so the spec's "admin adds a field" E2E case is still open for
   every PR.
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
@@ -308,9 +318,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
-6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53) and PR 2 patients (#68)
-   merged; PR 3 claims/denials (#73, own "edit custom fields" pages) done; PR 4 payers (Settings ›
-   Payers list/detail) next.
+6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
+   PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›
+   Payers with its own "edit custom fields" page) done. Next: S3 (Users and roles tab).
 7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
    payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
    timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.
