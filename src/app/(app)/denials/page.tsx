@@ -7,7 +7,7 @@ import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Code } from "@/components/ui/Code";
-import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
+import { nextSortDir, SortableHeader, Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Money } from "@/components/ui/Money";
@@ -19,7 +19,15 @@ import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
 import { CATEGORY_LABEL_KEYS, CATEGORY_ORDER } from "@/domain/carc";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
-import { DUE_SOON_DAYS, listDenials, PAGE_SIZE, payerOptions, queueSummary } from "@/domain/denials/queries";
+import {
+  DUE_SOON_DAYS,
+  listDenials,
+  PAGE_SIZE,
+  payerOptions,
+  QUEUE_SORT_DEFAULT_DIR,
+  queueSummary,
+  type QueueSortKey,
+} from "@/domain/denials/queries";
 import { loadListValues } from "@/domain/custom-fields/list-values";
 import { ListCell } from "@/components/custom-fields/ListCell";
 import { getFormat, getT } from "@/i18n/server";
@@ -47,12 +55,22 @@ export default async function DenialQueuePage({
     { value: "", label: t("filter.allCategories") },
     ...CATEGORY_ORDER.map((value) => ({ value, label: tc(CATEGORY_LABEL_KEYS[value]) })),
   ];
-  const sortLabel =
-    filters.sort === "deadline"
-      ? t("sortLabel.deadline")
-      : filters.sort === "amount"
-        ? t("sortLabel.amount")
-        : t("sortLabel.notice");
+  const sortLabel = filters.sort === "amount" ? t("sortLabel.amount") : t("sortLabel.deadline");
+  const dir = filters.dir ?? QUEUE_SORT_DEFAULT_DIR[filters.sort];
+  /** Props for one sortable column header (P4, docs/specs/record-pages.md). */
+  function sortHeader(key: QueueSortKey, label: string) {
+    const active = filters.sort === key;
+    const nextDir = nextSortDir(active, dir, QUEUE_SORT_DEFAULT_DIR[key]);
+    return {
+      active,
+      dir,
+      href: `/denials${filtersToQuery(filters, { sort: key, dir: nextDir, page: 1 })}`,
+      accessibleLabel: tc("sortable.ariaLabel", {
+        column: label,
+        direction: tc(nextDir === "asc" ? "sortable.ascending" : "sortable.descending"),
+      }),
+    };
+  }
 
   const { rows, total, summary, payers, listColumns, listValues } = await withTenant(auth, async (tx) => {
     const [list, summary, payers] = await Promise.all([
@@ -151,16 +169,6 @@ export default async function DenialQueuePage({
               { value: "unassigned", label: t("assignee.unassigned") },
             ]}
           />
-          <Select
-            label={t("field.sortBy")}
-            name="sort"
-            defaultValue={filters.sort}
-            options={[
-              { value: "deadline", label: t("field.appealDeadline") },
-              { value: "amount", label: t("field.deniedAmount") },
-              { value: "notice", label: t("sort.newestNotice") },
-            ]}
-          />
           <div className="flex gap-2">
             <Button type="submit" size="md">
               {tc("action.apply")}
@@ -194,12 +202,15 @@ export default async function DenialQueuePage({
                 <Th>{tc("word.patient")}</Th>
                 <Th>{tc("word.payer")}</Th>
                 <Th>{tc("word.reason")}</Th>
-                <Th numeric aria-sort={filters.sort === "amount" ? "descending" : undefined}>
-                  {t("field.denied")}
-                </Th>
-                <Th aria-sort={filters.sort === "deadline" ? "ascending" : undefined}>
-                  {t("field.appealDeadline")}
-                </Th>
+                <SortableHeader
+                  numeric
+                  label={t("field.denied")}
+                  {...sortHeader("amount", t("field.denied"))}
+                />
+                <SortableHeader
+                  label={t("field.appealDeadline")}
+                  {...sortHeader("deadline", t("field.appealDeadline"))}
+                />
                 <Th>{tc("word.status")}</Th>
                 <Th>{t("field.assignee")}</Th>
                 {listColumns.map((col) => (

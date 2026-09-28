@@ -44,8 +44,11 @@ _Last updated: 2026-09-28_
   P3 done 2026-09-28 (Appeals, Remittances, Prompt pay, Settings › Custom fields, Operator ›
   Practices forms on `FormShell`). P2 done 2026-09-28 (Claims and Denials record pages onto
   `RecordHeader`/`RecordLayout`/`FieldList`; claim correction and denial assign/status controls
-  moved to the header action and main-column panels respectively). Next: P4 sortable `DataTable`.
-  Open (owner): which column replaces Sex on the list.
+  moved to the header action and main-column panels respectively). **P1–P4 done** (P4, 2026-09-28:
+  `DataTable` gained sortable column headers — `SortableHeader`, `?sort=<key>&dir=asc|desc`,
+  allow-listed per list with a stable `id` tie-break — and a `density="compact"` option; applied to
+  Claims, Denials, Appeals, Patients, and Payers. Server-side sort, no new dependency; ADR 0004
+  addendum). Open (owner): which column replaces Sex on the list.
 - Internationalization (`specs/internationalization.md`, ADR 0009, R-11.1): the whole product (practice
   app, sign-in, operator console, Insight .xlsx export) reads in English, Spanish, or Portuguese. Own
   module in `src/i18n/` (no dependency): typed dictionaries per namespace in
@@ -303,6 +306,7 @@ _Last updated: 2026-09-28_
 | 2026-09-27 | University Wiki: articles are code (PR-reviewed, no per-tenant or user-edited content), legal values only through rule tokens, search by POST; sits beside the U1 courses under the same header, not in the switcher; further structure waits for the owner (OA-036) | `specs/university-wiki.md` |
 | 2026-09-27 | Roll-forward pending counsel (OA-034), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-034 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
 | 2026-09-27 | Patient Register is a synced, read-only copy of the practice EHR/PM (billing minimum only) over FHIR R4 / US Core + SMART Backend Services; data-source drop-down beside the Patients tab, Patients table only for now; manual entry kept only while no connection is active (OA-046) | ADR 0010, `specs/patient-integrations.md` |
+| 2026-09-28 | Record pattern P4: `DataTable` sorting is server-side via allow-listed `?sort=<key>&dir=asc\|desc` links, not TanStack Table (still deferred until a list needs client-side interactivity — column chooser, virtualized rows) | ADR 0004 addendum, `specs/record-pages.md` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -336,8 +340,6 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    P2 coverage now comes from the EHR sync once a practice is connected (`specs/patient-integrations.md`).
 11. Patient integrations PI1a → PI1c → PI2a → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
-12. Record pattern (`specs/record-pages.md`): P3 (`FormShell`) and P2 (Claims/Denials on
-   `RecordHeader`/`RecordLayout`) done; next P4 sortable `DataTable`.
 
 ## Open questions for humans
 - Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter

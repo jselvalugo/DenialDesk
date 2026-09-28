@@ -36,11 +36,9 @@ export const denials: Messages["denials"] = {
   "field.assignee": "Asignado a",
   "field.appealDeadline": "Plazo de apelación",
   "field.deniedAmount": "Monto denegado",
-  "field.sortBy": "Ordenar por",
   "assignee.unassigned": "Sin asignar",
   "sortLabel.deadline": "plazo de apelación",
   "sortLabel.amount": "monto denegado",
-  "sortLabel.notice": "aviso más reciente",
 
   // Página de la cola (src/app/(app)/denials/page.tsx)
   "queue.title": "Cola de denegaciones",
@@ -59,7 +57,6 @@ export const denials: Messages["denials"] = {
   "filter.allCategories": "Todas las categorías",
   "filter.anyone": "Cualquiera",
   "filter.assignedToMe": "Asignadas a mí",
-  "sort.newestNotice": "Aviso más reciente",
   "appealFiled.late": "Presentada después del plazo",
   "appealFiled.onTime": "Apelación presentada a tiempo",
   "appealFiled.noDeadline": "Apelación presentada · sin plazo configurado",

@@ -514,4 +514,42 @@ describe("claims list and timely-filing summary (R-3.1.5)", () => {
     );
     expect(statuses.some((s) => s.status === "draft")).toBe(false);
   });
+
+  it("sorts an explicit column (SQL-backed group) ascending or descending, with a stable id tie-break (P4)", async () => {
+    const { asc: ascResult, desc: descResult } = await withTenant(a, async (tx) => {
+      const asc = await claimsOverview(tx, { group: "all", sort: "billed", dir: "asc", page: 1 }, today);
+      const desc = await claimsOverview(tx, { group: "all", sort: "billed", dir: "desc", page: 1 }, today);
+      return { asc, desc };
+    });
+    expect(ascResult.rows.length).toBeGreaterThan(1);
+    // A `dir` flip never changes the filtered total, only the order the pages come back in.
+    expect(descResult.total).toBe(ascResult.total);
+    for (const [rows, sign] of [
+      [ascResult.rows, 1],
+      [descResult.rows, -1],
+    ] as const) {
+      for (let i = 1; i < rows.length; i += 1) {
+        const cmp = (rows[i]!.billedCents - rows[i - 1]!.billedCents) * sign;
+        expect(cmp).toBeGreaterThanOrEqual(0);
+        if (cmp === 0) expect(rows[i - 1]!.id < rows[i]!.id).toBe(true);
+      }
+    }
+  });
+
+  it("sorts the unsubmitted queue (in-memory, urgency by default) by an explicit column instead", async () => {
+    const [byDefault, byClaimNumber] = await withTenant(a, async (tx) => {
+      const urgency = await claimsOverview(tx, { group: "unsubmitted", page: 1 }, today);
+      const explicit = await claimsOverview(
+        tx,
+        { group: "unsubmitted", sort: "claimNumber", dir: "asc", page: 1 },
+        today,
+      );
+      return [urgency, explicit];
+    });
+    expect(byClaimNumber.rows.length).toBeGreaterThan(1);
+    const numbers = byClaimNumber.rows.map((r) => r.claimNumber);
+    expect(numbers).toEqual([...numbers].sort());
+    // The total (urgency-filtered set) is unaffected by which order it's read in.
+    expect(byClaimNumber.total).toBe(byDefault.total);
+  });
 });

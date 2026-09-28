@@ -53,7 +53,6 @@ export const appeals: Messages["appeals"] = {
   "filter.allPayers": "Todos los pagadores",
   "field.level": "Nivel",
   "field.denied": "Denegado",
-  "field.sortBy": "Ordenar por",
   "field.deniedAmount": "Monto denegado",
   "empty.title": "Ninguna apelación coincide con estos filtros",
   "empty.description":

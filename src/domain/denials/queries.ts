@@ -24,12 +24,21 @@ export const DUE_SOON_DAYS = 7;
 /** Overview "next deadlines" also shows denials overdue by up to this many days (display window). */
 export const RECENTLY_OVERDUE_DAYS = 30;
 
+export type QueueSortKey = "deadline" | "amount";
+/** First-click direction for each sortable column (P4, docs/specs/record-pages.md). */
+export const QUEUE_SORT_DEFAULT_DIR: Record<QueueSortKey, "asc" | "desc"> = {
+  deadline: "asc",
+  amount: "desc",
+};
+
 export interface QueueFilters {
   status: "open" | "closed" | "all";
   payerId?: string;
   category?: DenialCategory;
   assignee?: "me" | "unassigned";
-  sort: "deadline" | "amount" | "notice";
+  sort: QueueSortKey;
+  /** Defaults to `QUEUE_SORT_DEFAULT_DIR[sort]` when omitted (callers that don't parse a URL). */
+  dir?: "asc" | "desc";
   page: number;
 }
 
@@ -46,23 +55,25 @@ function filterConditions(filters: QueueFilters, userId: string): SQL[] {
 
 export async function listDenials(tx: TenantTx, filters: QueueFilters, userId: string) {
   const where = and(...filterConditions(filters, userId));
+  const dir = filters.dir ?? QUEUE_SORT_DEFAULT_DIR[filters.sort];
   const order =
     filters.sort === "amount"
-      ? [desc(denials.deniedCents), asc(denials.id)]
-      : filters.sort === "notice"
-        ? [desc(denials.noticeDate), asc(denials.id)]
-        : [
-            // Denials still awaiting practice action sort ahead of ones whose deadline is already
-            // met (e.g. appeal_submitted), so a soon-but-already-handled deadline never bumps a
-            // denial that still needs work (D1).
-            sql`case when ${denials.status} in (${sql.join(
-              ACTION_STATUSES.map((s) => sql`${s}`),
-              sql`, `,
-            )}) then 0 else 1 end`,
-            sql`${denials.appealDeadline} asc nulls last`,
-            desc(denials.deniedCents),
-            asc(denials.id),
-          ];
+      ? [dir === "asc" ? asc(denials.deniedCents) : desc(denials.deniedCents), asc(denials.id)]
+      : [
+          // Denials still awaiting practice action sort ahead of ones whose deadline is already
+          // met (e.g. appeal_submitted), so a soon-but-already-handled deadline never bumps a
+          // denial that still needs work (D1). This priority holds for either direction; only the
+          // deadline ordering within each group flips with `dir`.
+          sql`case when ${denials.status} in (${sql.join(
+            ACTION_STATUSES.map((s) => sql`${s}`),
+            sql`, `,
+          )}) then 0 else 1 end`,
+          dir === "asc"
+            ? sql`${denials.appealDeadline} asc nulls last`
+            : sql`${denials.appealDeadline} desc nulls last`,
+          desc(denials.deniedCents),
+          asc(denials.id),
+        ];
 
   const rows = await tx
     .select({

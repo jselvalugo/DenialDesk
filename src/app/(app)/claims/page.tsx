@@ -5,7 +5,7 @@ import { todayIn } from "@rules/calendar";
 import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
+import { nextSortDir, SortableHeader, Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Money } from "@/components/ui/Money";
@@ -15,7 +15,13 @@ import { Panel } from "@/components/ui/Panel";
 import { Select } from "@/components/ui/Select";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
-import { CLAIMS_PAGE_SIZE, claimsOverview, UNSUBMITTED_LIMIT } from "@/domain/claims/queries";
+import {
+  CLAIM_SORT_DEFAULT_DIR,
+  CLAIMS_PAGE_SIZE,
+  claimsOverview,
+  UNSUBMITTED_LIMIT,
+  type ClaimSortKey,
+} from "@/domain/claims/queries";
 import { CLAIM_STATUSES, FILING_STATE_LABEL_KEYS, FILING_WARNING_DAYS } from "@/domain/claims/status";
 import { regimeLabel } from "@/domain/denial-status";
 import { payerOptions } from "@/domain/denials/queries";
@@ -41,6 +47,21 @@ export default async function ClaimsPage({
   const t = await getT("claims");
   const tc = await getT("common");
   const f = await getFormat();
+  /** Props for one sortable column header (P4, docs/specs/record-pages.md). */
+  function sortHeader(key: ClaimSortKey, label: string) {
+    const active = filters.sort === key;
+    const currentDir = active ? (filters.dir ?? CLAIM_SORT_DEFAULT_DIR[key]) : CLAIM_SORT_DEFAULT_DIR[key];
+    const nextDir = nextSortDir(active, currentDir, CLAIM_SORT_DEFAULT_DIR[key]);
+    return {
+      active,
+      dir: currentDir,
+      href: `/claims${claimFiltersToQuery(filters, { sort: key, dir: nextDir, page: 1 })}`,
+      accessibleLabel: tc("sortable.ariaLabel", {
+        column: label,
+        direction: tc(nextDir === "asc" ? "sortable.ascending" : "sortable.descending"),
+      }),
+    };
+  }
 
   const { rows, total, truncated, summary, payers, listColumns, listValues } = await withTenant(
     auth,
@@ -198,15 +219,25 @@ export default async function ClaimsPage({
           <Table caption={t(captionKey)}>
             <thead>
               <tr>
-                <Th>{tc("word.claim")}</Th>
-                <Th>{tc("word.patient")}</Th>
-                <Th>{tc("word.payer")}</Th>
-                <Th>{t("list.table.dateOfService")}</Th>
-                <Th numeric>{t("detail.field.billed")}</Th>
-                <Th aria-sort={filters.group === "unsubmitted" ? "ascending" : undefined}>
+                <SortableHeader label={tc("word.claim")} {...sortHeader("claimNumber", tc("word.claim"))} />
+                <SortableHeader
+                  label={tc("word.patient")}
+                  {...sortHeader("patientName", tc("word.patient"))}
+                />
+                <SortableHeader label={tc("word.payer")} {...sortHeader("payer", tc("word.payer"))} />
+                <SortableHeader
+                  label={t("list.table.dateOfService")}
+                  {...sortHeader("serviceDate", t("list.table.dateOfService"))}
+                />
+                <SortableHeader
+                  numeric
+                  label={t("detail.field.billed")}
+                  {...sortHeader("billed", t("detail.field.billed"))}
+                />
+                <Th aria-sort={filters.group === "unsubmitted" && !filters.sort ? "ascending" : undefined}>
                   {t("list.table.filingDeadline")}
                 </Th>
-                <Th>{tc("word.status")}</Th>
+                <SortableHeader label={tc("word.status")} {...sortHeader("status", tc("word.status"))} />
                 {listColumns.map((col) => (
                   <Th key={col.fieldId}>{col.label}</Th>
                 ))}

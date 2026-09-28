@@ -7,7 +7,7 @@ import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Code } from "@/components/ui/Code";
-import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
+import { nextSortDir, SortableHeader, Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Money } from "@/components/ui/Money";
@@ -18,7 +18,14 @@ import { Select } from "@/components/ui/Select";
 import { StatTile } from "@/components/ui/StatTile";
 import { withTenant } from "@/db/tenant";
 import { CATEGORY_LABEL_KEYS } from "@/domain/carc";
-import { appealQueueSummary, listAppeals, PAGE_SIZE, DUE_SOON_DAYS } from "@/domain/appeals/queries";
+import {
+  APPEAL_SORT_DEFAULT_DIR,
+  appealQueueSummary,
+  listAppeals,
+  PAGE_SIZE,
+  DUE_SOON_DAYS,
+  type AppealSortKey,
+} from "@/domain/appeals/queries";
 import { APPEAL_LEVEL_LABEL_KEYS, APPEAL_STATUSES } from "@/domain/appeals/status";
 import { payerOptions } from "@/domain/denials/queries";
 import { getFormat, getT } from "@/i18n/server";
@@ -43,6 +50,21 @@ export default async function AppealsPage({
   const tc = await getT("common");
   const f = await getFormat();
   const sortLabel = filters.sort === "amount" ? t("sortLabel.amount") : t("sortLabel.deadline");
+  const dir = filters.dir ?? APPEAL_SORT_DEFAULT_DIR[filters.sort];
+  /** Props for one sortable column header (P4, docs/specs/record-pages.md). */
+  function sortHeader(key: AppealSortKey, label: string) {
+    const active = filters.sort === key;
+    const nextDir = nextSortDir(active, dir, APPEAL_SORT_DEFAULT_DIR[key]);
+    return {
+      active,
+      dir,
+      href: `/appeals${appealFiltersToQuery(filters, { sort: key, dir: nextDir, page: 1 })}`,
+      accessibleLabel: tc("sortable.ariaLabel", {
+        column: label,
+        direction: tc(nextDir === "asc" ? "sortable.ascending" : "sortable.descending"),
+      }),
+    };
+  }
 
   const { rows, total, summary, payers } = await withTenant(auth, async (tx) => {
     const [list, summary, payers] = await Promise.all([
@@ -126,15 +148,6 @@ export default async function AppealsPage({
               ...payers.map((p) => ({ value: p.id, label: p.name })),
             ]}
           />
-          <Select
-            label={t("field.sortBy")}
-            name="sort"
-            defaultValue={filters.sort}
-            options={[
-              { value: "deadline", label: tc("word.deadline") },
-              { value: "amount", label: t("field.deniedAmount") },
-            ]}
-          />
           <div className="flex gap-2">
             <Button type="submit" size="md">
               {tc("action.apply")}
@@ -158,8 +171,15 @@ export default async function AppealsPage({
                 <Th>{t("field.level")}</Th>
                 <Th>{tc("word.payer")}</Th>
                 <Th>{tc("word.category")}</Th>
-                <Th numeric>{t("field.denied")}</Th>
-                <Th>{tc("word.deadline")}</Th>
+                <SortableHeader
+                  numeric
+                  label={t("field.denied")}
+                  {...sortHeader("amount", t("field.denied"))}
+                />
+                <SortableHeader
+                  label={tc("word.deadline")}
+                  {...sortHeader("deadline", tc("word.deadline"))}
+                />
                 <Th>{tc("word.status")}</Th>
               </tr>
             </thead>

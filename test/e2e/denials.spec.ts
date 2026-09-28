@@ -27,6 +27,40 @@ test.describe("denial work", () => {
     for (const text of await reasons.allTextContents()) expect(text).toContain("Authorization");
   });
 
+  test("clicking the Denied column header sorts the queue and toggles aria-sort (P4)", async ({ page }) => {
+    await page.goto("/denials?status=all");
+    const deniedHeader = page.getByRole("columnheader", { name: /Denied/ });
+    await expect(deniedHeader).toHaveAttribute("aria-sort", "none");
+    const amounts = () =>
+      page.getByRole("table").getByRole("row").locator("td:nth-child(5)").allTextContents();
+    const beforeAmounts = await amounts();
+
+    // First click: amount, descending (its first-click direction). The sort control is a real link
+    // (works with no JavaScript) exposed as a button (it acts on this view, not a navigation), so it
+    // never shows up in a plain `getByRole("link")` sweep of the table's own row links.
+    await deniedHeader.getByRole("button").click();
+    await expect(page).toHaveURL(/sort=amount/);
+    await expect(page.getByRole("columnheader", { name: /Denied/ })).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
+    const descAmounts = await amounts();
+    expect(descAmounts).not.toEqual(beforeAmounts);
+
+    // Second click on the same header toggles to ascending.
+    await page
+      .getByRole("columnheader", { name: /Denied/ })
+      .getByRole("button")
+      .click();
+    await expect(page).toHaveURL(/dir=asc/);
+    await expect(page.getByRole("columnheader", { name: /Denied/ })).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+    const ascAmounts = await amounts();
+    expect(ascAmounts).not.toEqual(descAmounts);
+  });
+
   test("working a denial: note, assignment, status, and audit trail", async ({ page }) => {
     await page.goto("/denials?assignee=unassigned");
     await page.getByRole("table").getByRole("link").first().click();

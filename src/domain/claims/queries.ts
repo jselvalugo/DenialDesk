@@ -12,10 +12,33 @@ export const CLAIMS_PAGE_SIZE = 25;
  */
 export const UNSUBMITTED_LIMIT = 5_000;
 
+/** Sortable list columns (P4, docs/specs/record-pages.md). `patientName` sorts by last, then first. */
+export const CLAIM_SORT_KEYS = [
+  "claimNumber",
+  "patientName",
+  "payer",
+  "serviceDate",
+  "billed",
+  "status",
+] as const;
+export type ClaimSortKey = (typeof CLAIM_SORT_KEYS)[number];
+/** First-click direction for each sortable column. */
+export const CLAIM_SORT_DEFAULT_DIR: Record<ClaimSortKey, "asc" | "desc"> = {
+  claimNumber: "asc",
+  patientName: "asc",
+  payer: "asc",
+  serviceDate: "desc",
+  billed: "desc",
+  status: "asc",
+};
+
 export interface ClaimFilters {
   group: "unsubmitted" | "in_process" | "all";
   payerId?: string;
   filing?: Exclude<FilingState, "open">;
+  /** Omitted: keep the group's own priority order (filing urgency, or newest service date first). */
+  sort?: ClaimSortKey;
+  dir?: "asc" | "desc";
   page: number;
 }
 
@@ -44,33 +67,95 @@ function baseQuery(tx: TenantTx) {
     .innerJoin(payers, eq(payers.id, claims.payerId));
 }
 
+/** Drizzle `orderBy` for an explicit column sort on the SQL-backed (`in_process`/`all`) groups. */
+function claimsOrderBy(sort: ClaimSortKey, dir: "asc" | "desc") {
+  const d = dir === "asc" ? asc : desc;
+  switch (sort) {
+    case "claimNumber":
+      return [d(claims.claimNumber), asc(claims.id)];
+    case "patientName":
+      return [d(patients.lastName), d(patients.firstName), asc(claims.id)];
+    case "payer":
+      return [d(payers.name), asc(claims.id)];
+    case "serviceDate":
+      return [d(claims.serviceDate), asc(claims.id)];
+    case "billed":
+      return [d(claims.billedCents), asc(claims.id)];
+    case "status":
+      return [d(claims.status), asc(claims.id)];
+  }
+}
+
 /**
  * Every unsubmitted claim's filing status, most urgent first: past deadline, then soonest deadline,
- * then not configured (no filing rule for the regime). Loads only the columns needed to sort; the
- * patient columns are read for the one page shown.
+ * then not configured (no filing rule for the regime), with a stable id tie-break. Loads the columns
+ * needed both for that urgency order and for an explicit column sort (P4): a practice's unsubmitted
+ * backlog is a working set (capped at `UNSUBMITTED_LIMIT`), so sorting it in memory is cheap.
  */
 async function unsubmittedIndex(tx: TenantTx, today: string) {
   const rows = await tx
     .select({
       id: claims.id,
+      claimNumber: claims.claimNumber,
+      status: claims.status,
       payerId: claims.payerId,
+      payerName: payers.name,
       regime: payers.regime,
       serviceDate: claims.serviceDate,
       billedCents: claims.billedCents,
+      patientFirst: patients.firstName,
+      patientLast: patients.lastName,
     })
     .from(claims)
     .innerJoin(payers, eq(payers.id, claims.payerId))
+    .innerJoin(patients, eq(patients.id, claims.patientId))
     .where(inArray(claims.status, UNSUBMITTED_STATUSES))
     .orderBy(asc(claims.serviceDate), asc(claims.id))
     .limit(UNSUBMITTED_LIMIT);
-  const index = rows
-    .map((row) => ({ ...row, filing: filingStatus(row.regime, row.serviceDate, today) }))
-    .sort((a, b) => {
-      const ad = a.filing.daysRemaining ?? Number.POSITIVE_INFINITY;
-      const bd = b.filing.daysRemaining ?? Number.POSITIVE_INFINITY;
-      return ad - bd || b.billedCents - a.billedCents;
-    });
-  return { index, truncated: rows.length >= UNSUBMITTED_LIMIT };
+  const withFiling = rows.map((row) => ({
+    ...row,
+    filing: filingStatus(row.regime, row.serviceDate, today),
+  }));
+  return { index: withFiling, truncated: rows.length >= UNSUBMITTED_LIMIT };
+}
+
+type IndexRow = Awaited<ReturnType<typeof unsubmittedIndex>>["index"][number];
+
+/** Urgency order for the unsubmitted queue's default view: soonest deadline first (R-3.1.5). */
+function byUrgency(a: IndexRow, b: IndexRow): number {
+  const ad = a.filing.daysRemaining ?? Number.POSITIVE_INFINITY;
+  const bd = b.filing.daysRemaining ?? Number.POSITIVE_INFINITY;
+  return ad - bd || b.billedCents - a.billedCents || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+/** An explicit column sort (P4), with the same stable id tie-break as the SQL-backed groups. */
+function byColumn(sort: ClaimSortKey, dir: "asc" | "desc"): (a: IndexRow, b: IndexRow) => number {
+  const mul = dir === "asc" ? 1 : -1;
+  return (a, b) => {
+    let cmp = 0;
+    switch (sort) {
+      case "claimNumber":
+        cmp = a.claimNumber.localeCompare(b.claimNumber);
+        break;
+      case "patientName":
+        cmp = `${a.patientLast} ${a.patientFirst}`.localeCompare(`${b.patientLast} ${b.patientFirst}`);
+        break;
+      case "payer":
+        cmp = a.payerName.localeCompare(b.payerName);
+        break;
+      case "serviceDate":
+        cmp = a.serviceDate.localeCompare(b.serviceDate);
+        break;
+      case "billed":
+        cmp = a.billedCents - b.billedCents;
+        break;
+      case "status":
+        cmp = a.status.localeCompare(b.status);
+        break;
+    }
+    if (cmp !== 0) return cmp * mul;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  };
 }
 
 export type ClaimListRow = ListRow & { filing: FilingStatus | null };
@@ -112,7 +197,10 @@ export async function claimsOverview(
         (!filters.payerId || row.payerId === filters.payerId) &&
         (!filters.filing || row.filing.state === filters.filing),
     );
-    const page = matching.slice(offset, offset + CLAIMS_PAGE_SIZE);
+    const ordered = filters.sort
+      ? [...matching].sort(byColumn(filters.sort, filters.dir ?? CLAIM_SORT_DEFAULT_DIR[filters.sort]))
+      : [...matching].sort(byUrgency);
+    const page = ordered.slice(offset, offset + CLAIMS_PAGE_SIZE);
     const details =
       page.length === 0
         ? []
@@ -134,9 +222,12 @@ export async function claimsOverview(
   if (filters.group === "in_process") conditions.push(notInArray(claims.status, UNSUBMITTED_STATUSES));
   if (filters.payerId) conditions.push(eq(claims.payerId, filters.payerId));
   const where = and(...conditions);
+  const orderBy = filters.sort
+    ? claimsOrderBy(filters.sort, filters.dir ?? CLAIM_SORT_DEFAULT_DIR[filters.sort])
+    : [desc(claims.serviceDate), asc(claims.id)];
   const rows: ListRow[] = await baseQuery(tx)
     .where(where)
-    .orderBy(desc(claims.serviceDate), asc(claims.claimNumber))
+    .orderBy(...orderBy)
     .limit(CLAIMS_PAGE_SIZE)
     .offset(offset);
   const [{ total } = { total: 0 }] = await tx.select({ total: count() }).from(claims).where(where);

@@ -95,4 +95,26 @@ describe("listDenials", () => {
     );
     expect(rows.every((r) => r.assigneeName === null)).toBe(true);
   });
+
+  it("sorts by denied amount, in either direction, with a stable id tie-break (P4)", async () => {
+    const { asc: ascResult, desc: descResult } = await withTenant(ctx, async (tx) => {
+      const asc = await listDenials(tx, { status: "all", sort: "amount", dir: "asc", page: 1 }, ctx.userId);
+      const desc = await listDenials(tx, { status: "all", sort: "amount", dir: "desc", page: 1 }, ctx.userId);
+      return { asc, desc };
+    });
+    // A `dir` flip never changes the filtered total, only the order the pages come back in.
+    expect(descResult.total).toBe(ascResult.total);
+    // Ordered by amount, with ties (same denied amount) always broken id-ascending, in either
+    // direction, so paging is deterministic (P4: "Add a stable tie-breaker").
+    for (const [rows, sign] of [
+      [ascResult.rows, 1],
+      [descResult.rows, -1],
+    ] as const) {
+      for (let i = 1; i < rows.length; i += 1) {
+        const cmp = (rows[i]!.deniedCents - rows[i - 1]!.deniedCents) * sign;
+        expect(cmp).toBeGreaterThanOrEqual(0);
+        if (cmp === 0) expect(rows[i - 1]!.id < rows[i]!.id).toBe(true);
+      }
+    }
+  });
 });
