@@ -367,7 +367,7 @@ function endpointMetadata(
  * or credentials), like the endpoint values `endpointMetadata` records. Null when there is none or
  * it isn't a URL (an issuer needn't be one), so nothing unparsed is copied into the log.
  */
-function normalizedUrlForAudit(value: string | null | undefined): string | null {
+export function normalizedUrlForAudit(value: string | null | undefined): string | null {
   if (!value) return null;
   try {
     const url = new URL(value);
@@ -738,7 +738,7 @@ export async function hasPassingTestNow(
  * Why the Submit panel shows a disabled button instead of an enabled one, as a message key, or null
  * when nothing known now would make the server refuse (the step-up and the attestation are asked for
  * in the panel itself). The same rules Submit applies, in the same order: the environment, another
- * live connection, a passing test.
+ * live connection, a usable signing key, a passing test.
  */
 export async function submitBlockedReason(
   tx: TenantTx,
@@ -751,6 +751,9 @@ export async function submitBlockedReason(
   if (await hasAnotherLiveConnection(tx, actor.tenantId, connection.targetTable, connection.id)) {
     return "error.anotherConnectionLive";
   }
+  // No usable signing key: Submit refuses with the key's own reason (`requirePassingTest`), not with
+  // "no passing test", which would send the administrator to a Test connection that can't pass.
+  if (!signing.kid) return signing.refusal ?? "test.error.keyUnavailable";
   if (!(await hasPassingTestNow(tx, actor.tenantId, connection.id, signing))) {
     return connection.isSandbox ? "submit.blocked.sandbox" : "submit.blocked.noPassingTest";
   }

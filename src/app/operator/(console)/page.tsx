@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
-import { primaryLinkButtonClass } from "@/components/ui/linkButton";
+import { primaryLinkButtonClass, secondaryLinkButtonClass } from "@/components/ui/linkButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { listPractices } from "@/domain/platform/practices";
 import { getFormat, getT } from "@/i18n/server";
@@ -41,9 +41,14 @@ export default async function OperatorPage() {
         title={t("list.title")}
         description={t("list.description")}
         actions={
-          <Link href="/operator/practices/new" className={primaryLinkButtonClass}>
-            {t("list.newPractice")}
-          </Link>
+          <>
+            <Link href="/operator/integrations" className={secondaryLinkButtonClass}>
+              {t("integrations.link")}
+            </Link>
+            <Link href="/operator/practices/new" className={primaryLinkButtonClass}>
+              {t("list.newPractice")}
+            </Link>
+          </>
         }
       />
 

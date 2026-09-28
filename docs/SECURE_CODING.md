@@ -236,7 +236,7 @@ tsx) and their type packages.
   (R-7.4.4), and a third-party license notice file generated from the lockfile.
 - **SC-B12.3 MUST** The container image runs as a non-root user on a minimal base pinned by digest,
   with no build tools or source maps in the runtime stage.
-- **SC-B12.4 MUST** `main` is protected: required status checks (CI), required pull requests, no
+- **SC-B12.4 MUST** The default branch (`main` once renamed, OA-001) is protected: required status checks (CI), required pull requests, no
   force pushes or deletions. Reviewer-agent results are recorded in the PR and gate merging under
   CLAUDE.md #12; changes to protection settings need human sign-off (R-15.9).
 
@@ -264,4 +264,4 @@ exception.
 | SC-A2.2 | No automated license check in CI. |
 | SC-A2.6 | Next.js telemetry is disabled in the `Dockerfile` and `netlify.toml` but not in CI or local development (`NEXT_TELEMETRY_DISABLED=1`). |
 | SC-B12.1, SC-B12.2 | No SAST, DAST, container/IaC scanning, SBOM, signed commits or artifacts, or license notice file yet. |
-| SC-B12.4 | Branch protection on `main` is not verifiable from the repository; the owner confirms the settings (OA-066). |
+| SC-B12.4 | The default branch is not yet renamed to `main`, and its protection is not verifiable from the repository; the owner confirms the settings (OA-001, OA-074). |

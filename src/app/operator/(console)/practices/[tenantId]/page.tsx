@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
+import { listPendingForPractice } from "@/domain/integrations/approval";
 import { agreementStatus, listAgreements, type AgreementStatus } from "@/domain/platform/agreements";
 import { getPractice } from "@/domain/platform/practices";
 import { getUniversityAccessForOperator } from "@/domain/platform/university-access";
@@ -67,6 +68,7 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
   const status: AgreementStatus = agreementStatus(agreements, todayIn());
   const access = customer ? await getUniversityAccessForOperator(tenantId, operator) : null;
   const accessState = universityAccessState(access);
+  const pendingConnections = customer ? await listPendingForPractice(tenantId, operator) : [];
   const accessTone = {
     none: "neutral",
     requested: "warning",
@@ -217,6 +219,48 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
               </ul>
               <UniversityAccessForm tenantId={tenantId} granted={hasUniversityAccess(access)} />
             </div>
+          </Panel>
+
+          <Panel
+            title={t("integrations.practiceTitle")}
+            description={t("integrations.practiceDescription")}
+            flush
+          >
+            {pendingConnections.length === 0 ? (
+              <p className="p-4 text-body text-muted">{t("integrations.practiceEmpty")}</p>
+            ) : (
+              <Table caption={t("integrations.tableCaption")}>
+                <thead>
+                  <tr>
+                    <Th>{t("integrations.columns.name")}</Th>
+                    <Th>{t("integrations.columns.baseUrl")}</Th>
+                    <Th>{t("integrations.columns.clientId")}</Th>
+                    <Th>{t("integrations.columns.submitted")}</Th>
+                    <Th className="text-right">{tc("word.actions")}</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingConnections.map((item) => (
+                    <Tr key={item.connectionId}>
+                      <Td className="font-medium">{item.displayName}</Td>
+                      <Td className="font-mono break-all">{item.baseUrl}</Td>
+                      <Td className="font-mono break-all">{item.clientId}</Td>
+                      <Td className="tabular text-muted">
+                        {item.submittedAt ? f.dateOf(item.submittedAt) : "—"}
+                      </Td>
+                      <Td className="text-right">
+                        <Link
+                          href={`/operator/practices/${tenantId}/integrations/${item.connectionId}`}
+                          className="font-medium text-link hover:underline"
+                        >
+                          {t("integrations.review")}
+                        </Link>
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
           </Panel>
 
           {agreements.some((a) => a.status !== "voided") && (
