@@ -82,6 +82,8 @@ export function checkBaseUrl(raw: string, ports: Set<number> = allowedPorts()): 
     return { ok: false, code: "invalid" };
   }
   if (url.protocol !== "https:") return { ok: false, code: "not_https" };
+  // "https:host/path" parses (the WHATWG parser supplies the slashes) but isn't what anyone meant.
+  if (!/^https:\/\//i.test(text)) return { ok: false, code: "invalid" };
   // The raw authority too: "https://@host" parses with an empty username but still carried userinfo.
   const authority = text.replace(/^https:\/\//i, "").split("/")[0] ?? "";
   if (url.username !== "" || url.password !== "" || authority.includes("@")) {

@@ -17,6 +17,7 @@ const REFUSED_SYSTEMS = new Set([
   "http://hl7.org/fhir/sid/us-medicare",
   "urn:oid:2.16.840.1.113883.4.572", // Medicare HICN (security review M-1; ⚠️ VERIFY)
   "http://hl7.org/fhir/sid/us-medicaid", // a member ID (non-negotiable 6)
+  "urn:oid:2.16.840.1.113883.4.3", // driver's license root (the per-state OIDs are its children)
 ]);
 
 /** Prefixes refused: state driver's-license OIDs (2.16.840.1.113883.4.3.<state>) and passports. */
@@ -34,8 +35,10 @@ export type IdentifierSystemResult = { ok: true; system: string } | { ok: false;
 const URN_SHAPE = /^(urn:oid:[0-2](\.(0|[1-9][0-9]*))+|urn:uuid:[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i;
 /** Path characters an identifier-system URL may use: unreserved plus "/" (no escapes, no ";"). */
 const SYSTEM_PATH = /^[A-Za-z0-9\-._~/]*$/;
-/** Control, zero-width, and bidi-override characters (security review L-4). */
-export const INVISIBLE_CHARS = /[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁤⁦-⁩﻿]/;
+/** Control, soft-hyphen, zero-width, line/paragraph-separator, and bidi characters (security review
+ * L-4). Written as escapes, never raw, so a reviewer can see them (Trojan Source). */
+export const INVISIBLE_CHARS =
+  /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/;
 
 /**
  * Canonical form for comparison, or null when the system isn't a plain URI. An http(s) system must

@@ -19,6 +19,7 @@ describe("checkMrnIdentifierSystem (PI1b)", () => {
     "http://hl7.org/fhir/sid/us-medicare",
     "urn:oid:2.16.840.1.113883.4.3.12",
     "urn:oid:2.16.840.1.113883.4.3.25",
+    "urn:oid:2.16.840.1.113883.4.3",
     "http://hl7.org/fhir/sid/passport-USA",
     // Security review M-1: OID forms, member IDs, and spellings of listed URLs (⚠️ VERIFY OIDs).
     "urn:oid:2.16.840.1.113883.4.927",
@@ -55,6 +56,8 @@ describe("checkMrnIdentifierSystem (PI1b)", () => {
     // Invisible and bidi characters (security review L-4).
     ["http://ehr.example.com/m\u202ern", "invalid"],
     ["http://ehr.example.com/\u200bmrn", "invalid"],
+    ["http://ehr.example.com/m\u2028rn", "invalid"],
+    ["http://ehr.example.com/m\u00adrn", "invalid"],
   ])("refuses %j (%s)", (raw, code) => {
     expect(checkMrnIdentifierSystem(raw)).toEqual({ ok: false, code });
   });

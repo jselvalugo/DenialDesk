@@ -169,7 +169,8 @@ when the run succeeds, so a failed first run still locks the endpoint.
       test: practice A cannot claim or release practice B's entry (M-a). Sandbox connections are not
       registered.
       ⚠️ The WHATWG-normalization algorithm itself is `src/integrations/fhir/url-rules.ts` (shipped
-      in PI1b-1; PI2a derives `token_endpoint_key` with the same function); PI1a stores whatever
+      in PI1b-1; PI2a derives `token_endpoint_key` with the same function, and must refuse the
+      sandbox host for a discovered endpoint, since `checkBaseUrl` exempts it from `.invalid`); PI1a stores whatever
       `endpoint_key`/`token_endpoint_key` the caller computes.
       ⚠️ R-15.9: the `REVOKE`/`GRANT EXECUTE` and column-grant statements in this migration are a
       privilege change; per non-negotiable 5/R-15.9 they still need a human sign-off recorded on the
@@ -217,7 +218,7 @@ get their own tests in PI2a.
       never logged or returned. (`src/domain/integrations/connections.ts`)
 - [x] PI1b-1: URL rules on save (`src/integrations/fhir/url-rules.ts`): `https`; hostname only (no IP
       literal in any form the WHATWG parser accepts, userinfo, query, fragment); refuse `localhost`,
-      `.localhost`, `.local`, `.internal`, `.home.arpa`, `.invalid` (except the sandbox constant),
+      `.localhost`, `.local`, `.internal`, `.localdomain`, `.arpa`, `.onion`, `.invalid` (except the sandbox constant),
       single-label names, and a trailing dot; port 443 or one listed in `INTEGRATION_ALLOWED_PORTS`;
       path limited to unreserved characters and `/` (no escapes, `;`, or dot segments; repeated
       slashes collapse), and a real connection may not use the sandbox host or MRN system.

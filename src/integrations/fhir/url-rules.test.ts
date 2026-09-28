@@ -79,6 +79,9 @@ describe("checkBaseUrl (PI1b URL rules on save)", () => {
     ["https://fhir.example.com./r4", "trailing_dot"],
     ["https://fhir.example.com:8443/r4", "port_not_allowed"],
     ["https://localhost.localdomain/r4", "reserved_host"],
+    ["https://1.0.0.127.in-addr.arpa/r4", "reserved_host"],
+    ["https://abcdefghijklmnop.onion/r4", "reserved_host"],
+    ["https:fhir.example.com/r4", "invalid"],
     // One endpoint, one spelling (security review L-2); no free text in the path (compliance #8).
     ["https://fhir.example.com/%72%34", "path_characters"],
     ["https://fhir.example.com/r4;jsessionid=x", "path_characters"],
