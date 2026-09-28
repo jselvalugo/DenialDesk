@@ -79,6 +79,8 @@ export const shell = {
   // Data-source drop-down beside a synced table's tab (specs/erp-shell.md)
   "dataSource.source": "Source:",
   "dataSource.table.patients": "Patients",
+  // The accessible name must contain the button's visible text ("Source: …") in every language
+  // (WCAG 2.5.3 label in name; data-source.test.ts checks it).
   "dataSource.ariaLabel": "{table} data source: {state}",
   "dataSource.ariaState": "{name}, {state}",
   "dataSource.state.manual": "Manual",

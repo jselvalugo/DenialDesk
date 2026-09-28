@@ -77,3 +77,30 @@ export function dataSourceButton(
     ariaLabel: t("dataSource.ariaLabel", { table: t(`dataSource.table.${table}`), state: named }),
   };
 }
+
+/**
+ * Where the administrator link in the panel goes, or null for other roles: the list ("Connect an
+ * integration…") when nothing is a source, the last one was revoked, or the id wasn't sent; else the
+ * connection page ("Connection settings").
+ */
+export function dataSourceAdminLink(
+  summary: DataSourceSummary | null,
+  canManageIntegrations: boolean,
+): { kind: "connect" | "settings"; href: string } | null {
+  if (!canManageIntegrations) return null;
+  if (!summary || dataSourceState(summary) === "revoked" || !summary.connectionId) {
+    return { kind: "connect", href: "/settings/integrations" };
+  }
+  return { kind: "settings", href: `/settings/integrations/${summary.connectionId}` };
+}
+
+/**
+ * What the signed-in layout sends to the browser for a role: the connection id only feeds the
+ * administrators' "Connection settings" link, so every other role gets null (minimum necessary).
+ */
+export function summaryForRole(
+  summary: DataSourceSummary | null,
+  canManageIntegrations: boolean,
+): DataSourceSummary | null {
+  return summary && !canManageIntegrations ? { ...summary, connectionId: null } : summary;
+}

@@ -198,8 +198,10 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 | `MaskedValue` | Member ID / SSN / MBI shown as `•••• 1234`; "Reveal" is an audited action (R-7.5.1). |
 | `AIContent` | Labeled "AI draft — review before sending" with the approving user recorded (R-7.11.2). Phase 3. |
 
-Interactive primitives (dialog, menu, popover, tooltip, select) use Radix UI for accessibility,
-styled with our tokens (ADR 0004).
+Interactive primitives (menu, popover, tooltip, select) use Radix UI for accessibility, styled with
+our tokens (ADR 0004), once a component needs real menu or popover semantics. Until then the shell's
+small panels (user menu, data-source drop-down) are disclosures with the rules in ADR 0004's
+2026-09-28 amendment, and dialogs use the native `<dialog>` element.
 
 ## 10. Content and formatting
 - Voice: plain, precise, calm. "Appeal deadline in 5 days", not "Hurry! Deadline soon!"

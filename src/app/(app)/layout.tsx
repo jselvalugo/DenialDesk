@@ -1,18 +1,26 @@
 import { canManageIntegrations, canViewRevenueCycle } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { AppShell } from "@/components/shell/AppShell";
+import { summaryForRole } from "@/components/shell/data-source";
 import { withTenant } from "@/db/tenant";
-import { connectionSummary } from "@/domain/integrations/connections";
+import { connectionSummary, type DataSourceSummary } from "@/domain/integrations/connections";
+import { log } from "@/lib/log";
 
 /** Everything in this group requires a signed-in user with MFA and a practice. */
 export default async function SignedInLayout({ children }: { children: React.ReactNode }) {
   const auth = await requireAuth();
-  // The Patients data-source drop-down (specs/erp-shell.md): one indexed read of configuration,
-  // never PHI or patient counts, so not audited.
   const canManage = canManageIntegrations(auth.role);
-  const summary = await withTenant(auth, (tx) => connectionSummary(tx, "patients"));
-  // The connection id only feeds the administrators' "Connection settings" link (minimum necessary).
-  const patients = summary && !canManage ? { ...summary, connectionId: null } : summary;
+  // The Patients data-source drop-down (specs/erp-shell.md): one read of configuration, never PHI or
+  // patient counts, so not audited. A failure hides the drop-down (undefined) rather than taking
+  // every signed-in page down with it.
+  let patients: DataSourceSummary | null | undefined;
+  try {
+    const summary = await withTenant(auth, (tx) => connectionSummary(tx, "patients"));
+    patients = summaryForRole(summary, canManage);
+  } catch {
+    log.error("shell.data_source_unavailable", { tenantId: auth.tenantId });
+    patients = undefined;
+  }
   return (
     <AppShell
       user={{

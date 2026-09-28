@@ -77,10 +77,10 @@ export const shell: Messages["shell"] = {
   // Menu de origem de dados ao lado da aba de uma tabela sincronizada (specs/erp-shell.md)
   "dataSource.source": "Origem:",
   "dataSource.table.patients": "Pacientes",
-  "dataSource.ariaLabel": "Origem de dados de {table}: {state}",
+  "dataSource.ariaLabel": "Origem: {state} (dados de {table})",
   "dataSource.ariaState": "{name}, {state}",
   "dataSource.state.manual": "Manual",
-  "dataSource.state.synced": "Sincronizado {when}",
+  "dataSource.state.synced": "Sincronizada {when}",
   "dataSource.state.notSynced": "Ainda não sincronizado",
   "dataSource.state.running": "Sincronização em andamento",
   "dataSource.state.awaitingApproval": "Aguardando aprovação",

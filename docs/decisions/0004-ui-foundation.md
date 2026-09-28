@@ -59,3 +59,18 @@ CSS custom property set on `<table>`, not React context, so `Table`/`Th`/`Td` st
 (no `"use client"`) per this ADR's "Server Components by default." TanStack remains the plan for when
 a list needs genuinely client-side interactivity (a column chooser, virtualized rows) that
 server-rendered pages can't give it.
+
+## Amendment (2026-09-28): disclosure panels instead of a menu library
+The shell's small pop-over panels — the user menu (`UserMenu`) and the tab-bar data-source drop-down
+(`DataSourceMenu`, `specs/erp-shell.md`, patient integrations PI1b-3) — are hand-rolled
+**disclosures**, not Radix menus: the project has no Radix dependency yet, and two small panels of
+links and buttons didn't justify adding one (CLAUDE.md #10). They follow one pattern: a `button` with
+`aria-expanded`/`aria-controls`; the panel holds ordinary links and buttons in Tab order (not
+`role="menu"` with arrow-key roving, which a disclosure doesn't claim); Escape closes and returns focus
+to the button; an outside click, tabbing away, and (for a panel opened from the scrolling tab bar)
+scrolling or resizing close it; the panel takes `tabIndex={-1}` so a click on its text doesn't count as
+leaving it. A panel opened from dark chrome is `position: fixed`, anchored to the button and clamped to
+the viewport, and marks itself `data-chrome="light"` so focus rings return to the blue (≥ 3:1 on
+white). Radix (or an equivalent) becomes required when a component needs real menu semantics — roving
+focus, typeahead, submenus, checkable items — or a positioned popover with collision handling beyond
+this clamp; dialogs keep using the native `<dialog>` element.

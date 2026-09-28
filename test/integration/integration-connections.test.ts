@@ -579,14 +579,35 @@ describe("connectionSummary (the tab-bar drop-down)", () => {
     expect(await summaryOf()).toMatchObject({ connectionId: nextId, status: "active" });
   });
 
+  it("shows the most recently revoked of two past sources", async () => {
+    const c = await createTestTenant("Connections summary two revoked");
+    const revokeAfterLive = async (name: string) => {
+      const { id } = await withTenant(c, (tx) =>
+        createSandboxConnection(tx, admin(c, true), { displayName: name }),
+      );
+      await withTenant(c, (tx) => activateSandboxStandIn(tx, c, id));
+      await withTenant(c, async (tx) =>
+        revokeConnection(tx, admin(c, true), id, (await getConnection(tx, id))!.updatedAt.toISOString()),
+      );
+      return id;
+    };
+    await revokeAfterLive("First source");
+    const second = await revokeAfterLive("Second source");
+    expect(await withTenant(c, (tx) => connectionSummary(tx, "patients"))).toMatchObject({
+      connectionId: second,
+      displayName: "Second source",
+      status: "revoked",
+    });
+  });
+
   it("never counts another practice's sync run, and carries only configuration", async () => {
     const c = await createTestTenant("Connections summary runs");
     const { id } = await withTenant(c, (tx) =>
       createSandboxConnection(tx, admin(c, true), { displayName: "C live" }),
     );
     await withTenant(c, (tx) => activateSandboxStandIn(tx, c, id));
-    // A run in another practice, inserted as the table owner and pointed at nothing of C's: RLS
-    // and the tenant match in the lateral join both keep it out.
+    // A run in another practice (inserted as that practice, under RLS): RLS and the tenant match in
+    // the lateral join both keep it out of C's summary.
     const other = await createTestTenant("Connections summary runs other");
     const { id: otherId } = await withTenant(other, (tx) =>
       createSandboxConnection(tx, admin(other, true), { displayName: "Other live" }),

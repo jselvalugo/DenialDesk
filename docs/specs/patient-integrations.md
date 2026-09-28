@@ -277,8 +277,11 @@ get their own tests in PI2a.
   sentence (e.g. nothing synced yet; staff can't register patients by hand meanwhile). The revoked
   sentence ("can't be edited here for now") depends on OA-048.
 - PI2b: the drop-down's summary loads with the signed-in layout, which persists across client
-  navigation, so other users' open sessions can show a stale state until a reload; refresh it
-  (e.g. when the menu opens, or on an interval) once syncs can change it.
+  navigation, so other users' open sessions can show a stale state — and a relative time frozen at
+  the layout's render — until a reload. Once syncs can change it: fetch the summary when the menu
+  opens (or on an interval) and recompute the relative time against the browser's clock after
+  mount (keep the server's render time for the first paint). That also lets the layout skip the
+  per-request query on modules without a data-source tab.
 
 ### PI1c — operator approval
 - [ ] The operator practice page (`/operator/practices/<id>`, pattern of BAA recording and

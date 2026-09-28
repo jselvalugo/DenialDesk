@@ -30,7 +30,9 @@ const DAY = 24 * HOUR;
 
 function formatRelative(at: Date, now: Date, locale: Locale): string {
   const rtf = new Intl.RelativeTimeFormat(INTL_TAGS[locale], { numeric: "auto" });
-  const diff = at.getTime() - now.getTime();
+  // Clamped to the past: a few seconds of clock skew between the database and the app must never
+  // read "in 2 minutes" for something that already happened.
+  const diff = Math.min(0, at.getTime() - now.getTime());
   const size = Math.abs(diff);
   if (size < HOUR) return rtf.format(Math.trunc(diff / MINUTE), "minute");
   if (size < DAY) return rtf.format(Math.trunc(diff / HOUR), "hour");

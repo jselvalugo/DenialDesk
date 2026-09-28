@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, Database } from "lucide-react";
 import { useFormat, useT } from "@/i18n/client";
-import { dataSourceButton, dataSourceState } from "./data-source";
+import { dataSourceAdminLink, dataSourceButton, dataSourceState } from "./data-source";
+
+/** Panel width (w-80) and the gap it keeps from the viewport edge. */
+const PANEL_WIDTH = 320;
+const EDGE = 8;
 import { useShellDataSources } from "./ShellContext";
 
 /**
@@ -54,12 +58,16 @@ export function DataSourceMenu({ table }: { table: "patients" }) {
   const now = new Date(sources.renderedAt);
   const { state, ariaLabel } = dataSourceButton(summary, table, t, format, now);
   const kind = dataSourceState(summary);
-  const showConnect = sources.canManageIntegrations && (summary === null || kind === "revoked");
+  const adminLink = dataSourceAdminLink(summary, sources.canManageIntegrations);
+  // DESIGN.md §10: relative time is never alone — the absolute time is in the panel and on hover.
+  const absolute = summary?.lastSuccessAt ? format.dateTime(new Date(summary.lastSuccessAt)) : undefined;
 
   const toggle = () => {
     if (!open && button.current) {
       const rect = button.current.getBoundingClientRect();
-      setPosition({ top: rect.bottom + 4, left: rect.left });
+      // Clamped so the whole panel stays on screen (narrow windows, 400% zoom, a scrolled tab bar).
+      const maxLeft = Math.max(EDGE, window.innerWidth - PANEL_WIDTH - EDGE);
+      setPosition({ top: rect.bottom + 4, left: Math.min(Math.max(rect.left, EDGE), maxLeft) });
     }
     setOpen((value) => !value);
   };
@@ -79,15 +87,16 @@ export function DataSourceMenu({ table }: { table: "patients" }) {
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={toggle}
-        className="flex max-w-[28rem] items-center gap-1.5 px-3 text-label whitespace-nowrap text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-active/60 hover:text-white focus-visible:-outline-offset-2"
+        title={absolute}
+        className="group flex max-w-[28rem] items-center gap-1.5 px-3 text-label whitespace-nowrap text-sidebar-fg transition-colors duration-100 hover:bg-sidebar-active/60 hover:text-white focus-visible:-outline-offset-2"
       >
         <Database aria-hidden="true" className="size-3.5 shrink-0 text-sidebar-muted" strokeWidth={1.75} />
-        <span className="text-sidebar-muted">{t("dataSource.source")}</span>
+        <span className="text-sidebar-muted group-hover:text-sidebar-fg">{t("dataSource.source")}</span>
         {summary ? (
           <>
             {/* A long connection name truncates here; the full name is in the panel. */}
             <span className="min-w-0 truncate font-medium text-white">{summary.displayName}</span>
-            <span aria-hidden="true" className="text-sidebar-muted">
+            <span aria-hidden="true" className="text-sidebar-muted group-hover:text-sidebar-fg">
               ·
             </span>
             <span className="shrink-0">{state}</span>
@@ -98,10 +107,14 @@ export function DataSourceMenu({ table }: { table: "patients" }) {
         <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-sidebar-muted" strokeWidth={2} />
       </button>
       {open && position && (
+        // tabIndex -1: a click on the panel's text keeps focus inside, so onBlur doesn't close it.
+        // data-chrome="light": focus rings inside return to the blue (the tab bar's teal is < 3:1 here).
         <div
           id={panelId}
+          tabIndex={-1}
+          data-chrome="light"
           style={{ top: position.top, left: position.left }}
-          className="fixed z-40 w-80 rounded-panel border border-border bg-surface text-text shadow-sm"
+          className="fixed z-40 w-80 max-w-[calc(100vw-16px)] rounded-panel border border-border bg-surface text-text shadow-sm outline-none"
         >
           <div className="border-b border-border px-4 py-3">
             <p className="text-label font-semibold tracking-wide text-subtle uppercase">
@@ -131,18 +144,16 @@ export function DataSourceMenu({ table }: { table: "patients" }) {
               </dd>
             </dl>
           )}
-          {sources.canManageIntegrations && (
+          {adminLink && (
             <div className="p-1.5">
               <Link
-                href={
-                  showConnect || !summary?.connectionId
-                    ? "/settings/integrations"
-                    : `/settings/integrations/${summary.connectionId}`
-                }
+                href={adminLink.href}
                 onClick={() => setOpen(false)}
                 className="flex h-9 w-full items-center rounded-control px-2.5 text-body font-medium text-link hover:bg-surface-muted"
               >
-                {showConnect ? t("dataSource.action.connect") : t("dataSource.action.settings")}
+                {adminLink.kind === "connect"
+                  ? t("dataSource.action.connect")
+                  : t("dataSource.action.settings")}
               </Link>
             </div>
           )}

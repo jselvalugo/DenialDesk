@@ -518,7 +518,7 @@ export async function connectionSummary(tx: TenantTx, table: "patients"): Promis
     where c.target_table = ${table}
       and (c.status not in ('draft', 'revoked')
            or (c.status = 'revoked' and (c.has_synced or c.submitted_at is not null)))
-    order by (c.status = 'revoked'), coalesce(c.revoked_at, c.updated_at) desc
+    order by (c.status = 'revoked'), coalesce(c.revoked_at, c.updated_at) desc, c.id desc
     limit 1
   `);
   const row = result.rows[0];

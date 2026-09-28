@@ -55,7 +55,10 @@ arrive with the features behind them (PI2a Submit/pause/resume, PI2b sync now an
       (`data-chrome="dark"` focus ring) reads "Source: Manual ▾", or "Source: <connection name> ·
       Synced <relative time> ▾", "Not synced yet", "Sync running", "Awaiting approval", "Paused",
       "Needs attention" (error), or "Revoked". Accessible name "Patients data source: <state>"
-      (with the connection name when there is one); the status is text, never color alone. A
+      (with the connection name when there is one; in es/pt it starts with the visible "Origen:" /
+      "Origem:" so the name contains the visible label, WCAG 2.5.3); the status is text, never color
+      alone. The button's `title` carries the absolute last-sync time (DESIGN.md §10: relative time is
+      never alone; the panel shows it too). A
       disclosure like the user menu rather than a Radix menu: the project has no menu library, and
       adding one for this was not worth a dependency. The panel is `fixed`, anchored to the button,
       because the tab bar scrolls sideways; Escape, an outside click, scrolling, resizing, or tabbing
@@ -70,12 +73,15 @@ arrive with the features behind them (PI2a Submit/pause/resume, PI2b sync now an
       verification within the last 5 minutes (step-up, as in `specs/patient-integrations.md`); the
       menu shows the result as a status message.
 - [x] The summary (connection name, status, last successful sync, latest run status) is loaded by the
-      signed-in layout for the tenant in one query (`connectionSummary`; the live row is found through
-      the partial unique index, the revoked fallback scans the practice's few connections) and passed through
+      signed-in layout for the tenant in one query (`connectionSummary`; it filters the practice's
+      few connections — the `OR` of live and past-source rows doesn't use the partial unique index —
+      and looks up the latest run through `integration_sync_runs_connection_idx`) and passed through
       `AppShell` → `ShellProvider`; it holds no PHI, no counts of patients, and nothing is placed in
       URLs or client storage (R-7.4.8). The source is the live connection if any, else the most
       recently revoked one that was ever submitted or synced; a draft is never a source. Actions
-      that change a connection revalidate the whole signed-in layout so the drop-down is current.
+      that change a connection revalidate the whole signed-in layout so the drop-down is current. The
+      connection id reaches the browser only for administrators (`summaryForRole`); if the query
+      fails, the drop-down is hidden and the page still renders.
 - [x] Relative time (`format.relative`, from the server's render time so server and browser agree)
       and all labels come from `src/i18n/` in en/es/pt (R-11.1).
 - [x] The tab bar still fits 1024px without horizontal page scroll (e2e); a long connection name
@@ -85,7 +91,8 @@ arrive with the features behind them (PI2a Submit/pause/resume, PI2b sync now an
 ## Data / API changes
 None for navigation: it is computed client-side from role flags already passed to the shell; no
 PHI. The data-source drop-down (2026-09-27) adds one server-side read of the practice's
-integration connection summary in `AppShell` (Confidential configuration, not PHI; not audited).
+integration connection summary in the signed-in layout (`src/app/(app)/layout.tsx`), passed through
+`AppShell` (Internal/Confidential configuration, not PHI; not audited).
 
 ## Legal rules used
 None.
@@ -99,9 +106,15 @@ is a menu, not access control: every page enforces its own permission on the ser
 
 ## Test evidence
 - Unit: `src/components/shell/navigation.test.ts` (module visibility, path → module/page
-  resolution, switcher search filter).
+  resolution, switcher search filter); `data-source.test.ts` (every drop-down state, label in name
+  in en/es/pt, admin link choice, connection id stripped for non-admins); `src/i18n/format.test.ts`
+  (relative time units and boundaries, clamped to the past, es/pt).
+- Integration: `test/integration/integration-connections.test.ts` "connectionSummary" (manual,
+  drafts never a source, live, queued run, revoked after live, most recent of two revoked, newer
+  live wins, another practice's connection and run never shown, exactly five keys).
 - E2E: `shell.spec.ts` (switcher search, keyboard shortcut, Escape, Close button, backdrop, header
   "Go to" button, module switch from the tab bar button, planned pages not links, decorative icons,
-  no horizontal scroll at 1024px), `revenue-cycle.spec.ts` (module hidden from specialists in bar
+  no horizontal scroll at 1024px; the data-source drop-down at 1024px as a non-administrator: name,
+  panel, no admin links, Escape returns focus, not on other modules), `revenue-cycle.spec.ts` (module hidden from specialists in bar
   and switcher), `auth.spec.ts` (user menu), and navigation in `claims`, `operator` specs through
   the switcher.
