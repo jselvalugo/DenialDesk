@@ -254,6 +254,8 @@ describe("migrations raise only listed, value-free trigger messages", () => {
     "0039_patient_integrations_data_layer.sql": {
       "OLD.status": "integrationConnectionStatus",
       "NEW.status": "integrationConnectionStatus",
+      old_run_status: "integrationSyncRunStatus",
+      new_run_status: "integrationSyncRunStatus",
     },
   };
 

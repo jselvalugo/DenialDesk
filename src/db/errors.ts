@@ -1,7 +1,12 @@
 import { DrizzleQueryError } from "drizzle-orm";
 import { PgPreparedQuery } from "drizzle-orm/pg-core";
 import { LOG_VALUE_PATTERNS, log } from "@/lib/log";
-import { appealStatusEnum, integrationConnectionStatusEnum, voucherStatusEnum } from "./schema";
+import {
+  appealStatusEnum,
+  integrationConnectionStatusEnum,
+  integrationSyncRunStatusEnum,
+  voucherStatusEnum,
+} from "./schema";
 
 /** A database failure with the query parameters (which can hold PHI) stripped out. */
 export class DatabaseError extends Error {
@@ -49,7 +54,13 @@ const OBJECT_ONLY_MESSAGE_CODES = new Set([
 ]);
 
 /** What a trigger may interpolate into a `%`: an ID, a small integer, or a voucher status. */
-export type TriggerSlot = "uuid" | "int" | "voucherStatus" | "appealStatus" | "integrationConnectionStatus";
+export type TriggerSlot =
+  | "uuid"
+  | "int"
+  | "voucherStatus"
+  | "appealStatus"
+  | "integrationConnectionStatus"
+  | "integrationSyncRunStatus";
 const SLOT_PATTERNS: Record<TriggerSlot, string> = {
   uuid: "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
   // Versions and counts; at most 6 digits so an SSN, member ID, or numeric MRN never matches.
@@ -57,6 +68,7 @@ const SLOT_PATTERNS: Record<TriggerSlot, string> = {
   voucherStatus: `(?:${voucherStatusEnum.enumValues.join("|")})`,
   appealStatus: `(?:${appealStatusEnum.enumValues.join("|")})`,
   integrationConnectionStatus: `(?:${integrationConnectionStatusEnum.enumValues.join("|")})`,
+  integrationSyncRunStatus: `(?:${integrationSyncRunStatusEnum.enumValues.join("|")})`,
 };
 
 /**
@@ -113,13 +125,21 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
   { format: "patients: a synced row can only be inserted by a running sync run", args: [] },
   { format: "patients %: a synced patient cannot become manual", args: ["uuid"] },
   { format: "patients %: synced fields can only change during a running sync run", args: ["uuid"] },
+  { format: "patients %: sensitivity tags cannot change during a sync run", args: ["uuid"] },
   { format: "integration_sync_issues is append-only", args: [] },
+  { format: "integration_sync_runs cannot be deleted", args: [] },
   { format: "integration_sync_runs %: a finished run cannot change", args: ["uuid"] },
+  {
+    format: "integration_sync_runs_lifecycle: % -> % is not allowed",
+    args: ["integrationSyncRunStatus", "integrationSyncRunStatus"],
+  },
+  { format: "integration_sync_runs %: the connection must be active to run", args: ["uuid"] },
   { format: "integration_registry_release: connection % is not draft or revoked", args: ["uuid"] },
   { format: "integration_connections %: revoked is terminal", args: ["uuid"] },
   { format: "integration_connections %: is_sandbox cannot change", args: ["uuid"] },
   { format: "integration_connections %: has_synced cannot be unset", args: ["uuid"] },
   { format: "integration_connections %: endpoint fields are immutable once synced", args: ["uuid"] },
+  { format: "integration_connections %: the endpoint can only change while draft", args: ["uuid"] },
   {
     format: "integration_connections_lifecycle: % -> % is not allowed",
     args: ["integrationConnectionStatus", "integrationConnectionStatus"],
@@ -128,6 +148,7 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
     format: "integration_connections %: only the platform operator may activate a pending connection",
     args: ["uuid"],
   },
+  { format: "integration_connections %: activation requires a fresh approval", args: ["uuid"] },
   {
     format: "integration_connections %: only the display name can change while pending approval",
     args: ["uuid"],

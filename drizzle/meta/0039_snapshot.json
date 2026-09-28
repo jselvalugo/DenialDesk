@@ -1,5 +1,5 @@
 {
-  "id": "7f507c23-6d16-4993-9dc8-5331ba97e66d",
+  "id": "eb92e87f-1d97-4392-9550-a837b5dbf660",
   "prevId": "c90a79a3-e76a-452e-993d-eec9d5a88aa5",
   "version": "7",
   "dialect": "postgresql",
@@ -3183,8 +3183,8 @@
         }
       },
       "foreignKeys": {
-        "integration_endpoint_registry_connection_id_integration_connections_id_fk": {
-          "name": "integration_endpoint_registry_connection_id_integration_connections_id_fk",
+        "integration_endpoint_registry_connection_fk": {
+          "name": "integration_endpoint_registry_connection_fk",
           "tableFrom": "integration_endpoint_registry",
           "tableTo": "integration_connections",
           "columnsFrom": [
@@ -3642,6 +3642,28 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "integration_sync_runs_one_active": {
+          "name": "integration_sync_runs_one_active",
+          "columns": [
+            {
+              "expression": "tenant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "connection_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "status in ('queued', 'running')",
           "concurrently": false,
           "method": "btree",
           "with": {}

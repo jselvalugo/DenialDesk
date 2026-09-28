@@ -278,9 +278,7 @@ export const integrationEndpointRegistry = pgTable(
   "integration_endpoint_registry",
   {
     id: id(),
-    connectionId: uuid("connection_id")
-      .notNull()
-      .references(() => integrationConnections.id),
+    connectionId: uuid("connection_id").notNull(),
     endpointKey: text("endpoint_key").notNull(),
     clientId: text("client_id").notNull(),
     /** Filled in once discovery (PI2a) runs; null until then. */
@@ -288,6 +286,11 @@ export const integrationEndpointRegistry = pgTable(
     claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    foreignKey({
+      name: "integration_endpoint_registry_connection_fk",
+      columns: [t.connectionId],
+      foreignColumns: [integrationConnections.id],
+    }),
     uniqueIndex("integration_endpoint_registry_connection_key").on(t.connectionId),
     uniqueIndex("integration_endpoint_registry_endpoint_key").on(t.endpointKey, t.clientId),
     uniqueIndex("integration_endpoint_registry_token_endpoint_key").on(t.tokenEndpointKey, t.clientId),
@@ -425,6 +428,10 @@ export const integrationSyncRuns = pgTable(
     }),
     uniqueIndex("integration_sync_runs_tenant_id_key").on(t.tenantId, t.id),
     index("integration_sync_runs_connection_idx").on(t.tenantId, t.connectionId, t.queuedAt),
+    // At most one queued or running run per connection at a time.
+    uniqueIndex("integration_sync_runs_one_active")
+      .on(t.tenantId, t.connectionId)
+      .where(sql`status in ('queued', 'running')`),
   ],
 );
 
