@@ -313,6 +313,11 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
 
             <Panel title={t("panel.patient")}>
               <FieldList>
+                <Field label={tc("word.name")}>
+                  <Link href={`/patients/${patient.id}`} className="font-medium text-link hover:underline">
+                    {patient.lastName}, {patient.firstName}
+                  </Link>
+                </Field>
                 <Field label={t("field.dob")} tabular>
                   {f.date(patient.birthDate)}
                 </Field>

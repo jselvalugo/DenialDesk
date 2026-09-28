@@ -177,6 +177,11 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
 
             <Panel title={t("detail.patient.title")}>
               <FieldList>
+                <Field label={tc("word.name")}>
+                  <Link href={`/patients/${patient.id}`} className="font-medium text-link hover:underline">
+                    {patient.lastName}, {patient.firstName}
+                  </Link>
+                </Field>
                 <Field label={t("detail.patient.dob")} tabular>
                   {f.date(patient.birthDate)}
                 </Field>
