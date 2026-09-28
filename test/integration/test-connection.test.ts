@@ -900,7 +900,8 @@ describe("hasRecentPassingTest (what Submit will require)", () => {
   it("N4: the pass is tied to the token endpoint key and the issuer as well", async () => {
     for (const change of [
       { issuer: "https://x.example.com/r4" },
-      { tokenEndpointKey: "https://x.example.com/t" },
+      // Since 0041 the key must equal lower(token_endpoint), so the pair moves together.
+      { tokenEndpoint: "https://x.example.com/t", tokenEndpointKey: "https://x.example.com/t" },
     ]) {
       const { id } = await draft();
       await testConnection(runner(a), admin(a), id, deps(FakeFhirTransport.healthy()));
@@ -936,7 +937,8 @@ describe("hasRecentPassingTest (what Submit will require)", () => {
     expect(await check(a, id)).toBe(true);
     await systemDb()
       .update(integrationConnections)
-      .set({ baseUrl: `${stored.baseUrl}/x` })
+      // endpoint_key must equal lower(base_url) (0041), so both move.
+      .set({ baseUrl: `${stored.baseUrl}/x`, endpointKey: `${stored.baseUrl}/x`.toLowerCase() })
       .where(eq(integrationConnections.id, id));
     expect(await check(a, id)).toBe(false);
   });
