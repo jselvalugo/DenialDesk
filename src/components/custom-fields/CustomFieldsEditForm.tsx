@@ -31,6 +31,7 @@ export function CustomFieldsEditForm({
   fields,
   values,
   cancelHref,
+  canChangeLocked,
 }: {
   action: (state: CustomFieldsSaveState, formData: FormData) => Promise<CustomFieldsSaveState>;
   /** The hidden field name the server action reads the record id from ("claimId" / "denialId"). */
@@ -40,6 +41,9 @@ export function CustomFieldsEditForm({
   fields: CustomFieldOption[];
   values: LoadedCustomFieldValue[];
   cancelHref: string;
+  /** Whether this actor may write a masked field (`canWorkDenials`) — hides the "Change" control on
+   * a locked field otherwise, since the save would only refuse it. */
+  canChangeLocked: boolean;
 }) {
   const tcf = useT("customFields");
   const tc = useT("common");
@@ -58,9 +62,10 @@ export function CustomFieldsEditForm({
           fields={fields}
           values={values}
           errorFor={(key) => (state.field === `cf.${key}` ? state.error : undefined)}
+          canChangeLocked={canChangeLocked}
         />
       </FormSection>
-      <FormActions>
+      <FormActions note={tcf("form.actionsNote")}>
         <Button type="submit" variant="primary" disabled={pending} aria-disabled={pending}>
           {pending ? tc("action.saving") : tc("action.save")}
         </Button>

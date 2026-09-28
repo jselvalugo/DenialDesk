@@ -1,7 +1,7 @@
 /** Messages for rendering and storing custom field values on record forms and detail pages
  * (docs/specs/settings-and-custom-fields.md S2). Shared across patients, claims, denials, payers. */
 export const customFields = {
-  "section.title": "Campos adicionais",
+  "section.title": "Campos personalizados",
   "input.locked": "Bloqueado",
   "input.change": "Alterar",
   "input.cancelChange": "Cancelar",
@@ -22,4 +22,6 @@ export const customFields = {
 
   "error.cantView": "Você não tem permissão para ver este campo.",
   "error.chooseReason": "Escolha um motivo.",
+
+  "form.actionsNote": "Ao salvar, seu nome e o horário são registrados na trilha de auditoria.",
 } as const;

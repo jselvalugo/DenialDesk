@@ -115,21 +115,34 @@ function TypedInput({
  * clicks "Change", which reveals an empty input to replace the value — never prefilled, so an
  * unrelated edit to the record can never silently resubmit and overwrite a value the form never
  * saw. Leaving it collapsed omits the field entirely, which `saveValuesForRecord` reads as
- * "unchanged". */
-function LockedFieldInput({ field, error }: { field: CustomFieldOption; error?: string }) {
+ * "unchanged". `canChange` is false for a role that may edit the record but isn't permitted to
+ * write a masked value (the same roles as the member ID reveal, `canWorkDenials`) — the domain
+ * refuses that write server-side regardless, but the "Change" control itself is never offered, so
+ * the form never invites an edit it can only reject. */
+function LockedFieldInput({
+  field,
+  error,
+  canChange,
+}: {
+  field: CustomFieldOption;
+  error?: string;
+  canChange: boolean;
+}) {
   const t = useT("customFields");
   const [changing, setChanging] = useState(false);
   if (!changing) {
     return (
       <div className="flex items-center gap-2">
         <span className="text-body text-muted">{t("input.locked")}</span>
-        <button
-          type="button"
-          onClick={() => setChanging(true)}
-          className="text-label font-medium text-link hover:underline"
-        >
-          {t("input.change")}
-        </button>
+        {canChange && (
+          <button
+            type="button"
+            onClick={() => setChanging(true)}
+            className="text-label font-medium text-link hover:underline"
+          >
+            {t("input.change")}
+          </button>
+        )}
       </div>
     );
   }
@@ -157,6 +170,7 @@ export function CustomFieldInputs({
   values = [],
   errorFor,
   bare = false,
+  canChangeLocked = true,
 }: {
   fields: CustomFieldOption[];
   /** Render only the fields, for a caller that supplies its own titled section (FormSection). */
@@ -165,6 +179,12 @@ export function CustomFieldInputs({
   /** Keyed by the field's stable `key` (`cf.<key>` is what a save error's `field` carries), not
    * its id, since a `CustomFieldValueError` never carries the id. */
   errorFor?: (fieldKey: string) => string | undefined;
+  /** Whether this actor may write a masked (sensitive, or record-tagged) field — the same roles as
+   * the member ID reveal (`canWorkDenials`). Default `true` matches every existing caller, which
+   * renders this form only for roles that already have that permission; a caller whose editors and
+   * revealers can differ (claims, denials) passes the actor's own `canWorkDenials(role)` so the
+   * "Change" control is never offered to a role the write would only refuse anyway. */
+  canChangeLocked?: boolean;
 }) {
   const t = useT("customFields");
   if (fields.length === 0) return null;
@@ -188,7 +208,7 @@ export function CustomFieldInputs({
               {field.required && <span className="sr-only"> ({t("input.required")})</span>}
             </label>
             {masked ? (
-              <LockedFieldInput field={field} error={error} />
+              <LockedFieldInput field={field} error={error} canChange={canChangeLocked} />
             ) : (
               <TypedInput field={field} defaultValue={loaded?.value} error={error} />
             )}

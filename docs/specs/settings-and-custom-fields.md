@@ -150,8 +150,13 @@ concurrency token; list columns); **PR 4** payers.
   value and audits.
 
 ### Audit events (IDs and enum keys only, never values)
-- Existing `patient.created|updated` metadata gains custom field keys in `changedFields` as `cf:<key>`
-  (same for claim/denial/payer updates).
+- `custom_field.values_updated` (entityType `custom_field_value`, metadata: entity, recordId, the
+  changed field keys, and `patientId` when the record has one — the patient itself, or a claim's or
+  denial's patient) is the record of a custom-field save, for every entity. It is a separate event
+  from the record's own update audit (`patient.updated`, and for claims/denials — which get their
+  own "edit custom fields" page rather than folding into the record's own edit, S2 PR 3 — no
+  `claim.updated`/`denial.updated` event at all, since that save never touches the `claims`/
+  `denials` row); those events list only that record's own fields, never `cf:<key>` entries.
 - `custom_field.value_revealed` (entityType `custom_field_value`, metadata: fieldId, entity,
   recordId, reason).
 - `custom_field.value_integrity_failed` (fieldId, recordId).

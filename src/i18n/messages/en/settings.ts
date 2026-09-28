@@ -135,4 +135,5 @@ export const settings = {
   "error.noValueOnFile": "No value on file.",
   "error.valueUnavailable": "Value unavailable.",
   "error.staleValues": "These fields changed since you opened them. Reload and try again.",
+  "error.recordNotFound": "Record not found.",
 } as const;

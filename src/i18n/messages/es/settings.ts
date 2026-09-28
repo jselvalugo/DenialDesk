@@ -137,4 +137,5 @@ export const settings: Messages["settings"] = {
   "error.noValueOnFile": "No hay ningún valor en archivo.",
   "error.valueUnavailable": "Valor no disponible.",
   "error.staleValues": "Estos campos cambiaron desde que los abrió. Recargue e intente de nuevo.",
+  "error.recordNotFound": "Registro no encontrado.",
 };

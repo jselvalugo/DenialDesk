@@ -94,13 +94,30 @@ async function seededPractice(label: string, seed: number) {
   };
 }
 
-/** A denial on this specific claim (guaranteed the same patient as the claim), or undefined if the
- * synthetic dataset didn't generate one for it. */
-async function denialIdForClaim(ctx: Ctx, claimId: string): Promise<string | undefined> {
+/**
+ * Inserts a denial directly on the given claim. The synthetic dataset's own denial generation is
+ * probabilistic (`generator.ts`), so a test that needs a denial tied to a *specific* claim (to
+ * share that claim's patient, for the I7 masking tests) creates one deterministically instead of
+ * searching for one that may not exist — a test that silently no-ops on missing fixture data is
+ * worse than one that fails loudly.
+ */
+async function createDenialOnClaim(ctx: Ctx, claimId: string): Promise<string> {
   const [row] = await withTenant(ctx, (tx) =>
-    tx.select({ id: denials.id }).from(denials).where(eq(denials.claimId, claimId)).limit(1),
+    tx
+      .insert(denials)
+      .values({
+        tenantId: ctx.tenantId,
+        claimId,
+        groupCode: "CO",
+        carc: "11",
+        category: "coding",
+        deniedCents: 500,
+        noticeDate: todayIn(),
+        status: "new",
+      })
+      .returning({ id: denials.id }),
   );
-  return row?.id;
+  return row!.id;
 }
 
 let a: Awaited<ReturnType<typeof seededPractice>>;
@@ -814,6 +831,13 @@ describe("no list/search/export module reads custom field values", () => {
       "src/domain/claims/queries.ts",
       "src/domain/denials/queries.ts",
       "src/domain/synthetic/generator.ts",
+      // X12 generation/parsing and appeal drafting must never gain a path to a masked value:
+      // custom fields are practice-internal and can never reach billed content or a filed appeal.
+      "src/edi/x12/835.ts",
+      "src/domain/appeals/queries.ts",
+      "src/domain/appeals/actions.ts",
+      "src/app/(app)/insight/[reportId]/export/route.ts",
+      "src/app/(app)/insight/export-all/route.ts",
     ];
     for (const path of candidates) {
       const source = await fs.readFile(path, "utf8").catch(() => "");
@@ -1055,8 +1079,7 @@ describe("custom field values on claims and denials (PR3)", () => {
     const denialFieldId = await withTenant(a.ctx, (tx) =>
       createCustomField(tx, a.ctx, field({ entity: "denial", key: "denial_masked_by_patient" })),
     );
-    const denialRecordId = await denialIdForClaim(a.ctx, a.claimId);
-    if (!denialRecordId) return; // The synthetic dataset didn't generate a denial on this claim.
+    const denialRecordId = await createDenialOnClaim(a.ctx, a.claimId);
     await withTenant(a.ctx, (tx) =>
       saveValuesForRecord(tx, a.ctx, "denial", denialRecordId, new Map([[denialFieldId, "denial note"]])),
     );
@@ -1068,9 +1091,21 @@ describe("custom field values on claims and denials (PR3)", () => {
       const loaded = await withTenant(a.ctx, (tx) =>
         loadValuesForRecord(tx, a.ctx, "denial", denialRecordId),
       );
-      const found = loaded.find((v) => v.fieldId === denialFieldId)!;
-      expect(found.masked).toBe(true);
-      expect(found.value).toBeUndefined();
+      const found = loaded.find((v) => v.fieldId === denialFieldId);
+      expect(found).toBeDefined();
+      expect(found!.masked).toBe(true);
+      expect(found!.value).toBeUndefined();
+
+      // Only a reveal-permitted role can open it, same as the claim case above.
+      const revealed = await withTenant(a.ctx, (tx) =>
+        revealCustomFieldValue(tx, a.ctx, {
+          fieldId: denialFieldId,
+          entity: "denial",
+          recordId: denialRecordId,
+          reason: "appeal",
+        }),
+      );
+      expect(revealed.value).toBe("denial note");
     } finally {
       await systemDb().update(patients).set({ sensitivityTags: [] }).where(eq(patients.id, a.patientId));
     }
@@ -1093,6 +1128,35 @@ describe("custom field values on claims and denials (PR3)", () => {
       );
       expect(columns.some((c) => c.key === "claim_list_tagged")).toBe(true);
       expect(valuesByRecord.has(a.claimId)).toBe(false);
+    } finally {
+      await systemDb().update(patients).set({ sensitivityTags: [] }).where(eq(patients.id, a.patientId));
+    }
+  });
+
+  it("list values exclude a denial belonging to a patient with sensitivity tags", async () => {
+    const denialFieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "denial", key: "denial_list_tagged", showInList: true })),
+    );
+    const denialRecordId = await createDenialOnClaim(a.ctx, a.claimId);
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(
+        tx,
+        a.ctx,
+        "denial",
+        denialRecordId,
+        new Map([[denialFieldId, "shown when untagged"]]),
+      ),
+    );
+    await systemDb()
+      .update(patients)
+      .set({ sensitivityTags: ["hiv"] })
+      .where(eq(patients.id, a.patientId));
+    try {
+      const { columns, valuesByRecord } = await withTenant(a.ctx, (tx) =>
+        loadListValues(tx, a.ctx, "denial", [denialRecordId]),
+      );
+      expect(columns.some((c) => c.key === "denial_list_tagged")).toBe(true);
+      expect(valuesByRecord.has(denialRecordId)).toBe(false);
     } finally {
       await systemDb().update(patients).set({ sensitivityTags: [] }).where(eq(patients.id, a.patientId));
     }
@@ -1144,6 +1208,134 @@ describe("custom field values on claims and denials (PR3)", () => {
     expect(afterSuccess.find((v) => v.fieldId === fieldId)?.value).toBe("my fresh edit");
   });
 
+  it("the values-table concurrency token works the same way for a denial (not only claims)", async () => {
+    const denialRecordId = await createDenialOnClaim(a.ctx, a.claimId);
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "denial", key: "token_field_denial" })),
+    );
+    const tokenBefore = await withTenant(a.ctx, (tx) => customFieldValuesToken(tx, "denial", denialRecordId));
+
+    // Someone else saves a value in between the edit page loading and this save being submitted.
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "denial", denialRecordId, new Map([[fieldId, "changed elsewhere"]])),
+    );
+
+    await expect(
+      withTenant(a.ctx, (tx) =>
+        saveValuesForRecord(
+          tx,
+          a.ctx,
+          "denial",
+          denialRecordId,
+          new Map([[fieldId, "my stale edit"]]),
+          undefined,
+          tokenBefore,
+        ),
+      ),
+    ).rejects.toThrow(/changed since you opened/);
+
+    const afterRefusal = await withTenant(a.ctx, (tx) =>
+      loadValuesForRecord(tx, a.ctx, "denial", denialRecordId),
+    );
+    expect(afterRefusal.find((v) => v.fieldId === fieldId)?.value).toBe("changed elsewhere");
+
+    const freshToken = await withTenant(a.ctx, (tx) => customFieldValuesToken(tx, "denial", denialRecordId));
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(
+        tx,
+        a.ctx,
+        "denial",
+        denialRecordId,
+        new Map([[fieldId, "my fresh edit"]]),
+        undefined,
+        freshToken,
+      ),
+    );
+    const afterSuccess = await withTenant(a.ctx, (tx) =>
+      loadValuesForRecord(tx, a.ctx, "denial", denialRecordId),
+    );
+    expect(afterSuccess.find((v) => v.fieldId === fieldId)?.value).toBe("my fresh edit");
+  });
+
+  it("two concurrent saves reading the same pre-existing '0:' token cannot both pass: the second blocks on the record's own row lock, then is refused as stale (not a silent overwrite)", async () => {
+    // Tenant B's claim, untouched by any other test in this file, so its token genuinely starts at
+    // "0:" (no existing `custom_field_values` rows at all) — the exact edge case that a `FOR
+    // UPDATE` read over zero rows can't lock.
+    const fieldId = await withTenant(b.ctx, (tx) =>
+      createCustomField(tx, b.ctx, field({ entity: "claim", key: "token_race_field" })),
+    );
+    const tokenBefore = await withTenant(b.ctx, (tx) => customFieldValuesToken(tx, "claim", b.claimId));
+    expect(tokenBefore).toBe("0:");
+
+    let t1Ready!: () => void;
+    const t1ReadyPromise = new Promise<void>((resolve) => {
+      t1Ready = resolve;
+    });
+    let releaseT1!: () => void;
+    const releaseT1Promise = new Promise<void>((resolve) => {
+      releaseT1 = resolve;
+    });
+
+    // T1: a real `saveValuesForRecord` call (not a raw insert) that reads the "0:" token, passes,
+    // writes its value, and then holds its transaction open — uncommitted — until told to proceed.
+    const t1 = systemDb().transaction(async (tx) => {
+      await tx.execute(sql`set local role denialdesk_app`);
+      await tx.execute(sql`select set_config('app.tenant_id', ${b.ctx.tenantId}, true)`);
+      await tx.execute(sql`select set_config('app.user_id', ${b.ctx.userId}, true)`);
+      await saveValuesForRecord(
+        tx,
+        b.ctx,
+        "claim",
+        b.claimId,
+        new Map([[fieldId, "t1 value"]]),
+        undefined,
+        tokenBefore,
+      );
+      t1Ready();
+      await releaseT1Promise;
+    });
+    await t1ReadyPromise;
+
+    // T2: the same pre-T1 "0:" token (as if it had loaded the edit page before T1 saved). Without
+    // `lockRecordRow` serializing on the claim's own row, a `FOR UPDATE` read of zero existing
+    // `custom_field_values` rows locks nothing, and T2 would sail through with the same "0:" token
+    // T1 already used, then silently clear or overwrite T1's value.
+    const t2Promise = withTenant(b.ctx, (tx) =>
+      saveValuesForRecord(
+        tx,
+        b.ctx,
+        "claim",
+        b.claimId,
+        new Map([[fieldId, "t2 value"]]),
+        undefined,
+        tokenBefore,
+      ),
+    );
+
+    // Confirm T2 is genuinely blocked on the claim row's lock (not racing straight through).
+    await expect
+      .poll(
+        async () => {
+          const result = await systemDb().execute<{ waiting: number }>(
+            sql`select count(*)::int as waiting from pg_stat_activity
+                where datname = current_database() and wait_event_type = 'Lock'
+                  and query ilike '%from "claims"%for no key update%'`,
+          );
+          return result.rows[0]?.waiting;
+        },
+        { timeout: 10_000, interval: 25 },
+      )
+      .toBe(1);
+
+    releaseT1();
+    await t1;
+    await expect(t2Promise).rejects.toThrow(/changed since you opened/);
+
+    // T1's value landed; T2's stale attempt overwrote nothing.
+    const loaded = await withTenant(b.ctx, (tx) => loadValuesForRecord(tx, b.ctx, "claim", b.claimId));
+    expect(loaded.find((v) => v.fieldId === fieldId)?.value).toBe("t1 value");
+  }, 20_000);
+
   it("saving a claim's custom field values never creates a claim_versions row or changes the claim's own version/updatedAt", async () => {
     const fieldId = await withTenant(a.ctx, (tx) =>
       createCustomField(tx, a.ctx, field({ entity: "claim", key: "no_version_field" })),
@@ -1189,5 +1381,185 @@ describe("custom field values on claims and denials (PR3)", () => {
       tx.select().from(customFieldValues).where(eq(customFieldValues.claimId, a.claimId)),
     );
     expect(bLoaded).toEqual([]);
+  });
+
+  it("tenant B cannot save values against tenant A's claim or denial id (the record is invisible under RLS, refused cleanly rather than a raw trigger error)", async () => {
+    const denialRecordId = await createDenialOnClaim(a.ctx, a.claimId);
+
+    const bClaimFieldId = await withTenant(b.ctx, (tx) =>
+      createCustomField(tx, b.ctx, field({ entity: "claim", key: "iso_claim_write" })),
+    );
+    await expect(
+      withTenant(b.ctx, (tx) =>
+        saveValuesForRecord(tx, b.ctx, "claim", a.claimId, new Map([[bClaimFieldId, "should not land"]])),
+      ),
+    ).rejects.toBeInstanceOf(CustomFieldValueError);
+
+    const bDenialFieldId = await withTenant(b.ctx, (tx) =>
+      createCustomField(tx, b.ctx, field({ entity: "denial", key: "iso_denial_write" })),
+    );
+    await expect(
+      withTenant(b.ctx, (tx) =>
+        saveValuesForRecord(
+          tx,
+          b.ctx,
+          "denial",
+          denialRecordId,
+          new Map([[bDenialFieldId, "should not land"]]),
+        ),
+      ),
+    ).rejects.toBeInstanceOf(CustomFieldValueError);
+
+    // Nothing was written under either tenant from these refused attempts.
+    const aClaimValues = await withTenant(a.ctx, (tx) =>
+      tx.select().from(customFieldValues).where(eq(customFieldValues.claimId, a.claimId)),
+    );
+    expect(aClaimValues.some((v) => v.fieldId === bClaimFieldId)).toBe(false);
+    const bValues = await withTenant(b.ctx, (tx) => tx.select().from(customFieldValues));
+    expect(bValues.some((v) => v.claimId === a.claimId || v.denialId === denialRecordId)).toBe(false);
+  });
+
+  it("tenant B cannot reveal tenant A's claim custom field value (the field row is invisible under RLS: no decrypt, no audit)", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "claim", key: "iso_claim_reveal", sensitivity: "hiv" })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "claim", a.claimId, new Map([[fieldId, "alpha secret"]])),
+    );
+    const before = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.value_revealed"));
+    const result = await withTenant(b.ctx, (tx) =>
+      revealCustomFieldValue(tx, b.ctx, { fieldId, entity: "claim", recordId: a.claimId, reason: "appeal" }),
+    );
+    expect(result.value).toBeUndefined();
+    expect(result.error).toBeDefined();
+    const after = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.value_revealed"));
+    expect(after.length).toBe(before.length); // no new reveal audit row
+  });
+
+  it("a role outside canWorkDenials is refused a reveal on a claim or denial custom field, with no decrypt and no audit", async () => {
+    const denialRecordId = await createDenialOnClaim(a.ctx, a.claimId);
+    const compliance = await addUser(a.ctx.tenantId, "compliance", "cf-reveal-refused");
+    for (const [entity, recordId] of [
+      ["claim", a.claimId],
+      ["denial", denialRecordId],
+    ] as const) {
+      const fieldId = await withTenant(a.ctx, (tx) =>
+        createCustomField(
+          tx,
+          a.ctx,
+          field({ entity, key: `compliance_refused_${entity}`, sensitivity: "hiv" }),
+        ),
+      );
+      await withTenant(a.ctx, (tx) =>
+        saveValuesForRecord(tx, a.ctx, entity, recordId, new Map([[fieldId, `${entity} secret`]])),
+      );
+      const before = await systemDb()
+        .select()
+        .from(auditEvents)
+        .where(eq(auditEvents.action, "custom_field.value_revealed"));
+      const result = await withTenant(compliance, (tx) =>
+        revealCustomFieldValue(tx, compliance, { fieldId, entity, recordId, reason: "appeal" }),
+      );
+      expect(result.value).toBeUndefined();
+      expect(result.error).toBe("Your role can't reveal custom field values.");
+      const after = await systemDb()
+        .select()
+        .from(auditEvents)
+        .where(eq(auditEvents.action, "custom_field.value_revealed"));
+      expect(after.length).toBe(before.length);
+    }
+  });
+
+  it("claim and denial saves, reads, and reveals audit with IDs/keys only, never the value, and a reveal always carries a reason", async () => {
+    const denialRecordId = await createDenialOnClaim(a.ctx, a.claimId);
+    for (const [entity, recordId] of [
+      ["claim", a.claimId],
+      ["denial", denialRecordId],
+    ] as const) {
+      const plainFieldId = await withTenant(a.ctx, (tx) =>
+        createCustomField(tx, a.ctx, field({ entity, key: `audit_plain_${entity}` })),
+      );
+      const sensitiveFieldId = await withTenant(a.ctx, (tx) =>
+        createCustomField(tx, a.ctx, field({ entity, key: `audit_sensitive_${entity}`, sensitivity: "hiv" })),
+      );
+
+      await withTenant(a.ctx, (tx) =>
+        saveValuesForRecord(
+          tx,
+          a.ctx,
+          entity,
+          recordId,
+          new Map([
+            [plainFieldId, `${entity} plain value`],
+            [sensitiveFieldId, `${entity} secret value`],
+          ]),
+        ),
+      );
+      const [updateEvent] = await systemDb()
+        .select()
+        .from(auditEvents)
+        .where(eq(auditEvents.action, "custom_field.values_updated"))
+        .orderBy(desc(auditEvents.occurredAt))
+        .limit(1);
+      // patientId (threat model R1): who this custom-field change belongs to, IDs only.
+      expect(updateEvent!.metadata).toMatchObject({ entity, recordId, patientId: a.patientId });
+      const changedKeys = String((updateEvent!.metadata as Record<string, string>).changed).split(",");
+      expect(changedKeys).toEqual(
+        expect.arrayContaining([`audit_plain_${entity}`, `audit_sensitive_${entity}`]),
+      );
+      expect(JSON.stringify(updateEvent)).not.toContain("plain value");
+      expect(JSON.stringify(updateEvent)).not.toContain("secret value");
+
+      await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, entity, recordId));
+      const [readEvent] = await systemDb()
+        .select()
+        .from(auditEvents)
+        .where(eq(auditEvents.action, "custom_field.values_read"))
+        .orderBy(desc(auditEvents.occurredAt))
+        .limit(1);
+      expect(readEvent!.metadata).toMatchObject({ entity, recordId });
+      const readFieldIds = String((readEvent!.metadata as Record<string, string>).fieldIds).split(",");
+      expect(readFieldIds).toContain(plainFieldId);
+      expect(readFieldIds).not.toContain(sensitiveFieldId); // masked: never decrypted on load
+      expect(JSON.stringify(readEvent)).not.toContain("plain value");
+
+      const revealed = await withTenant(a.ctx, (tx) =>
+        revealCustomFieldValue(tx, a.ctx, {
+          fieldId: sensitiveFieldId,
+          entity,
+          recordId,
+          reason: "eligibility",
+        }),
+      );
+      expect(revealed.value).toBe(`${entity} secret value`);
+      const [revealEvent] = await systemDb()
+        .select()
+        .from(auditEvents)
+        .where(eq(auditEvents.action, "custom_field.value_revealed"))
+        .orderBy(desc(auditEvents.occurredAt))
+        .limit(1);
+      expect(revealEvent!.entityId).toBe(sensitiveFieldId);
+      expect(revealEvent!.reason).toBe("eligibility");
+      expect(revealEvent!.metadata).toMatchObject({ entity, recordId });
+      expect(JSON.stringify(revealEvent)).not.toContain("secret value");
+    }
+  });
+
+  it("refuses a save whose claim/denial id doesn't exist at all in this tenant, with a translated error rather than a raw database error", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "claim", key: "bad_id_field" })),
+    );
+    const bogusId = "00000000-0000-0000-0000-000000000000";
+    await expect(
+      withTenant(a.ctx, (tx) =>
+        saveValuesForRecord(tx, a.ctx, "claim", bogusId, new Map([[fieldId, "should not land"]])),
+      ),
+    ).rejects.toBeInstanceOf(CustomFieldValueError);
   });
 });
