@@ -49,8 +49,8 @@ _Last updated: 2026-09-28_
   MRN-identifier-system rules in `src/integrations/fhir/`, environment rule at save; **PI1b-2 Settings pages done** (list for every role, admin-only new/detail
   pages, inline-confirmed revoke with offboarding steps, `docs/runbooks/integration-offboarding.md`),
   **PI1b-3 drop-down done** (`DataSourceMenu` beside the Patients tab: Source: Manual / <name> ·
-  state, every role; admin link to connect or manage; sync actions join in PI2a/PI2b),
-  PI1b-3 drop-down; Submit/attestation/MFA step-up/pause-resume moved to PI2a, where Test
+  state, every role; admin link to connect or manage; sync actions join in PI2a/PI2b);
+  Submit/attestation/MFA step-up/pause-resume moved to PI2a, where Test
   connection first makes Submit possible; PI1c operator approval now follows PI2a, since it needs
   submitted connections), PI2a transport/discovery/keys/test connection + Submit, PI1c operator approval,
   PI2b sync engine + sandbox + jobs + history + payer mapping (includes `withTenantAsSystem`,
@@ -369,7 +369,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
    P2 coverage now comes from the EHR sync once a practice is connected (`specs/patient-integrations.md`).
-11. Patient integrations PI1a → PI1b (done) → PI2a → PI1c → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
+11. Patient integrations PI1a → PI1b (done; PI2a follow-ups from its reviews: hide or explain
+   "Register patient" and give the drop-down panel a sentence per state while a connection is outside
+   draft/revoked; PI2b: refresh the drop-down's summary during a session) → PI2a → PI1c → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
 
 ## Open questions for humans
@@ -405,6 +407,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   (`public/brand/README.md`); it is owner-supplied and described as a synthetic render.
 - Claims list: are patient names read only to order the unsubmitted queue by patient (never shown
   beyond the displayed page) covered by the `claim.list_viewed` audit event? `OA-060`.
+- Integrations: the free-text connection name is now shown to every role on every page (the Patients
+  data-source drop-down); accept the residual risk or ask for a stronger guard? `OA-061`.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.
 - Insight exported .xlsx workbooks (R-9.2.1, SOC 2 C1.1/CC6.7): owner said "not sure, let's

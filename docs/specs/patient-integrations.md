@@ -268,9 +268,17 @@ get their own tests in PI2a.
   (registering is refused then, PI1a): hide or explain it with the drop-down's state (PI2a, when a
   connection can first leave draft). The new page offers only the built-in sandbox where only synthetic data is allowed, so a reviewed
   vendor sandbox (`VENDOR_SANDBOX_HOSTS`, empty, OA-049) has no UI path yet: add one with the first
-  host. Residual risk accepted for now: the connection name is free text shown to every role (the list
-  and the drop-down); its only guard against patient information is the "no patient information"
-  hint plus the length and invisible-character checks.
+  host. Residual risk, pending owner acceptance (**OA-061**): the connection name is free text shown to
+  every role, on the list and in the drop-down on every signed-in page (screen shares, screenshots);
+  its only guard against patient information is the "no patient information" hint plus the length
+  and invisible-character checks.
+- PI2a follow-ups (compliance review of PI1b-3): the drop-down panel says "Patients sync read-only
+  from {name}" for every non-revoked state; give `pending_approval` / `paused` / `error` their own
+  sentence (e.g. nothing synced yet; staff can't register patients by hand meanwhile). The revoked
+  sentence ("can't be edited here for now") depends on OA-048.
+- PI2b: the drop-down's summary loads with the signed-in layout, which persists across client
+  navigation, so other users' open sessions can show a stale state until a reload; refresh it
+  (e.g. when the menu opens, or on an interval) once syncs can change it.
 
 ### PI1c — operator approval
 - [ ] The operator practice page (`/operator/practices/<id>`, pattern of BAA recording and

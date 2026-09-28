@@ -484,7 +484,8 @@ export type SyncRunStatus = (typeof integrationSyncRunStatusEnum.enumValues)[num
  * are ISO strings: this crosses to the browser. Configuration only — never PHI or patient counts.
  */
 export interface DataSourceSummary {
-  connectionId: string;
+  /** Null when sent to a role that can't open the connection page (the layout strips it). */
+  connectionId: string | null;
   displayName: string;
   status: ConnectionStatus;
   lastSuccessAt: string | null;

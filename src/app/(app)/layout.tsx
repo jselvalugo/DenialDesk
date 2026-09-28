@@ -9,7 +9,10 @@ export default async function SignedInLayout({ children }: { children: React.Rea
   const auth = await requireAuth();
   // The Patients data-source drop-down (specs/erp-shell.md): one indexed read of configuration,
   // never PHI or patient counts, so not audited.
-  const patients = await withTenant(auth, (tx) => connectionSummary(tx, "patients"));
+  const canManage = canManageIntegrations(auth.role);
+  const summary = await withTenant(auth, (tx) => connectionSummary(tx, "patients"));
+  // The connection id only feeds the administrators' "Connection settings" link (minimum necessary).
+  const patients = summary && !canManage ? { ...summary, connectionId: null } : summary;
   return (
     <AppShell
       user={{
@@ -20,7 +23,7 @@ export default async function SignedInLayout({ children }: { children: React.Rea
       showRevenueCycle={canViewRevenueCycle(auth.role)}
       dataSources={{
         patients,
-        canManageIntegrations: canManageIntegrations(auth.role),
+        canManageIntegrations: canManage,
         renderedAt: new Date().toISOString(),
       }}
     >

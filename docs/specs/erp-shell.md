@@ -70,7 +70,8 @@ arrive with the features behind them (PI2a Submit/pause/resume, PI2b sync now an
       verification within the last 5 minutes (step-up, as in `specs/patient-integrations.md`); the
       menu shows the result as a status message.
 - [x] The summary (connection name, status, last successful sync, latest run status) is loaded by the
-      signed-in layout for the tenant in one indexed query (`connectionSummary`) and passed through
+      signed-in layout for the tenant in one query (`connectionSummary`; the live row is found through
+      the partial unique index, the revoked fallback scans the practice's few connections) and passed through
       `AppShell` → `ShellProvider`; it holds no PHI, no counts of patients, and nothing is placed in
       URLs or client storage (R-7.4.8). The source is the live connection if any, else the most
       recently revoked one that was ever submitted or synced; a draft is never a source. Actions

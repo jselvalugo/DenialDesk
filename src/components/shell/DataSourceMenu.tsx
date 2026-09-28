@@ -135,7 +135,7 @@ export function DataSourceMenu({ table }: { table: "patients" }) {
             <div className="p-1.5">
               <Link
                 href={
-                  showConnect || !summary
+                  showConnect || !summary?.connectionId
                     ? "/settings/integrations"
                     : `/settings/integrations/${summary.connectionId}`
                 }

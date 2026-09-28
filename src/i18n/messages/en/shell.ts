@@ -93,7 +93,7 @@ export const shell = {
   "dataSource.panel.manual": "Staff register patients by hand in DenialDesk.",
   "dataSource.panel.connected": "Patients sync read-only from {name}.",
   "dataSource.panel.revoked":
-    "The connection to {name} was revoked. Staff register new patients by hand; patients already synced stay read-only.",
+    "The connection to {name} was revoked. Staff register new patients by hand; patients already synced can't be edited here for now.",
   "dataSource.panel.status": "Status",
   "dataSource.panel.lastSync": "Last successful sync",
   "dataSource.panel.never": "Never",

@@ -92,7 +92,7 @@ export const shell: Messages["shell"] = {
   "dataSource.panel.manual": "El personal registra a los pacientes a mano en DenialDesk.",
   "dataSource.panel.connected": "Los pacientes se sincronizan en solo lectura desde {name}.",
   "dataSource.panel.revoked":
-    "La conexión con {name} se revocó. El personal registra a mano a los pacientes nuevos; los ya sincronizados siguen en solo lectura.",
+    "La conexión con {name} se revocó. El personal registra a mano a los pacientes nuevos; los ya sincronizados no se pueden editar aquí por ahora.",
   "dataSource.panel.status": "Estado",
   "dataSource.panel.lastSync": "Última sincronización correcta",
   "dataSource.panel.never": "Nunca",

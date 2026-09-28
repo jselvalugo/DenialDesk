@@ -579,6 +579,44 @@ describe("connectionSummary (the tab-bar drop-down)", () => {
     expect(await summaryOf()).toMatchObject({ connectionId: nextId, status: "active" });
   });
 
+  it("never counts another practice's sync run, and carries only configuration", async () => {
+    const c = await createTestTenant("Connections summary runs");
+    const { id } = await withTenant(c, (tx) =>
+      createSandboxConnection(tx, admin(c, true), { displayName: "C live" }),
+    );
+    await withTenant(c, (tx) => activateSandboxStandIn(tx, c, id));
+    // A run in another practice, inserted as the table owner and pointed at nothing of C's: RLS
+    // and the tenant match in the lateral join both keep it out.
+    const other = await createTestTenant("Connections summary runs other");
+    const { id: otherId } = await withTenant(other, (tx) =>
+      createSandboxConnection(tx, admin(other, true), { displayName: "Other live" }),
+    );
+    await withTenant(other, (tx) => activateSandboxStandIn(tx, other, otherId));
+    await withTenant(other, (tx) =>
+      tx.execute(sql`
+        insert into integration_sync_runs (tenant_id, connection_id, trigger, triggered_by)
+        values (${other.tenantId}::uuid, ${otherId}::uuid, 'manual', ${other.userId}::uuid)
+      `),
+    );
+    const summary = await withTenant(c, (tx) => connectionSummary(tx, "patients"));
+    expect(summary!.lastRunStatus).toBeNull();
+    // Exactly these keys reach the browser: never the base URL, client ID, or any run detail.
+    expect(Object.keys(summary!).sort()).toEqual(
+      ["connectionId", "displayName", "lastRunStatus", "lastSuccessAt", "status"].sort(),
+    );
+    for (const ctx of [c, other]) {
+      const current = (await withTenant(ctx, (tx) => connectionSummary(tx, "patients")))!;
+      await withTenant(ctx, async (tx) =>
+        revokeConnection(
+          tx,
+          admin(ctx, true),
+          current.connectionId!,
+          (await getConnection(tx, current.connectionId!))!.updatedAt.toISOString(),
+        ),
+      );
+    }
+  });
+
   it("never shows another practice's connection", async () => {
     const c = await createTestTenant("Connections summary isolation");
     const { id } = await withTenant(b, (tx) =>
