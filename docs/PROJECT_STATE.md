@@ -6,6 +6,10 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-27_
 
 ## Where we are
+- Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
+  of practice denial totals (`queueSummary`, aggregates only, no audit; owner to confirm, OA-058), the two step flows as a
+  connected pipeline (`src/components/home/FlowSteps.tsx`), and "Your modules" as a card grid with
+  page links. Within DESIGN.md §3 (no gradients, hairline panels, hover-only motion ≤ 150ms).
 - **Patient integrations — Patient Register synced from the EHR/PM** (`specs/patient-integrations.md`,
   ADR 0010 Proposed, `threat-models/patient-integrations.md`; owner request 2026-09-27: "sync data,
   not hold any of the data … a drop-down in the nav bar beside the table … connect to this table

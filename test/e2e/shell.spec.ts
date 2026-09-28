@@ -259,6 +259,13 @@ test.describe("signed in", () => {
     ]) {
       await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
     }
+    // Live practice totals from the denial queue, each linking to where it can be worked.
+    const today = page.getByRole("region", { name: "Open denials today" });
+    for (const label of ["Open denials", "Amount at risk", "Due in 7 days", "Past deadline"]) {
+      await expect(today.getByRole("link", { name: label, exact: true })).toBeVisible();
+    }
+    await expect(page.getByText("3 of 5 steps available")).toBeVisible();
+    await expect(page.getByText("2 of 4 steps available")).toBeVisible();
     // Shipped steps link to their page; planned steps are labelled, never linked.
     for (const step of [1, 2, 3]) {
       await expect(page.locator(`[data-step="${step}"]`).getByRole("link")).toHaveCount(1);
