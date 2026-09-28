@@ -3,7 +3,7 @@
 Read this at the start of every session, after `CLAUDE.md`. Update it at the end of every session
 that changes decisions, status, or open questions. Keep it short: facts and links, not narrative.
 
-_Last updated: 2026-09-27_
+_Last updated: 2026-09-28_
 
 ## Where we are
 - Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
@@ -33,7 +33,18 @@ _Last updated: 2026-09-27_
   Phases: PI0 docs (done), **PI1a data layer (done, `drizzle/0039_patient_integrations_data_layer.sql`:
   patients provenance + read-only trigger, `integration_connections` lifecycle/editability trigger,
   the endpoint registry with SECURITY DEFINER claim/release, sync runs/issues, payer mappings;
-  `canManageIntegrations`; domain refusals in `src/domain/patients/queries.ts`)**, PI1b Settings ›
+  `canManageIntegrations`; domain refusals in `src/domain/patients/queries.ts`; revised 2026-09-28
+  after correctness/security/compliance review — sandbox self-activation and approval-presence CHECK
+  constraints, endpoint-field-set locked to `draft` only, self-approval-freshness enforcement,
+  registry claim requires a discovered token endpoint + `FOR UPDATE`, `search_path` hardened to
+  `pg_catalog, public, pg_temp` with `pg_temp` last and `REVOKE ALL FROM PUBLIC` before granting the
+  two registry functions, a partial unique index caps one queued/running run per connection and one
+  non-draft/revoked connection per tenant, `purge_demo_practices()` extended for the five new tables,
+  `updatePatientSensitivityTags` now takes `actor.canTag`, and `src/lib/log.ts` drops non-UUID
+  `*Id`-shaped fields and denylists raw identifier keys — see `docs/specs/patient-integrations.md`
+  PI1a for the full list; R-15.9 human sign-off on the privilege (REVOKE/GRANT/column-grant)
+  statements is still needed before this migration runs anywhere but a local/test database)**, PI1b
+  Settings ›
   Integrations + drop-down, PI1c operator approval, PI2a transport/discovery/keys/test connection,
   PI2b sync engine + sandbox + jobs + history + payer mapping (includes `withTenantAsSystem`,
   `denialdesk_jobs`, the integration service principal — deferred from PI1a per the spec's own phase

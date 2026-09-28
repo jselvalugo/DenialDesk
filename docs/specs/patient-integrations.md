@@ -105,33 +105,85 @@ when the run succeeds, so a failed first run still locks the endpoint.
 - [x] Migration adds provenance to `patients` and the new tables (Data changes); existing patients
       become `source = 'manual'`. Every new table has `tenant_id`, RLS ENABLE + FORCE, a tenant
       policy, composite `(tenant_id, x)` FKs for every reference, tenant in every unique key, no
-      DELETE grant, and an isolation test (read, insert, update across tenants).
+      DELETE grant, and an isolation test (read, insert, update across tenants). CHECK constraints
+      close the gaps a first pass left open: a sandbox connection can only ever point at the
+      built-in sandbox URL/key and can never reach `pending_approval` (`is_sandbox` cannot be
+      self-declared to skip approval); a non-sandbox connection cannot reach
+      `active`/`paused`/`error` without recorded `approved_by/_at`, `approval_method`, and
+      `population_scope`; `pending_approval` requires submission + US-residency attestation fields;
+      `revoked` requires `revoked_by/_at`; `patients_member_id_presence` requires a manual row's
+      member id and ties a `fhir` row's member id to `coverage_status`; a manual row keeps every
+      sync-owned column at its default; `source_sensitivity` is a fixed vocabulary; `external_id`
+      matches FHIR `id` syntax; and `issue_codes`/`status_reason`-style code arrays match a
+      `[a-z_]{1,64}` format (via the immutable helper `integration_codes_well_formed`, since a CHECK
+      cannot itself run a subquery). A partial unique index allows only one queued/running
+      `integration_sync_runs` row per connection.
       (`drizzle/0039_patient_integrations_data_layer.sql`, `test/integration/patient-integrations.test.ts`)
+      ⚠️ Cutover consideration: these CHECKs and the partial unique indexes are added with a plain
+      `ALTER TABLE ... ADD CONSTRAINT` / `CREATE UNIQUE INDEX`, which takes a table lock and
+      validates existing rows inline — fine here because the tables are new and empty in every
+      environment this migration has run in. A **future** change to these constraints on a
+      populated table should use `NOT VALID` + a separate `VALIDATE CONSTRAINT`, and
+      `CREATE UNIQUE INDEX CONCURRENTLY`, to avoid locking reads/writes.
 - [x] Trigger `patients_synced_readonly` refuses INSERT of a `fhir` row, any change to a synced
       column, and any change of `source`/`source_connection_id`/`external_id`, unless
-      `app.sync_run_id` names a `running` run of `app.sync_connection_id` in the current tenant and
-      that connection owns the row. `fhir → manual` is always refused. Message added to
-      `TRIGGER_MESSAGE_FORMATS` (ADR 0006).
-- [x] Trigger on `integration_connections` enforces the lifecycle and editability rules above; the
-      app role cannot write approval columns or move `pending_approval → active` (column grants +
-      trigger); `revoked` is terminal.
-- [x] Endpoint registry `integration_endpoint_registry` (no RLS, no grants to `denialdesk_app`):
-      unique `(endpoint_key, client_id)` over all practices, reached only through SECURITY DEFINER
-      `integration_registry_claim(connection_id)` / `_release(connection_id)` returning a boolean.
-      `endpoint_key` = WHATWG-normalized scheme + host + port + path (no trailing slash; path compared
-      case-insensitively). A second unique key covers the normalized **discovered token endpoint** +
-      client ID, so a vanity hostname or CNAME for the same server can't bypass the registry (M-b).
-      Both functions require `connection.tenant_id = current_setting('app.tenant_id')`, run with
-      `SET search_path = pg_catalog, public`, and release only on a transition to `draft`
-      (withdraw/reject) or `revoked`, enforced in the database; isolation test: practice A cannot
-      claim or release practice B's entry (M-a). Sandbox connections are not registered.
+      `app.sync_run_id` names a `running` run of `app.sync_connection_id` in the current tenant,
+      that run's connection is `active`, and that connection owns the row. `fhir → manual` is
+      always refused, and sensitivity tags are frozen (never touched by a sync, even on a manual
+      row) whenever `app.sync_run_id` is set. Message added to `TRIGGER_MESSAGE_FORMATS` (ADR 0006).
+- [x] Trigger on `integration_connections` enforces the lifecycle and editability rules above: the
+      app role cannot write approval columns (column grants) or move `pending_approval → active`
+      (also checked in the trigger, as a second layer, by role name); activation additionally
+      requires a *fresh* approval (`approved_at` must change on the same update, not merely be
+      carried over); `revoked` is terminal; the endpoint field set (`base_url`, `endpoint_key`,
+      `token_endpoint`, `token_endpoint_key`, `issuer`, `client_id`, `mrn_identifier_system`) is
+      writable only while `status = 'draft'`, regardless of whether the same update also changes
+      `status`, and is locked forever once `has_synced`; while `pending_approval`, only
+      `display_name`, the updated-by/at bookkeeping, and the status transition itself may change.
+      A second trigger abandons any `queued`/`running` sync run when its connection is revoked, and
+      a partial unique index allows only one connection per tenant outside `draft`/`revoked` at a
+      time (unchanged from the first pass, now covered by an explicit isolation/edge-case test
+      matrix rather than a single happy-path test).
+- [x] Endpoint registry `integration_endpoint_registry` (no RLS, no grants to `denialdesk_app`;
+      `PUBLIC`'s default EXECUTE on the two functions below is explicitly revoked before the
+      practice role is granted it back): unique `(endpoint_key, client_id)` over all practices,
+      reached only through SECURITY DEFINER `integration_registry_claim(connection_id)` /
+      `_release(connection_id)` returning a boolean. `endpoint_key` = WHATWG-normalized scheme +
+      host + port + path (no trailing slash; path compared case-insensitively). A second unique key
+      covers the normalized **discovered token endpoint** + client ID, so a vanity hostname or CNAME
+      for the same server can't bypass the registry (M-b); claiming refuses (rather than silently
+      registering) a connection with no discovered token endpoint yet. Both functions require
+      `connection.tenant_id = current_setting('app.tenant_id')`, claim only a connection that is
+      `pending_approval` and not a sandbox (row locked `FOR UPDATE`), run with
+      `SET search_path = pg_catalog, public, pg_temp` (`pg_temp` last, so a session-local temp table
+      can never shadow a catalog/schema lookup — tested with a planted temp table), and release only
+      on a transition to `draft` (withdraw/reject) or `revoked`, enforced in the database; isolation
+      test: practice A cannot claim or release practice B's entry (M-a). Sandbox connections are not
+      registered.
       ⚠️ The WHATWG-normalization algorithm itself is `src/integrations/fhir/url-rules.ts` (PI2a);
       PI1a stores whatever `endpoint_key`/`token_endpoint_key` the caller computes.
+      ⚠️ R-15.9: the `REVOKE`/`GRANT EXECUTE` and column-grant statements in this migration are a
+      privilege change; per non-negotiable 5/R-15.9 they still need a human sign-off recorded on the
+      PR before this migration is applied anywhere beyond a local/test database, same as any other
+      IAM-adjacent change.
+- [x] `purge_demo_practices()` (0038) is extended (`CREATE OR REPLACE`, same function, same
+      trigger-disable/enable pattern) to delete the five new tables' demo-practice rows in FK order
+      (`integration_sync_issues`, `integration_sync_runs`, `integration_payer_mappings`, `patients`,
+      `integration_endpoint_registry`, `integration_connections`) and to disable/re-enable the two
+      new append-only-style guards around that; extended in `test/integration/demo-purge.test.ts`.
 - [x] Domain refusals (before the triggers): `updatePatient` on synced patients; register/edit while
-      a connection is outside `draft`/`revoked`. Sensitivity tags (administrators) and custom field
-      values stay editable on synced patients (new `updatePatientSensitivityTags`, separate from
-      `updatePatient`, since the latter is refused outright on a synced patient).
+      a connection is outside `draft`/`revoked` (checked with `SELECT ... FOR SHARE`; the
+      synced-patient refusal is checked first, so editing a specific synced patient reports that,
+      not the generic "registration is closed" message). Sensitivity tags require the caller's role
+      to grant tag-management (`updatePatientSensitivityTags(tx, actor, ...)` takes
+      `actor.canTag` and validates the tag against the known vocabulary at runtime) and stay
+      editable on synced patients — separate from `updatePatient`, since the latter is refused
+      outright on a synced patient. Custom field values also stay editable on a synced patient.
 - [x] `canManageIntegrations` (admin only).
+- [x] `src/lib/log.ts`'s redaction helpers additionally drop any `*Id`-shaped field whose value isn't
+      a UUID, and refuse a small deny-list of identifier keys outright (`externalId`, `memberId`,
+      `clientId`, `sourceVersionId`) so a raw FHIR/member identifier can never reach a log record
+      even under a plausible-looking key name.
 
 ### PI1b — Settings › Integrations and the tab-bar drop-down
 - [ ] Integrations tab live: list (name, status, last sync); "New connection" →
