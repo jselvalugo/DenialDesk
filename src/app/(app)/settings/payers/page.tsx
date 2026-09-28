@@ -2,16 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAuth } from "@/auth/session";
 import { Code } from "@/components/ui/Code";
-import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
+import { nextSortDir, SortableHeader, Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Panel } from "@/components/ui/Panel";
 import { ListCell } from "@/components/custom-fields/ListCell";
 import { withTenant } from "@/db/tenant";
 import { regimeLabel } from "@/domain/denial-status";
 import { loadListValues } from "@/domain/custom-fields/list-values";
-import { listPayers } from "@/domain/payers/queries";
+import { listPayers, PAYER_SORT_DEFAULT_DIR } from "@/domain/payers/queries";
 import { payerSourceLabel } from "@/domain/payers/source-label";
 import { getT } from "@/i18n/server";
+import { parsePayerSort, payerListHref } from "./sort";
 
 // Read-only payer list under Settings (docs/specs/settings-and-custom-fields.md S2 PR4;
 // docs/specs/payer-catalog.md). Every practice role may view it, same as the rest of Settings
@@ -22,13 +23,18 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t("payers.metaTitle") };
 }
 
-export default async function PayersPage() {
+export default async function PayersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const auth = await requireAuth();
   const t = await getT("settings");
   const tc = await getT("common");
+  const { sort, dir } = parsePayerSort(await searchParams);
 
   const { rows, listColumns, listValues } = await withTenant(auth, async (tx) => {
-    const rows = await listPayers(tx);
+    const rows = await listPayers(tx, dir);
     const { columns, valuesByRecord } = await loadListValues(
       tx,
       auth,
@@ -37,6 +43,8 @@ export default async function PayersPage() {
     );
     return { rows, listColumns: columns, listValues: valuesByRecord };
   });
+
+  const nextDir = nextSortDir(true, dir, PAYER_SORT_DEFAULT_DIR[sort]);
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
@@ -54,7 +62,15 @@ export default async function PayersPage() {
           <Table caption={t("payers.tableCaption")}>
             <thead>
               <tr>
-                <Th>{tc("word.name")}</Th>
+                <SortableHeader
+                  label={tc("word.name")}
+                  active
+                  dir={dir}
+                  href={payerListHref(sort, nextDir)}
+                  hint={tc("sortable.hint", {
+                    direction: tc(nextDir === "asc" ? "sortable.ascending" : "sortable.descending"),
+                  })}
+                />
                 <Th>{t("payers.ediPayerId")}</Th>
                 <Th>{t("payers.field.regime")}</Th>
                 <Th>{t("payers.source")}</Th>

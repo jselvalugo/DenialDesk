@@ -35,11 +35,10 @@ export const denials: Messages["denials"] = {
   "field.assignee": "Responsável",
   "field.appealDeadline": "Prazo de recurso",
   "field.deniedAmount": "Valor negado",
-  "field.sortBy": "Ordenar por",
   "assignee.unassigned": "Sem responsável",
   "sortLabel.deadline": "prazo de recurso",
   "sortLabel.amount": "valor negado",
-  "sortLabel.notice": "aviso mais recente",
+  "sortLabel.notice": "data do aviso",
 
   // Página da fila (src/app/(app)/denials/page.tsx)
   "queue.title": "Fila de negativas",
@@ -58,7 +57,6 @@ export const denials: Messages["denials"] = {
   "filter.allCategories": "Todas as categorias",
   "filter.anyone": "Qualquer um",
   "filter.assignedToMe": "Atribuídas a mim",
-  "sort.newestNotice": "Aviso mais recente",
   "appealFiled.late": "Apresentado após o prazo",
   "appealFiled.onTime": "Recurso apresentado no prazo",
   "appealFiled.noDeadline": "Recurso apresentado · sem prazo configurado",

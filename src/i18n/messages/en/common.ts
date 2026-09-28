@@ -66,6 +66,12 @@ export const common = {
   "word.on": "on",
   "word.of": "of",
 
+  // Sortable table headers (components/ui/DataTable SortableHeader)
+  "sortable.hint": "sort {direction}",
+  "sortable.ascending": "ascending",
+  "sortable.descending": "descending",
+  "sortable.defaultOrder": "sort in default order",
+
   // Pagination (components/ui/Pagination)
   "pagination.label": "Pagination",
   "pagination.noResults": "No results",

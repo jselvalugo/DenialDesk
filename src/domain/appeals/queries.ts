@@ -19,11 +19,20 @@ export const PAGE_SIZE = 25;
 /** Same display window as the denial queue (denials/queries.ts): a UI setting, not a legal value. */
 export const DUE_SOON_DAYS = 7;
 
+export type AppealSortKey = "deadline" | "amount";
+/** First-click direction for each sortable column (P4, docs/specs/record-pages.md). */
+export const APPEAL_SORT_DEFAULT_DIR: Record<AppealSortKey, "asc" | "desc"> = {
+  deadline: "asc",
+  amount: "desc",
+};
+
 export interface AppealQueueFilters {
   status: "open" | "closed" | "all";
   level?: AppealLevel;
   payerId?: string;
-  sort: "deadline" | "amount";
+  sort: AppealSortKey;
+  /** Defaults to `APPEAL_SORT_DEFAULT_DIR[sort]` when omitted (callers that don't parse a URL). */
+  dir?: "asc" | "desc";
   page: number;
 }
 
@@ -39,10 +48,15 @@ function filterConditions(filters: AppealQueueFilters): SQL[] {
 
 export async function listAppeals(tx: TenantTx, filters: AppealQueueFilters) {
   const where = and(...filterConditions(filters));
+  const dir = filters.dir ?? APPEAL_SORT_DEFAULT_DIR[filters.sort];
   const order =
     filters.sort === "amount"
-      ? [desc(denials.deniedCents), asc(appeals.id)]
-      : [sql`${appeals.deadline} asc nulls last`, desc(denials.deniedCents), asc(appeals.id)];
+      ? [dir === "asc" ? asc(denials.deniedCents) : desc(denials.deniedCents), asc(appeals.id)]
+      : [
+          dir === "asc" ? sql`${appeals.deadline} asc nulls last` : sql`${appeals.deadline} desc nulls last`,
+          desc(denials.deniedCents),
+          asc(appeals.id),
+        ];
 
   const rows = await tx
     .select({

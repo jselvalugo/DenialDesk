@@ -5,6 +5,7 @@ import { z } from "zod";
 import { todayIn } from "@rules/calendar";
 import { canEditPatients } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { nextSortDir } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { primaryLinkButtonClass } from "@/components/ui/linkButton";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -13,11 +14,18 @@ import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { loadListValues } from "@/domain/custom-fields/list-values";
 import { blocksPatientsRegister, getPatientsConnectionSummary } from "@/domain/integrations/connections";
-import { listPatients, PATIENT_LIST_FIELDS, PATIENTS_PAGE_SIZE } from "@/domain/patients/queries";
+import {
+  listPatients,
+  PATIENT_LIST_FIELDS,
+  PATIENT_SORT_DEFAULT_DIR,
+  PATIENTS_PAGE_SIZE,
+  type PatientSortKey,
+} from "@/domain/patients/queries";
 import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { PatientSearch } from "./PatientSearch";
 import { PatientTable } from "./PatientTable";
+import { parsePatientSort, patientListHref } from "./sort";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT("patients");
@@ -31,17 +39,33 @@ export default async function PatientsPage({
 }) {
   const auth = await requireAuth();
   const t = await getT("patients");
-  // Only the page number is ever in the URL; searches are POSTed (no PHI in URLs).
-  const page = z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(10_000)
-    .catch(1)
-    .parse((await searchParams).page);
+  const params = await searchParams;
+  // Only the page number and sort are ever in the URL; searches are POSTed (no PHI in URLs).
+  const page = z.coerce.number().int().min(1).max(10_000).catch(1).parse(params.page);
+  const { sort, dir } = parsePatientSort(params);
+  const tc = await getT("common");
+  /** Props for one sortable column header (P4, docs/specs/record-pages.md). */
+  function sortHeader(key: PatientSortKey): {
+    active: boolean;
+    dir: "asc" | "desc";
+    href: string;
+    hint: string;
+  } {
+    const active = sort === key;
+    const currentDir = active ? dir : PATIENT_SORT_DEFAULT_DIR[key];
+    const nextDir = nextSortDir(active, currentDir, PATIENT_SORT_DEFAULT_DIR[key]);
+    return {
+      active,
+      dir: currentDir,
+      href: patientListHref(key, nextDir, 1),
+      hint: tc("sortable.hint", {
+        direction: tc(nextDir === "asc" ? "sortable.ascending" : "sortable.descending"),
+      }),
+    };
+  }
 
   const { rows, total, listColumns, listValues, connectionSummary } = await withTenant(auth, async (tx) => {
-    const list = await listPatients(tx, page);
+    const list = await listPatients(tx, page, sort, dir);
     const connectionSummary = await getPatientsConnectionSummary(tx);
     await audit(tx, {
       action: "patient.list_viewed",
@@ -64,7 +88,7 @@ export default async function PatientsPage({
   });
 
   const pages = Math.max(1, Math.ceil(total / PATIENTS_PAGE_SIZE));
-  if (total > 0 && page > pages) redirect(`/patients?page=${pages}`);
+  if (total > 0 && page > pages) redirect(patientListHref(sort, dir, pages));
   // A connected EHR/PM makes the Patient Register read-only (docs/specs/patient-integrations.md
   // "PI1a"): the Register button and empty-state action are hidden and a notice explains why.
   const registerBlocked = blocksPatientsRegister(connectionSummary);
@@ -117,13 +141,18 @@ export default async function PatientsPage({
             listValues={Object.fromEntries(
               [...listValues.entries()].map(([recordId, values]) => [recordId, Object.fromEntries(values)]),
             )}
+            sort={{
+              name: sortHeader("name"),
+              mrn: sortHeader("mrn"),
+              birthDate: sortHeader("birthDate"),
+            }}
           />
         )}
         <Pagination
           page={page}
           pageSize={PATIENTS_PAGE_SIZE}
           total={total}
-          hrefFor={(p) => `/patients?page=${p}`}
+          hrefFor={(p) => patientListHref(sort, dir, p)}
         />
       </Panel>
     </div>

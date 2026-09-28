@@ -52,9 +52,20 @@ test.describe("claims", () => {
 
   test("claims the payer accepted can't be corrected", async ({ page }) => {
     await page.goto("/claims?group=in_process");
-    await page.getByRole("table").getByRole("link").first().click();
+    // Scoped to tbody: the header row's own sortable-column links (P4) would otherwise be first.
+    await page.getByRole("table").locator("tbody").getByRole("link").first().click();
     await expect(page.getByText("Timely filing no longer applies.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Correct claim" })).toHaveCount(0);
+  });
+
+  test("choosing a filter keeps the current sort (P4 review)", async ({ page }) => {
+    await page.goto("/claims?group=in_process&sort=billed&dir=asc");
+    // "Claims" also names the module switcher's link and button; scope to the filter select itself.
+    await page.locator("#select-group").selectOption("all");
+    await page.getByRole("button", { name: "Apply" }).click();
+    await expect(page).toHaveURL(/group=all/);
+    await expect(page).toHaveURL(/sort=billed/);
+    await expect(page).toHaveURL(/dir=asc/);
   });
 
   test("rejects malformed and unknown claim IDs", async ({ page }) => {
@@ -68,7 +79,8 @@ test.describe("claims as compliance (read-only)", () => {
 
   test("can review a claim and its history but not correct it", async ({ page }) => {
     await page.goto("/claims");
-    await page.getByRole("table").getByRole("link").first().click();
+    // Scoped to tbody: the header row's own sortable-column links (P4) would otherwise be first.
+    await page.getByRole("table").locator("tbody").getByRole("link").first().click();
     await expect(page.getByRole("heading", { name: "Version history" })).toBeVisible();
     await expect(page.getByText("You have read-only access to claims.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Correct claim" })).toHaveCount(0);

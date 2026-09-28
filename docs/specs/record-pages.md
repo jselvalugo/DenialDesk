@@ -76,7 +76,45 @@ a masked identifier (member ID, SSN) — those stay in the aside behind `MaskedV
       the prompt-pay void-in-error reason, and the BAA agreement dates now use `FormRow`,
       `SelectField`, `TextField`, and `TextareaField` in place of hand-rolled grids and inputs,
       unchanged behavior and unchanged accessible names.
-- [ ] P4 — `DataTable` gains sortable headers and a compact density (TanStack, ADR 0004).
+- [x] P4 — `DataTable` gains sortable column headers (`SortableHeader`: a plain link setting
+      `?sort=<key>&dir=asc|desc`, `aria-sort` on the `th`, a visible arrow, and a visually-hidden
+      span naming the direction a click applies, appended after the visible column label — never an
+      `aria-label` that would replace it) and a `density="compact"` option (a CSS custom property on
+      `<table>`, so `Table`/`Th`/`Td` stay server-renderable; not yet turned on for any list).
+      Server-side sorting, no new dependency — ADR 0004 addendum records why TanStack stays deferred.
+      Applied to Claims (claim number, patient name, payer, service date, billed, status), Denials
+      (notice date, amount, appeal deadline), Appeals (amount, deadline), Patients (name, MRN, date
+      of birth — the list's own headers only; search results, still POSTed and out of the URL, keep
+      plain headers), and Payers (name). Every sort key is allow-listed with zod. Indexed already:
+      Claims' `claimNumber`, `patientName`, `serviceDate`; Patients' `name`, `mrn`; Denials' every
+      key (`denials_queue_deadline_idx`, `_amount_idx`, `_tenant_notice_date_idx`); Appeals'
+      `deadline` (`appeals_queue_idx`). Not indexed, but cheap at a tenant's row counts: Claims'
+      `billed`, `payer`, `status`; Patients' `birthDate`; Payers' `name`; Appeals' `amount` (the
+      joined denial's amount). A stable `id` tie-break keeps paging deterministic; `status` orders by
+      the `claim_status` Postgres enum's own declared (workflow) order, not alphabetically, matched
+      by the in-memory comparator used for the unsubmitted queue. `patientName` sorts by last name,
+      then first *initial* (`Intl.Collator`), then claim number, then id — matching the "Last, F."
+      the column displays; the unsubmitted queue's own index only joins `patients` and reads a name
+      at all when a `patientName` sort is actually requested (minimum necessary — the urgency-ordered
+      default never touches a patient's name). With no `sort` in the URL, each list keeps its
+      existing (pre-P4) default order and tie-break exactly — soonest deadline first for Denials and
+      Appeals, filing urgency first (then service date, then id) for unsubmitted Claims, newest
+      service date (then claim number, then id) otherwise, alphabetical (then MRN, then id) for
+      Patients — including the D1 priority (denials still awaiting action sort ahead of
+      already-handled ones) for either direction of a deadline sort. Every GET filter form carries
+      the current `sort`/`dir` as hidden inputs, so choosing a filter and clicking Apply never drops
+      the sort back to the default. Unchanged: which rows are returned, role gates, and
+      `*.list_viewed`/`*.queue_viewed` audits (Claims' and Denials' events already record the filter
+      query string, which now includes `sort`/`dir` when non-default; Appeals' and Patients' events
+      record no such string and were not changed, to avoid inventing a new audit shape).
+  - [x] P4 review follow-ups (2026-09-28): the unsubmitted index reads patient names only when the
+        `unsubmitted` group is sorted by `patientName` (a `patientName` sort on the other groups sorts
+        in Postgres, whose text order follows the database collation — byte-wise under `C`,
+        linguistic under `en_US.utf8` — so it can differ from the in-memory `CLAIM_NAME_COLLATOR` on
+        case, accents, or punctuation); the "Filing deadline" header's hint says "sort in default
+        order" and is omitted when no column sort is applied; default-order tie-break tests insert
+        rows with explicit ids running opposite to the expected order, so an id-only regression fails
+        on every run; queue sort tests insert their own denials instead of mutating seeded ones.
 
 ## Data / API changes
 `listPatients` also selects `sex`, `city`, `state` for the list columns (same table, same RLS;
