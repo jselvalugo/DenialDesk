@@ -10,6 +10,13 @@ insurance companies and plans operating in Florida, so the practice can track an
 patients and claims by insurer. Until the clearinghouse payer list is connected, catalog entries
 carry a name and source only; their EDI payer ID and regulatory regime stay **unverified**.
 
+Note (2026-09-28, `docs/specs/settings-and-custom-fields.md` S2 PR 4): a minimal, read-only payer
+record now exists under **Settings** — `/settings/payers` (list) and `/settings/payers/[id]`
+(detail) — so a payer's own custom field values have somewhere to be shown and edited
+(`/settings/payers/[id]/fields`). It is not the payer admin screen this spec's P2 still owes: name,
+EDI payer ID, and regime stay uneditable there, and nothing here changes P1's catalog, resolution,
+or verification behavior.
+
 ## Phases
 | Phase | Scope |
 |---|---|

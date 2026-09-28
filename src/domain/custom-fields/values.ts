@@ -18,7 +18,7 @@ import type { Messages } from "@/i18n/messages/types";
 import { createTranslator, type Translator } from "@/i18n/translate";
 import { activeCustomFields } from "@/domain/settings/queries";
 import type { CustomFieldEntity, CustomFieldType } from "@/domain/settings/custom-fields";
-import { canWorkDenials } from "@/auth/permissions";
+import { canEditPayerFields, canWorkDenials } from "@/auth/permissions";
 import type { Role } from "@/auth/session";
 import { isRestricted } from "@/domain/patients/record";
 
@@ -456,6 +456,14 @@ export async function saveValuesForRecord(
   expectedValuesToken?: string,
 ): Promise<string[]> {
   await lockRecordRow(tx, entity, recordId, t);
+  // Defense in depth: the settings payer pages already gate on `canEditPayerFields` before this
+  // is ever reached, but a payer's values are practice configuration rather than a record a
+  // front-line biller corrects (spec review, S2 PR4), so the domain layer enforces the same,
+  // narrower role here too, the way the standard field-level `canWorkDenials` mask check below
+  // does for a sensitive value on any entity.
+  if (entity === "payer" && !canEditPayerFields(actor.role)) {
+    throw new CustomFieldValueError(t("error.notPayerEditor"));
+  }
   const fields = await activeCustomFields(tx, entity);
   const column = RECORD_COLUMN[entity];
   if (expectedValuesToken !== undefined) {

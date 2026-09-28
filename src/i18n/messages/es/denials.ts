@@ -67,9 +67,9 @@ export const denials: Messages["denials"] = {
 
   // Página de detalle de la denegación (src/app/(app)/denials/[id])
   "detail.title": "Denegación",
+  "detail.eyebrow": "Registro de la denegación",
   "nav.breadcrumb": "Ruta de navegación",
   "detail.breadcrumb": "Cola de denegaciones",
-  "detail.subtitle": "Denegación de {category} · {payer} · aviso con fecha {date}",
   "detail.remittanceLink": "capturada de la remesa",
   "detail.categoryUnverifiedBadge": "Categoría sin verificar",
   "detail.carcUnknown": "Código aún no incluido en la lista de referencia de DenialDesk.",
@@ -86,6 +86,7 @@ export const denials: Messages["denials"] = {
   "field.line": "Línea {number} · {code}",
   "field.wholeClaim": "Toda la reclamación",
   "field.dateOfService": "Fecha de servicio",
+  "field.noticeDate": "Fecha del aviso",
   "field.provider": "Proveedor",
   "field.npi": "NPI {npi}",
   "field.location": "Ubicación",
@@ -100,6 +101,7 @@ export const denials: Messages["denials"] = {
   "field.addNote": "Agregar una nota",
   "note.placeholder": "Qué hizo, qué sigue, con quién habló.",
   "panel.denial": "Denegación",
+  "panel.details": "Detalles de la denegación",
   "panel.notesTitle": "Notas",
   "panel.notesDescription": "Visible para todo el equipo de este consultorio.",
   "panel.patient": "Paciente",

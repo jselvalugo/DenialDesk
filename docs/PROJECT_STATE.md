@@ -58,8 +58,10 @@ _Last updated: 2026-09-28_
   strip and Record panel, sectioned register/edit forms). `ageOn()` pure helper with boundary tests;
   `PageEyebrow` takes a `page` override and no longer prints "Patients · Patients" on form pages.
   P3 done 2026-09-28 (Appeals, Remittances, Prompt pay, Settings › Custom fields, Operator ›
-  Practices forms on `FormShell`). Next: P2 Claims and Denials record headers onto `RecordHeader`;
-  P4 sortable `DataTable`. Open (owner): which column replaces Sex on the list.
+  Practices forms on `FormShell`). P2 done 2026-09-28 (Claims and Denials record pages onto
+  `RecordHeader`/`RecordLayout`/`FieldList`; claim correction and denial assign/status controls
+  moved to the header action and main-column panels respectively). Next: P4 sortable `DataTable`.
+  Open (owner): which column replaces Sex on the list.
 - Internationalization (`specs/internationalization.md`, ADR 0009, R-11.1): the whole product (practice
   app, sign-in, operator console, Insight .xlsx export) reads in English, Spanish, or Portuguese. Own
   module in `src/i18n/` (no dependency): typed dictionaries per namespace in
@@ -137,8 +139,8 @@ _Last updated: 2026-09-28_
   denials (4 steps; charge import and 837P/835 marked Planned) and lists more safeguards (MFA,
   field encryption, BAA on file). Wording passed `compliance-checker`; owner sign-off on copy pending.
 - Settings (`specs/settings-and-custom-fields.md`): the "Setup" module is now **Settings**, with
-  section tabs (General, Custom fields; Users and roles, Security, Notifications, Integrations
-  planned). The `/design` style-guide page was removed 2026-09-26 (owner request). Administrators define custom fields on patients,
+  section tabs (General, Custom fields, Payers; Users and roles, Security, Notifications,
+  Integrations planned). The `/design` style-guide page was removed 2026-09-26 (owner request). Administrators define custom fields on patients,
   claims, denials, and payers (`custom_fields`, migration 0023, RLS + isolation test, audited).
   S2 values: PR 1 (crypto AAD, `custom_field_values` + `custom_field_value_versions` tables,
   migration 0027, domain `src/domain/custom-fields/values.ts`) done and merged. PR 2 (patients UI)
@@ -161,9 +163,19 @@ _Last updated: 2026-09-28_
   `claims`/`denials` column change, no `claim_versions` row — confirmed by an integration test), so
   its stale-edit check is a new values-table concurrency token (`customFieldValuesToken` /
   `saveValuesForRecord`'s `expectedValuesToken`) instead of the record's own `updatedAt`; `/claims`
-  and `/denials` gained list columns via the same `loadListValues` module. `pnpm test`,
-  `test:integration` (371/371), `lint`, `typecheck`, `format:check` all green. Next: PR 4 payers; an
-  e2e admin user fixture doesn't exist yet (`test/e2e/global-setup.ts` seeds
+  and `/denials` gained list columns via the same `loadListValues` module. PR 4 (payers) done: since
+  there is no payer screen yet outside Settings, a new, minimal, read-only payer record was added
+  there instead — `/settings/payers` (table: name, EDI payer ID or "Not verified", regime label or
+  "Regime not verified", source, plus up to 5 non-sensitive `show_in_list` payer fields via the same
+  `loadListValues`), `/settings/payers/[id]` (`RecordHeader`/`RecordLayout`/`FieldList`, a "Custom
+  fields" panel with masked reveal via `revealPayerCustomField`), and `/settings/payers/[id]/fields`
+  (the same standalone edit-page pattern and values-table concurrency token as PR 3). Payers have no
+  linked patient, so they carry no record-level sensitivity (`recordIsSensitive` returns `false` for
+  `payer`, tested). New permission `canEditPayerFields` (admin, manager) gates the fields edit page
+  and action — an owner-confirmable choice noted as an open question in the spec, since payers have
+  no natural "biller" role the way claims and patients do. `pnpm test` (833/833),
+  `test:integration` (376/376), `lint`, `typecheck`, `format:check` all green. Next: S3 (Users and
+  roles tab); an e2e admin user fixture doesn't exist yet (`test/e2e/global-setup.ts` seeds
   specialist/compliance/manager only), so the spec's "admin adds a field" E2E case is still open for
   every PR.
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
@@ -324,9 +336,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
-6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53) and PR 2 patients (#68)
-   merged; PR 3 claims/denials (#73, own "edit custom fields" pages) done; PR 4 payers (Settings ›
-   Payers list/detail) next.
+6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
+   PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›
+   Payers with its own "edit custom fields" page) done. Next: S3 (Users and roles tab).
 7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
    payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
    timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.
@@ -340,8 +352,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    P2 coverage now comes from the EHR sync once a practice is connected (`specs/patient-integrations.md`).
 11. Patient integrations PI1a → PI1c → PI2a → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
-12. Record pattern (`specs/record-pages.md`): P3 forms onto `FormShell` in progress; P2 Claims and
-   Denials record headers after custom fields PR 3 merges; then P4 sortable `DataTable`.
+12. Record pattern (`specs/record-pages.md`): P3 (`FormShell`) and P2 (Claims/Denials on
+   `RecordHeader`/`RecordLayout`) done; next P4 sortable `DataTable`.
 
 ## Open questions for humans
 - Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter

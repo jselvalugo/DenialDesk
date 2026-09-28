@@ -49,11 +49,14 @@ export const claims: Messages["claims"] = {
 
   // Detalhe da reivindicação (app/(app)/claims/[id]/page.tsx)
   "detail.pageTitle": "Reivindicação",
+  "detail.eyebrow": "Registro da reivindicação",
+  "detail.details.title": "Detalhes da reivindicação",
+  "detail.lines.title": "Linhas da reivindicação",
   "detail.filing.rolledNote":
     "(pendente de parecer jurídico: {date}; a prorrogação por fim de semana ou feriado ainda não foi confirmada, portanto envie até a data acima)",
   "detail.breadcrumbClaims": "Reivindicações",
-  "detail.subtitle": "data de atendimento {date} · versão {version}",
   "detail.field.dateOfService": "Data de atendimento",
+  "detail.field.version": "Versão",
   "detail.field.provider": "Prestador",
   "detail.field.npi": "NPI {npi}",
   "detail.field.location": "Local",

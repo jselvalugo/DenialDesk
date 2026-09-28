@@ -7,6 +7,7 @@ export const settings: Messages["settings"] = {
     "Como o DenialDesk está configurado para sua clínica: seu perfil, os campos dos seus registros e quem pode fazer o quê.",
   "tabs.general": "Geral",
   "tabs.customFields": "Campos personalizados",
+  "tabs.payers": "Pagadores",
   "tabs.usersAndRoles": "Usuários e funções",
   "tabs.security": "Segurança",
   "tabs.notifications": "Notificações",
@@ -139,5 +140,45 @@ export const settings: Messages["settings"] = {
   "error.noValueOnFile": "Nenhum valor registrado.",
   "error.valueUnavailable": "Valor indisponível.",
   "error.staleValues": "Esses campos mudaram desde que você os abriu. Recarregue e tente novamente.",
+  "error.reload": "Recarregue a página e tente novamente.",
+
+  // Pagadores em Configurações (docs/specs/settings-and-custom-fields.md S2 PR4; registro somente
+  // leitura; payer-catalog P2 adicionará verificação e edição).
+  "payers.metaTitle": "Pagadores",
+  "payers.listTitle": "Pagadores",
+  "payers.listDescription": "Os pagadores da sua clínica, carregados do catálogo inicial da Flórida.",
+  "payers.count": "{count, plural, one {# pagador} other {# pagadores}}",
+  "payers.tableCaption": "Pagadores",
+  "payers.ediPayerId": "ID de pagador EDI",
+  "payers.notVerified": "Não verificado",
+  "payers.source": "Fonte",
+  "payers.sourceNotRecorded": "Não registrado",
+  "payers.sourceOir": "Lista de seguradoras licenciadas da OIR da Flórida",
+  "payers.sourceSmmc": "Lista de planos de atendimento gerenciado do Medicaid (AHCA)",
+  "payers.sourceCms": "CMS",
+  "payers.sourceReference": "Lista de referência (ainda não verificada)",
+  "payers.emptyTitle": "Ainda não há pagadores",
+  "payers.emptyDescription": "Os pagadores aparecem quando o catálogo inicial da sua clínica é carregado.",
+
+  "payers.detailMetaTitle": "Pagador",
+  "payers.detailEyebrow": "Registro de pagador",
+  "payers.breadcrumbList": "Pagadores",
+  "payers.badgeUnverified": "Não verificado",
+  "payers.detailsTitle": "Dados do pagador",
+  "payers.detailsDescription":
+    "O nome, o ID de pagador EDI e o regime regulatório são verificados em uma fase posterior e não podem ser alterados aqui.",
+  "payers.field.ediPayerId": "ID de pagador EDI",
+  "payers.field.regime": "Regime regulatório",
+  "payers.field.source": "Fonte",
+  "payers.field.added": "Adicionado",
+  "payers.editCustomFields": "Editar campos personalizados",
+
+  "payers.fieldsMetaTitle": "Editar campos personalizados do pagador",
+  "payers.fieldsPageTitle": "Editar campos personalizados",
+  "payers.fieldsDescription": "Campos que sua clínica adicionou aos pagadores.",
+  "payers.fieldsBreadcrumb": "Campos personalizados",
+
+  "error.notPayerEditor":
+    "Somente administradores e gerentes podem alterar os campos personalizados de um pagador.",
   "error.recordNotFound": "Registro não encontrado.",
 };
