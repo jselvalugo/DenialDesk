@@ -105,6 +105,8 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
   const deadlineVerify = basisRules.some((rule) => rule.verify);
   const appealRolled = denial.appealDeadline ? pendingRolledDate(denial.appealDeadline, basisRules) : null;
   const milestonesVerify = milestones?.some(({ rule }) => rule.verify) ?? false;
+  const showStartAppeal = canWork && openAppeals.length === 0 && ACTION_STATUSES.includes(denial.status);
+  const showViewAppeal = openAppeals.length > 0;
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
@@ -162,23 +164,34 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
           { label: t("field.deniedAmount"), value: <Money cents={denial.deniedCents} /> },
           {
             label: t("field.appealDeadline"),
-            value: denial.appealDeadline ? f.date(denial.appealDeadline) : t("deadlineNotConfigured"),
+            value: (
+              <span className="inline-flex items-center gap-1.5">
+                {denial.appealDeadline ? f.date(denial.appealDeadline) : t("deadlineNotConfigured")}
+                {(deadlineVerify || appealRolled) && (
+                  <Badge tone="warning" dot={false}>
+                    {t("badge.pendingVerification")}
+                  </Badge>
+                )}
+              </span>
+            ),
             tabular: true,
           },
         ]}
         actions={
-          <>
-            {canWork && openAppeals.length === 0 && ACTION_STATUSES.includes(denial.status) && (
-              <Link href={`/appeals/new?denialId=${denial.id}`} className={primaryLinkButtonClass}>
-                {t("action.startAppeal")}
-              </Link>
-            )}
-            {openAppeals.length > 0 && (
-              <Link href={`/appeals/${openAppeals[0]!.id}`} className={secondaryLinkButtonClass}>
-                {t("action.viewAppeal")}
-              </Link>
-            )}
-          </>
+          showStartAppeal || showViewAppeal ? (
+            <>
+              {showStartAppeal && (
+                <Link href={`/appeals/new?denialId=${denial.id}`} className={primaryLinkButtonClass}>
+                  {t("action.startAppeal")}
+                </Link>
+              )}
+              {showViewAppeal && (
+                <Link href={`/appeals/${openAppeals[0]!.id}`} className={secondaryLinkButtonClass}>
+                  {t("action.viewAppeal")}
+                </Link>
+              )}
+            </>
+          ) : undefined
         }
       />
       {!canWork && (
@@ -295,6 +308,9 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
 
             <Panel title={t("panel.details")}>
               <FieldList>
+                <Field label={t("field.assignee")}>
+                  {detail.assigneeName ?? <span className="text-subtle">{t("assignee.unassigned")}</span>}
+                </Field>
                 <Field label={t("field.noticeDate")} tabular>
                   {f.date(denial.noticeDate)}
                 </Field>
@@ -374,6 +390,7 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
         <Panel title={t("panel.denial")}>
           <div className="mb-4 flex flex-wrap items-end gap-4 border-b border-border pb-4">
             <StatusControl
+              key={denial.status}
               denialId={denial.id}
               current={denial.status}
               disabled={!canWork}
@@ -382,7 +399,13 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                 label: tc(s.labelKey),
               }))}
             />
-            <AssignControl denialId={denial.id} current={denial.assigneeId} team={team} disabled={!canWork} />
+            <AssignControl
+              key={denial.assigneeId ?? "none"}
+              denialId={denial.id}
+              current={denial.assigneeId}
+              team={team}
+              disabled={!canWork}
+            />
           </div>
           <dl className="grid grid-cols-3 gap-x-6 gap-y-4">
             <div className="col-span-3 flex flex-col gap-1">

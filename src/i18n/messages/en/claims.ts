@@ -51,8 +51,8 @@ export const claims = {
   "detail.filing.rolledNote":
     "(pending counsel: {date}; weekend/holiday extension not yet confirmed, so file by the date above)",
   "detail.breadcrumbClaims": "Claims",
-  "detail.subtitle": "date of service {date} · version {version}",
   "detail.field.dateOfService": "Date of service",
+  "detail.field.version": "Version",
   "detail.field.provider": "Provider",
   "detail.field.npi": "NPI {npi}",
   "detail.field.location": "Location",

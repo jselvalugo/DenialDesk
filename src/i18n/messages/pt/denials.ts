@@ -69,7 +69,6 @@ export const denials: Messages["denials"] = {
   "detail.eyebrow": "Registro da negativa",
   "nav.breadcrumb": "Trilha de navegação",
   "detail.breadcrumb": "Fila de negativas",
-  "detail.subtitle": "Negativa de {category} · {payer} · aviso datado de {date}",
   "detail.remittanceLink": "capturada da remessa",
   "detail.categoryUnverifiedBadge": "Categoria não verificada",
   "detail.carcUnknown": "Código ainda não incluído na lista de referência do DenialDesk.",

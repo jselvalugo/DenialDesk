@@ -66,7 +66,6 @@ export const denials = {
   "detail.eyebrow": "Denial record",
   "nav.breadcrumb": "Breadcrumb",
   "detail.breadcrumb": "Denial queue",
-  "detail.subtitle": "{category} denial · {payer} · notice dated {date}",
   "detail.remittanceLink": "captured from remittance",
   "detail.categoryUnverifiedBadge": "Category unverified",
   "detail.carcUnknown": "Code not in DenialDesk's reference list yet.",

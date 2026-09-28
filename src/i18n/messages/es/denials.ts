@@ -70,7 +70,6 @@ export const denials: Messages["denials"] = {
   "detail.eyebrow": "Registro de la denegación",
   "nav.breadcrumb": "Ruta de navegación",
   "detail.breadcrumb": "Cola de denegaciones",
-  "detail.subtitle": "Denegación de {category} · {payer} · aviso con fecha {date}",
   "detail.remittanceLink": "capturada de la remesa",
   "detail.categoryUnverifiedBadge": "Categoría sin verificar",
   "detail.carcUnknown": "Código aún no incluido en la lista de referencia de DenialDesk.",

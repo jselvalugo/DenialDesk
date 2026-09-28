@@ -106,6 +106,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
           },
           { label: t("detail.field.payer"), value: payer.name },
           { label: t("detail.field.dateOfService"), value: f.date(claim.serviceDate), tabular: true },
+          { label: t("detail.field.version"), value: claim.version, tabular: true },
           { label: t("detail.field.billed"), value: <Money cents={claim.billedCents} /> },
           { label: t("detail.field.paid"), value: <Money cents={claim.paidCents} /> },
         ]}
@@ -124,6 +125,13 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                   </span>
                 </Field>
                 <Field label={t("detail.field.location")}>{detail.locationName}</Field>
+                <Field label={t("detail.field.payer")}>
+                  {payer.name}
+                  <span className="block text-label text-muted">{regimeLabel(payer.regime, tc)}</span>
+                </Field>
+                <Field label={t("detail.field.payerReceived")} tabular empty="—">
+                  {claim.payerReceivedDate ? f.date(claim.payerReceivedDate) : null}
+                </Field>
                 <Field label={t("detail.field.diagnosis")} span>
                   <span className="flex flex-wrap gap-1">
                     {claim.diagnosisCodes.map((code) => (

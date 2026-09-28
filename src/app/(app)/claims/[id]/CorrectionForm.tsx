@@ -1,6 +1,15 @@
 "use client";
 
-import { createContext, startTransition, useActionState, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  startTransition,
+  useActionState,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Button } from "@/components/ui/Button";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { useT } from "@/i18n/client";
@@ -54,10 +63,18 @@ function useCorrection(): CorrectionContextValue {
 export function CorrectionAction() {
   const { open, setOpen, state } = useCorrection();
   const t = useT("claims");
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  // Return focus here when the form below is cancelled, so it doesn't drop to <body> (mounted
+  // whether or not this renders visibly, since this component stays in the tree while `open`).
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (wasOpenRef.current && !open) buttonRef.current?.focus();
+    wasOpenRef.current = open;
+  }, [open]);
   if (open) return null;
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+      <Button ref={buttonRef} type="button" variant="secondary" onClick={() => setOpen(true)}>
         {t("correction.button")}
       </Button>
       {state.savedVersion && (
@@ -116,7 +133,14 @@ export function CorrectionForm({
       <div className="grid grid-cols-[180px_minmax(0,1fr)] gap-4">
         <label className="flex flex-col gap-1 text-label font-medium text-text">
           {t("correction.form.dateOfService")}
-          <input type="date" name="serviceDate" defaultValue={serviceDate} required className={inputClass} />
+          <input
+            type="date"
+            name="serviceDate"
+            defaultValue={serviceDate}
+            required
+            autoFocus
+            className={inputClass}
+          />
         </label>
         <label className="flex flex-col gap-1 text-label font-medium text-text">
           {t("correction.form.diagnosisCodes")}

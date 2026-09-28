@@ -55,8 +55,8 @@ export const claims: Messages["claims"] = {
   "detail.filing.rolledNote":
     "(pendente de parecer jurídico: {date}; a prorrogação por fim de semana ou feriado ainda não foi confirmada, portanto envie até a data acima)",
   "detail.breadcrumbClaims": "Reivindicações",
-  "detail.subtitle": "data de atendimento {date} · versão {version}",
   "detail.field.dateOfService": "Data de atendimento",
+  "detail.field.version": "Versão",
   "detail.field.provider": "Prestador",
   "detail.field.npi": "NPI {npi}",
   "detail.field.location": "Local",
