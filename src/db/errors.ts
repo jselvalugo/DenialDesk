@@ -123,6 +123,7 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
   { format: "appeal % cannot move from % to %", args: ["uuid", "appealStatus", "appealStatus"] },
   { format: "appeal %: claim % does not match the claim of denial %", args: ["uuid", "uuid", "uuid"] },
   { format: "patients: a synced row can only be inserted by a running sync run", args: [] },
+  { format: "patients: a synced row cannot be inserted with sensitivity tags set", args: [] },
   { format: "patients %: a synced patient cannot become manual", args: ["uuid"] },
   { format: "patients %: synced fields can only change during a running sync run", args: ["uuid"] },
   { format: "patients %: sensitivity tags cannot change during a sync run", args: ["uuid"] },
@@ -149,6 +150,7 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
     args: ["uuid"],
   },
   { format: "integration_connections %: activation requires a fresh approval", args: ["uuid"] },
+  { format: "integration_connections %: activation requires a registry entry", args: ["uuid"] },
   {
     format: "integration_connections %: only the display name can change while pending approval",
     args: ["uuid"],

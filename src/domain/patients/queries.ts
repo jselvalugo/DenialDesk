@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, like, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, like, ne, or, sql } from "drizzle-orm";
 import type { TenantTx } from "@/db/tenant";
 import { claims, denials, integrationConnections, patients, payers } from "@/db/schema";
 import { decryptField, encryptField } from "@/lib/crypto/field";
@@ -219,22 +219,25 @@ export class PatientRecordError extends Error {
 /**
  * Registering or editing a patient by hand is refused while the practice's Patients table has an
  * EHR/PM connection outside draft/revoked (docs/specs/patient-integrations.md "PI1a"; ADR 0010):
- * once a connection is submitted, the EHR becomes the system of record. `FOR SHARE` (correctness
- * review N2) locks the candidate row(s) against a concurrent Submit, so this check can't pass in
- * the same instant a connection moves out of draft/revoked underneath it.
+ * once a connection is submitted, the EHR becomes the system of record.
+ *
+ * Correctness review N2 (final round): a naive `WHERE status NOT IN ('draft', 'revoked')` before
+ * the `FOR SHARE` lock only locks rows that already look blocking — a connection still `draft` at
+ * this statement's snapshot is never selected, so it's never locked, and a concurrent Submit can
+ * still move it out of draft in between this check and the write that follows it. Every
+ * non-`revoked` row for this table (draft included) is locked here instead, so a concurrent Submit
+ * has to wait for this transaction; only then is the blocking status decided, in code.
  */
 async function assertPatientsRegisterOpen(tx: TenantTx, t: PatientsT = englishPatientsT) {
-  const blocking = await tx
-    .select({ id: integrationConnections.id })
+  const candidates = await tx
+    .select({ status: integrationConnections.status })
     .from(integrationConnections)
     .where(
-      and(
-        eq(integrationConnections.targetTable, "patients"),
-        notInArray(integrationConnections.status, ["draft", "revoked"]),
-      ),
+      and(eq(integrationConnections.targetTable, "patients"), ne(integrationConnections.status, "revoked")),
     )
     .for("share");
-  if (blocking.length > 0) throw new PatientRecordError(t("error.integrationConnected"));
+  const blocking = candidates.some((row) => row.status !== "draft");
+  if (blocking) throw new PatientRecordError(t("error.integrationConnected"));
 }
 
 /** FKs bypass RLS, so a payer ID from the form is checked against this practice first. */

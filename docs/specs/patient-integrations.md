@@ -107,7 +107,9 @@ when the run succeeds, so a failed first run still locks the endpoint.
       policy, composite `(tenant_id, x)` FKs for every reference, tenant in every unique key, no
       DELETE grant, and an isolation test (read, insert, update across tenants). CHECK constraints
       close the gaps a first pass left open: a sandbox connection can only ever point at the
-      built-in sandbox URL/key and can never reach `pending_approval` (`is_sandbox` cannot be
+      built-in sandbox URL/key, client ID, token endpoint, and issuer (`token_endpoint`/
+      `token_endpoint_key`/`issuer` must be NULL or the fixed sandbox value; `client_id` — NOT NULL
+      — must equal it) and can never reach `pending_approval` (`is_sandbox` cannot be
       self-declared to skip approval); a non-sandbox connection cannot reach
       `active`/`paused`/`error` without recorded `approved_by/_at`, `approval_method`, and
       `population_scope`; `pending_approval` requires submission + US-residency attestation fields;
@@ -130,13 +132,19 @@ when the run succeeds, so a failed first run still locks the endpoint.
       `app.sync_run_id` names a `running` run of `app.sync_connection_id` in the current tenant,
       that run's connection is `active`, and that connection owns the row. `fhir → manual` is
       always refused, and sensitivity tags are frozen (never touched by a sync, even on a manual
-      row) whenever `app.sync_run_id` is set. Message added to `TRIGGER_MESSAGE_FORMATS` (ADR 0006).
+      row) whenever `app.sync_run_id` is set — including the very first INSERT of a synced row,
+      which is refused outright unless `sensitivity_tags = '{}'` (sensitivity tags are always
+      practice-set, never carried in from the EHR/PM). Message added to `TRIGGER_MESSAGE_FORMATS`
+      (ADR 0006).
 - [x] Trigger on `integration_connections` enforces the lifecycle and editability rules above: the
       app role cannot write approval columns (column grants) or move `pending_approval → active`
       (also checked in the trigger, as a second layer, by role name); activation additionally
       requires a *fresh* approval (`approved_at` must change on the same update, not merely be
-      carried over); `revoked` is terminal; the endpoint field set (`base_url`, `endpoint_key`,
-      `token_endpoint`, `token_endpoint_key`, `issuer`, `client_id`, `mrn_identifier_system`) is
+      carried over) **and**, for a non-sandbox connection, a matching `integration_endpoint_registry`
+      row (the registry is what stops two practices going live on the same real EHR registration, so
+      activation without a claimed entry would defeat the point of the registry); `revoked` is
+      terminal; the endpoint field set (`base_url`, `endpoint_key`, `token_endpoint`,
+      `token_endpoint_key`, `issuer`, `client_id`, `mrn_identifier_system`) is
       writable only while `status = 'draft'`, regardless of whether the same update also changes
       `status`, and is locked forever once `has_synced`; while `pending_approval`, only
       `display_name`, the updated-by/at bookkeeping, and the status transition itself may change.
@@ -172,9 +180,13 @@ when the run succeeds, so a failed first run still locks the endpoint.
       `integration_endpoint_registry`, `integration_connections`) and to disable/re-enable the two
       new append-only-style guards around that; extended in `test/integration/demo-purge.test.ts`.
 - [x] Domain refusals (before the triggers): `updatePatient` on synced patients; register/edit while
-      a connection is outside `draft`/`revoked` (checked with `SELECT ... FOR SHARE`; the
-      synced-patient refusal is checked first, so editing a specific synced patient reports that,
-      not the generic "registration is closed" message). Sensitivity tags require the caller's role
+      a connection is outside `draft`/`revoked`. `assertPatientsRegisterOpen` locks every one of the
+      practice's `target_table = 'patients'` connections that isn't `revoked` with `SELECT ... FOR
+      SHARE` — **draft rows included** — and only then decides in code whether any of them is
+      outside `draft`/`revoked`; locking only the already-blocking rows (correctness review N2,
+      final round) would leave a still-`draft` connection unlocked and racing a concurrent Submit.
+      The synced-patient refusal is checked first, so editing a specific synced patient reports
+      that, not the generic "registration is closed" message. Sensitivity tags require the caller's role
       to grant tag-management (`updatePatientSensitivityTags(tx, actor, ...)` takes
       `actor.canTag` and validates the tag against the known vocabulary at runtime) and stay
       editable on synced patients — separate from `updatePatient`, since the latter is refused
@@ -273,6 +285,11 @@ when the run succeeds, so a failed first run still locks the endpoint.
       sign in, has no memberships and no roles (keeps the `audit_events.actor_user_id` FK; a test
       asserts the FK stays); the admin who pressed Sync now in
       `metadata.triggeredBy`; reason `ehr_sync`; "where" = runtime function id and host.
+      `app.sync_run_id`/`app.sync_connection_id` must be set with `set_config(name, value, true)`
+      (transaction-local — `is_local = true`), the same way PI1a's own tests set them, never with
+      `is_local = false`/session-level: a pooled connection reused by another request afterwards
+      must not inherit a stale run/connection setting that `patients_synced_readonly` would then
+      trust.
 - [ ] Every run first checks the connection's issuer against discovery; a mismatch fails the run
       before any upsert (`issuer_mismatch`); a changed token endpoint sets `error`.
 - [ ] Search: `Patient?_lastUpdated=ge<watermark>&_count=100`; Coverage for a page's patients by POST

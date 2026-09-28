@@ -11,6 +11,7 @@ import {
 import { withTenant, withTenantAsPlatform } from "@/db/tenant";
 import { createPatient, updatePatient, updatePatientSensitivityTags } from "@/domain/patients/queries";
 import { patientSchema } from "@/domain/patients/record";
+import { loadValuesForRecord, saveValuesForRecord } from "@/domain/custom-fields/values";
 import { createTestTenant, expectDbError } from "./helpers";
 
 // docs/specs/patient-integrations.md "PI1a": provenance, connections, the endpoint registry, and
@@ -24,6 +25,8 @@ import { createTestTenant, expectDbError } from "./helpers";
 // explicit, granted column list instead of `.insert()`/`.update()`.
 
 const SANDBOX_URL = "https://sandbox.fhir.denialdesk.invalid/r4";
+const SANDBOX_CLIENT_ID = "sandbox-client";
+const SANDBOX_TOKEN_ENDPOINT = "https://sandbox.fhir.denialdesk.invalid/token";
 
 type Ctx = { tenantId: string; userId: string };
 let a: Ctx;
@@ -74,7 +77,9 @@ async function makeConnection(
   const isSandbox = overrides.isSandbox ?? false;
   const baseUrl = overrides.baseUrl ?? (isSandbox ? SANDBOX_URL : `https://${host}/r4`);
   const endpointKey = overrides.endpointKey ?? baseUrl;
-  const clientId = overrides.clientId ?? `client-${seq}`;
+  // A sandbox row's client_id is pinned by integration_connections_sandbox_is_builtin (final
+  // review), so the per-call unique default only applies to a real connection.
+  const clientId = overrides.clientId ?? (isSandbox ? SANDBOX_CLIENT_ID : `client-${seq}`);
   const mrnIdentifierSystem = `https://${host}/mrn`;
   const result = await withTenant(ctx, (tx) =>
     tx.execute<{ id: string }>(sql`
@@ -189,6 +194,10 @@ async function makeActiveConnection(label = "Active connection"): Promise<{ ctx:
   const id = await makeConnection(ctx);
   await setDraftField(ctx, id, "token_endpoint_key", `https://token-${id}.example.test/token`);
   await submitForApproval(ctx, id);
+  // Final review, Low: activation now requires a claimed registry entry for a non-sandbox
+  // connection (integration_connections_lifecycle), so the registry claim — which in the real
+  // flow happens once submitted, before the operator can approve — has to happen here too.
+  expect(await claimRegistry(ctx, id)).toBe(true);
   await approveAsOperator(ctx, id);
   return { ctx, connId: id };
 }
@@ -488,6 +497,42 @@ describe("security review H1: sandbox self-activation", () => {
     );
   });
 
+  it("refuses a sandbox row with a real client_id (final review)", async () => {
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.execute(sql`
+          insert into integration_connections
+            (tenant_id, display_name, base_url, endpoint_key, client_id, mrn_identifier_system, is_sandbox, created_by, updated_by)
+          values (${a.tenantId}::uuid, 'Fake sandbox client', ${SANDBOX_URL}, ${SANDBOX_URL}, 'not-the-sandbox-client', 'https://x/mrn', true, ${a.userId}::uuid, ${a.userId}::uuid)
+        `),
+      ),
+      /integration_connections_sandbox_is_builtin/,
+    );
+  });
+
+  it("refuses a sandbox row with a real token_endpoint or issuer (final review)", async () => {
+    // token_endpoint/issuer aren't in the INSERT column grant (set by the app via UPDATE, once
+    // draft, the same way a real connection's endpoint set is filled in) — set via setDraftField.
+    const tokenId = await makeConnection(a, { isSandbox: true });
+    await expectDbError(
+      setDraftField(a, tokenId, "token_endpoint", "https://not-the-sandbox.example.test/token"),
+      /integration_connections_sandbox_is_builtin/,
+    );
+    const issuerId = await makeConnection(a, { isSandbox: true });
+    await expectDbError(
+      setDraftField(a, issuerId, "issuer", "not-the-sandbox-issuer"),
+      /integration_connections_sandbox_is_builtin/,
+    );
+  });
+
+  it("allows a sandbox row whose token_endpoint/token_endpoint_key/issuer are null or the built-in constants", async () => {
+    const id = await makeConnection(a, { isSandbox: true });
+    await setDraftField(a, id, "token_endpoint", SANDBOX_TOKEN_ENDPOINT);
+    await setDraftField(a, id, "token_endpoint_key", SANDBOX_TOKEN_ENDPOINT);
+    await setDraftField(a, id, "issuer", SANDBOX_CLIENT_ID);
+    expect(await connectionStatus(id)).toBe("draft");
+  });
+
   it("refuses a non-sandbox connection reaching active/paused/error without a recorded approval (CHECK, independent of the trigger)", async () => {
     await expectDbError(
       systemDb().execute(sql`
@@ -521,15 +566,20 @@ describe("security review H2/B1/B2: the endpoint set only changes while draft", 
     ["issuer", "https://elsewhere.example.test"],
     ["client_id", "new-client"],
     ["mrn_identifier_system", "https://elsewhere.example.test/mrn"],
+    // Compliance review (final round): the residency attestation is locked with the rest of the
+    // endpoint set (meaningless once submitted) — covered here with type-appropriate values, since
+    // these two columns aren't text like the rest.
+    ["us_residency_attested_by", randomUUID()],
+    ["us_residency_attested_at", new Date().toISOString()],
   ];
 
-  it.each(endpointColumns)("refuses editing %s once approved and active (not yet synced)", async (column) => {
-    const { ctx, connId: id } = await makeActiveConnection(`Endpoint lock ${column}`);
-    await expectDbError(
-      setDraftField(ctx, id, column, "https://elsewhere.example.test/whatever"),
-      /the endpoint can only change while draft/,
-    );
-  });
+  it.each(endpointColumns)(
+    "refuses editing %s once approved and active (not yet synced)",
+    async (column, value) => {
+      const { ctx, connId: id } = await makeActiveConnection(`Endpoint lock ${column}`);
+      await expectDbError(setDraftField(ctx, id, column, value), /the endpoint can only change while draft/);
+    },
+  );
 
   it("refuses token_endpoint in pending_approval", async () => {
     const ctx = await createTestTenant("Endpoint lock pending");
@@ -562,11 +612,13 @@ describe("integration_connections lifecycle and editability trigger", () => {
   it("draft -> pending_approval is allowed, but only the operator may activate it", async () => {
     const ctx = await createTestTenant("Lifecycle activate");
     const id = await makeConnection(ctx);
+    await setDraftField(ctx, id, "token_endpoint_key", `https://token-${id}.example.test/token`);
     await submitForApproval(ctx, id);
     await expectDbError(
       activateAsApp(ctx, id),
       /only the platform operator may activate a pending connection/,
     );
+    expect(await claimRegistry(ctx, id)).toBe(true);
     await approveAsOperator(ctx, id);
     expect(await connectionStatus(id)).toBe("active");
   });
@@ -645,6 +697,18 @@ describe("integration_connections lifecycle and editability trigger", () => {
     );
   });
 
+  it("security review (final round, Low): activation of a non-sandbox connection requires a claimed registry entry", async () => {
+    const ctx = await createTestTenant("Activate without registry");
+    const id = await makeConnection(ctx);
+    await setDraftField(ctx, id, "token_endpoint_key", `https://token-${id}.example.test/token`);
+    await submitForApproval(ctx, id);
+    // No claimRegistry call: the connection is pending_approval but never claimed the registry.
+    await expectDbError(approveAsOperator(ctx, id), /activation requires a registry entry/);
+    expect(await claimRegistry(ctx, id)).toBe(true);
+    await approveAsOperator(ctx, id);
+    expect(await connectionStatus(id)).toBe("active");
+  });
+
   it("security review N5: lifecycle preconditions — pending_approval needs submission+attestation, revoked needs its fields, activation needs approval+scope", async () => {
     const id = await makeConnection(a);
     await expectDbError(
@@ -661,6 +725,12 @@ describe("integration_connections lifecycle and editability trigger", () => {
 });
 
 describe("integration_sync_runs lifecycle (security review M4/N1)", () => {
+  it("refuses a second queued run on the same connection (integration_sync_runs_one_active)", async () => {
+    const { ctx, connId } = await makeActiveConnection();
+    await queueRun(ctx, connId);
+    await expectDbError(queueRun(ctx, connId), /integration_sync_runs_one_active/);
+  });
+
   it("refuses updating a finished run", async () => {
     const { ctx, connId } = await makeActiveConnection();
     const runId = await makeRunningRun(ctx, connId);
@@ -935,6 +1005,15 @@ describe("patients_synced_readonly trigger", () => {
       tx.select({ source: patients.source }).from(patients).where(eq(patients.id, patientId)),
     );
     expect(row!.source).toBe("fhir");
+  });
+
+  it("compliance review (final round): refuses inserting a fhir row with sensitivity tags already set", async () => {
+    const { ctx, connId } = await makeActiveConnection();
+    const runId = await makeRunningRun(ctx, connId);
+    await expectDbError(
+      insertSyncedPatient(ctx, connId, runId, { sensitivityTags: ["hiv"] }),
+      /a synced row cannot be inserted with sensitivity tags set/,
+    );
   });
 
   it("allows a positive synced-column update inside the owning run", async () => {
@@ -1297,7 +1376,7 @@ describe("domain refusals (src/domain/patients/queries.ts)", () => {
     expect(event!.metadata).toEqual({ added: "hiv", removed: "" });
   });
 
-  it("correctness review N3: custom field values still save on a synced patient", async () => {
+  it("correctness review N3: custom field values still save on a synced patient (through saveValuesForRecord)", async () => {
     const { ctx, connId } = await makeActiveConnection();
     const runId = await makeRunningRun(ctx, connId);
     const patientId = await insertSyncedPatient(ctx, connId, runId);
@@ -1308,17 +1387,23 @@ describe("domain refusals (src/domain/patients/queries.ts)", () => {
         returning id
       `),
     ).then((r) => r.rows);
+    // Goes through the real domain entry points, not raw SQL, so lockRecordRow's `FOR NO KEY
+    // UPDATE` on `patients` runs against the synced row too (it's a lock, not an UPDATE, so it
+    // can't trip patients_synced_readonly).
     await withTenant(ctx, (tx) =>
-      tx.execute(sql`
-        insert into custom_field_values (tenant_id, field_id, patient_id, value_enc, created_by, updated_by)
-        values (${ctx.tenantId}::uuid, ${field!.id}::uuid, ${patientId}::uuid, 'v1.iv.tag.ct', ${ctx.userId}::uuid, ${ctx.userId}::uuid)
-      `),
-    );
-    const [row] = await withTenant(ctx, (tx) =>
-      tx.execute<{ value_enc: string }>(
-        sql`select value_enc from custom_field_values where patient_id = ${patientId}::uuid`,
+      saveValuesForRecord(
+        tx,
+        { ...ctx, role: "admin" },
+        "patient",
+        patientId,
+        new Map([[field!.id, "Synced patient note"]]),
       ),
-    ).then((r) => r.rows);
-    expect(row!.value_enc).toBe("v1.iv.tag.ct");
+    );
+    const values = await withTenant(ctx, (tx) =>
+      loadValuesForRecord(tx, { ...ctx, role: "admin" }, "patient", patientId),
+    );
+    const saved = values.find((v) => v.fieldId === field!.id);
+    expect(saved?.masked).toBe(false);
+    expect(saved?.value).toBe("Synced patient note");
   });
 });

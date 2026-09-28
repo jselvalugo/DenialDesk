@@ -172,11 +172,22 @@ ALTER TABLE "integration_connections" ADD CONSTRAINT "integration_connections_re
 
 -- Security review H1: the built-in synthetic sandbox is one fixed endpoint (spec "Synthetic
 -- sandbox"); a sandbox row can never point at a real host, so "is_sandbox" can never be used to
--- dodge operator approval or the SSRF guard for a real endpoint.
+-- dodge operator approval or the SSRF guard for a real endpoint. Final review: pin the whole
+-- endpoint identity (not just base_url/endpoint_key) so a sandbox row can't carry a real token
+-- endpoint, issuer, or client ID either — token_endpoint/token_endpoint_key/issuer are nullable
+-- (never discovered for the in-process sandbox) but client_id is NOT NULL, so it must equal the
+-- fixed sandbox client ID.
 ALTER TABLE "integration_connections" ADD CONSTRAINT "integration_connections_sandbox_is_builtin"
   CHECK (
     NOT "is_sandbox"
-    OR ("base_url" = 'https://sandbox.fhir.denialdesk.invalid/r4' AND "endpoint_key" = 'https://sandbox.fhir.denialdesk.invalid/r4')
+    OR (
+      "base_url" = 'https://sandbox.fhir.denialdesk.invalid/r4'
+      AND "endpoint_key" = 'https://sandbox.fhir.denialdesk.invalid/r4'
+      AND "client_id" = 'sandbox-client'
+      AND ("token_endpoint" IS NULL OR "token_endpoint" = 'https://sandbox.fhir.denialdesk.invalid/token')
+      AND ("token_endpoint_key" IS NULL OR "token_endpoint_key" = 'https://sandbox.fhir.denialdesk.invalid/token')
+      AND ("issuer" IS NULL OR "issuer" = 'sandbox-client')
+    )
   );--> statement-breakpoint
 -- Security review H1/N5: a real (non-sandbox) connection cannot be live without a recorded
 -- operator approval, method, and population scope; a sandbox connection never needs one.
@@ -469,6 +480,11 @@ BEGIN
          OR run_tenant_id IS DISTINCT FROM NEW.tenant_id OR run_connection_status IS DISTINCT FROM 'active' THEN
         RAISE EXCEPTION 'patients: a synced row can only be inserted by a running sync run';
       END IF;
+      -- Compliance review (final round): sensitivity tags are practice-owned; a sync never sets
+      -- them, not even on the very first insert of a synced row.
+      IF NEW.sensitivity_tags IS DISTINCT FROM '{}'::text[] THEN
+        RAISE EXCEPTION 'patients: a synced row cannot be inserted with sensitivity tags set';
+      END IF;
     END IF;
     RETURN NEW;
   END IF;
@@ -553,6 +569,7 @@ CREATE TRIGGER patients_synced_readonly BEFORE INSERT OR UPDATE ON "patients"
 -- still refuses the one transition that must be the operator's: pending_approval -> active.
 CREATE FUNCTION integration_connections_lifecycle() RETURNS trigger
   LANGUAGE plpgsql
+  SET search_path = pg_catalog, public, pg_temp
   AS $$
 BEGIN
   IF OLD.status = 'revoked' THEN
@@ -637,6 +654,14 @@ BEGIN
       IF NEW.approved_by IS NULL OR NEW.approved_at IS NULL
          OR NEW.approved_at IS NOT DISTINCT FROM OLD.approved_at THEN
         RAISE EXCEPTION 'integration_connections %: activation requires a fresh approval', OLD.id;
+      END IF;
+      -- Security review (final round, Low): a non-sandbox connection can't go live without having
+      -- claimed the global endpoint registry first — otherwise two practices could both be "active"
+      -- against the same real EHR registration, which the registry exists to prevent.
+      IF NOT NEW.is_sandbox AND NOT EXISTS (
+        SELECT 1 FROM public.integration_endpoint_registry WHERE connection_id = OLD.id
+      ) THEN
+        RAISE EXCEPTION 'integration_connections %: activation requires a registry entry', OLD.id;
       END IF;
     END IF;
   END IF;
