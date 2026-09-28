@@ -116,4 +116,22 @@ export const integrations: Messages["integrations"] = {
     "Esse sistema é um número de Seguro Social, Medicare, carteira de motorista ou passaporte, não um número de prontuário.",
   "error.endpointLocked":
     "A URL, o ID de cliente e o sistema de identificadores só podem mudar enquanto a conexão for um rascunho que nunca foi sincronizado.",
+  "test.outcome.ok":
+    "O teste foi bem-sucedido. O DenialDesk alcançou o servidor, encontrou seu ponto de autenticação e recebeu um token de acesso. Nenhuma informação de pacientes foi solicitada.",
+  "test.outcome.unreachable":
+    "O DenialDesk não conseguiu alcançar o servidor. Verifique a URL base e se o servidor está aberto à internet e não bloqueado por um firewall. Tente novamente em alguns minutos.",
+  "test.outcome.tls_failed":
+    "Não foi possível verificar a conexão segura (TLS) do servidor. O certificado deve ser válido, emitido por uma autoridade pública e corresponder ao nome do host, e o servidor deve aceitar TLS 1.2 ou superior.",
+  "test.outcome.not_fhir_r4":
+    "O servidor não respondeu como FHIR R4 (versão 4.0.1). Verifique se a URL base é o endpoint FHIR R4.",
+  "test.outcome.smart_config_invalid":
+    "A configuração SMART do servidor está ausente ou inutilizável. O DenialDesk precisa de SMART Backend Services com JWT de chave privada assinado com ES384 ou RS384.",
+  "test.outcome.auth_refused":
+    "O servidor recusou as credenciais do DenialDesk. Verifique o ID de cliente e se o administrador do EHR/PM registrou a chave pública do DenialDesk para este cliente.",
+  "test.outcome.capability_missing":
+    "O servidor não consegue fazer o que o DenialDesk precisa: pesquisar Patient por data da última atualização, pesquisar Coverage por paciente e conceder acesso de leitura a Patient, Coverage e Organization.",
+  "test.error.rateLimited": "Testes de conexão demais. Aguarde alguns minutos e tente novamente.",
+  "test.error.noKey": "Esta conexão ainda não tem uma chave de assinatura, então não pode ser testada.",
+  "test.error.keyUnavailable":
+    "A chave de assinatura desta conexão não está disponível agora. Tente novamente mais tarde.",
 };

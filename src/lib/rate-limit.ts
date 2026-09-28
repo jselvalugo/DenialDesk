@@ -9,12 +9,19 @@ import { requestContext } from "./request-context";
  * Counters live in PostgreSQL so limits hold across serverless instances. Security policy,
  * not legal rules.
  */
-export type Bucket = "sign_in" | "mfa" | "seed";
+export type Bucket =
+  "sign_in" | "mfa" | "seed" | "integration_test_connection" | "integration_test_practice" | "jwks";
 
 const POLICY: Record<Bucket, { limit: number; windowSeconds: number; env?: string }> = {
   sign_in: { limit: 30, windowSeconds: 15 * 60, env: "RATE_LIMIT_SIGNIN" },
   mfa: { limit: 30, windowSeconds: 15 * 60, env: "RATE_LIMIT_MFA" },
   seed: { limit: 5, windowSeconds: 60 * 60 },
+  // "Test connection" dials a practice-supplied host, so it is limited per connection and per
+  // practice, separately from sign-in (docs/specs/patient-integrations.md PI2a; threat model D2).
+  integration_test_connection: { limit: 5, windowSeconds: 10 * 60 },
+  integration_test_practice: { limit: 20, windowSeconds: 10 * 60 },
+  // Public JWKS reads, per client network; EHRs fetch a key at token time, not per request.
+  jwks: { limit: 120, windowSeconds: 60 },
 };
 
 export function limitFor(bucket: Bucket): { limit: number; windowSeconds: number } {

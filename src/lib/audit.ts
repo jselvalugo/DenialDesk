@@ -105,7 +105,9 @@ export type AuditAction =
   | "operator.university_access_revoked"
   | "integration.connection_created"
   | "integration.connection_updated"
-  | "integration.connection_revoked";
+  | "integration.connection_revoked"
+  | "integration.connection_tested"
+  | "integration.transport_refused";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
