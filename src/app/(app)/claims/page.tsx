@@ -47,21 +47,30 @@ export default async function ClaimsPage({
   const t = await getT("claims");
   const tc = await getT("common");
   const f = await getFormat();
-  /** Props for one sortable column header (P4, docs/specs/record-pages.md). */
-  function sortHeader(key: ClaimSortKey, label: string) {
-    const active = filters.sort === key;
-    const currentDir = active ? (filters.dir ?? CLAIM_SORT_DEFAULT_DIR[key]) : CLAIM_SORT_DEFAULT_DIR[key];
+  /**
+   * Props for one sortable column header (P4, docs/specs/record-pages.md). `serviceDate` also shows
+   * active when nothing is explicitly sorted and the group isn't `unsubmitted` — that's this group's
+   * actual default order (newest service date first), so the header should say so.
+   */
+  function sortHeader(key: ClaimSortKey) {
+    const explicit = filters.sort === key;
+    const impliedDefault = key === "serviceDate" && !filters.sort && filters.group !== "unsubmitted";
+    const active = explicit || impliedDefault;
+    const currentDir = explicit ? (filters.dir ?? CLAIM_SORT_DEFAULT_DIR[key]) : CLAIM_SORT_DEFAULT_DIR[key];
     const nextDir = nextSortDir(active, currentDir, CLAIM_SORT_DEFAULT_DIR[key]);
     return {
       active,
       dir: currentDir,
       href: `/claims${claimFiltersToQuery(filters, { sort: key, dir: nextDir, page: 1 })}`,
-      accessibleLabel: tc("sortable.ariaLabel", {
-        column: label,
+      hint: tc("sortable.hint", {
         direction: tc(nextDir === "asc" ? "sortable.ascending" : "sortable.descending"),
       }),
     };
   }
+  /** "Filing deadline" has no direction to toggle; clicking it always clears `sort` and returns to
+   * the group's own priority order (filing urgency for unsubmitted claims). */
+  const filingDeadlineActive = filters.group === "unsubmitted" && !filters.sort;
+  const filingDeadlineHref = `/claims${claimFiltersToQuery(filters, { sort: undefined, dir: undefined, page: 1 })}`;
 
   const { rows, total, truncated, summary, payers, listColumns, listValues } = await withTenant(
     auth,
@@ -153,6 +162,12 @@ export default async function ClaimsPage({
 
       <Panel flush>
         <form method="get" className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
+          {/* Carries the current sort through Apply, so choosing a filter never drops it back to
+              the group's default order (P4 review). */}
+          {filters.sort && <input type="hidden" name="sort" value={filters.sort} />}
+          {filters.sort && filters.dir && filters.dir !== CLAIM_SORT_DEFAULT_DIR[filters.sort] && (
+            <input type="hidden" name="dir" value={filters.dir} />
+          )}
           <Select
             label={t("list.filter.claims")}
             name="group"
@@ -219,25 +234,19 @@ export default async function ClaimsPage({
           <Table caption={t(captionKey)}>
             <thead>
               <tr>
-                <SortableHeader label={tc("word.claim")} {...sortHeader("claimNumber", tc("word.claim"))} />
+                <SortableHeader label={tc("word.claim")} {...sortHeader("claimNumber")} />
+                <SortableHeader label={tc("word.patient")} {...sortHeader("patientName")} />
+                <SortableHeader label={tc("word.payer")} {...sortHeader("payer")} />
+                <SortableHeader label={t("list.table.dateOfService")} {...sortHeader("serviceDate")} />
+                <SortableHeader numeric label={t("detail.field.billed")} {...sortHeader("billed")} />
                 <SortableHeader
-                  label={tc("word.patient")}
-                  {...sortHeader("patientName", tc("word.patient"))}
+                  label={t("list.table.filingDeadline")}
+                  active={filingDeadlineActive}
+                  dir="asc"
+                  href={filingDeadlineHref}
+                  hint={tc("sortable.hint", { direction: tc("sortable.ascending") })}
                 />
-                <SortableHeader label={tc("word.payer")} {...sortHeader("payer", tc("word.payer"))} />
-                <SortableHeader
-                  label={t("list.table.dateOfService")}
-                  {...sortHeader("serviceDate", t("list.table.dateOfService"))}
-                />
-                <SortableHeader
-                  numeric
-                  label={t("detail.field.billed")}
-                  {...sortHeader("billed", t("detail.field.billed"))}
-                />
-                <Th aria-sort={filters.group === "unsubmitted" && !filters.sort ? "ascending" : undefined}>
-                  {t("list.table.filingDeadline")}
-                </Th>
-                <SortableHeader label={tc("word.status")} {...sortHeader("status", tc("word.status"))} />
+                <SortableHeader label={tc("word.status")} {...sortHeader("status")} />
                 {listColumns.map((col) => (
                   <Th key={col.fieldId}>{col.label}</Th>
                 ))}

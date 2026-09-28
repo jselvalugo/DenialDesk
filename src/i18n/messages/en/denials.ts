@@ -36,6 +36,7 @@ export const denials = {
   "assignee.unassigned": "Unassigned",
   "sortLabel.deadline": "appeal deadline",
   "sortLabel.amount": "denied amount",
+  "sortLabel.notice": "notice date",
 
   // Queue page (src/app/(app)/denials/page.tsx)
   "queue.title": "Denial queue",

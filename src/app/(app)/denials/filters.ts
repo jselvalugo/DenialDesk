@@ -7,7 +7,7 @@ const schema = z.object({
   payer: z.uuid().optional().catch(undefined),
   category: z.enum(denialCategoryEnum.enumValues).optional().catch(undefined),
   assignee: z.enum(["me", "unassigned"]).optional().catch(undefined),
-  sort: z.enum(["deadline", "amount"]).catch("deadline"),
+  sort: z.enum(["deadline", "amount", "notice"]).catch("deadline"),
   dir: z.enum(["asc", "desc"]).optional().catch(undefined),
   page: z.coerce.number().int().min(1).max(10_000).catch(1),
 });

@@ -61,7 +61,7 @@ export const common: Messages["common"] = {
   "word.on": "em",
   "word.of": "de",
 
-  "sortable.ariaLabel": "Ordenar por {column}, {direction}",
+  "sortable.hint": "ordenar {direction}",
   "sortable.ascending": "crescente",
   "sortable.descending": "decrescente",
 

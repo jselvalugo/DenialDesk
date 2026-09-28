@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, ne } from "drizzle-orm";
+import { eq, inArray, ne } from "drizzle-orm";
 import { addCalendarDays, todayIn } from "@rules/calendar";
 import { closeDatabase } from "@/db/client";
 import { claims, denials } from "@/db/schema";
@@ -116,5 +116,95 @@ describe("listDenials", () => {
         if (cmp === 0) expect(rows[i - 1]!.id < rows[i]!.id).toBe(true);
       }
     }
+  });
+
+  it("breaks a deliberate amount tie by id ascending, regardless of sort direction (P4 review)", async () => {
+    const { tiedIds, ascRows, descRows } = await withTenant(ctx, async (tx) => {
+      const grouped = await tx
+        .select({ payerId: claims.payerId, id: denials.id })
+        .from(denials)
+        .innerJoin(claims, eq(claims.id, denials.claimId));
+      const byPayer = new Map<string, string[]>();
+      for (const row of grouped) byPayer.set(row.payerId, [...(byPayer.get(row.payerId) ?? []), row.id]);
+      const [payerId, tiedIds] = [...byPayer.entries()].find(
+        ([, ids]) => ids.length >= 3 && ids.length <= 20,
+      )!;
+      // Force every one of this payer's denials to the exact same denied amount.
+      await tx.update(denials).set({ deniedCents: 424_242 }).where(inArray(denials.id, tiedIds));
+      const ascResult = await listDenials(
+        tx,
+        { status: "all", payerId, sort: "amount", dir: "asc", page: 1 },
+        ctx.userId,
+      );
+      const descResult = await listDenials(
+        tx,
+        { status: "all", payerId, sort: "amount", dir: "desc", page: 1 },
+        ctx.userId,
+      );
+      return { payerId, tiedIds, ascRows: ascResult.rows, descRows: descResult.rows };
+    });
+    expect(tiedIds.length).toBeGreaterThanOrEqual(3);
+    const sortedIds = [...tiedIds].sort();
+    // Every row is tied on amount, so both directions fall through to the same id-ascending order.
+    expect(ascRows.map((r) => r.id)).toEqual(sortedIds);
+    expect(descRows.map((r) => r.id)).toEqual(sortedIds);
+    expect(ascRows.every((r) => r.deniedCents === 424_242)).toBe(true);
+  });
+
+  it("holds the awaiting-action-first priority for a descending deadline sort too, with nulls last (P4 review)", async () => {
+    const { targetIds, rows } = await withTenant(ctx, async (tx) => {
+      const grouped = await tx
+        .select({ payerId: claims.payerId, id: denials.id })
+        .from(denials)
+        .innerJoin(claims, eq(claims.id, denials.claimId));
+      const byPayer = new Map<string, string[]>();
+      for (const row of grouped) byPayer.set(row.payerId, [...(byPayer.get(row.payerId) ?? []), row.id]);
+      const [payerId, ids] = [...byPayer.entries()].find(([, list]) => list.length >= 3)!;
+      const [handledLaterDeadline, awaitingEarlierDeadline, awaitingNoDeadline] = ids;
+      await tx
+        .update(denials)
+        .set({ status: "appeal_submitted", appealDeadline: addCalendarDays(today, 10) })
+        .where(eq(denials.id, handledLaterDeadline!));
+      await tx
+        .update(denials)
+        .set({ status: "new", appealDeadline: addCalendarDays(today, 2) })
+        .where(eq(denials.id, awaitingEarlierDeadline!));
+      await tx
+        .update(denials)
+        .set({ status: "new", appealDeadline: null })
+        .where(eq(denials.id, awaitingNoDeadline!));
+      const result = await listDenials(
+        tx,
+        { status: "all", payerId, sort: "deadline", dir: "desc", page: 1 },
+        ctx.userId,
+      );
+      return {
+        targetIds: {
+          handledLaterDeadline: handledLaterDeadline!,
+          awaitingEarlierDeadline: awaitingEarlierDeadline!,
+          awaitingNoDeadline: awaitingNoDeadline!,
+        },
+        rows: result.rows,
+      };
+    });
+    const indexOf = (id: string) => rows.findIndex((r) => r.id === id);
+    // Still needs work (awaiting action) sorts ahead of already-handled, even with a later deadline —
+    // the D1 priority holds for `dir=desc` too, not only the ascending default.
+    expect(indexOf(targetIds.awaitingEarlierDeadline)).toBeLessThan(indexOf(targetIds.handledLaterDeadline));
+    // Within the awaiting-action group, a null deadline still sorts last, even sorting "descending".
+    expect(indexOf(targetIds.awaitingNoDeadline)).toBeGreaterThan(indexOf(targetIds.awaitingEarlierDeadline));
+  });
+
+  it("sorts by notice date, in either direction (restored, P4 review)", async () => {
+    const { asc: ascResult, desc: descResult } = await withTenant(ctx, async (tx) => {
+      const asc = await listDenials(tx, { status: "all", sort: "notice", dir: "asc", page: 1 }, ctx.userId);
+      const desc = await listDenials(tx, { status: "all", sort: "notice", dir: "desc", page: 1 }, ctx.userId);
+      return { asc, desc };
+    });
+    expect(descResult.total).toBe(ascResult.total);
+    const ascDates = ascResult.rows.map((r) => r.noticeDate);
+    expect(ascDates).toEqual([...ascDates].sort());
+    const descDates = descResult.rows.map((r) => r.noticeDate);
+    expect(descDates).toEqual([...descDates].sort().reverse());
   });
 });

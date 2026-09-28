@@ -97,38 +97,34 @@ export function nextSortDir(active: boolean, dir: SortDir, defaultDir: SortDir):
 }
 
 /**
- * A `Th` whose content sets `?sort=<key>&dir=asc|desc` (server-side sorting; ADR 0004 addendum —
- * TanStack stays deferred until a list needs client-side interactivity). It's a real `<a href>` (no
- * JavaScript required, unlike a client-side `onClick`), but exposed as `role="button"`: activating it
- * acts on the current view rather than navigating to a different resource, the W3C ARIA Authoring
- * Practices' sortable-table pattern, and it keeps a plain `getByRole("link")` on the table scoped to
- * each row's own record link. `aria-sort` goes on the `th` itself (DESIGN.md §11), with a visible
- * arrow (`aria-hidden`) and an accessible name naming the direction the click applies (a screen
- * reader gets the *current* state from `aria-sort` already; the control's name says what it does).
+ * A `Th` whose content is a plain link that sets `?sort=<key>&dir=asc|desc` (server-side sorting;
+ * ADR 0004 addendum — TanStack stays deferred until a list needs client-side interactivity). Real
+ * navigation (`<a href>`), so it needs no JavaScript. `aria-sort` goes on the `th` itself (DESIGN.md
+ * §11) and a visible arrow marks the direction (`aria-hidden`, decorative next to the text). The
+ * link's accessible name is the visible column label (`label`) followed by `hint`, a short
+ * visually-hidden phrase naming the direction the click applies — never an `aria-label` that would
+ * replace the column name, so the header still reads as "Denied" (plus the hint), not something
+ * else entirely. A screen reader gets the *current* sorted state from `aria-sort`; `hint` says what
+ * activating the link does next.
  */
 export function SortableHeader({
   label,
   href,
   active,
   dir,
-  accessibleLabel,
+  hint,
   numeric,
 }: {
   label: ReactNode;
   href: string;
   active: boolean;
   dir: SortDir;
-  accessibleLabel: string;
+  hint: string;
   numeric?: boolean;
 }) {
   return (
     <Th numeric={numeric} aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}>
-      <Link
-        href={href}
-        role="button"
-        aria-label={accessibleLabel}
-        className="inline-flex items-center gap-1 hover:text-text"
-      >
+      <Link href={href} className="inline-flex items-center gap-1 hover:text-text">
         <span>{label}</span>
         {active ? (
           dir === "asc" ? (
@@ -139,6 +135,7 @@ export function SortableHeader({
         ) : (
           <ArrowUpDown aria-hidden="true" className="size-3.5 shrink-0 opacity-50" />
         )}
+        <span className="sr-only"> {hint}</span>
       </Link>
     </Th>
   );

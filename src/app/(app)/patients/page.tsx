@@ -44,7 +44,12 @@ export default async function PatientsPage({
   const { sort, dir } = parsePatientSort(params);
   const tc = await getT("common");
   /** Props for one sortable column header (P4, docs/specs/record-pages.md). */
-  function sortHeader(key: PatientSortKey, label: string) {
+  function sortHeader(key: PatientSortKey): {
+    active: boolean;
+    dir: "asc" | "desc";
+    href: string;
+    hint: string;
+  } {
     const active = sort === key;
     const currentDir = active ? dir : PATIENT_SORT_DEFAULT_DIR[key];
     const nextDir = nextSortDir(active, currentDir, PATIENT_SORT_DEFAULT_DIR[key]);
@@ -52,8 +57,7 @@ export default async function PatientsPage({
       active,
       dir: currentDir,
       href: patientListHref(key, nextDir, 1),
-      accessibleLabel: tc("sortable.ariaLabel", {
-        column: label,
+      hint: tc("sortable.hint", {
         direction: tc(nextDir === "asc" ? "sortable.ascending" : "sortable.descending"),
       }),
     };
@@ -124,9 +128,9 @@ export default async function PatientsPage({
               [...listValues.entries()].map(([recordId, values]) => [recordId, Object.fromEntries(values)]),
             )}
             sort={{
-              name: sortHeader("name", tc("word.patient")),
-              mrn: sortHeader("mrn", t("field.mrn")),
-              birthDate: sortHeader("birthDate", t("field.birthDate")),
+              name: sortHeader("name"),
+              mrn: sortHeader("mrn"),
+              birthDate: sortHeader("birthDate"),
             }}
           />
         )}

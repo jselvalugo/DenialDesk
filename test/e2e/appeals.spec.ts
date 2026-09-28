@@ -7,7 +7,8 @@ test.describe("appeal lifecycle", () => {
     page,
   }) => {
     await page.goto("/denials?assignee=unassigned");
-    await page.getByRole("table").getByRole("link").first().click();
+    // Scoped to tbody: the header row's own sortable-column links (P4) would otherwise be first.
+    await page.getByRole("table").locator("tbody").getByRole("link").first().click();
     await expect(page.getByRole("heading", { name: "Appeal deadline" })).toBeVisible();
 
     const startAppeal = page.getByRole("link", { name: "Start appeal" });

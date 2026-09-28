@@ -67,8 +67,7 @@ export default async function PayersPage({
                   active
                   dir={dir}
                   href={payerListHref(sort, nextDir)}
-                  accessibleLabel={tc("sortable.ariaLabel", {
-                    column: tc("word.name"),
+                  hint={tc("sortable.hint", {
                     direction: tc(nextDir === "asc" ? "sortable.ascending" : "sortable.descending"),
                   })}
                 />

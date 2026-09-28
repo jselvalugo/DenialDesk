@@ -67,7 +67,7 @@ export const common = {
   "word.of": "of",
 
   // Sortable table headers (components/ui/DataTable SortableHeader)
-  "sortable.ariaLabel": "Sort by {column}, {direction}",
+  "sortable.hint": "sort {direction}",
   "sortable.ascending": "ascending",
   "sortable.descending": "descending",
 

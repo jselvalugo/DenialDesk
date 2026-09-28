@@ -39,6 +39,7 @@ export const denials: Messages["denials"] = {
   "assignee.unassigned": "Sin asignar",
   "sortLabel.deadline": "plazo de apelación",
   "sortLabel.amount": "monto denegado",
+  "sortLabel.notice": "fecha de aviso",
 
   // Página de la cola (src/app/(app)/denials/page.tsx)
   "queue.title": "Cola de denegaciones",

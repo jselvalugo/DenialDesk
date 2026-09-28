@@ -31,14 +31,14 @@ test.describe("denial work", () => {
     await page.goto("/denials?status=all");
     const deniedHeader = page.getByRole("columnheader", { name: /Denied/ });
     await expect(deniedHeader).toHaveAttribute("aria-sort", "none");
+    // Column 6: Claim, Patient, Payer, Reason, Notice date, Denied.
     const amounts = () =>
-      page.getByRole("table").getByRole("row").locator("td:nth-child(5)").allTextContents();
+      page.getByRole("table").getByRole("row").locator("td:nth-child(6)").allTextContents();
     const beforeAmounts = await amounts();
 
-    // First click: amount, descending (its first-click direction). The sort control is a real link
-    // (works with no JavaScript) exposed as a button (it acts on this view, not a navigation), so it
-    // never shows up in a plain `getByRole("link")` sweep of the table's own row links.
-    await deniedHeader.getByRole("button").click();
+    // First click: amount, descending (its first-click direction). A plain link, so it also proves
+    // it survives the table's normal getByRole("link") sweep as long as that's scoped to tbody.
+    await deniedHeader.getByRole("link").click();
     await expect(page).toHaveURL(/sort=amount/);
     await expect(page.getByRole("columnheader", { name: /Denied/ })).toHaveAttribute(
       "aria-sort",
@@ -50,7 +50,7 @@ test.describe("denial work", () => {
     // Second click on the same header toggles to ascending.
     await page
       .getByRole("columnheader", { name: /Denied/ })
-      .getByRole("button")
+      .getByRole("link")
       .click();
     await expect(page).toHaveURL(/dir=asc/);
     await expect(page.getByRole("columnheader", { name: /Denied/ })).toHaveAttribute(
@@ -61,9 +61,23 @@ test.describe("denial work", () => {
     expect(ascAmounts).not.toEqual(descAmounts);
   });
 
+  test("choosing a filter keeps the current sort (P4 review)", async ({ page }) => {
+    await page.goto("/denials?status=all&sort=amount&dir=asc");
+    await page.getByLabel("Category").selectOption("authorization");
+    await page.getByRole("button", { name: "Apply" }).click();
+    await expect(page).toHaveURL(/category=authorization/);
+    await expect(page).toHaveURL(/sort=amount/);
+    await expect(page).toHaveURL(/dir=asc/);
+    await expect(page.getByRole("columnheader", { name: /Denied/ })).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+  });
+
   test("working a denial: note, assignment, status, and audit trail", async ({ page }) => {
     await page.goto("/denials?assignee=unassigned");
-    await page.getByRole("table").getByRole("link").first().click();
+    // Scoped to tbody: the header row's own sortable-column links (P4) would otherwise be first.
+    await page.getByRole("table").locator("tbody").getByRole("link").first().click();
     await expect(page.getByRole("heading", { name: "Appeal deadline" })).toBeVisible();
 
     await page.getByLabel("Add a note").fill("Called payer; requested reconsideration form. (synthetic)");
@@ -90,7 +104,8 @@ test.describe("denial work", () => {
 
   test("member ID is masked until revealed with a reason", async ({ page }) => {
     await page.goto("/denials");
-    await page.getByRole("table").getByRole("link").first().click();
+    // Scoped to tbody: the header row's own sortable-column links (P4) would otherwise be first.
+    await page.getByRole("table").locator("tbody").getByRole("link").first().click();
     await expect(page.getByLabel(/Member ID ending in \d{4}/)).toBeVisible();
     await page.getByRole("button", { name: "Reveal" }).click();
     await page.getByLabel("Reason for viewing").selectOption("appeal");
@@ -109,7 +124,8 @@ test.describe("compliance role", () => {
 
   test("can view but not change denials", async ({ page }) => {
     await page.goto("/denials");
-    await page.getByRole("table").getByRole("link").first().click();
+    // Scoped to tbody: the header row's own sortable-column links (P4) would otherwise be first.
+    await page.getByRole("table").locator("tbody").getByRole("link").first().click();
     await expect(page.getByText("You have read-only access to denials.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Update status" })).toBeDisabled();
     await expect(page.getByLabel("Add a note")).toBeDisabled();
@@ -118,7 +134,8 @@ test.describe("compliance role", () => {
 
   test("the server rejects changes even if the disabled controls are re-enabled", async ({ page }) => {
     await page.goto("/denials");
-    await page.getByRole("table").getByRole("link").first().click();
+    // Scoped to tbody: the header row's own sortable-column links (P4) would otherwise be first.
+    await page.getByRole("table").locator("tbody").getByRole("link").first().click();
     await expect(page.getByText("You have read-only access to denials.")).toBeVisible();
     await page.waitForLoadState("networkidle"); // let React hydrate before tampering
     // Simulate a user tampering with the page: re-enable the form and submit it.

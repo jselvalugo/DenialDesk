@@ -15,7 +15,7 @@ interface PatientSortHeader {
   active: boolean;
   dir: SortDir;
   href: string;
-  accessibleLabel: string;
+  hint: string;
 }
 
 /**

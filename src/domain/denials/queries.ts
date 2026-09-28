@@ -17,6 +17,7 @@ import {
 import { ACTION_STATUSES, OPEN_STATUSES } from "@/domain/denial-status";
 import type { DenialCategory } from "@/domain/carc";
 import { isPayerVerified } from "@/domain/payers/verification";
+import { assertNever } from "@/lib/assert-never";
 
 export const PAGE_SIZE = 25;
 /** Queue "due soon" window: a display setting, not a legal value. */
@@ -24,11 +25,16 @@ export const DUE_SOON_DAYS = 7;
 /** Overview "next deadlines" also shows denials overdue by up to this many days (display window). */
 export const RECENTLY_OVERDUE_DAYS = 30;
 
-export type QueueSortKey = "deadline" | "amount";
-/** First-click direction for each sortable column (P4, docs/specs/record-pages.md). */
+export type QueueSortKey = "deadline" | "amount" | "notice";
+/**
+ * First-click direction for each sortable column (P4, docs/specs/record-pages.md). Indexed:
+ * `deadline` (`denials_queue_deadline_idx`), `amount` (`denials_queue_amount_idx`), `notice`
+ * (`denials_tenant_notice_date_idx`).
+ */
 export const QUEUE_SORT_DEFAULT_DIR: Record<QueueSortKey, "asc" | "desc"> = {
   deadline: "asc",
   amount: "desc",
+  notice: "desc",
 };
 
 export interface QueueFilters {
@@ -53,27 +59,38 @@ function filterConditions(filters: QueueFilters, userId: string): SQL[] {
   return conditions;
 }
 
+function denialsOrderBy(sort: QueueSortKey, dir: "asc" | "desc") {
+  switch (sort) {
+    case "amount":
+      return [dir === "asc" ? asc(denials.deniedCents) : desc(denials.deniedCents), asc(denials.id)];
+    case "notice":
+      // Pre-P4 shape exactly: no D1 awaiting-action priority here, only for `deadline` below.
+      return [dir === "asc" ? asc(denials.noticeDate) : desc(denials.noticeDate), asc(denials.id)];
+    case "deadline":
+      return [
+        // Denials still awaiting practice action sort ahead of ones whose deadline is already
+        // met (e.g. appeal_submitted), so a soon-but-already-handled deadline never bumps a
+        // denial that still needs work (D1). This priority holds for either direction; only the
+        // deadline ordering within each group flips with `dir`.
+        sql`case when ${denials.status} in (${sql.join(
+          ACTION_STATUSES.map((s) => sql`${s}`),
+          sql`, `,
+        )}) then 0 else 1 end`,
+        dir === "asc"
+          ? sql`${denials.appealDeadline} asc nulls last`
+          : sql`${denials.appealDeadline} desc nulls last`,
+        desc(denials.deniedCents),
+        asc(denials.id),
+      ];
+    default:
+      return assertNever(sort);
+  }
+}
+
 export async function listDenials(tx: TenantTx, filters: QueueFilters, userId: string) {
   const where = and(...filterConditions(filters, userId));
   const dir = filters.dir ?? QUEUE_SORT_DEFAULT_DIR[filters.sort];
-  const order =
-    filters.sort === "amount"
-      ? [dir === "asc" ? asc(denials.deniedCents) : desc(denials.deniedCents), asc(denials.id)]
-      : [
-          // Denials still awaiting practice action sort ahead of ones whose deadline is already
-          // met (e.g. appeal_submitted), so a soon-but-already-handled deadline never bumps a
-          // denial that still needs work (D1). This priority holds for either direction; only the
-          // deadline ordering within each group flips with `dir`.
-          sql`case when ${denials.status} in (${sql.join(
-            ACTION_STATUSES.map((s) => sql`${s}`),
-            sql`, `,
-          )}) then 0 else 1 end`,
-          dir === "asc"
-            ? sql`${denials.appealDeadline} asc nulls last`
-            : sql`${denials.appealDeadline} desc nulls last`,
-          desc(denials.deniedCents),
-          asc(denials.id),
-        ];
+  const order = denialsOrderBy(filters.sort, dir);
 
   const rows = await tx
     .select({
@@ -90,6 +107,7 @@ export async function listDenials(tx: TenantTx, filters: QueueFilters, userId: s
       deniedCents: denials.deniedCents,
       appealDeadline: denials.appealDeadline,
       appealSubmittedOn: denials.appealSubmittedOn,
+      noticeDate: denials.noticeDate,
       status: denials.status,
       assigneeName: users.displayName,
     })

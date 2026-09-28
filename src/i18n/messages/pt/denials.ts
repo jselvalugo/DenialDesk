@@ -38,6 +38,7 @@ export const denials: Messages["denials"] = {
   "assignee.unassigned": "Sem responsável",
   "sortLabel.deadline": "prazo de recurso",
   "sortLabel.amount": "valor negado",
+  "sortLabel.notice": "data do aviso",
 
   // Página da fila (src/app/(app)/denials/page.tsx)
   "queue.title": "Fila de negativas",

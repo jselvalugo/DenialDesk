@@ -45,10 +45,14 @@ _Last updated: 2026-09-28_
   Practices forms on `FormShell`). P2 done 2026-09-28 (Claims and Denials record pages onto
   `RecordHeader`/`RecordLayout`/`FieldList`; claim correction and denial assign/status controls
   moved to the header action and main-column panels respectively). **P1–P4 done** (P4, 2026-09-28:
-  `DataTable` gained sortable column headers — `SortableHeader`, `?sort=<key>&dir=asc|desc`,
-  allow-listed per list with a stable `id` tie-break — and a `density="compact"` option; applied to
-  Claims, Denials, Appeals, Patients, and Payers. Server-side sort, no new dependency; ADR 0004
-  addendum). Open (owner): which column replaces Sex on the list.
+  `DataTable` gained sortable column headers — `SortableHeader`, a plain link that sets
+  `?sort=<key>&dir=asc|desc` with `aria-sort` on the `th` and a visually-hidden direction hint —
+  allow-listed per list with a stable `id` tie-break, applied to Claims, Denials (whose queue also
+  regained its "Notice date" column, sortable, restoring the pre-P4 "sort by notice" criterion), and
+  Appeals, Patients, and Payers. Server-side sort, no new dependency; ADR 0004 addendum. `density`
+  (a `Table` prop, a CSS custom property, no new React context) is available on `DataTable` but not
+  yet turned on for any list — a later change, not part of P4. Open (owner): which column replaces
+  Sex on the list.
 - Internationalization (`specs/internationalization.md`, ADR 0009, R-11.1): the whole product (practice
   app, sign-in, operator console, Insight .xlsx export) reads in English, Spanish, or Portuguese. Own
   module in `src/i18n/` (no dependency): typed dictionaries per namespace in

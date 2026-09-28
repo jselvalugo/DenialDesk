@@ -1,7 +1,6 @@
 import { z } from "zod";
+import type { SortDir } from "@/components/ui/DataTable";
 import { PAYER_SORT_DEFAULT_DIR, PAYER_SORT_KEYS, type PayerSortKey } from "@/domain/payers/queries";
-
-export type SortDir = "asc" | "desc";
 
 const schema = z.object({
   sort: z.enum(PAYER_SORT_KEYS).catch("name"),

@@ -49,18 +49,18 @@ export default async function AppealsPage({
   const t = await getT("appeals");
   const tc = await getT("common");
   const f = await getFormat();
-  const sortLabel = filters.sort === "amount" ? t("sortLabel.amount") : t("sortLabel.deadline");
   const dir = filters.dir ?? APPEAL_SORT_DEFAULT_DIR[filters.sort];
+  const directionWord = tc(dir === "asc" ? "sortable.ascending" : "sortable.descending");
+  const sortLabel = `${filters.sort === "amount" ? t("sortLabel.amount") : t("sortLabel.deadline")}, ${directionWord}`;
   /** Props for one sortable column header (P4, docs/specs/record-pages.md). */
-  function sortHeader(key: AppealSortKey, label: string) {
+  function sortHeader(key: AppealSortKey) {
     const active = filters.sort === key;
     const nextDir = nextSortDir(active, dir, APPEAL_SORT_DEFAULT_DIR[key]);
     return {
       active,
       dir,
       href: `/appeals${appealFiltersToQuery(filters, { sort: key, dir: nextDir, page: 1 })}`,
-      accessibleLabel: tc("sortable.ariaLabel", {
-        column: label,
+      hint: tc("sortable.hint", {
         direction: tc(nextDir === "asc" ? "sortable.ascending" : "sortable.descending"),
       }),
     };
@@ -120,6 +120,10 @@ export default async function AppealsPage({
 
       <Panel flush>
         <form method="get" className="flex flex-wrap items-end gap-3 border-b border-border px-4 py-3">
+          {/* Carries the current sort through Apply, so choosing a filter never drops it back to
+              the default order (P4 review). */}
+          {filters.sort !== "deadline" && <input type="hidden" name="sort" value={filters.sort} />}
+          {dir !== APPEAL_SORT_DEFAULT_DIR[filters.sort] && <input type="hidden" name="dir" value={dir} />}
           <Select
             label={tc("word.status")}
             name="status"
@@ -171,15 +175,8 @@ export default async function AppealsPage({
                 <Th>{t("field.level")}</Th>
                 <Th>{tc("word.payer")}</Th>
                 <Th>{tc("word.category")}</Th>
-                <SortableHeader
-                  numeric
-                  label={t("field.denied")}
-                  {...sortHeader("amount", t("field.denied"))}
-                />
-                <SortableHeader
-                  label={tc("word.deadline")}
-                  {...sortHeader("deadline", tc("word.deadline"))}
-                />
+                <SortableHeader numeric label={t("field.denied")} {...sortHeader("amount")} />
+                <SortableHeader label={tc("word.deadline")} {...sortHeader("deadline")} />
                 <Th>{tc("word.status")}</Th>
               </tr>
             </thead>
