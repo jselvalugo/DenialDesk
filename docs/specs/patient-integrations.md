@@ -556,7 +556,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `auth.step_up_verified|failed` (session, tenant, and the page as a route template plus the
       connection UUID, e.g. `/settings/integrations/[id]`: never the raw path, so free text in a
       crafted `returnTo` can't reach the log; `returnTo` is capped at 256 characters and must be one
-      of the integrations pages with a UUID id segment, else it resolves to the default page). A
+      of the integrations pages with a UUID id segment (a connection page or, from PI2b, its `/payers` page), else it resolves to the default page). A
       step-up that finds its session revoked meanwhile (`completeStepUpMfa` returns false) audits
       nothing as verified and sends the browser to sign in. `hasRecentMfa` also refuses a
       verification more than 30 s in the future (clock skew between instances is tolerated up to
@@ -588,7 +588,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       direction and the emergency stop for a suspected compromise; OA-063). Wired into the
       connection page as one action per state (Settings › Integrations › connection), every string
       in en/es/pt.
-- [ ] Payer mapping also requires step-up (ships with payer mapping, PI2b; call `requireStepUp`).
+- [x] Payer mapping also requires step-up (ships with payer mapping, PI2b; `savePayerMappings` calls `requireStepUp`, so the rule and its message are the ones Resume and Submit use).
 - [x] Revoke records a reason code from a fixed vocabulary (`no_longer_used`, `switching_systems`,
       `configured_in_error`, `security_concern`, `other`; `src/domain/integrations/revoke-reasons.ts`)
       as the audit event's `reason` and the connection's `status_reason`; required on the form and
@@ -862,10 +862,52 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `queued`/`running`); no heartbeat for 20 min → `abandoned`. Sync now once a minute.
 - [ ] Sync never writes `claims` or claim versions; the 837P builder (claims C3) snapshots patient
       demographics into the claim version at submission (R-3.10.3).
-- [ ] Payer mapping page (step-up): payor keys (`Organization/<id>`, Organization name) → practice
-      payer or unmapped; one audited update of affected patients.
-- [ ] Sync history (`/settings/integrations/[id]/runs`, admin): counts and codes; issue rows link
-      to DenialDesk patient IDs.
+- [x] Payer mapping page (step-up), `/settings/integrations/[id]/payers` (PI2b UI slice; no migration,
+      no GRANT: `integration_payer_mappings` grants SELECT/INSERT/UPDATE to the app role and has tenant
+      RLS; `src/domain/integrations/payer-mappings.ts`): payor keys (`Organization/<id>`, with the
+      Organization name when the sync recorded one) → a payer of this practice, or not mapped. The page
+      lists every key a synced patient of the connection carries (with a patient count) plus every key
+      that already has a mapping row, with one select of the practice's payers per key. Administrators
+      only (any other role gets a 404 on the page and `error.notAdmin` from the action and the domain).
+      **Saving needs an MFA step-up in the last five minutes** (`requireStepUp`, checked before the
+      form is even read; the page shows the step-up link and `/step-up` returns to this page, which
+      `stepUpTarget` now allows). Refusals, in order: not an administrator; no recent step-up; a
+      malformed form (fixed shape, at most 500 lines, no duplicate key, payer empty or a UUID); a
+      connection that isn't the practice's (not found) or is revoked; an insurer the connection never
+      reported (no mapping row and no patient carries the key: keys can't be planted); a payer that isn't
+      the practice's own; a line whose mapping changed since the page was opened (each line carries the
+      mapping's `updated_at`, checked under a row lock). Only lines that change something are written
+      (a payer set, changed, or cleared to "not mapped"). **Each written line is one
+      `integration.payer_mapping_changed` event in the same transaction** (entity = the mapping row's
+      own ID; metadata: `connection_id`, `payer_id`, `previous_payer_id`, `change` =
+      `mapped|changed|cleared`, `affected_patient_count`, `step_up_verified_at`; **never the payor key,
+      the name, or a patient**, since a payor key is Restricted PHI on the patient row it comes from), so
+      a failed audit write rolls the whole save back. Viewing the page is audited
+      `integration.payer_mappings_viewed` (connection ID, insurer and patient counts). Every string is
+      an en/es/pt key. Tests: `test/integration/integration-payer-mapping.test.ts` (isolation, non-admin
+      refused, step-up required at 4:55 / 6:00 / from-the-future, foreign connection and foreign payer,
+      planted key, stale page, audit atomicity, PHI-free audit, the action and the page).
+- [ ] **Apply a saved mapping to the patients that carry the key** (the second half of the spec's
+      "one audited update of affected patients"; **open, by design of the database**). A synced patient's
+      `primary_payer_id`, `coverage_status`, and member ID are read-only outside a running sync run
+      (trigger `patients_synced_readonly`), and the run's own context (`withTenantAsSystem`) belongs to the
+      sync engine, so the mapping page saves the decision and records how many patients it concerns
+      (`affected_patient_count`) but does not touch a patient. The sync must re-derive coverage for every
+      patient whose payor key has a mapping newer than the patient's `synced_at`, even when the
+      resource's `versionId` is unchanged ("same `versionId` = unchanged" would otherwise never apply a
+      new mapping), and audit that update once per run (`patient.synced_updated`, changed field names).
+      Until then the page says what a mapping is for, not that it has been applied.
+- [x] Sync history (`/settings/integrations/[id]/runs`, admin; PI2b UI slice,
+      `src/domain/integrations/sync-history.ts`): every run of the connection, newest first (25 a page),
+      as counts (created, updated, linked, skipped), status, queued and finished times, who started it as
+      "Sync now" or "Schedule" (never a user ID or name), the run's issue codes, and its HTTP status; one
+      run's issue rows (`?run=<uuid>`, at most 200) list a code and, when the record became a patient, a
+      link to that patient by DenialDesk ID. The selects name their columns, so nothing else can reach
+      the page: no resource, external ID, MRN, name, URL, watermark, or `diagnostics` (a test walks the
+      page's element tree for a synced patient's name, MRN, external ID, and payor key). A run ID that
+      isn't this connection's (another connection's or practice's) is a message, never listed. Administrators
+      only (404 otherwise). Not audited: it shows no PHI (runs and issues are Internal data, and the
+      connection page is not audited either). Tests: `test/integration/integration-sync-history.test.ts`.
 - [ ] Synthetic sandbox (base URL `https://sandbox.fhir.denialdesk.invalid/r4`, in-process
       `SandboxTransport`, only when `syntheticDataOnly()`): token endpoint verifies the assertion
       (signature, alg allow-list, `aud`, `exp`, `jti` remembered until `exp`); deterministic
@@ -964,7 +1006,8 @@ with old/new base URL, token endpoint host + path, and client ID — always the 
 with no query string or fragment (configuration, not PHI);
 `integration.transport_refused` (`address_refused`, `tls_failed`, `redirect_refused`; connection ID
 and the code only), `security.env_signing_key_in_production`,
-`integration.registry_conflict`, `integration.payer_mapping_changed`,
+`integration.registry_conflict`, `integration.payer_mapping_changed` (one per changed mapping: mapping,
+connection, and payer IDs, counts, never a payor key or name), `integration.payer_mappings_viewed`,
 `operator.integration_approved|rejected`, `integration.sync_started|completed|failed` (counts; the
 run-level `sync_completed` is the record of receipt for unchanged and skipped resources),
 `patient.synced_created|synced_updated|linked_to_source|source_inactivated|source_merged|source_gone`
@@ -1031,7 +1074,7 @@ PI1b: offboarding a connection.
 - `drizzle/00NN_*.sql` (+ Netlify mirror, `src/db/schema.ts`); `src/db/tenant.ts`
   (`withTenantAsSystem`).
 - `src/domain/integrations/`: `connections.ts` (lifecycle, zod allow-list, audit), `registry.ts`,
-  `approval.ts` (operator), `payer-mappings.ts`, `sync-runs.ts`, `sync.ts`, `principal.ts`.
+  `approval.ts` (operator), `payer-mappings.ts`, `sync-history.ts`, `sync-runs.ts`, `sync.ts`, `principal.ts`.
 - `src/integrations/fhir/`: `transport.ts`, `address-guard.ts`, `url-rules.ts`, `discovery.ts`,
   `auth.ts`, `search.ts`, `map-patient.ts`, `map-coverage.ts`, `identifier-rules.ts`,
   `security-labels.ts`, `types.ts`, `vendor-sandboxes.ts`, `sandbox/`.

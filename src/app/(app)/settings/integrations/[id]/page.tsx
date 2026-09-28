@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { canManageIntegrations } from "@/auth/permissions";
@@ -155,6 +156,32 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
           )}
         </FieldList>
       </Panel>
+
+      {/* Once a connection can have synced (or has), where to see what it read and map its insurers. */}
+      {(connection.hasSynced || ["active", "paused", "error", "revoked"].includes(connection.status)) && (
+        <Panel title={t("detail.moreTitle")} description={t("detail.moreDescription")}>
+          <ul className="flex flex-col gap-3">
+            <li>
+              <Link
+                href={`/settings/integrations/${connection.id}/payers`}
+                className="font-medium text-link hover:underline"
+              >
+                {t("detail.payersLink")}
+              </Link>
+              <p className="text-label text-muted">{t("detail.payersHint")}</p>
+            </li>
+            <li>
+              <Link
+                href={`/settings/integrations/${connection.id}/runs`}
+                className="font-medium text-link hover:underline"
+              >
+                {t("detail.runsLink")}
+              </Link>
+              <p className="text-label text-muted">{t("detail.runsHint")}</p>
+            </li>
+          </ul>
+        </Panel>
+      )}
 
       {revoked ? (
         offboarding && (
