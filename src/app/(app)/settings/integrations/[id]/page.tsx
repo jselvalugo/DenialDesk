@@ -1,0 +1,164 @@
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { z } from "zod";
+import { canManageIntegrations } from "@/auth/permissions";
+import { requireAuth } from "@/auth/session";
+import { Field, FieldList } from "@/components/records/FieldList";
+import { Badge } from "@/components/ui/Badge";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
+import { Panel } from "@/components/ui/Panel";
+import { withTenant } from "@/db/tenant";
+import {
+  CONNECTION_STATUS_LABEL_KEYS,
+  CONNECTION_STATUS_TONE,
+  endpointEditable,
+  getConnection,
+} from "@/domain/integrations/connections";
+import { getFormat, getT } from "@/i18n/server";
+import { ConnectionForm } from "../ConnectionForm";
+import { RevokeConnectionForm } from "./RevokeConnectionForm";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT("integrations");
+  return { title: t("detail.metaTitle") };
+}
+
+/**
+ * One EHR/PM connection: its configuration, the edit form, and revoke with the offboarding steps
+ * (docs/specs/patient-integrations.md PI1b-2; runbook docs/runbooks/integration-offboarding.md).
+ * Administrators only: the base URL and client ID are Confidential configuration.
+ */
+export default async function ConnectionPage({ params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAuth();
+  if (!canManageIntegrations(auth.role)) notFound();
+  const id = z.uuid().safeParse((await params).id);
+  if (!id.success) notFound();
+  const connection = await withTenant(auth, (tx) => getConnection(tx, id.data));
+  if (!connection) notFound();
+  const t = await getT("integrations");
+  const ts = await getT("settings");
+  const format = await getFormat();
+  const revoked = connection.status === "revoked";
+  const updatedAt = connection.updatedAt.toISOString();
+
+  const offboardingSteps = (withHeading: boolean) => (
+    <div className="flex flex-col gap-2">
+      {withHeading && <h3 className="text-body font-semibold text-text">{t("offboarding.title")}</h3>}
+      <p className="text-body text-muted">{t("offboarding.description")}</p>
+      <ol className="ml-5 list-decimal space-y-1 text-body text-text">
+        <li>{t("offboarding.step1", { clientId: connection.clientId })}</li>
+        <li>{t("offboarding.step2")}</li>
+        <li>{t("offboarding.step3")}</li>
+        <li>{t("offboarding.step4")}</li>
+      </ol>
+    </div>
+  );
+  const offboarding = !connection.isSandbox;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Breadcrumbs
+        label={ts("nav.breadcrumb")}
+        items={[
+          { label: ts("tabs.integrations"), href: "/settings/integrations" },
+          { label: connection.displayName },
+        ]}
+      />
+
+      <Panel title={t("detail.configurationTitle")} description={t("detail.configurationDescription")}>
+        <FieldList columns={2}>
+          <Field label={t("list.name")}>{connection.displayName}</Field>
+          <Field label={t("detail.status")}>
+            <Badge tone={CONNECTION_STATUS_TONE[connection.status]}>
+              {t(CONNECTION_STATUS_LABEL_KEYS[connection.status])}
+            </Badge>
+          </Field>
+          <Field label={t("detail.source")}>
+            {connection.isSandbox ? t("source.sandbox") : t("source.fhir")}
+          </Field>
+          <Field label={t("detail.target")}>{t("target.patients")}</Field>
+          <Field label={t("form.baseUrl")} mono span>
+            {connection.baseUrl}
+          </Field>
+          <Field label={t("form.clientId")} mono>
+            {connection.clientId}
+          </Field>
+          <Field label={t("form.mrnSystem")} mono>
+            {connection.mrnIdentifierSystem}
+          </Field>
+          <Field
+            label={t("detail.tokenEndpoint")}
+            mono={Boolean(connection.tokenEndpoint)}
+            empty={t("detail.notDiscovered")}
+          >
+            {connection.tokenEndpoint}
+          </Field>
+          <Field
+            label={t("detail.issuer")}
+            mono={Boolean(connection.issuer)}
+            empty={t("detail.notDiscovered")}
+          >
+            {connection.issuer}
+          </Field>
+          <Field label={t("detail.created")} tabular>
+            {format.dateTime(connection.createdAt)}
+          </Field>
+          <Field label={t("detail.lastSync")} tabular empty={t("list.never")}>
+            {connection.lastSuccessAt ? format.dateTime(connection.lastSuccessAt) : null}
+          </Field>
+          {connection.submittedAt && (
+            <Field label={t("detail.submitted")} tabular>
+              {format.dateTime(connection.submittedAt)}
+            </Field>
+          )}
+          {connection.approvedAt && (
+            <Field label={t("detail.approved")} tabular>
+              {format.dateTime(connection.approvedAt)}
+            </Field>
+          )}
+          {connection.revokedAt && (
+            <Field label={t("detail.revokedAt")} tabular>
+              {format.dateTime(connection.revokedAt)}
+            </Field>
+          )}
+        </FieldList>
+      </Panel>
+
+      {revoked ? (
+        offboarding && (
+          <Panel title={t("offboarding.title")}>
+            <div className="flex flex-col gap-4">
+              <p className="text-body text-text">
+                {t("offboarding.revokedNotice", { date: format.dateTime(connection.revokedAt!) })}
+              </p>
+              {offboardingSteps(false)}
+            </div>
+          </Panel>
+        )
+      ) : (
+        <>
+          <Panel flush>
+            <ConnectionForm
+              sandbox={connection.isSandbox}
+              endpointLocked={!endpointEditable(connection)}
+              connection={{
+                id: connection.id,
+                displayName: connection.displayName,
+                baseUrl: connection.baseUrl,
+                clientId: connection.clientId,
+                mrnIdentifierSystem: connection.mrnIdentifierSystem,
+                updatedAt,
+              }}
+            />
+          </Panel>
+          <Panel title={t("revoke.title")} description={t("revoke.description")}>
+            <div className="flex flex-col gap-5">
+              {offboarding && offboardingSteps(true)}
+              <RevokeConnectionForm id={connection.id} updatedAt={updatedAt} />
+            </div>
+          </Panel>
+        </>
+      )}
+    </div>
+  );
+}
