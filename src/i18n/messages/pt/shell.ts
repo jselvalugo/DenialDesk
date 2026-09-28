@@ -81,7 +81,7 @@ export const shell: Messages["shell"] = {
   "dataSource.ariaState": "{name}, {state}",
   "dataSource.state.manual": "Manual",
   "dataSource.state.synced": "Sincronizada {when}",
-  "dataSource.state.notSynced": "Ainda não sincronizado",
+  "dataSource.state.notSynced": "Ainda não sincronizada",
   "dataSource.state.running": "Sincronização em andamento",
   "dataSource.state.awaitingApproval": "Aguardando aprovação",
   "dataSource.state.paused": "Pausada",

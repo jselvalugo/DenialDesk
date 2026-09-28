@@ -5,11 +5,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, Database } from "lucide-react";
 import { useFormat, useT } from "@/i18n/client";
 import { dataSourceAdminLink, dataSourceButton, dataSourceState } from "./data-source";
+import { useShellDataSources } from "./ShellContext";
 
 /** Panel width (w-80) and the gap it keeps from the viewport edge. */
 const PANEL_WIDTH = 320;
 const EDGE = 8;
-import { useShellDataSources } from "./ShellContext";
 
 /**
  * The data-source drop-down beside a synced table's tab (specs/erp-shell.md; ADR 0010): where the
