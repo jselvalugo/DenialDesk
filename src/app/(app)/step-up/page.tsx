@@ -4,6 +4,7 @@ import { requireAuth } from "@/auth/session";
 import { CodeForm } from "@/app/login/mfa/CodeForm";
 import { Panel } from "@/components/ui/Panel";
 import { getT } from "@/i18n/server";
+import { safeInternalPath } from "@/lib/safe-path";
 import { verifyStepUp } from "./actions";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -23,8 +24,7 @@ export default async function StepUpPage({
 }) {
   await requireAuth();
   const t = await getT("auth");
-  const raw = (await searchParams).returnTo;
-  const returnTo = typeof raw === "string" && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+  const returnTo = safeInternalPath((await searchParams).returnTo, "/settings/integrations");
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-6 py-10">

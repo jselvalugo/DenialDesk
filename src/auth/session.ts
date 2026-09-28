@@ -132,7 +132,15 @@ export async function completeMfa(sessionId: string, realm: Realm = "practice"):
  * check as sign-in, but no token rotation (the session is already trusted) and no redirect to "/".
  */
 export async function completeStepUpMfa(sessionId: string): Promise<void> {
-  await systemDb().update(sessions).set({ mfaVerifiedAt: new Date() }).where(eq(sessions.id, sessionId));
+  // Same token rotation as completeMfa (security review PR #81): a step-up is another proof of
+  // possession of the authenticator, so the session token it was performed under should not
+  // outlive it either.
+  const token = randomBytes(32).toString("base64url");
+  await systemDb()
+    .update(sessions)
+    .set({ mfaVerifiedAt: new Date(), tokenHash: hashToken(token), lastSeenAt: new Date() })
+    .where(eq(sessions.id, sessionId));
+  await setCookie(token, "practice");
 }
 
 /** True when MFA was completed within the step-up window (R-7.2.2): sign-in or a recent step-up. */
