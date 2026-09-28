@@ -60,11 +60,11 @@ _Last updated: 2026-09-28_
   `HttpsTransport` (explicit TLS ≥ 1.2, no env proxies, no redirects, content-type allow-list,
   10 MB/30 s caps), the deny-by-default SSRF address guard (IANA special-purpose ranges + embedded
   IPv4 decode, checked on every resolved address at connect), and the run/bundle/paging limit helpers (wired into the sync loop in PI2b).
-  **PI2a part 2 done for pre-production** (branch `pi2a-discovery`, no migration, no grant; coordinator
-  decisions 2026-09-28): transport N3 resolved (a non-2xx resolves with its status and the body is
+  **PI2a part 2 done for pre-production** (PR #87, branch `pi2a-discovery`, no migration, no grant;
+  coordinator decisions 2026-09-28): transport N3 resolved (a non-2xx resolves with its status and the body is
   discarded unread), discovery, the SMART token request (`auth.ts`, `src/lib/crypto/jwt-sign.ts`,
   redacting `AccessToken`), keys from one shared pre-production secret (`EnvSharedKeyStore`,
-  `INTEGRATION_SIGNING_KEY`, OA-063; production refuses it; Key Vault stub fails closed), the public
+  `INTEGRATION_SIGNING_KEY`, OA-064; a **pre-production exception, production control deferred** relative to R-7.3.4/R-7.3.5; production refuses it at use and at boot; register it only with synthetic-data vendor sandboxes, never a live practice EHR; Key Vault stub fails closed), the public
   `/.well-known/jwks.json` route (allow-list, `jwks` bucket), and Test connection (domain service,
   admin action, button on the connection page; result from the audit log via `hasRecentPassingTest`,
   a pass within 24 h counts even if a later test fails). **Open for the Azure cutover (R-15.9
