@@ -305,7 +305,8 @@ describe("Pause, resume, withdraw, and the revoke reason (PI2a)", () => {
       submitConnectionAction,
     ]) {
       for (const target of [id, "not-a-uuid"]) {
-        const result = await run(action, form({ id: target, updatedAt: stamp }));
+        // Submit also carries the language its attestation was shown in (checked before anything else).
+        const result = await run(action, form({ id: target, updatedAt: stamp, locale: "en" }));
         expect(result.state?.error).toMatch(/not found/);
       }
     }

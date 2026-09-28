@@ -358,7 +358,10 @@ describe("submitConnectionAction (PI2a)", () => {
     expect((await run(testConnectionAction, form({ id }))).state).toMatchObject({
       error: expect.stringMatching(/can't be tested yet/),
     });
-    const refused = await run(submitConnectionAction, form({ id, updatedAt: await stampOf(id) }));
+    const refused = await run(
+      submitConnectionAction,
+      form({ id, updatedAt: await stampOf(id), locale: language }),
+    );
     expect(errorOf(refused)).toMatch(/Test connection has to pass first/);
     expect(await row(id)).toMatchObject({ status: "draft", submittedAt: null });
   });
