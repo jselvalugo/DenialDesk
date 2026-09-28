@@ -61,6 +61,15 @@ _Last updated: 2026-09-28_
   10 MB/30 s caps), the deny-by-default SSRF address guard (IANA special-purpose ranges + embedded
   IPv4 decode, checked on every resolved address at connect), and the run/bundle/paging limit helpers (wired into the sync loop in PI2b) —
   discovery, keys, JWKS, and test connection (PI2a part 2) still open (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded). Review fixes on PR #83: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  **PI2a lifecycle + step-up slice done** (branch `pi2a-lifecycle`, ported from closed #81 onto the
+  #82/#84/#85 domain layer; Submit, the residency attestation, and the Submit registry claim wait on
+  Test connection, PI2a-2): step-up MFA (R-7.2.2) — migration 0041 `sessions.mfa_verified_at`,
+  `hasRecentMfa` (5 min, `src/auth/step-up.ts`), `/step-up` with `safeInternalPath`, token rotation,
+  `auth.step_up_verified|failed`, and the shared `requireStepUp` gate Submit will call; admin-only,
+  audited, tenant-scoped, environment-checked Pause, Resume (step-up), and Withdraw (releases the
+  registry claim) wired into the connection page; Revoke takes a reason code (audit "why"); the
+  `endpoint_key`/`token_endpoint_key` CHECKs (0041). No GRANT or privilege change (`sessions` is
+  owner-only; the CHECKs add no privilege). Owner decisions and the TOTP-vs-WebAuthn gap: `OA-063`.
   Owner questions OA-045 onward; data source DS-12 in `docs/data-sources.xlsx`.
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
@@ -414,6 +423,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   (`public/brand/README.md`); it is owner-supplied and described as a synthetic render.
 - Claims list: are patient names read only to order the unsubmitted queue by patient (never shown
   beyond the displayed page) covered by the `claim.list_viewed` audit event? `OA-060`.
+- Integrations step-up (PI2a): confirm the step-up window, lockout interplay, which actions need it
+  (Resume yes; Pause and Revoke no, on purpose), and whether TOTP is enough until WebAuthn ships
+  (R-7.2.2 asks for phishing-resistant MFA; close before the first real EHR connection). `OA-063`.
 - Integrations: the free-text connection name is now shown to every role on every page (the Patients
   data-source drop-down); accept the residual risk or ask for a stronger guard? `OA-061`.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
@@ -478,6 +490,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
     (including `detail` row values). Decide how production migrations run and where their output goes.
 
 ## Lessons / conventions learned
+- A CHECK like `key = lower(url)` evaluates to NULL, which PostgreSQL treats as passing, whenever
+  either side is NULL, so it doesn't stop a key written with no URL; spell the NULL cases out
+  (`key IS NULL OR (url IS NOT NULL AND key = lower(url))`), as 0041 does for the token endpoint.
+- A step-up check that shares the sign-in attempt counter must give back its own successful attempt,
+  or a handful of legitimate step-ups in one session lock the account (`releaseAttempt`).
 - Components that take a function prop (e.g. `Pagination`'s `hrefFor`) must stay server components;
   a `"use client"` directive there breaks every page with "Functions cannot be passed directly to
   Client Components". Client components get translations from `useT`, server ones from `getT`.

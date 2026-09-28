@@ -27,6 +27,7 @@ import {
 } from "@/integrations/fhir/url-rules";
 import { VENDOR_SANDBOX_HOSTS } from "@/integrations/fhir/vendor-sandboxes";
 import { audit } from "@/lib/audit";
+import { isRevokeReasonCode } from "./revoke-reasons";
 
 // EHR/PM connections as an administrator creates and edits them (docs/specs/patient-integrations.md
 // PI1b; ADR 0010). Configuration only, never PHI. The database (drizzle/0039, 0040) enforces the
@@ -59,18 +60,23 @@ export const CONNECTION_STATUS_TONE = {
   revoked: "neutral",
 } as const satisfies Record<ConnectionStatus, "neutral" | "info" | "success" | "warning" | "danger">;
 
-/** A refusal with a translated message and, when it belongs to one, the form field it concerns. */
+/**
+ * A refusal with a translated message and, when it belongs to one, the form field it concerns.
+ * `stepUpRequired` marks the refusal that a fresh MFA verification fixes (R-7.2.2), so the page
+ * can offer the way to do it rather than only saying no.
+ */
 export class IntegrationConnectionError extends Error {
   constructor(
     message: string,
     readonly field?: ConnectionField,
+    readonly stepUpRequired = false,
   ) {
     super(message);
     this.name = "IntegrationConnectionError";
   }
 }
 
-export type ConnectionField = "displayName" | "baseUrl" | "clientId" | "mrnIdentifierSystem";
+export type ConnectionField = "displayName" | "baseUrl" | "clientId" | "mrnIdentifierSystem" | "reason";
 
 export interface IntegrationActor {
   tenantId: string;
@@ -78,6 +84,12 @@ export interface IntegrationActor {
   role: Role;
   /** `syntheticDataOnly()`: real EHR endpoints are refused, only the built-in sandbox is allowed. */
   syntheticOnly: boolean;
+  /**
+   * `hasRecentMfa(session.mfaVerifiedAt)`: MFA completed within the step-up window (R-7.2.2). Always
+   * derived from the session on the server, never from the request. Absent means false, so an actor
+   * built without it can't pass a step-up gate.
+   */
+  recentMfa?: boolean;
 }
 
 /** SMART client IDs are opaque strings; visible ASCII without spaces covers every vendor we know. */
@@ -184,6 +196,32 @@ export function parseEndpointInput(
 
 function assertAdmin(actor: IntegrationActor, t: IntegrationsT) {
   if (!canManageIntegrations(actor.role)) fail(t, "error.notAdmin");
+}
+
+/**
+ * Step-up gate (R-7.2.2): refuses unless the actor's session completed MFA within the last five
+ * minutes. Resume uses it now; Submit (PI2a-2) and payer mapping (PI2b) call the same helper, so the
+ * rule and its message live in one place. The refusal carries `stepUpRequired` so the page can link
+ * to `/step-up`.
+ */
+export function requireStepUp(actor: IntegrationActor, t: IntegrationsT = englishT): void {
+  if (actor.recentMfa !== true) {
+    throw new IntegrationConnectionError(t("error.stepUpRequired"), undefined, true);
+  }
+}
+
+/**
+ * The environment rule (spec "Environment and population rules") for a lifecycle change: where only
+ * synthetic data is allowed only the sandbox may be worked with, and in production only a real
+ * endpoint. Pure, so it is unit-tested without a database.
+ */
+export function assertEnvironmentAllows(
+  isSandbox: boolean,
+  actor: Pick<IntegrationActor, "syntheticOnly">,
+  t: IntegrationsT = englishT,
+): void {
+  if (isSandbox && !actor.syntheticOnly) fail(t, "error.sandboxRefused");
+  if (!isSandbox && actor.syntheticOnly) fail(t, "error.realEndpointRefused");
 }
 
 /** Columns safe to show an administrator: configuration only (no key reference or exception text). */
@@ -431,48 +469,168 @@ export async function updateConnection(
   });
 }
 
+/** What a lifecycle UPDATE changes: only granted columns (status, status_reason, revoked_*, updated_*). */
+interface StatusChange {
+  status: ConnectionStatus;
+  /** Set (or cleared with null) together with the status; left alone when undefined. */
+  statusReason?: string | null;
+  /** Stamps who revoked and when (the CHECKs require both for `revoked`). */
+  revoked?: boolean;
+}
+
+async function writeStatus(tx: TenantTx, actor: IntegrationActor, id: string, change: StatusChange) {
+  await tx
+    .update(integrationConnections)
+    .set({
+      status: change.status,
+      ...(change.statusReason !== undefined ? { statusReason: change.statusReason } : {}),
+      ...(change.revoked ? { revokedBy: actor.userId, revokedAt: sql`now()` } : {}),
+      updatedBy: actor.userId,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(integrationConnections.id, id));
+}
+
 /**
- * Revokes a connection (spec "Connection lifecycle"): terminal, from any state. Releases its
- * registry entry (the database function only releases after this transition). Signing keys arrive
- * with PI2a; destroying them joins this step then.
+ * Releases the registry entry through the SECURITY DEFINER function, which itself refuses unless the
+ * connection is already draft or revoked and belongs to the caller's practice. A sandbox is never
+ * registered. Returns whether an entry was released.
+ */
+async function releaseRegistry(tx: TenantTx, id: string, isSandbox: boolean): Promise<boolean> {
+  if (isSandbox) return false;
+  const released = await tx.execute<{ released: boolean }>(
+    sql`select integration_registry_release(${id}::uuid) as released`,
+  );
+  return released.rows[0]?.released === true;
+}
+
+/**
+ * Revokes a connection (spec "Connection lifecycle"): terminal, from any state, with a reason code
+ * from a fixed vocabulary (compliance review #6a) that becomes the audit event's "why" and the
+ * connection's `status_reason`. Releases its registry entry (the database function only releases
+ * after this transition). No environment check and no step-up, on purpose: revoking is the safe
+ * direction and the emergency stop (a suspected key compromise), so it has to work in any
+ * environment and without a fresh code at hand. Signing keys arrive with PI2a; destroying them
+ * joins this step then.
  */
 export async function revokeConnection(
   tx: TenantTx,
   actor: IntegrationActor,
   id: string,
   expectedUpdatedAt: string,
+  reasonCode: unknown,
   t: IntegrationsT = englishT,
 ): Promise<void> {
   assertAdmin(actor, t);
+  if (!isRevokeReasonCode(reasonCode)) fail(t, "error.revokeReasonRequired", "reason");
   const current = await lockForChange(tx, id, expectedUpdatedAt, t);
-  await tx
-    .update(integrationConnections)
-    .set({
-      status: "revoked",
-      revokedBy: actor.userId,
-      revokedAt: sql`now()`,
-      updatedBy: actor.userId,
-      updatedAt: sql`now()`,
-    })
-    .where(eq(integrationConnections.id, id));
-  let registryReleased = false;
-  if (!current.isSandbox) {
-    const released = await tx.execute<{ released: boolean }>(
-      sql`select integration_registry_release(${id}::uuid) as released`,
-    );
-    registryReleased = released.rows[0]?.released === true;
-  }
+  await writeStatus(tx, actor, id, { status: "revoked", statusReason: reasonCode, revoked: true });
+  const registryReleased = await releaseRegistry(tx, id, current.isSandbox);
   await audit(tx, {
     action: "integration.connection_revoked",
     actorUserId: actor.userId,
     tenantId: actor.tenantId,
     entityType: "integration_connection",
     entityId: id,
+    reason: reasonCode,
     metadata: {
+      reason_code: reasonCode,
       previous_status: current.status,
       sandbox: current.isSandbox,
       registry_released: registryReleased,
       ...(current.isSandbox ? {} : endpointMetadata("", current)),
+    },
+  });
+}
+
+/** Locks the row for a lifecycle change and checks the states it may leave and the environment rule. */
+async function lockForTransition(
+  tx: TenantTx,
+  actor: IntegrationActor,
+  id: string,
+  expectedUpdatedAt: string,
+  from: readonly ConnectionStatus[],
+  t: IntegrationsT,
+) {
+  assertAdmin(actor, t);
+  const current = await lockForChange(tx, id, expectedUpdatedAt, t);
+  if (!from.includes(current.status)) fail(t, "error.invalidTransition");
+  assertEnvironmentAllows(current.isSandbox, actor, t);
+  return current;
+}
+
+/** Pause (`active` → `paused`): sync stops until an administrator resumes it. */
+export async function pauseConnection(
+  tx: TenantTx,
+  actor: IntegrationActor,
+  id: string,
+  expectedUpdatedAt: string,
+  t: IntegrationsT = englishT,
+): Promise<void> {
+  const current = await lockForTransition(tx, actor, id, expectedUpdatedAt, ["active"], t);
+  await writeStatus(tx, actor, id, { status: "paused" });
+  await audit(tx, {
+    action: "integration.connection_paused",
+    actorUserId: actor.userId,
+    tenantId: actor.tenantId,
+    entityType: "integration_connection",
+    entityId: id,
+    metadata: { previous_status: current.status, sandbox: current.isSandbox },
+  });
+}
+
+/**
+ * Resume (`paused` or `error` → `active`), gated by a step-up (R-7.2.2): restarting the sync of a
+ * practice's patients deserves a fresh proof of the authenticator. Clears the reason a connection
+ * went to `error` with, since it is no longer in that state.
+ */
+export async function resumeConnection(
+  tx: TenantTx,
+  actor: IntegrationActor,
+  id: string,
+  expectedUpdatedAt: string,
+  t: IntegrationsT = englishT,
+): Promise<void> {
+  const current = await lockForTransition(tx, actor, id, expectedUpdatedAt, ["paused", "error"], t);
+  requireStepUp(actor, t);
+  await writeStatus(tx, actor, id, { status: "active", statusReason: null });
+  await audit(tx, {
+    action: "integration.connection_resumed",
+    actorUserId: actor.userId,
+    tenantId: actor.tenantId,
+    entityType: "integration_connection",
+    entityId: id,
+    metadata: { previous_status: current.status, sandbox: current.isSandbox },
+  });
+}
+
+/**
+ * Withdraw (`pending_approval` → `draft`): the administrator takes a submitted connection back
+ * before the operator approves it, releasing its registry claim so it can be corrected and
+ * submitted again. The endpoint set is editable again afterwards (a draft that never synced).
+ */
+export async function withdrawConnection(
+  tx: TenantTx,
+  actor: IntegrationActor,
+  id: string,
+  expectedUpdatedAt: string,
+  t: IntegrationsT = englishT,
+): Promise<void> {
+  const current = await lockForTransition(tx, actor, id, expectedUpdatedAt, ["pending_approval"], t);
+  await writeStatus(tx, actor, id, { status: "draft" });
+  // After the status change: the database function refuses to release while still pending.
+  const registryReleased = await releaseRegistry(tx, id, current.isSandbox);
+  await audit(tx, {
+    action: "integration.connection_updated",
+    actorUserId: actor.userId,
+    tenantId: actor.tenantId,
+    entityType: "integration_connection",
+    entityId: id,
+    metadata: {
+      transition: "withdrawn",
+      previous_status: current.status,
+      registry_released: registryReleased,
+      ...endpointMetadata("", current),
     },
   });
 }

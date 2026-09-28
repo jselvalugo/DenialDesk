@@ -10,16 +10,24 @@ A practice administrator (`canManageIntegrations`) revokes in the app. The EHR/P
 practice's EHR/PM administrator; DenialDesk staff never act on a practice's EHR/PM.
 
 ## In DenialDesk
-1. Settings › Integrations › open the connection › **Revoke connection**; tick the confirmation and
-   revoke. The page then shows the revoked time and the offboarding steps below.
+0. Not ready to give the connection up? **Pause** (active connections) stops syncing without
+   deleting anything and can be undone with **Resume**, which asks the administrator to verify with
+   their authenticator app first (step-up, R-7.2.2). A connection still **awaiting approval** can be
+   **withdrawn** back to a draft (its registry claim is released). Revoking is the permanent step.
+1. Settings › Integrations › open the connection › **Revoke connection**; choose the reason (a fixed
+   list: no longer used, switching systems, set up by mistake, security concern, other; never patient
+   information), tick the confirmation, and revoke. Revoking needs no fresh verification on purpose,
+   so it works as an emergency stop. The page then shows the revoked time and the offboarding steps
+   below.
 2. What the app does on revoke (same transaction):
    - status → `revoked` with who and when (`revoked_by`, `revoked_at`), terminal (database trigger);
    - any queued or running sync run → `abandoned` (database trigger);
    - its entry in the cross-practice endpoint registry is released, so that endpoint and client ID
      can be submitted again (by this practice or another; any new connection still needs its own
      Submit and, for a real endpoint, operator approval, PI1c);
-   - audit event `integration.connection_revoked` with the previous status, the endpoint, client ID,
-     MRN identifier system, and whether a registry entry was released (configuration only, no PHI).
+   - audit event `integration.connection_revoked` with the reason code (also its "why" column and the
+     connection's `status_reason`), the previous status, the endpoint, client ID, MRN identifier
+     system, and whether a registry entry was released (configuration only, no PHI).
 3. From PI2a: the connection's signing key is destroyed as part of revoke. Until then no key exists.
 
 ## At the EHR/PM (the practice's EHR/PM administrator)

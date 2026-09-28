@@ -184,10 +184,16 @@ describe("Settings › Integrations actions (PI1b-2)", () => {
     const created = await run(createConnectionAction, form({ displayName: "To revoke" }));
     const id = created.redirectedTo!.replace("/settings/integrations/", "");
     const stamp = (await row(id)).updatedAt.toISOString();
-    const unconfirmed = await run(revokeConnectionAction, form({ id, updatedAt: stamp }));
+    const unconfirmed = await run(
+      revokeConnectionAction,
+      form({ id, updatedAt: stamp, reason: "no_longer_used" }),
+    );
     expect(unconfirmed.state?.error).toMatch(/Check the box/);
     expect((await row(id)).status).toBe("draft");
-    const confirmed = await run(revokeConnectionAction, form({ id, updatedAt: stamp, confirm: "on" }));
+    const confirmed = await run(
+      revokeConnectionAction,
+      form({ id, updatedAt: stamp, reason: "no_longer_used", confirm: "on" }),
+    );
     expect(confirmed.redirectedTo).toBe(`/settings/integrations/${id}`);
     expect((await row(id)).status).toBe("revoked");
   });
@@ -200,7 +206,10 @@ describe("Settings › Integrations actions (PI1b-2)", () => {
     const stamp = (await row(id)).updatedAt.toISOString();
     auth = { ...practice, role: "admin" };
     for (const target of [id, "not-a-uuid"]) {
-      const result = await run(revokeConnectionAction, form({ id: target, updatedAt: stamp, confirm: "on" }));
+      const result = await run(
+        revokeConnectionAction,
+        form({ id: target, updatedAt: stamp, reason: "no_longer_used", confirm: "on" }),
+      );
       expect(result.state?.error).toMatch(/not found/);
     }
     expect((await row(id)).status).toBe("draft");

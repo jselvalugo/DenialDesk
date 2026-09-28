@@ -260,7 +260,9 @@ get their own tests in PI2a.
       detail ("Failing row contains …") never reaches the page or an error tracker (compliance
       review #5, #10). The connection page and the new page are admin-only (404 otherwise; e2e);
       every action re-checks the role on the server.
-- Moved to PI2a (see there): Submit, the residency attestation, the MFA step-up, pause/resume.
+- Moved to PI2a (see there): Submit, the residency attestation, the MFA step-up, pause/resume
+  (step-up, pause/resume, withdraw, and the revoke reason are done there; Submit and the attestation wait
+  on Test connection).
 - PI1b follow-ups (compliance review of PI1b-2, not yet scheduled): an audited "offboarding
   confirmed by/at" record for the EHR-side deregistration (SOC 2 CC6.2/CC6.3 evidence); notify the
   practice's other administrators on revoke (CC7.3), alongside the activation notice (PI1c).
@@ -303,21 +305,53 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       stamps `submitted_by/_at` in both cases — the drop-down treats a revoked connection as a past
       source only if it was ever submitted or synced):
       requires a passing Test connection in the last 24 h, the residency attestation (real only),
-      and an MFA verification within the last 5 minutes (step-up; R-7.2.2). Tests: Submit refused
-      without a recent passing test, and without a recent step-up.
+      and an MFA verification within the last 5 minutes (step-up; R-7.2.2; the gate and `/step-up`
+      exist now, see "Step-up MFA" below: call `requireStepUp`). Tests: Submit refused without a
+      recent passing test, and without a recent step-up.
 - [ ] Residency attestation on Submit of a real connection: "This EHR/PM endpoint stores and
       processes data only in the United States" — stricter than § 408.051(3), which also allows
       territories and Canada (DenialDesk defaults to U.S.-only, R-3.3.1). Audited.
 - [ ] Submit claims the registry; a conflict refuses Submit with "This endpoint and client ID are
       already connected" (no other practice named) and audits `integration.registry_conflict`.
-- [ ] Withdraw (`pending_approval` → `draft`, releases the registry claim).
-- [ ] Pause (`active` → `paused`) and resume (`paused`/`error` → `active`, MFA step-up); payer
-      mapping also requires step-up.
-- [ ] Revoke records a reason code (audit "why", compliance review #6a) now that it can stop a live
-      sync.
-- [ ] Database CHECKs `endpoint_key = lower(base_url)` and `token_endpoint_key =
-      lower(token_endpoint)`, so the registry key can't be written apart from the URL (security
-      review L-3; `url-rules.ts` already guarantees the equality).
+- [x] Step-up MFA (R-7.2.2; PI2a lifecycle slice): migration 0041 adds `sessions.mfa_verified_at`
+      (set at sign-in MFA and at each step-up; null on a session from before 0041, which must step
+      up first); `hasRecentMfa` (`src/auth/step-up.ts`, 5-minute window from
+      `MFA_STEP_UP_WINDOW_MS`, inclusive at 5:00; unit-tested at 4:59 / 5:00 / 5:01); `/step-up`
+      re-verifies the sign-in TOTP and returns to a `returnTo` that `safeInternalPath` keeps to an
+      allow-listed same-origin path (open-redirect fix, `src/lib/safe-path.ts`); a success rotates
+      the session token and cookie (`completeStepUpMfa`); it shares the sign-in attempt limiter, a
+      failure never resets the sign-in lockout counter, and a success keeps earlier failures
+      (`claimTotp(..., resetLockout: false)`) while giving back only its own attempt
+      (`releaseAttempt`), so successful step-ups can't add up to a lockout; audited
+      `auth.step_up_verified|failed` (session, tenant, path without query string). The gate for
+      domain actions is `requireStepUp(actor)` (`connections.ts`: `actor.recentMfa` comes from the
+      session, never the request; refusal carries `stepUpRequired`, and the page links to
+      `/step-up`). Resume uses it now; **Submit (PI2a-2) and payer mapping (PI2b) call the same
+      helper.** No GRANT changes: `sessions` is reached through the connection owner only.
+      Owner decisions: OA-063 (incl. TOTP vs WebAuthn, R-7.2.2).
+- [x] Withdraw (`pending_approval` → `draft`, releases the registry claim through the SECURITY
+      DEFINER function after the status change; audited `integration.connection_updated` with
+      `transition: withdrawn`). Admin-only, tenant-scoped (another practice's connection is "not
+      found" and its claim is untouched), environment-rule checked, stale-page checked.
+- [x] Pause (`active` → `paused`) and resume (`paused`/`error` → `active`, MFA step-up; resume also
+      clears `status_reason`), audited `integration.connection_paused|resumed`; same admin, tenant,
+      environment, and stale-page checks. Pause and Revoke deliberately need **no** step-up (the safe
+      direction and the emergency stop for a suspected compromise; OA-063). Wired into the
+      connection page as one action per state (Settings › Integrations › connection), every string
+      in en/es/pt.
+- [ ] Payer mapping also requires step-up (ships with payer mapping, PI2b; call `requireStepUp`).
+- [x] Revoke records a reason code from a fixed vocabulary (`no_longer_used`, `switching_systems`,
+      `configured_in_error`, `security_concern`, `other`; `src/domain/integrations/revoke-reasons.ts`)
+      as the audit event's `reason` and the connection's `status_reason`; required on the form and
+      in the domain (no free text, so no patient information can reach the "why").
+- [x] Database CHECKs (drizzle/0041) `endpoint_key = lower(base_url)` and, for the token endpoint,
+      "no key, or a key equal to `lower(token_endpoint)` with the endpoint present" — a bare
+      `token_endpoint_key = lower(token_endpoint)` evaluates to NULL, which a CHECK accepts, for a key
+      written with no endpoint, so the second CHECK is spelled out. An endpoint without a key stays
+      allowed (discovery sets the endpoint first; the registry claim refuses a missing key). Security
+      review L-3; existing rows verified by `test/integration/integration-lifecycle.test.ts` and
+      validated by the migration itself. The PI1a fixtures that set a bare `token_endpoint_key` now
+      set the endpoint with it (`setDraftField`).
 - [x] `HttpsTransport` (node:https, PI2a part 1, `src/integrations/fhir/transport.ts`): TLS options
       explicit (`minVersion: 'TLSv1.2'`, a TLS 1.2 cipher list of ECDHE with AES-GCM/ChaCha20-Poly1305
       only — TLS 1.3 suites at their defaults, and TLS 1.3 is negotiated when the server offers it —

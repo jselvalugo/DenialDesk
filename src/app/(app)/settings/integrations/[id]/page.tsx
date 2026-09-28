@@ -16,6 +16,7 @@ import {
 } from "@/domain/integrations/connections";
 import { getFormat, getT } from "@/i18n/server";
 import { ConnectionForm } from "../ConnectionForm";
+import { ConnectionLifecycleButton } from "./ConnectionLifecycle";
 import { RevokeConnectionForm } from "./RevokeConnectionForm";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -54,6 +55,16 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
     </div>
   );
   const offboarding = !connection.isSandbox;
+  // The lifecycle action each state offers (PI2a): pause a live connection, resume a stopped one
+  // (a step-up is needed), withdraw a submitted one. A draft has none (Submit ships with PI2a-2).
+  const lifecycle = (
+    {
+      active: { kind: "pause", description: "lifecycle.active" },
+      paused: { kind: "resume", description: "lifecycle.paused" },
+      error: { kind: "resume", description: "lifecycle.error" },
+      pending_approval: { kind: "withdraw", description: "lifecycle.pending_approval" },
+    } as const
+  )[connection.status as "active" | "paused" | "error" | "pending_approval"];
 
   return (
     <div className="flex flex-col gap-6">
@@ -137,6 +148,14 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
         )
       ) : (
         <>
+          {lifecycle && (
+            <Panel title={t("lifecycle.title")}>
+              <div className="flex flex-col gap-4">
+                <p className="text-body text-muted">{t(lifecycle.description)}</p>
+                <ConnectionLifecycleButton kind={lifecycle.kind} id={connection.id} updatedAt={updatedAt} />
+              </div>
+            </Panel>
+          )}
           <Panel flush>
             <ConnectionForm
               sandbox={connection.isSandbox}

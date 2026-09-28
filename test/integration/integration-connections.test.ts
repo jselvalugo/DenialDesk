@@ -399,7 +399,7 @@ describe("revokeConnection", () => {
     const input = endpoint();
     const { id } = await withTenant(a, (tx) => createConnection(tx, admin(a), input));
     const stamp = (await detail(a, id)).updatedAt.toISOString();
-    await withTenant(a, (tx) => revokeConnection(tx, admin(a), id, stamp));
+    await withTenant(a, (tx) => revokeConnection(tx, admin(a), id, stamp, "no_longer_used"));
     const row = await detail(a, id);
     expect(row.status).toBe("revoked");
     expect(row.revokedAt).not.toBeNull();
@@ -416,9 +416,10 @@ describe("revokeConnection", () => {
     expect(
       (await refusal(withTenant(a, (tx) => updateConnection(tx, admin(a), id, next, input)))).message,
     ).toMatch(/revoked/);
-    expect((await refusal(withTenant(a, (tx) => revokeConnection(tx, admin(a), id, next)))).message).toMatch(
-      /revoked/,
-    );
+    expect(
+      (await refusal(withTenant(a, (tx) => revokeConnection(tx, admin(a), id, next, "no_longer_used"))))
+        .message,
+    ).toMatch(/revoked/);
   });
 
   it("releases the connection's registry claim when a submitted connection is revoked", async () => {
@@ -447,7 +448,7 @@ describe("revokeConnection", () => {
         .where(and(eq(integrationEndpointRegistry.connectionId, id)));
     expect(await claimed()).toHaveLength(1);
     const stamp = (await detail(c, id)).updatedAt.toISOString();
-    await withTenant(c, (tx) => revokeConnection(tx, admin(c), id, stamp));
+    await withTenant(c, (tx) => revokeConnection(tx, admin(c), id, stamp, "no_longer_used"));
     expect(await claimed()).toHaveLength(0);
     expect((await lastAudit(id)).metadata).toMatchObject({
       previous_status: "pending_approval",
@@ -465,7 +466,7 @@ describe("revokeConnection", () => {
       tx.execute(sql`update integration_connections set status = 'active' where id = ${id}::uuid`),
     );
     const stamp = (await detail(c, id)).updatedAt.toISOString();
-    await withTenant(c, (tx) => revokeConnection(tx, admin(c, true), id, stamp));
+    await withTenant(c, (tx) => revokeConnection(tx, admin(c, true), id, stamp, "no_longer_used"));
     expect((await detail(c, id)).status).toBe("revoked");
     expect((await lastAudit(id)).metadata).toEqual({
       previous_status: "active",
@@ -475,7 +476,7 @@ describe("revokeConnection", () => {
     const real = endpoint();
     const { id: realId } = await withTenant(c, (tx) => createConnection(tx, admin(c), real));
     const realStamp = (await detail(c, realId)).updatedAt.toISOString();
-    await withTenant(c, (tx) => revokeConnection(tx, admin(c), realId, realStamp));
+    await withTenant(c, (tx) => revokeConnection(tx, admin(c), realId, realStamp, "no_longer_used"));
     expect((await lastAudit(realId)).metadata).toMatchObject({
       base_url: (await detail(c, realId)).baseUrl,
       client_id: real.clientId,
@@ -489,7 +490,9 @@ describe("revokeConnection", () => {
     await withTenant(a, (tx) =>
       updateConnection(tx, admin(a), id, stamp, endpoint({ displayName: "Changed" })),
     );
-    const error = await refusal(withTenant(a, (tx) => revokeConnection(tx, admin(a), id, stamp)));
+    const error = await refusal(
+      withTenant(a, (tx) => revokeConnection(tx, admin(a), id, stamp, "no_longer_used")),
+    );
     expect(error.message).toMatch(/changed since you opened it/);
     expect((await detail(a, id)).status).toBe("draft");
   });
@@ -497,7 +500,9 @@ describe("revokeConnection", () => {
   it("can't revoke another practice's connection", async () => {
     const { id } = await withTenant(b, (tx) => createConnection(tx, admin(b), endpoint()));
     const stamp = (await detail(b, id)).updatedAt.toISOString();
-    const error = await refusal(withTenant(a, (tx) => revokeConnection(tx, admin(a), id, stamp)));
+    const error = await refusal(
+      withTenant(a, (tx) => revokeConnection(tx, admin(a), id, stamp, "no_longer_used")),
+    );
     expect(error.message).toMatch(/not found/);
     expect((await detail(b, id)).status).toBe("draft");
   });
@@ -506,7 +511,9 @@ describe("revokeConnection", () => {
     const { id } = await withTenant(a, (tx) => createConnection(tx, admin(a), endpoint()));
     const stamp = (await detail(a, id)).updatedAt.toISOString();
     const error = await refusal(
-      withTenant(a, (tx) => revokeConnection(tx, { ...admin(a), role: "specialist" }, id, stamp)),
+      withTenant(a, (tx) =>
+        revokeConnection(tx, { ...admin(a), role: "specialist" }, id, stamp, "no_longer_used"),
+      ),
     );
     expect(error.message).toMatch(/administrator/);
     expect((await detail(a, id)).status).toBe("draft");
@@ -539,6 +546,7 @@ describe("connectionSummary (the tab-bar drop-down)", () => {
         admin(c, true),
         draftId,
         (await getConnection(tx, draftId))!.updatedAt.toISOString(),
+        "no_longer_used",
       ),
     );
     expect(await summaryOf()).toBeNull();
@@ -565,7 +573,13 @@ describe("connectionSummary (the tab-bar drop-down)", () => {
 
     // Revoked after being live: still shown (synced patients came from it), until another is live.
     await withTenant(c, async (tx) =>
-      revokeConnection(tx, admin(c, true), id, (await getConnection(tx, id))!.updatedAt.toISOString()),
+      revokeConnection(
+        tx,
+        admin(c, true),
+        id,
+        (await getConnection(tx, id))!.updatedAt.toISOString(),
+        "no_longer_used",
+      ),
     );
     expect(await summaryOf()).toMatchObject({
       connectionId: id,
@@ -587,7 +601,13 @@ describe("connectionSummary (the tab-bar drop-down)", () => {
       );
       await withTenant(c, (tx) => activateSandboxStandIn(tx, c, id));
       await withTenant(c, async (tx) =>
-        revokeConnection(tx, admin(c, true), id, (await getConnection(tx, id))!.updatedAt.toISOString()),
+        revokeConnection(
+          tx,
+          admin(c, true),
+          id,
+          (await getConnection(tx, id))!.updatedAt.toISOString(),
+          "no_longer_used",
+        ),
       );
       return id;
     };
@@ -633,6 +653,7 @@ describe("connectionSummary (the tab-bar drop-down)", () => {
           admin(ctx, true),
           current.connectionId!,
           (await getConnection(tx, current.connectionId!))!.updatedAt.toISOString(),
+          "no_longer_used",
         ),
       );
     }
@@ -647,7 +668,13 @@ describe("connectionSummary (the tab-bar drop-down)", () => {
     expect(await withTenant(c, (tx) => connectionSummary(tx, "patients"))).toBeNull();
     // Leave practice B with no live connection for the other tests in this file.
     await withTenant(b, async (tx) =>
-      revokeConnection(tx, admin(b, true), id, (await getConnection(tx, id))!.updatedAt.toISOString()),
+      revokeConnection(
+        tx,
+        admin(b, true),
+        id,
+        (await getConnection(tx, id))!.updatedAt.toISOString(),
+        "no_longer_used",
+      ),
     );
   });
 });

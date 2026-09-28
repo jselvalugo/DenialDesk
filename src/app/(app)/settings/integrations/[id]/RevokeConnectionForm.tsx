@@ -3,11 +3,16 @@
 import { startTransition, useActionState } from "react";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { Button } from "@/components/ui/Button";
+import { SelectField } from "@/components/ui/SelectField";
+import { REVOKE_REASON_CODES, REVOKE_REASON_LABEL_KEYS } from "@/domain/integrations/revoke-reasons";
 import { useT } from "@/i18n/client";
 import { revokeConnectionAction } from "../actions";
 import type { ConnectionFormState } from "../form-state";
 
-/** Revoke with inline confirmation (DESIGN.md §3): a required acknowledgement, then a danger button. */
+/**
+ * Revoke with inline confirmation (DESIGN.md §3): a required reason code (recorded as the audit
+ * "why"), a required acknowledgement, then a danger button.
+ */
 export function RevokeConnectionForm({ id, updatedAt }: { id: string; updatedAt: string }) {
   const t = useT("integrations");
   const [state, action, pending] = useActionState<ConnectionFormState, FormData>(revokeConnectionAction, {});
@@ -24,7 +29,19 @@ export function RevokeConnectionForm({ id, updatedAt }: { id: string; updatedAt:
     >
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="updatedAt" value={updatedAt} />
-      <FormAlert message={state.error} id="revoke-error" />
+      <FormAlert message={state.field === "reason" ? undefined : state.error} id="revoke-error" />
+      <SelectField
+        label={t("revoke.reason")}
+        name="reason"
+        required
+        defaultValue=""
+        hint={t("revoke.reasonHint")}
+        error={state.field === "reason" ? state.error : undefined}
+        options={[
+          { value: "", label: t("revoke.reasonPlaceholder") },
+          ...REVOKE_REASON_CODES.map((code) => ({ value: code, label: t(REVOKE_REASON_LABEL_KEYS[code]) })),
+        ]}
+      />
       <label className="flex items-start gap-2 text-body text-text">
         <input
           type="checkbox"
