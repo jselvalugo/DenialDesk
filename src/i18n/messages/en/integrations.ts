@@ -65,9 +65,33 @@ export const integrations = {
   "revoke.title": "Revoke connection",
   "revoke.description":
     "Revoking is permanent: DenialDesk stops using this connection, and it can't be reactivated. To connect again, create a new connection.",
+  "revoke.reason": "Reason",
+  "revoke.reasonHint": "Recorded in the audit log. Don't include patient information anywhere.",
+  "revoke.reasonPlaceholder": "Choose a reason",
+  "revoke.reason.no_longer_used": "We no longer use this connection",
+  "revoke.reason.switching_systems": "We're switching EHR/PM systems",
+  "revoke.reason.configured_in_error": "It was set up by mistake",
+  "revoke.reason.security_concern": "Security concern",
+  "revoke.reason.other": "Other",
   "revoke.confirm": "I understand that revoking this connection is permanent.",
   "revoke.submit": "Revoke connection",
   "revoke.pending": "Revoking…",
+  "lifecycle.title": "Sync",
+  "lifecycle.active":
+    "Pausing stops DenialDesk from syncing patients from this connection. Nothing is deleted, and you can resume later.",
+  "lifecycle.paused":
+    "Sync is paused. Resuming restarts it, and needs you to verify your identity with your authenticator app first.",
+  "lifecycle.error":
+    "DenialDesk stopped syncing after an error. Once it's fixed with your EHR/PM administrator, resume. Resuming needs you to verify your identity with your authenticator app first.",
+  "lifecycle.pending_approval":
+    "This connection is waiting for approval. Withdrawing it returns it to a draft you can edit and submit again.",
+  "pause.submit": "Pause sync",
+  "pause.pending": "Pausing…",
+  "resume.submit": "Resume sync",
+  "resume.pending": "Resuming…",
+  "withdraw.submit": "Withdraw submission",
+  "withdraw.pending": "Withdrawing…",
+  "stepUp.link": "Verify your identity",
   "offboarding.title": "Offboarding steps",
   "offboarding.description": "Finish these with your EHR/PM administrator after revoking:",
   "offboarding.step1":
@@ -79,6 +103,9 @@ export const integrations = {
   "offboarding.revokedNotice": "Revoked {date}. Finish the offboarding steps below if you haven't yet.",
   "error.saveFailed": "The connection couldn't be saved. Reload the page and try again.",
   "error.confirmRevoke": "Check the box to confirm you understand that revoking is permanent.",
+  "error.revokeReasonRequired": "Choose why you're revoking this connection.",
+  "error.stepUpRequired": "This needs a recent two-step verification. Verify your identity, then try again.",
+  "error.invalidTransition": "This connection isn't in a state where that is possible. Reload the page.",
   "error.notAdmin": "Only an administrator can manage integrations.",
   "error.notFound": "Integration not found.",
   "error.stale": "This connection changed since you opened it. Reload the page and try again.",
