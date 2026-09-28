@@ -8,7 +8,9 @@ ships to every customer at once, so one compromised dependency or one missed aut
 breach for all tenants. The rules below are deliberately rigid. The baseline is REQUIREMENTS §7
 (OWASP ASVS Level 2, R-7.4.1); this document says how we meet it and where we go further.
 
-Rule IDs (`SC-x.y`) are cited by `security-reviewer`. **MUST** rules are blocking. Exceptions follow
+Rule IDs (`SC-x.y`) are cited by `security-reviewer`. **MUST** rules are blocking: a change that
+breaks one, or makes a listed known gap worse, does not merge. Known gaps (end of this document) are
+tracked follow-ups that block production go-live, not unrelated PRs. Exceptions follow
 the same written, time-boxed, officer-signed process as `docs/HIPAA_COMPLIANCE.md` §0; agents cannot
 grant them.
 
@@ -46,14 +48,18 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
   Elastic, Commons Clause, any "non-commercial" license, unlicensed, or custom licenses.
   Transitive dependencies under MPL-2.0 or CC-BY-4.0 need a human decision recorded in the PR.
   Distributing the platform carries license obligations; we do not take on copyleft.
-- **SC-A2.3 MUST — Maintained and safe.** A release in the last 12 months (or a documented reason a
-  small, finished package is acceptable), an identifiable maintainer or organization, no open High or
-  Critical advisory, and no history of a compromised publish without a clear remediation.
+- **SC-A2.3 MUST — Maintained and safe.** A release in the last 12 months, or a written reason in
+  the register (A5) why a small, finished package is acceptable; an identifiable maintainer or
+  organization; no open High or Critical advisory; and no history of a compromised publish without
+  a clear remediation.
 - **SC-A2.4 MUST — Small.** The PR states how many packages the lockfile gains. More than 10 new
   transitive packages needs a written justification; a smaller alternative or our own code is
   preferred.
-- **SC-A2.5 MUST — No install scripts.** No native addons, `postinstall`, or build scripts. The
-  `pnpm.onlyBuiltDependencies` allow-list in `package.json` changes only with human sign-off.
+- **SC-A2.5 MUST — No install scripts.** No `postinstall` or build scripts and no native addons,
+  except (a) prebuilt platform binaries shipped as optional dependencies of approved packages
+  (`@next/swc-*`, `sharp`, `@tailwindcss/oxide`, `lightningcss`, `esbuild`) and (b) the packages in
+  the `pnpm.onlyBuiltDependencies` allow-list in `package.json` (`esbuild`, `unrs-resolver`), and
+  (c) Playwright's browser download in CI. Any change to these lists needs human sign-off.
 - **SC-A2.6 MUST — No phone-home.** No telemetry, analytics, update checks, remote code or config
   loading, or runtime network calls. Packages that do so are refused even if they can be "turned
   off."
@@ -78,12 +84,15 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
 - **SC-A4.1 MUST** Exact versions in `package.json` for every new dependency (no `^` or `~`);
   `pnpm-lock.yaml` is committed; CI installs with `--frozen-lockfile`.
 - **SC-A4.2 MUST** GitHub Actions are pinned to a full commit SHA with a version comment (as
-  `ci.yml` does today). Container base images are pinned by digest.
+  `ci.yml` does today). Container images — the `Dockerfile` base and CI service containers — are
+  pinned by digest. Tools fetched at build time (such as pnpm through corepack) are version- and
+  hash-pinned.
 - **SC-A4.3 MUST** A dependency update is a code change: full CI and `security-reviewer`. Read the
   changelog for major versions. Do not adopt a release younger than 7 days unless it fixes a
-  security advisory (defends against hijacked publishes).
-- **SC-A4.4 MUST** Critical and High advisories are fixed within the REQUIREMENTS §7.6 SLAs (15 and
-  30 days). `pnpm audit --audit-level=high` stays a failing CI gate.
+  security advisory (defends against hijacked publishes); pnpm and Dependabot are both configured
+  to hold new releases for 7 days.
+- **SC-A4.4 MUST** Advisories are fixed within the REQUIREMENTS §7.6 SLAs: Critical in 15 days (7
+  days if actively exploited), High in 30, Medium in 90. `pnpm audit --audit-level=high` stays a failing CI gate.
 - **SC-A4.5 MUST** Quarterly, remove unused dependencies and re-check A2.2–A2.3 for every direct
   dependency; update the register below.
 
@@ -92,21 +101,22 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
 Licenses verified against the npm registry on 2026-09-28. Adding a row needs A2; removing one is
 always welcome.
 
-| Package | Version | License | Why we have it |
-| --- | --- | --- | --- |
-| `next` | 16.3.6 | MIT | Web framework (ADR 0001) |
-| `react`, `react-dom` | 19.3.0 | MIT | UI (ADR 0001) |
-| `drizzle-orm` | 0.45.3 | Apache-2.0 | SQL-first data access (ADR 0001) |
-| `pg` | 8.23.0 | MIT | PostgreSQL driver |
-| `@netlify/database` | 2.0.1 | MIT | Pre-production database adapter only (ADR 0003) |
-| `zod` | 4.6.5 | MIT | Validation at every boundary |
-| `exceljs` | 4.4.0 | MIT | XLSX import/export (Insight, revenue cycle) |
-| `qrcode` | 1.5.4 | MIT | TOTP enrollment QR code |
-| `lucide-react` | 1.48.0 | ISC | Icons (DESIGN.md) |
-| `server-only` | 0.0.1 | MIT | Build-time guard against server code reaching the client |
+| Package | Version | License | Why we have it | Maintenance note (SC-A2.3) |
+| --- | --- | --- | --- | --- |
+| `next` | 16.3.6 | MIT | Web framework (ADR 0001) | Active |
+| `react`, `react-dom` | 19.3.0 | MIT | UI (ADR 0001) | Active |
+| `drizzle-orm` | 0.45.3 | Apache-2.0 | SQL-first data access (ADR 0001) | Active |
+| `pg` | 8.23.0 | MIT | PostgreSQL driver | Active |
+| `@netlify/database` | 2.0.1 | MIT | Pre-production database adapter only (ADR 0003) | Active |
+| `zod` | 4.6.5 | MIT | Validation at every boundary | Active |
+| `exceljs` | 4.4.0 | MIT | XLSX import/export (Insight, revenue cycle) | Latest release 2023 — **gap**: no written reason yet; evaluate a maintained replacement or our own writer |
+| `qrcode` | 1.5.4 | MIT | TOTP enrollment QR code | Latest release 2024 — **gap**: no written reason yet; small and server-only, justify or replace |
+| `lucide-react` | 1.48.0 | ISC | Icons (DESIGN.md) | Active |
+| `server-only` | 0.0.1 | MIT | Build-time guard against server code reaching the client | Latest release 2022 — finished marker package with no code paths at runtime; published by the React/Next.js maintainers |
 
-Dev dependencies are the tools named in ADR 0001 (TypeScript, ESLint, Prettier, Vitest, Playwright,
-Tailwind, drizzle-kit, tsx) and their type packages.
+Dev dependencies are the tools named in ADR 0001 (TypeScript, ESLint with `typescript-eslint` and
+`eslint-config-next`, Prettier, Vitest, Playwright, Tailwind with `@tailwindcss/postcss`, drizzle-kit,
+tsx) and their type packages.
 
 ---
 
@@ -158,8 +168,10 @@ Tailwind, drizzle-kit, tsx) and their type packages.
   `sql.raw` only with compile-time constants, never with input.
 - **SC-B5.2 MUST** Every query runs through the tenant-scoped helpers; every tenant table has
   row-level security and an isolation test (R-7.2.4). The app's database role cannot bypass RLS.
-- **SC-B5.3 MUST** `SECURITY DEFINER` functions pin `search_path` to `pg_catalog, public, pg_temp`,
-  `REVOKE ALL … FROM PUBLIC` before granting, and need human sign-off (R-15.9), as does any
+- **SC-B5.3 MUST** `SECURITY DEFINER` functions pin `search_path` to `pg_catalog, public, pg_temp`
+  with `pg_temp` last, schema-qualify the objects they touch, and rely on `CREATE` on schema `public`
+  being revoked from `PUBLIC` (the PostgreSQL 15+ default; a migration must never grant it back).
+  They `REVOKE ALL … FROM PUBLIC` before granting, and need human sign-off (R-15.9), as does any
   `GRANT`/`REVOKE` or change to audit tables.
 - **SC-B5.4 MUST** Every list is paginated and bounded; no unbounded reads of PHI tables.
 
@@ -176,9 +188,12 @@ Tailwind, drizzle-kit, tsx) and their type packages.
 
 ### B7. Cryptography and secrets
 
-- **SC-B7.1 MUST** `node:crypto` only. Field encryption is AES-256-GCM with a fresh random IV per
-  value (`src/lib/crypto/field.ts`); passwords use `scrypt` (`src/auth/password.ts`) or a stronger
-  memory-hard function; secrets and tokens compare with `timingSafeEqual`.
+- **SC-B7.1 MUST** `node:crypto` only. Field encryption is AES-256-GCM with a fresh random 96-bit IV
+  per value (`src/lib/crypto/field.ts`), and every PHI or identifier field binds tenant, field, and
+  record as additional authenticated data (AAD) so a ciphertext copied to another row or tenant
+  fails to decrypt (ADR 0007). Keys rotate at least annually and before a key could approach the
+  random-IV usage limit (NIST SP 800-38D). Passwords use `scrypt` (`src/auth/password.ts`) or a
+  stronger memory-hard function; secrets and tokens compare with `timingSafeEqual`.
 - **SC-B7.2 MUST NOT** `Math.random` for anything security-relevant (IDs, tokens, codes, nonces).
   Use `crypto.randomBytes` or `crypto.randomUUID`.
 - **SC-B7.3 MUST** No secrets in code, images, fixtures, or committed env files (R-7.3.5).
@@ -202,8 +217,9 @@ Tailwind, drizzle-kit, tsx) and their type packages.
 ### B10. HTTP hardening
 
 - **SC-B10.1 MUST** Security headers in `next.config.ts` on every response (HSTS, `nosniff`,
-  `no-referrer`, frame denial, Permissions-Policy) plus a strict Content-Security-Policy without
-  `unsafe-eval` and, outside the framework's needs, without `unsafe-inline`.
+  `no-referrer`, frame denial, Permissions-Policy) plus a strict Content-Security-Policy: a
+  per-request nonce with `strict-dynamic`, no `unsafe-eval`, no `unsafe-inline` for scripts,
+  `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors 'none'`.
 - **SC-B10.2 MUST** Authenticated and PHI responses send `Cache-Control: no-store` (HC-2.3).
 
 ### B11. Tests for controls
@@ -220,7 +236,9 @@ Tailwind, drizzle-kit, tsx) and their type packages.
   (R-7.4.4), and a third-party license notice file generated from the lockfile.
 - **SC-B12.3 MUST** The container image runs as a non-root user on a minimal base pinned by digest,
   with no build tools or source maps in the runtime stage.
-- **SC-B12.4 MUST** `main` is protected: required CI, required reviewer agents, no force pushes.
+- **SC-B12.4 MUST** `main` is protected: required status checks (CI), required pull requests, no
+  force pushes or deletions. Reviewer-agent results are recorded in the PR and gate merging under
+  CLAUDE.md #12; changes to protection settings need human sign-off (R-15.9).
 
 ### B13. Agents
 
@@ -238,8 +256,12 @@ exception.
 | Rule | Gap |
 | --- | --- |
 | SC-B10.1 | No Content-Security-Policy header in `next.config.ts`. |
+| SC-B7.1 | Member IDs (`src/domain/patients/queries.ts`, `src/db/seed.ts`) and TOTP secrets (`src/auth/enrollment.ts`) are encrypted without AAD; only custom field values bind AAD. |
 | SC-A4.1 | Some existing ranges are not exact (`server-only`, `@types/*`, `eslint`, `tsx`, `typescript-eslint`). |
-| SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest. |
-| SC-A4.3 | No release-age quarantine configured for pnpm. |
+| SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest, and `corepack enable` fetches pnpm without a hash check; CI's `postgres:16` service images are tag-only. |
+| SC-A4.3 | No release-age quarantine configured for pnpm, and no `cooldown` in `.github/dependabot.yml`. |
+| SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
 | SC-A2.2 | No automated license check in CI. |
-| SC-B12.1, SC-B12.2 | No SAST, DAST, container/IaC scanning, SBOM, signed artifacts, or license notice file yet. |
+| SC-A2.6 | Next.js telemetry is disabled in the `Dockerfile` and `netlify.toml` but not in CI or local development (`NEXT_TELEMETRY_DISABLED=1`). |
+| SC-B12.1, SC-B12.2 | No SAST, DAST, container/IaC scanning, SBOM, signed commits or artifacts, or license notice file yet. |
+| SC-B12.4 | Branch protection on `main` is not verifiable from the repository; the owner confirms the settings (OA-066). |
