@@ -813,6 +813,7 @@ describe("no list/search/export module reads custom field values", () => {
       "src/domain/claims/correction.ts",
       "src/domain/claims/queries.ts",
       "src/domain/denials/queries.ts",
+      "src/domain/payers/queries.ts",
       "src/domain/synthetic/generator.ts",
     ];
     for (const path of candidates) {
@@ -1189,5 +1190,146 @@ describe("custom field values on claims and denials (PR3)", () => {
       tx.select().from(customFieldValues).where(eq(customFieldValues.claimId, a.claimId)),
     );
     expect(bLoaded).toEqual([]);
+  });
+});
+
+// PR 4 (payers UI): a read-only payer record under Settings. Payers carry no linked patient, so
+// they have no record-level sensitivity (unlike claims and denials, which mask through their
+// patient) — only a field's own `sensitivity` category can mask a payer's value.
+describe("custom field values on payers (PR4)", () => {
+  it("never masks a payer's plain values by record-level sensitivity (payers have none)", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_plain_pr4" })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[fieldId, "network tier A"]])),
+    );
+    const loaded = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "payer", a.payerId));
+    const found = loaded.find((v) => v.fieldId === fieldId)!;
+    expect(found.masked).toBe(false);
+    expect(found.value).toBe("network tier A");
+  });
+
+  it("still masks a payer field marked sensitive, reveals it with an audit event carrying no value, and refuses a role outside canWorkDenials", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(
+        tx,
+        a.ctx,
+        field({ entity: "payer", key: "payer_sensitive_pr4", sensitivity: "reproductive_health" }),
+      ),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[fieldId, "contract rate 12%"]])),
+    );
+    const loaded = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "payer", a.payerId));
+    const found = loaded.find((v) => v.fieldId === fieldId)!;
+    expect(found.masked).toBe(true);
+    expect(found.value).toBeUndefined();
+
+    const compliance = await addUser(a.ctx.tenantId, "compliance", "payer-reveal-refused");
+    const refused = await withTenant(compliance, (tx) =>
+      revealCustomFieldValue(tx, compliance, {
+        fieldId,
+        entity: "payer",
+        recordId: a.payerId,
+        reason: "other",
+      }),
+    );
+    expect(refused.error).toBe("Your role can't reveal custom field values.");
+
+    const revealed = await withTenant(a.ctx, (tx) =>
+      revealCustomFieldValue(tx, a.ctx, {
+        fieldId,
+        entity: "payer",
+        recordId: a.payerId,
+        reason: "other",
+      }),
+    );
+    expect(revealed.value).toBe("contract rate 12%");
+    const events = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.value_revealed"));
+    const own = events.filter((e) => e.entityId === fieldId);
+    expect(own.length).toBeGreaterThan(0);
+    for (const e of own) expect(JSON.stringify(e)).not.toContain("contract rate 12%");
+
+    // Writing this masked field is refused for a role outside canWorkDenials, and nothing changes.
+    await expect(
+      withTenant(compliance, (tx) =>
+        saveValuesForRecord(tx, compliance, "payer", a.payerId, new Map([[fieldId, "overwrite"]])),
+      ),
+    ).rejects.toBeInstanceOf(CustomFieldValueError);
+    const stillOriginal = await withTenant(a.ctx, (tx) =>
+      revealCustomFieldValue(tx, a.ctx, { fieldId, entity: "payer", recordId: a.payerId, reason: "other" }),
+    );
+    expect(stillOriginal.value).toBe("contract rate 12%");
+  });
+
+  it("the values-table concurrency token refuses a stale payer edit", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_token_pr4" })),
+    );
+    const tokenBefore = await withTenant(a.ctx, (tx) => customFieldValuesToken(tx, "payer", a.payerId));
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[fieldId, "changed elsewhere"]])),
+    );
+    await expect(
+      withTenant(a.ctx, (tx) =>
+        saveValuesForRecord(
+          tx,
+          a.ctx,
+          "payer",
+          a.payerId,
+          new Map([[fieldId, "stale edit"]]),
+          undefined,
+          tokenBefore,
+        ),
+      ),
+    ).rejects.toThrow(/changed since you opened/);
+    const loaded = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "payer", a.payerId));
+    expect(loaded.find((v) => v.fieldId === fieldId)?.value).toBe("changed elsewhere");
+  });
+
+  it("isolates tenants for payer custom field values: tenant B cannot read tenant A's", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_iso_pr4" })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[fieldId, "alpha payer only"]])),
+    );
+    const bLoaded = await withTenant(b.ctx, (tx) =>
+      tx.select().from(customFieldValues).where(eq(customFieldValues.payerId, a.payerId)),
+    );
+    expect(bLoaded).toEqual([]);
+  });
+
+  it("loadListValues for payers never returns a sensitive field, only non-sensitive show_in_list ones", async () => {
+    const shownId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_list_shown_pr4", showInList: true })),
+    );
+    const sensitiveId = await withTenant(a.ctx, (tx) =>
+      createCustomField(
+        tx,
+        a.ctx,
+        field({ entity: "payer", key: "payer_list_sensitive_pr4", sensitivity: "reproductive_health" }),
+      ),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[shownId, "Tier 2"]])),
+    );
+    // A sensitive field can't be saved with showInList in the app layer at all (S1 DB check), so
+    // this only ever exercises the query-time filter for a value that does exist on the field.
+    void sensitiveId;
+
+    const { columns, valuesByRecord } = await withTenant(a.ctx, (tx) =>
+      loadListValues(tx, a.ctx, "payer", [a.payerId]),
+    );
+    expect(columns.map((c) => c.key)).toContain("payer_list_shown_pr4");
+    expect(columns.some((c) => c.key === "payer_list_sensitive_pr4")).toBe(false);
+    expect(valuesByRecord.get(a.payerId)?.get("payer_list_shown_pr4")).toBe("Tier 2");
+
+    const bResult = await withTenant(b.ctx, (tx) => loadListValues(tx, b.ctx, "payer", [a.payerId]));
+    expect(bResult.valuesByRecord.size).toBe(0);
   });
 });

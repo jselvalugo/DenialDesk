@@ -6,6 +6,7 @@ export const settings = {
     "How DenialDesk is set up for your practice: its profile, the fields on its records, and who can do what.",
   "tabs.general": "General",
   "tabs.customFields": "Custom fields",
+  "tabs.payers": "Payers",
   "tabs.usersAndRoles": "Users and roles",
   "tabs.security": "Security",
   "tabs.notifications": "Notifications",
@@ -135,4 +136,41 @@ export const settings = {
   "error.noValueOnFile": "No value on file.",
   "error.valueUnavailable": "Value unavailable.",
   "error.staleValues": "These fields changed since you opened them. Reload and try again.",
+  "error.reload": "Reload the page and try again.",
+
+  // Payers under Settings (docs/specs/settings-and-custom-fields.md S2 PR4; read-only record;
+  // payer-catalog P2 will add verification and editing).
+  "payers.metaTitle": "Payers",
+  "payers.listTitle": "Payers",
+  "payers.listDescription":
+    "The insurers your practice bills, from the Florida starter catalog and any added on a patient's coverage.",
+  "payers.count": "{count, plural, one {# payer} other {# payers}}",
+  "payers.tableCaption": "Payers",
+  "payers.ediPayerId": "EDI payer ID",
+  "payers.notVerified": "Not verified",
+  "payers.source": "Source",
+  "payers.sourcePractice": "Practice-entered",
+  "payers.emptyTitle": "No payers yet",
+  "payers.emptyDescription":
+    "Payers appear once your practice's starter catalog loads, or when one is added on a patient's primary insurance.",
+
+  "payers.detailMetaTitle": "Payer",
+  "payers.detailEyebrow": "Payer record",
+  "payers.breadcrumbList": "Payers",
+  "payers.badgeUnverified": "Unverified",
+  "payers.detailsTitle": "Payer details",
+  "payers.detailsDescription":
+    "Name, EDI payer ID, and regulatory regime are verified in a later phase and can't be changed here.",
+  "payers.field.ediPayerId": "EDI payer ID",
+  "payers.field.regime": "Regulatory regime",
+  "payers.field.source": "Source",
+  "payers.field.added": "Added",
+  "payers.editCustomFields": "Edit custom fields",
+
+  "payers.fieldsMetaTitle": "Edit payer custom fields",
+  "payers.fieldsPageTitle": "Edit custom fields",
+  "payers.fieldsDescription": "Fields your practice added to payers.",
+  "payers.fieldsBreadcrumb": "Custom fields",
+
+  "error.notPayerEditor": "Only administrators and managers can change a payer's custom fields.",
 } as const;

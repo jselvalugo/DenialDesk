@@ -45,6 +45,15 @@ export function canConfigureSettings(role: Role): boolean {
   return role === "admin";
 }
 
+/**
+ * A payer's own custom field values (docs/specs/settings-and-custom-fields.md S2 PR4): owner-
+ * confirmable choice (spec, S2 PR4) — administrators and managers, not front-line specialists or
+ * compliance, since payers are practice configuration rather than a record a biller corrects.
+ */
+export function canEditPayerFields(role: Role): boolean {
+  return role === "admin" || role === "manager";
+}
+
 /** Insight standard reports: every role can view (owner decision 2026-09-26). */
 export function canViewInsight(role: Role): boolean {
   return Boolean(role);
