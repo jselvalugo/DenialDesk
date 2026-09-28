@@ -56,7 +56,9 @@ them automatically; escalate any amendment request for such a patient to the own
    their clocks are the ones those requirements and counsel set, not restated here.
 3. Preserve evidence: nothing is deleted (connections, sync runs, and audit events are never
    deleted); export the `integration.*` audit events and the connection's sync runs for the window.
-4. If the practice administrator's own account is suspected, suspend it; from PI1c the platform
-   operator can revoke the connection instead.
+4. If the practice administrator's own account is suspected, suspend it. Operator approval (PI1c) can
+   reject a connection still awaiting approval (back to draft, endpoint claim released); revoking a
+   live connection is an administrator action today, so ask the practice's other administrator, or
+   the owner, to revoke it (an operator-side revoke is not built).
 5. Follow the integration key compromise runbook once it exists (PI2a): revoke at every EHR that
    trusted the key.

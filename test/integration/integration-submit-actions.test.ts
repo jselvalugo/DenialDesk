@@ -4,6 +4,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { closeDatabase, systemDb } from "@/db/client";
 import { auditEvents, integrationConnections, integrationEndpointRegistry } from "@/db/schema";
 import { withTenant, withTenantAsPlatform } from "@/db/tenant";
+import { US_RESIDENCY_ATTESTATION_VERSION } from "@/domain/integrations/connections";
 import { EnvSharedKeyStore } from "@/integrations/fhir/keys";
 import { FAKE_BASE_URL, FAKE_TOKEN_ENDPOINT, FakeFhirTransport } from "../support/fake-fhir-transport";
 import { createTestTenant } from "./helpers";
@@ -144,7 +145,14 @@ async function passTest(id: string) {
 }
 
 const submitForm = async (id: string, extra: Record<string, string> = {}) =>
-  form({ id, updatedAt: await stampOf(id), attest: "on", locale: language, ...extra });
+  form({
+    id,
+    updatedAt: await stampOf(id),
+    attest: "on",
+    locale: language,
+    attestationVersion: String(US_RESIDENCY_ATTESTATION_VERSION),
+    ...extra,
+  });
 
 /** The operator's approval (PI1c has not shipped): table-owner privileges, as in the lifecycle tests. */
 async function approve(ctx: Ctx, id: string) {
@@ -292,6 +300,24 @@ describe("submitConnectionAction (PI2a)", () => {
     expect(errorOf(await run(submitConnectionAction, await submitForm(id)))).toBeUndefined();
   });
 
+  it("refuses a form whose attestation wording version is not the current one, or that names none", async () => {
+    const { id } = await realDraft();
+    await passTest(id);
+    // The wording was changed (a deploy) between the page load and the click: a stale, absent, or
+    // garbled version is refused, so the version recorded is the version that was read.
+    for (const attestationVersion of ["0", "2", "99", "1 ", "one", ""]) {
+      const result = await run(submitConnectionAction, await submitForm(id, { attestationVersion }));
+      expect(errorOf(result)).toMatch(/confirmation wording changed/);
+    }
+    const data = await submitForm(id);
+    data.delete("attestationVersion");
+    expect(errorOf(await run(submitConnectionAction, data))).toMatch(/confirmation wording changed/);
+    expect(await row(id)).toMatchObject({ status: "draft", submittedAt: null, usResidencyAttestedAt: null });
+    expect(await audits(id, "integration.connection_submitted")).toEqual([]);
+    // The current version goes through (and none of the refusals above spent the Submit rate limit).
+    expect(errorOf(await run(submitConnectionAction, await submitForm(id)))).toBeUndefined();
+  });
+
   it("refuses in words while another connection of the practice is submitted or active, and shows no save error", async () => {
     const first = await realDraft();
     await passTest(first.id);
@@ -360,7 +386,12 @@ describe("submitConnectionAction (PI2a)", () => {
     });
     const refused = await run(
       submitConnectionAction,
-      form({ id, updatedAt: await stampOf(id), locale: language }),
+      form({
+        id,
+        updatedAt: await stampOf(id),
+        locale: language,
+        attestationVersion: String(US_RESIDENCY_ATTESTATION_VERSION),
+      }),
     );
     expect(errorOf(refused)).toMatch(/Test connection has to pass first/);
     expect(await row(id)).toMatchObject({ status: "draft", submittedAt: null });

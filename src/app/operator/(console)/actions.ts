@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { passwordProblem } from "@/auth/password";
 import { requireOperator } from "@/auth/operator";
+import { approveConnection, rejectConnection } from "@/domain/integrations/approval";
 import {
   checkAgreementFile,
   recordAgreement as record,
@@ -217,4 +219,89 @@ export async function revokeUniversity(
   }
   revalidatePath(`/operator/practices/${parsed.data.tenantId}`);
   return { revoked: true };
+}
+
+export interface IntegrationDecisionState {
+  error?: string;
+}
+
+/** A form field as the server reads it: text only, capped, so nothing large reaches the domain. */
+function field(formData: FormData, name: string, max: number): string {
+  const value = formData.get(name);
+  return typeof value === "string" ? value.slice(0, max) : "";
+}
+
+const decisionIds = z.object({ tenantId: z.uuid(), connectionId: z.uuid() });
+
+/**
+ * Approves a submitted EHR/PM connection (docs/specs/patient-integrations.md PI1c). The operator
+ * session is required first (a practice session, an administrator's included, is never accepted);
+ * the domain then checks the operator again, the practice, the connection's state and version, and
+ * the registry claim. The checkboxes count only as `on`. Success goes back to the queue.
+ */
+export async function approveIntegration(
+  _: IntegrationDecisionState,
+  formData: FormData,
+): Promise<IntegrationDecisionState> {
+  const operator = await requireOperator();
+  const t = await getT("operator");
+  const ids = decisionIds.safeParse({
+    tenantId: field(formData, "tenantId", 40),
+    connectionId: field(formData, "connectionId", 40),
+  });
+  if (!ids.success) return { error: t("errors.invalidRequest") };
+  try {
+    await approveConnection(
+      {
+        ...ids.data,
+        expectedUpdatedAt: field(formData, "updatedAt", 40),
+        methodCode: field(formData, "methodCode", 64),
+        verifiedOn: field(formData, "verifiedOn", 10),
+        contactRole: field(formData, "contactRole", 64),
+        populationScope: field(formData, "populationScope", 64),
+        mrnNineDigitsVerified: formData.get("mrnNineDigits") === "on",
+        clientIdOwnershipVerified: formData.get("clientIdOwnership") === "on",
+      },
+      operator,
+    );
+  } catch (error) {
+    if (error instanceof PracticeError) return { error: t(error.key, error.params) };
+    throw error;
+  }
+  revalidatePath("/operator/integrations");
+  revalidatePath(`/operator/practices/${ids.data.tenantId}`);
+  // The practice's own signed-in pages show the connection's status (drop-down, Settings).
+  revalidatePath("/", "layout");
+  redirect("/operator/integrations?decided=approved");
+}
+
+/** Rejects a submitted connection with a reason code: back to draft, registry claim released. */
+export async function rejectIntegration(
+  _: IntegrationDecisionState,
+  formData: FormData,
+): Promise<IntegrationDecisionState> {
+  const operator = await requireOperator();
+  const t = await getT("operator");
+  const ids = decisionIds.safeParse({
+    tenantId: field(formData, "tenantId", 40),
+    connectionId: field(formData, "connectionId", 40),
+  });
+  if (!ids.success) return { error: t("errors.invalidRequest") };
+  try {
+    await rejectConnection(
+      {
+        ...ids.data,
+        expectedUpdatedAt: field(formData, "updatedAt", 40),
+        reasonCode: field(formData, "reasonCode", 64),
+      },
+      operator,
+    );
+  } catch (error) {
+    if (error instanceof PracticeError) return { error: t(error.key, error.params) };
+    throw error;
+  }
+  revalidatePath("/operator/integrations");
+  revalidatePath(`/operator/practices/${ids.data.tenantId}`);
+  revalidatePath("/", "layout");
+  redirect("/operator/integrations?decided=rejected");
 }

@@ -15,6 +15,7 @@ import {
   revokeConnection,
   submitConnection,
   updateConnection,
+  US_RESIDENCY_ATTESTATION_VERSION,
   withdrawConnection,
   resolveSigningKid,
   type IntegrationActor,
@@ -227,9 +228,10 @@ export async function resumeConnectionAction(
 /**
  * Submit a draft (spec PI2a): a real connection goes to DenialDesk for approval, the sandbox
  * activates. Admin only, re-checked here and in the domain. The attestation checkbox is read on the
- * server, together with the language the form displayed it in: a form whose language no longer
- * matches the request's (the language was switched in another tab, say) is refused, so the wording
- * an administrator agrees to is always the wording recorded. The step-up and the passing test are
+ * server, together with the language the form displayed it in and the wording's version: a form
+ * whose language no longer matches the request's (the language was switched in another tab, say), or
+ * whose version is no longer the current one, is refused, so the wording an administrator agrees to
+ * is always the wording recorded. The step-up and the passing test are
  * checked by the domain in the transaction that changes the status.
  */
 export async function submitConnectionAction(
@@ -243,6 +245,11 @@ export async function submitConnectionAction(
   if (!id.success) return { error: t("error.notFound") };
   const locale = await getLocale();
   if (text(formData, "locale", 8) !== locale) return { error: t("error.localeChanged") };
+  // The wording's version the form displayed: refused if the wording was changed (a deploy between
+  // page load and click), so the version recorded with the attestation is the one that was read.
+  if (text(formData, "attestationVersion", 8) !== String(US_RESIDENCY_ATTESTATION_VERSION)) {
+    return { error: t("error.attestationChanged") };
+  }
   const actor = integrationActor(auth);
   try {
     await submitConnection(

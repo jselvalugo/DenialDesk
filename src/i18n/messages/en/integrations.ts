@@ -196,6 +196,18 @@ export const integrations = {
   "error.localeChanged":
     "The page language changed since you opened it. Reload the page, read the confirmation again, and submit.",
   "error.submitRateLimited": "Too many submit attempts. Wait a few minutes and try again.",
+  "error.attestationChanged":
+    "The confirmation wording changed since you opened the page. Reload the page, read the confirmation again, and submit.",
   "error.anotherConnectionLive":
-    "Another connection is already submitted or active. Withdraw or revoke it first.",
+    "Another connection is already in use (submitted, active, paused, or in error). Withdraw or revoke it first.",
+  "rejected.notice":
+    "DenialDesk did not approve this connection because {reason}. Correct it, run Test connection, and submit it again.",
+  "rejected.reason.endpoint_not_verified":
+    "the endpoint could not be verified with your EHR/PM administrator",
+  "rejected.reason.client_id_not_verified":
+    "the client ID could not be verified with your EHR/PM administrator",
+  "rejected.reason.contact_not_verified": "your EHR/PM administrator could not be reached to confirm it",
+  "rejected.reason.population_not_scoped": "the patients to sync weren't limited to your practice",
+  "rejected.reason.configuration_incorrect": "the configuration is incorrect",
+  "rejected.reason.other": "of another reason; DenialDesk will contact you",
 } as const;
