@@ -67,7 +67,9 @@ _Last updated: 2026-09-28_
   regained its "Notice date" column, sortable, restoring the pre-P4 "sort by notice" criterion), and
   Appeals, Patients, and Payers. Server-side sort, no new dependency; ADR 0004 addendum. `density`
   (a `Table` prop, a CSS custom property, no new React context) is available on `DataTable` but not
-  yet turned on for any list — a later change, not part of P4. Open (owner): which column replaces
+  yet turned on for any list — a later change, not part of P4. P4 review follow-ups done 2026-09-28
+  (deterministic tie-break tests, patient-name sort test, names read only for the unsubmitted
+  `patientName` sort, "Filing deadline" hint says "default order"). Open (owner): which column replaces
   Sex on the list.
 - Internationalization (`specs/internationalization.md`, ADR 0009, R-11.1): the whole product (practice
   app, sign-in, operator console, Insight .xlsx export) reads in English, Spanish, or Portuguese. Own

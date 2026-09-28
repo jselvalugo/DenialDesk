@@ -20,7 +20,7 @@ import {
 import { patientSchema } from "@/domain/patients/record";
 import { generateDataset } from "@/domain/synthetic/generator";
 import { decryptField } from "@/lib/crypto/field";
-import { expectDbError } from "./helpers";
+import { expectDbError, uuidWithPrefix } from "./helpers";
 
 // docs/specs/patients.md: registry, chart, tenant isolation (R-7.2.4), audit (R-7.5.1).
 type Ctx = { tenantId: string; userId: string };
@@ -381,20 +381,28 @@ describe("patient chart and search", () => {
 
   it("keeps the pre-P4 default tie-break (MRN, then id) when two patients share a name (P4 review)", async () => {
     // A lastName that sorts before any realistic synthetic surname, so both land at the very top of
-    // page 1 regardless of how many other patients this tenant has accumulated.
+    // page 1 regardless of how many other patients this tenant has accumulated. Inserted directly
+    // (not through createPatient) so the ids run opposite to MRN order: a regression to an id-only
+    // tie-break fails on every run instead of about half of them.
     const lastName = "Aaaaaaaaaa";
     const { lowerId, higherId } = await withTenant(a, async (tx) => {
-      const higher = await createPatient(
-        tx,
-        actor(a),
-        input({ lastName, firstName: "Zed", mrn: "SYN-TIE-B" }),
-      );
-      const lower = await createPatient(
-        tx,
-        actor(a),
-        input({ lastName, firstName: "Zed", mrn: "SYN-TIE-A" }),
-      );
-      return { lowerId: lower.id, higherId: higher.id };
+      const base = {
+        tenantId: a.tenantId,
+        lastName,
+        firstName: "Zed",
+        birthDate: "1990-06-15",
+        memberIdEnc: "x",
+        memberIdLast4: "",
+      };
+      const [higher] = await tx
+        .insert(patients)
+        .values({ ...base, id: uuidWithPrefix("0"), mrn: "SYN-TIE-B" })
+        .returning({ id: patients.id });
+      const [lower] = await tx
+        .insert(patients)
+        .values({ ...base, id: uuidWithPrefix("f"), mrn: "SYN-TIE-A" })
+        .returning({ id: patients.id });
+      return { lowerId: lower!.id, higherId: higher!.id };
     });
     const { rows } = await withTenant(a, (tx) => listPatients(tx, 1));
     expect(rows[0]?.id).toBe(lowerId);

@@ -114,8 +114,10 @@ function claimsOrderBy(sort: ClaimSortKey, dir: "asc" | "desc") {
     case "claimNumber":
       return [d(claims.claimNumber), asc(claims.id)];
     case "patientName":
-      // Postgres compares text byte-wise by default; `substring(... from 1 for 1)` on the first
-      // name mirrors the in-memory comparator's "first initial" key, not the full first name.
+      // Text ordering follows the database's collation (byte-wise under `C`, linguistic under e.g.
+      // `en_US.utf8`), so it can differ from `CLAIM_NAME_COLLATOR` on case, accents, or punctuation.
+      // `substring(... from 1 for 1)` on the first name mirrors the in-memory comparator's "first
+      // initial" key, not the full first name.
       return [
         d(patients.lastName),
         d(sql`substring(${patients.firstName} from 1 for 1)`),
@@ -284,7 +286,13 @@ export async function claimsOverview(
   filters: ClaimFilters,
   today: string,
 ): Promise<{ rows: ClaimListRow[]; total: number; truncated: boolean; summary: FilingSummary }> {
-  const { index, truncated } = await unsubmittedIndex(tx, today, filters.sort === "patientName");
+  // Patient names are read only when they will actually order the unsubmitted page (minimum
+  // necessary): a `patientName` sort on the SQL-backed groups sorts in Postgres instead.
+  const { index, truncated } = await unsubmittedIndex(
+    tx,
+    today,
+    filters.group === "unsubmitted" && filters.sort === "patientName",
+  );
   const summary: FilingSummary = {
     unsubmitted: index.length,
     unsubmittedCents: index.reduce((sum, row) => sum + row.billedCents, 0),

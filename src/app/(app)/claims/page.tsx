@@ -68,7 +68,8 @@ export default async function ClaimsPage({
     };
   }
   /** "Filing deadline" has no direction to toggle; clicking it always clears `sort` and returns to
-   * the group's own priority order (filing urgency for unsubmitted claims). */
+   * the group's own priority order (filing urgency for unsubmitted claims), so its hint says
+   * "default order" rather than a direction, and it has no hint while that order is already shown. */
   const filingDeadlineActive = filters.group === "unsubmitted" && !filters.sort;
   const filingDeadlineHref = `/claims${claimFiltersToQuery(filters, { sort: undefined, dir: undefined, page: 1 })}`;
 
@@ -244,7 +245,7 @@ export default async function ClaimsPage({
                   active={filingDeadlineActive}
                   dir="asc"
                   href={filingDeadlineHref}
-                  hint={tc("sortable.hint", { direction: tc("sortable.ascending") })}
+                  hint={filingDeadlineActive ? undefined : tc("sortable.defaultOrder")}
                 />
                 <SortableHeader label={tc("word.status")} {...sortHeader("status")} />
                 {listColumns.map((col) => (

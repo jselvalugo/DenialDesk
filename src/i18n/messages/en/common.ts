@@ -70,6 +70,7 @@ export const common = {
   "sortable.hint": "sort {direction}",
   "sortable.ascending": "ascending",
   "sortable.descending": "descending",
+  "sortable.defaultOrder": "sort in default order",
 
   // Pagination (components/ui/Pagination)
   "pagination.label": "Pagination",

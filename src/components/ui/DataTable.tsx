@@ -119,7 +119,8 @@ export function SortableHeader({
   href: string;
   active: boolean;
   dir: SortDir;
-  hint: string;
+  /** Omitted when activating the link changes nothing (e.g. a default-order column already active). */
+  hint?: string;
   numeric?: boolean;
 }) {
   return (
@@ -135,7 +136,7 @@ export function SortableHeader({
         ) : (
           <ArrowUpDown aria-hidden="true" className="size-3.5 shrink-0 opacity-50" />
         )}
-        <span className="sr-only"> {hint}</span>
+        {hint ? <span className="sr-only"> {hint}</span> : null}
       </Link>
     </Th>
   );

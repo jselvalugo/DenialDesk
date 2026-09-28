@@ -34,3 +34,13 @@ export async function expectDbError(promise: Promise<unknown>, pattern: RegExp):
   }
   throw new Error(`Expected database error matching ${pattern}, but the query succeeded`);
 }
+
+/**
+ * A random UUID whose first hex digit is `prefix`, so tie-break tests control id order (P4 review):
+ * give the row expected *first* the higher prefix and a regression to an id-only tie-break fails on
+ * every run instead of about half of them.
+ */
+export function uuidWithPrefix(prefix: string): string {
+  if (!/^[0-9a-f]$/.test(prefix)) throw new Error("uuidWithPrefix takes one lowercase hex digit");
+  return `${prefix}${randomUUID().slice(1)}`;
+}
