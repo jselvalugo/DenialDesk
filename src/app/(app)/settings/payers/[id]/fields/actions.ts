@@ -37,10 +37,10 @@ export async function savePayerCustomFields(
   let found = true;
   try {
     await withTenant(auth, async (tx) => {
-      // Confirms the id names a payer of this tenant before writing anything — a bad id, or
-      // another tenant's payer id, must not reach `saveValuesForRecord` (which has no record of
-      // its own to check against for an entity with no version history) and must never surface a
-      // 500 to the browser.
+      // Confirms the id names a payer of this tenant before writing anything, so a bad id (or
+      // another tenant's payer id, hidden by RLS) reads as the usual "reload" message.
+      // `saveValuesForRecord` refuses it too — it locks the payer's own row via `lockRecordRow`
+      // and throws "Record not found" — so this is an earlier, friendlier check, not the only one.
       const payer = await getPayer(tx, ids.data.payerId);
       if (!payer) {
         found = false;

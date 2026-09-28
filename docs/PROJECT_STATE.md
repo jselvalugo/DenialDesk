@@ -338,7 +338,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
    PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›
-   Payers with its own "edit custom fields" page) done. Next: S3 (Users and roles tab).
+   Payers with its own "edit custom fields" page) done (#76), review polish follow-up done (payer
+   role check runs before the row lock; tighter tests; `payerSourceLabel` unit test). Next: S3
+   (Users and roles tab).
 7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
    payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
    timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.
