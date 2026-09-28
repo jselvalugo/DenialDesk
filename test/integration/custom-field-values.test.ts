@@ -14,6 +14,7 @@ import {
   denials,
   memberships,
   patients,
+  payers,
   users,
 } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
@@ -1705,23 +1706,23 @@ describe("custom field values on payers (PR4)", () => {
     const fieldId = await withTenant(a.ctx, (tx) =>
       createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_bad_id_pr4" })),
     );
-    // Neither the field's guard trigger nor `saveValuesForRecord` treats a bad payer id as "the
-    // record just doesn't exist yet, so create it" — a payer row is never something this call
-    // creates, only refers to (spec review, S2 PR4 item 3: the fields-edit action's own `getPayer`
-    // pre-check exists precisely to turn this into a friendly "reload" message before it ever
-    // reaches here; this asserts the deeper guarantee holds regardless).
-    await expectDbError(
-      withTenant(a.ctx, (tx) =>
-        saveValuesForRecord(tx, a.ctx, "payer", randomUUID(), new Map([[fieldId, "should not persist"]])),
-      ),
-      /does not belong to this tenant/,
+    // `lockRecordRow` (called first, inside `saveValuesForRecord`) selects the payer's own row
+    // before anything else: a random id, or another tenant's payer id hidden by RLS, finds no row
+    // and is refused with a translated `CustomFieldValueError` — never a raw database trigger
+    // error, and never a write. (The fields-edit action's own `getPayer` pre-check exists to turn
+    // this into the same friendly "reload" message even earlier, before this is ever reached; this
+    // asserts the deeper, always-on guarantee holds regardless of that action-level check.)
+    const randomId = withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "payer", randomUUID(), new Map([[fieldId, "should not persist"]])),
     );
-    await expectDbError(
-      withTenant(a.ctx, (tx) =>
-        saveValuesForRecord(tx, a.ctx, "payer", b.payerId, new Map([[fieldId, "should not persist"]])),
-      ),
-      /does not belong to this tenant/,
+    await expect(randomId).rejects.toBeInstanceOf(CustomFieldValueError);
+    await expect(randomId).rejects.toThrow("Record not found.");
+
+    const otherTenantId = withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "payer", b.payerId, new Map([[fieldId, "should not persist"]])),
     );
+    await expect(otherTenantId).rejects.toBeInstanceOf(CustomFieldValueError);
+    await expect(otherTenantId).rejects.toThrow("Record not found.");
     const rows = await systemDb()
       .select()
       .from(customFieldValues)
@@ -1793,4 +1794,121 @@ describe("custom field values on payers (PR4)", () => {
     const bResult = await withTenant(b.ctx, (tx) => loadListValues(tx, b.ctx, "payer", [a.payerId]));
     expect(bResult.valuesByRecord.size).toBe(0);
   });
+
+  it("refuses a specialist writing a payer's custom fields at all, even a plain non-sensitive one (canEditPayerFields, not canWorkDenials)", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_role_gate_pr4" })),
+    );
+    const specialist = await addUser(a.ctx.tenantId, "specialist", "payer-write-refused");
+    // A specialist may work denials (`canWorkDenials`) and so could write a merely-masked field on
+    // any other entity, but payers are practice configuration: only `canEditPayerFields` (admin,
+    // manager) may write a payer's values at all, enforced in the domain right beside
+    // `lockRecordRow` as defense in depth beneath the Settings pages' own role gate.
+    await expect(
+      withTenant(specialist, (tx) =>
+        saveValuesForRecord(tx, specialist, "payer", a.payerId, new Map([[fieldId, "should not persist"]])),
+      ),
+    ).rejects.toBeInstanceOf(CustomFieldValueError);
+    const rows = await systemDb()
+      .select()
+      .from(customFieldValues)
+      .where(eq(customFieldValues.fieldId, fieldId));
+    expect(rows).toHaveLength(0);
+
+    // The same write from a role that may edit payer fields succeeds.
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[fieldId, "admin wrote this"]])),
+    );
+    const loaded = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "payer", a.payerId));
+    expect(loaded.find((v) => v.fieldId === fieldId)?.value).toBe("admin wrote this");
+  });
+
+  it("two concurrent saves reading the same pre-existing '0:' token on a payer cannot both pass: the second blocks on the payer's own row lock, then is refused as stale (not a silent overwrite)", async () => {
+    // A fresh payer of tenant B, untouched by any other test, so its token genuinely starts at
+    // "0:" (no existing `custom_field_values` rows at all) — the exact edge case a `FOR UPDATE`
+    // read over zero rows can't lock (mirrors the claim version of this test).
+    const [freshPayer] = await withTenant(b.ctx, (tx) =>
+      tx.insert(payers).values({ tenantId: b.ctx.tenantId, name: "PR4 concurrency payer" }).returning({
+        id: payers.id,
+      }),
+    );
+    const payerId = freshPayer!.id;
+    const fieldId = await withTenant(b.ctx, (tx) =>
+      createCustomField(tx, b.ctx, field({ entity: "payer", key: "payer_token_race_pr4" })),
+    );
+    const tokenBefore = await withTenant(b.ctx, (tx) => customFieldValuesToken(tx, "payer", payerId));
+    expect(tokenBefore).toBe("0:");
+
+    let t1Ready!: () => void;
+    const t1ReadyPromise = new Promise<void>((resolve) => {
+      t1Ready = resolve;
+    });
+    let releaseT1!: () => void;
+    const releaseT1Promise = new Promise<void>((resolve) => {
+      releaseT1 = resolve;
+    });
+
+    // T1: a real `saveValuesForRecord` call that reads the "0:" token, passes, writes its value,
+    // and then holds its transaction open — uncommitted — until told to proceed.
+    const t1 = systemDb().transaction(async (tx) => {
+      await tx.execute(sql`set local role denialdesk_app`);
+      await tx.execute(sql`select set_config('app.tenant_id', ${b.ctx.tenantId}, true)`);
+      await tx.execute(sql`select set_config('app.user_id', ${b.ctx.userId}, true)`);
+      await saveValuesForRecord(
+        tx,
+        b.ctx,
+        "payer",
+        payerId,
+        new Map([[fieldId, "t1 value"]]),
+        undefined,
+        tokenBefore,
+      );
+      t1Ready();
+      await releaseT1Promise;
+    });
+    await t1ReadyPromise;
+
+    // T2: the same pre-T1 "0:" token (as if it had loaded the edit page before T1 saved). Without
+    // `lockRecordRow` serializing on the payer's own row, T2 would sail through with the same "0:"
+    // token T1 already used, then silently clear or overwrite T1's value. A no-op `.catch` is
+    // attached immediately (Node/Vitest can otherwise flag this as an unhandled rejection during
+    // the poll below, even though it is handled once T1 releases and this test awaits it).
+    const t2Promise = withTenant(b.ctx, (tx) =>
+      saveValuesForRecord(
+        tx,
+        b.ctx,
+        "payer",
+        payerId,
+        new Map([[fieldId, "t2 value"]]),
+        undefined,
+        tokenBefore,
+      ),
+    );
+    t2Promise.catch(() => undefined);
+
+    try {
+      // Confirm T2 is genuinely blocked on the payer row's lock (not racing straight through).
+      await expect
+        .poll(
+          async () => {
+            const result = await systemDb().execute<{ waiting: number }>(
+              sql`select count(*)::int as waiting from pg_stat_activity
+                  where datname = current_database() and wait_event_type = 'Lock'
+                    and query ilike '%from "payers"%for no key update%'`,
+            );
+            return result.rows[0]?.waiting;
+          },
+          { timeout: 10_000, interval: 25 },
+        )
+        .toBe(1);
+    } finally {
+      releaseT1();
+    }
+    await t1;
+    await expect(t2Promise).rejects.toThrow(/changed since you opened/);
+
+    // T1's value landed; T2's stale attempt overwrote nothing.
+    const loaded = await withTenant(b.ctx, (tx) => loadValuesForRecord(tx, b.ctx, "payer", payerId));
+    expect(loaded.find((v) => v.fieldId === fieldId)?.value).toBe("t1 value");
+  }, 20_000);
 });

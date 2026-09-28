@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { canEditPayerFields } from "@/auth/permissions";
+import { canEditPayerFields, canWorkDenials } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { CustomFieldsEditForm } from "@/components/custom-fields/CustomFieldsEditForm";
 import { toCustomFieldOptions } from "@/components/custom-fields/options";
@@ -70,6 +70,7 @@ export default async function PayerCustomFieldsPage({ params }: { params: Promis
           fields={toCustomFieldOptions(data.fields)}
           values={data.values}
           cancelHref={`/settings/payers/${id}`}
+          canChangeLocked={canWorkDenials(auth.role)}
         />
       </Panel>
     </div>
