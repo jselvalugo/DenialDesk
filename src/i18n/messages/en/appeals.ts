@@ -51,7 +51,6 @@ export const appeals = {
   "filter.allPayers": "All payers",
   "field.level": "Level",
   "field.denied": "Denied",
-  "field.sortBy": "Sort by",
   "field.deniedAmount": "Denied amount",
   "empty.title": "No appeals match these filters",
   "empty.description": "Start an appeal from a denial's page (“Start appeal”), or try a different filter.",

@@ -3,17 +3,29 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Code } from "@/components/ui/Code";
-import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
+import { SortableHeader, Table, Td, Th, Tr, type SortDir } from "@/components/ui/DataTable";
 import { ListCell } from "@/components/custom-fields/ListCell";
 import type { ListColumnDefinition } from "@/domain/custom-fields/list-values";
 import type { PatientListRow } from "@/domain/patients/queries";
 import { ageOn, isRestricted, patientName, sexLabel } from "@/domain/patients/record";
 import { useFormat, useT } from "@/i18n/client";
 
+/** One sortable column header's resolved props (computed server-side; see `patients/page.tsx`). */
+interface PatientSortHeader {
+  active: boolean;
+  dir: SortDir;
+  href: string;
+  hint: string;
+}
+
 /**
  * Patient rows for the list and search results, plus up to 5 non-sensitive custom field columns
  * marked "Show in list" (docs/specs/settings-and-custom-fields.md, S2 table-column addendum).
- * `today` (YYYY-MM-DD) comes from the server for ages.
+ * `today` (YYYY-MM-DD) comes from the server for ages. `sort` makes the Name/MRN/Birth date headers
+ * clickable links (P4), pre-computed server-side (so this client component never imports the
+ * server-only `domain/patients/queries` module for anything but types); omitted (the search-results
+ * rendering of this same table) keeps them plain, since re-sorting would navigate to the plain list
+ * and lose the POSTed search term (CLAUDE.md #4).
  */
 export function PatientTable({
   rows,
@@ -21,23 +33,34 @@ export function PatientTable({
   today,
   listColumns = [],
   listValues = {},
+  sort,
 }: {
   rows: PatientListRow[];
   caption: string;
   today: string;
   listColumns?: ListColumnDefinition[];
   listValues?: Record<string, Record<string, string | number | boolean>>;
+  sort?: { name: PatientSortHeader; mrn: PatientSortHeader; birthDate: PatientSortHeader };
 }) {
   const t = useT("patients");
   const tc = useT("common");
   const f = useFormat();
+
   return (
     <Table caption={caption}>
       <thead>
         <tr>
-          <Th>{tc("word.patient")}</Th>
-          <Th>{t("field.mrn")}</Th>
-          <Th>{t("field.birthDate")}</Th>
+          {sort ? (
+            <SortableHeader label={tc("word.patient")} {...sort.name} />
+          ) : (
+            <Th>{tc("word.patient")}</Th>
+          )}
+          {sort ? <SortableHeader label={t("field.mrn")} {...sort.mrn} /> : <Th>{t("field.mrn")}</Th>}
+          {sort ? (
+            <SortableHeader label={t("field.birthDate")} {...sort.birthDate} />
+          ) : (
+            <Th>{t("field.birthDate")}</Th>
+          )}
           <Th>{t("field.sex")}</Th>
           <Th>{t("field.location")}</Th>
           <Th>{t("field.coverage")}</Th>

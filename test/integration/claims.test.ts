@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { todayIn } from "@rules/calendar";
+import { addCalendarDays, todayIn } from "@rules/calendar";
 import { closeDatabase } from "@/db/client";
 import { auditEvents, claimLines, claims, claimVersions, payers } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
@@ -513,5 +513,114 @@ describe("claims list and timely-filing summary (R-3.1.5)", () => {
       tx.select({ status: claims.status }).from(claims).where(inArray(claims.id, ids)),
     );
     expect(statuses.some((s) => s.status === "draft")).toBe(false);
+  });
+
+  it("sorts an explicit column (SQL-backed group) ascending or descending, with a stable id tie-break (P4)", async () => {
+    const { asc: ascResult, desc: descResult } = await withTenant(a, async (tx) => {
+      const asc = await claimsOverview(tx, { group: "all", sort: "billed", dir: "asc", page: 1 }, today);
+      const desc = await claimsOverview(tx, { group: "all", sort: "billed", dir: "desc", page: 1 }, today);
+      return { asc, desc };
+    });
+    expect(ascResult.rows.length).toBeGreaterThan(1);
+    // A `dir` flip never changes the filtered total, only the order the pages come back in.
+    expect(descResult.total).toBe(ascResult.total);
+    for (const [rows, sign] of [
+      [ascResult.rows, 1],
+      [descResult.rows, -1],
+    ] as const) {
+      for (let i = 1; i < rows.length; i += 1) {
+        const cmp = (rows[i]!.billedCents - rows[i - 1]!.billedCents) * sign;
+        expect(cmp).toBeGreaterThanOrEqual(0);
+        if (cmp === 0) expect(rows[i - 1]!.id < rows[i]!.id).toBe(true);
+      }
+    }
+  });
+
+  it("sorts the unsubmitted queue (in-memory, urgency by default) by an explicit column instead", async () => {
+    const [byDefault, byClaimNumber] = await withTenant(a, async (tx) => {
+      const urgency = await claimsOverview(tx, { group: "unsubmitted", page: 1 }, today);
+      const explicit = await claimsOverview(
+        tx,
+        { group: "unsubmitted", sort: "claimNumber", dir: "asc", page: 1 },
+        today,
+      );
+      return [urgency, explicit];
+    });
+    expect(byClaimNumber.rows.length).toBeGreaterThan(1);
+    const numbers = byClaimNumber.rows.map((r) => r.claimNumber);
+    expect(numbers).toEqual([...numbers].sort());
+    // The total (urgency-filtered set) is unaffected by which order it's read in.
+    expect(byClaimNumber.total).toBe(byDefault.total);
+  });
+
+  it("keeps the pre-P4 default order (service date desc, then claim number, then id) with no sort requested (P4 review)", async () => {
+    const { claim } = await draftClaim(a);
+    const { lowerNumberId, higherNumberId, rows } = await withTenant(a, async (tx) => {
+      // Two new claims with a tied service date (a claim's `claims_require_version` trigger blocks
+      // updating an existing one's service date outside the correction flow), in a claim-number
+      // order that would fail if the tie-break were left to chance instead of the documented rule.
+      const tiedDate = "2026-01-15";
+      const base = {
+        tenantId: a.tenantId,
+        patientId: claim.patientId,
+        providerId: claim.providerId,
+        locationId: claim.locationId,
+        payerId: claim.payerId,
+        diagnosisCodes: claim.diagnosisCodes,
+        billedCents: claim.billedCents,
+        serviceDate: tiedDate,
+        status: "draft" as const,
+      };
+      const [higher] = await tx
+        .insert(claims)
+        .values({ ...base, claimNumber: `TIE-ORDER-B-${Date.now()}` })
+        .returning({ id: claims.id });
+      const [lower] = await tx
+        .insert(claims)
+        .values({ ...base, claimNumber: `TIE-ORDER-A-${Date.now()}` })
+        .returning({ id: claims.id });
+      const result = await claimsOverview(tx, { group: "all", page: 1 }, today);
+      return { lowerNumberId: lower!.id, higherNumberId: higher!.id, rows: result.rows };
+    });
+    const lowerIdx = rows.findIndex((r) => r.id === lowerNumberId);
+    const higherIdx = rows.findIndex((r) => r.id === higherNumberId);
+    expect(lowerIdx).toBeGreaterThanOrEqual(0);
+    expect(higherIdx).toBeGreaterThanOrEqual(0);
+    expect(lowerIdx).toBeLessThan(higherIdx);
+  });
+
+  it("falls back to service date ascending, then id, in the unsubmitted urgency default when deadline and billed amount tie (P4 review)", async () => {
+    const { claim } = await draftClaim(a);
+    const { earlierId, laterId, rows } = await withTenant(a, async (tx) => {
+      // An unverified payer has no regime, so `filingStatus` reports no deadline for either claim
+      // (both `daysRemaining: null`) — the urgency default's first two tie-break levels both tie,
+      // leaving only the (pre-P4) service-date fallback and the id tie-break to decide the order.
+      const [payer] = await tx
+        .insert(payers)
+        .values({ tenantId: a.tenantId, name: `Urgency tie-break payer ${Date.now()}` })
+        .returning();
+      const tiedBilledCents = 50_000;
+      const base = {
+        tenantId: a.tenantId,
+        patientId: claim.patientId,
+        providerId: claim.providerId,
+        locationId: claim.locationId,
+        payerId: payer!.id,
+        diagnosisCodes: claim.diagnosisCodes,
+        billedCents: tiedBilledCents,
+        status: "draft" as const,
+      };
+      const [earlier] = await tx
+        .insert(claims)
+        .values({ ...base, claimNumber: `TIE-EARLY-${Date.now()}`, serviceDate: addCalendarDays(today, -10) })
+        .returning({ id: claims.id });
+      const [later] = await tx
+        .insert(claims)
+        .values({ ...base, claimNumber: `TIE-LATE-${Date.now()}`, serviceDate: addCalendarDays(today, -5) })
+        .returning({ id: claims.id });
+      const result = await claimsOverview(tx, { group: "unsubmitted", payerId: payer!.id, page: 1 }, today);
+      return { earlierId: earlier!.id, laterId: later!.id, rows: result.rows };
+    });
+    expect(rows.map((r) => r.id)).toEqual([earlierId, laterId]);
   });
 });

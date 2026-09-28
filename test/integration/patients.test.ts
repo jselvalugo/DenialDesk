@@ -373,6 +373,34 @@ describe("patient chart and search", () => {
     expect(names).toEqual([...names].sort((x, y) => x.localeCompare(y, "en", { sensitivity: "base" })));
   });
 
+  it("sorts by name descending when asked (P4)", async () => {
+    const { rows } = await withTenant(a, (tx) => listPatients(tx, 1, "name", "desc"));
+    const names = rows.map((r) => `${r.lastName}\u0000${r.firstName}`);
+    expect(names).toEqual([...names].sort((x, y) => y.localeCompare(x, "en", { sensitivity: "base" })));
+  });
+
+  it("keeps the pre-P4 default tie-break (MRN, then id) when two patients share a name (P4 review)", async () => {
+    // A lastName that sorts before any realistic synthetic surname, so both land at the very top of
+    // page 1 regardless of how many other patients this tenant has accumulated.
+    const lastName = "Aaaaaaaaaa";
+    const { lowerId, higherId } = await withTenant(a, async (tx) => {
+      const higher = await createPatient(
+        tx,
+        actor(a),
+        input({ lastName, firstName: "Zed", mrn: "SYN-TIE-B" }),
+      );
+      const lower = await createPatient(
+        tx,
+        actor(a),
+        input({ lastName, firstName: "Zed", mrn: "SYN-TIE-A" }),
+      );
+      return { lowerId: lower.id, higherId: higher.id };
+    });
+    const { rows } = await withTenant(a, (tx) => listPatients(tx, 1));
+    expect(rows[0]?.id).toBe(lowerId);
+    expect(rows[1]?.id).toBe(higherId);
+  });
+
   it("finds by 'Last,' with a blank first name", async () => {
     const { id } = await withTenant(a, (tx) => createPatient(tx, actor(a), input({ lastName: "Wolfsbane" })));
     for (const term of ["Wolfsbane,", "Wolfsbane, "]) {

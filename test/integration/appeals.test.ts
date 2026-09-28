@@ -248,4 +248,28 @@ describe("listAppeals", () => {
     expect(total).toBeGreaterThan(0);
     expect(rows.length).toBeLessThanOrEqual(25);
   });
+
+  it("sorts by denied amount descending when asked (P4)", async () => {
+    const { asc: ascResult, desc: descResult } = await withTenant(ctx, async (tx) => {
+      const asc = await listAppeals(tx, { status: "all", sort: "amount", dir: "asc", page: 1 });
+      const desc = await listAppeals(tx, { status: "all", sort: "amount", dir: "desc", page: 1 });
+      return { asc, desc };
+    });
+    expect(descResult.total).toBe(ascResult.total);
+    const ascAmounts = ascResult.rows.map((r) => r.deniedCents);
+    expect(ascAmounts).toEqual([...ascAmounts].sort((x, y) => x - y));
+    const descAmounts = descResult.rows.map((r) => r.deniedCents);
+    expect(descAmounts).toEqual([...descAmounts].sort((x, y) => y - x));
+  });
+
+  it("sorts by deadline descending when asked (P4)", async () => {
+    const { rows } = await withTenant(ctx, (tx) =>
+      listAppeals(tx, { status: "all", sort: "deadline", dir: "desc", page: 1 }),
+    );
+    const deadlines = rows.map((r) => r.deadline);
+    const firstNull = deadlines.indexOf(null);
+    const dated = (firstNull === -1 ? deadlines : deadlines.slice(0, firstNull)) as string[];
+    expect(dated).toEqual([...dated].sort().reverse());
+    if (firstNull !== -1) expect(deadlines.slice(firstNull).every((d) => d === null)).toBe(true);
+  });
 });

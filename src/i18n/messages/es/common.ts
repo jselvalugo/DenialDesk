@@ -61,6 +61,10 @@ export const common: Messages["common"] = {
   "word.on": "el",
   "word.of": "de",
 
+  "sortable.hint": "ordenar {direction}",
+  "sortable.ascending": "ascendente",
+  "sortable.descending": "descendente",
+
   "pagination.label": "Paginación",
   "pagination.noResults": "Sin resultados",
   "pagination.showing": "Mostrando {first}–{last} de {total}",

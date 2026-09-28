@@ -33,11 +33,10 @@ export const denials = {
   "field.assignee": "Assignee",
   "field.appealDeadline": "Appeal deadline",
   "field.deniedAmount": "Denied amount",
-  "field.sortBy": "Sort by",
   "assignee.unassigned": "Unassigned",
   "sortLabel.deadline": "appeal deadline",
   "sortLabel.amount": "denied amount",
-  "sortLabel.notice": "newest notice",
+  "sortLabel.notice": "notice date",
 
   // Queue page (src/app/(app)/denials/page.tsx)
   "queue.title": "Denial queue",
@@ -55,7 +54,6 @@ export const denials = {
   "filter.allCategories": "All categories",
   "filter.anyone": "Anyone",
   "filter.assignedToMe": "Assigned to me",
-  "sort.newestNotice": "Newest notice",
   "appealFiled.late": "Filed after deadline",
   "appealFiled.onTime": "Appeal filed on time",
   "appealFiled.noDeadline": "Appeal filed · no deadline configured",

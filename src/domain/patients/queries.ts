@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, ilike, inArray, like, ne, or, sql } from "drizzle-orm";
 import type { TenantTx } from "@/db/tenant";
 import { claims, denials, integrationConnections, patients, payers } from "@/db/schema";
+import { assertNever } from "@/lib/assert-never";
 import { decryptField, encryptField } from "@/lib/crypto/field";
 import { audit } from "@/lib/audit";
 import { en } from "@/i18n/messages/en";
@@ -25,6 +26,20 @@ export const SEARCH_LIMIT = 25;
 /** Which fields a list or search row shows, recorded on `patient.list_viewed` / `patient.searched`. */
 export const PATIENT_LIST_FIELDS = "name,mrn,birthDate,age,sex,location,coverage";
 
+/**
+ * Sortable list columns (P4, docs/specs/record-pages.md). `name` sorts by last, then first, then
+ * (the pre-P4 default tie-break) MRN, then id. Indexed: `name` (`patients_tenant_name_idx`), `mrn`
+ * (unique `patients_tenant_mrn_key`). Not indexed, but cheap at a tenant's row counts: `birthDate`.
+ */
+export const PATIENT_SORT_KEYS = ["name", "mrn", "birthDate"] as const;
+export type PatientSortKey = (typeof PATIENT_SORT_KEYS)[number];
+/** First-click direction for each sortable column; all start ascending (A–Z, oldest first). */
+export const PATIENT_SORT_DEFAULT_DIR: Record<PatientSortKey, "asc" | "desc"> = {
+  name: "asc",
+  mrn: "asc",
+  birthDate: "asc",
+};
+
 const listColumns = {
   id: patients.id,
   mrn: patients.mrn,
@@ -45,10 +60,34 @@ function listQuery(tx: TenantTx) {
   return tx.select(listColumns).from(patients).leftJoin(payers, eq(payers.id, patients.primaryPayerId));
 }
 
-/** One page of patients, alphabetical by last then first name. */
-export async function listPatients(tx: TenantTx, page: number) {
+/**
+ * Drizzle `orderBy` for one sortable column. `name`'s tie-break is MRN then id, both fixed ascending
+ * regardless of `dir` (the exact pre-P4 default order when `dir` is itself ascending, just with an
+ * id fallback added for determinism); every other column's tie-break is plain ascending id.
+ */
+function patientOrderBy(sort: PatientSortKey, dir: "asc" | "desc") {
+  const d = dir === "asc" ? asc : desc;
+  switch (sort) {
+    case "name":
+      return [d(patients.lastName), d(patients.firstName), asc(patients.mrn), asc(patients.id)];
+    case "mrn":
+      return [d(patients.mrn), asc(patients.id)];
+    case "birthDate":
+      return [d(patients.birthDate), asc(patients.id)];
+    default:
+      return assertNever(sort);
+  }
+}
+
+/** One page of patients, alphabetical by last then first name unless another column is requested. */
+export async function listPatients(
+  tx: TenantTx,
+  page: number,
+  sort: PatientSortKey = "name",
+  dir: "asc" | "desc" = PATIENT_SORT_DEFAULT_DIR[sort],
+) {
   const rows = await listQuery(tx)
-    .orderBy(asc(patients.lastName), asc(patients.firstName), asc(patients.mrn))
+    .orderBy(...patientOrderBy(sort, dir))
     .limit(PATIENTS_PAGE_SIZE)
     .offset((page - 1) * PATIENTS_PAGE_SIZE);
   const [{ total } = { total: 0 }] = await tx.select({ total: count() }).from(patients);

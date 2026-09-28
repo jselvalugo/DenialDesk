@@ -45,3 +45,17 @@ global header, a navy tab bar with the current module's pages, and a module swit
 ADR 0005). No new dependency: the switcher is a native modal `<dialog>` (focus
 containment, Escape, inert background) rather than a Radix dialog. Radii move to 6px/8px and panels
 get a hairline shadow; the palette, fonts, and logo are unchanged.
+
+## Amendment (2026-09-28): sortable `DataTable`, server-side (P4)
+Record pattern P4 (`specs/record-pages.md`) added sortable column headers and a `density="compact"`
+option to `DataTable`. TanStack Table (named above as the plan for "when sorting/pagination arrives")
+stays deferred: these lists are server-rendered and tenant-scoped, and CLAUDE.md #10 asks that a new
+dependency be justified, not defaulted to. Sorting is **server-side** instead: a `SortableHeader`
+renders a link that sets `?sort=<key>&dir=asc|desc`; each list validates `sort` against its own
+allow-list of keys (zod), mapped to indexed or cheap columns, with a stable `id` tie-break for
+deterministic paging. An unknown key or direction falls back to the list's default order. Sort keys
+are column names only, never values — consistent with CLAUDE.md #4 (no PHI in URLs). `density` is a
+CSS custom property set on `<table>`, not React context, so `Table`/`Th`/`Td` stay server-renderable
+(no `"use client"`) per this ADR's "Server Components by default." TanStack remains the plan for when
+a list needs genuinely client-side interactivity (a column chooser, virtualized rows) that
+server-rendered pages can't give it.

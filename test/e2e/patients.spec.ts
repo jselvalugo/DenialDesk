@@ -95,7 +95,8 @@ test.describe("patients as compliance (read-only)", () => {
   test("can view patients but not register or edit them", async ({ page }) => {
     await page.goto("/patients");
     await expect(page.getByRole("link", { name: "Register patient" })).toHaveCount(0);
-    await page.getByRole("table", { name: "Patients" }).getByRole("link").first().click();
+    // Scoped to tbody: the header row's own sortable-column links (P4) would otherwise be first.
+    await page.getByRole("table", { name: "Patients" }).locator("tbody").getByRole("link").first().click();
     await expect(page.getByRole("heading", { name: "Demographics" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Edit record" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Reveal" })).toHaveCount(0);
