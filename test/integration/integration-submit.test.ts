@@ -525,11 +525,12 @@ describe("submitConnection — the endpoint registry", () => {
       expect(error.message).toBe("This endpoint and client ID are already connected");
       expect(transactions).toBe(2);
       // The failure is logged with IDs only: no configuration, no SQL text, no error detail.
-      expect(logged).toHaveBeenCalledTimes(1);
-      expect(logged).toHaveBeenCalledWith("integration.registry_conflict_audit_failed", {
-        tenantId: b.tenantId,
-        connectionId: second.id,
-      });
+      // Two lines, both codes/IDs only: the database layer's own sanitized "db.query_failed" (SQLSTATE
+      // 22012, division by zero) and the conflict-audit failure.
+      expect(logged.mock.calls).toEqual([
+        ["db.query_failed", { status: "22012" }],
+        ["integration.registry_conflict_audit_failed", { tenantId: b.tenantId, connectionId: second.id }],
+      ]);
     } finally {
       logged.mockRestore();
     }
@@ -592,7 +593,7 @@ describe("submitConnection — two practices at once", () => {
 });
 
 describe("submitConnection — one connection outside draft/revoked per practice", () => {
-  const anotherLive = /Another connection is already submitted or active/;
+  const anotherLive = /Another connection is already in use/;
 
   it("refuses in words, not a save error, while another connection is submitted, and touches nothing", async () => {
     const first = await draft();

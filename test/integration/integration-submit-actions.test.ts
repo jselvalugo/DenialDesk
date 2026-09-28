@@ -336,7 +336,7 @@ describe("submitConnectionAction (PI2a)", () => {
     const second = created.redirectedTo!.replace("/settings/integrations/", "");
     await passTest(second);
     const refused = await run(submitConnectionAction, await submitForm(second));
-    expect(errorOf(refused)).toMatch(/Another connection is already submitted or active/);
+    expect(errorOf(refused)).toMatch(/Another connection is already in use/);
     expect(errorOf(refused)).not.toMatch(/couldn't be saved/);
     expect(await row(second)).toMatchObject({ status: "draft", submittedAt: null });
     expect((await row(first.id)).status).toBe("pending_approval");
