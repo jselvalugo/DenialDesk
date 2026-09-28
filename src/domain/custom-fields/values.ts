@@ -20,6 +20,7 @@ import { activeCustomFields } from "@/domain/settings/queries";
 import type { CustomFieldEntity, CustomFieldType } from "@/domain/settings/custom-fields";
 import { canWorkDenials } from "@/auth/permissions";
 import type { Role } from "@/auth/session";
+import { isRestricted } from "@/domain/patients/record";
 
 type SettingsT = Translator<Messages["settings"]>;
 /** English translator used when a caller doesn't have the request's language (e.g. integration tests). */
@@ -238,30 +239,30 @@ async function recordIsSensitive(
 ): Promise<boolean> {
   if (entity === "patient") {
     const [row] = await tx
-      .select({ sensitivityTags: patients.sensitivityTags })
+      .select({ sensitivityTags: patients.sensitivityTags, sourceRestricted: patients.sourceRestricted })
       .from(patients)
       .where(eq(patients.id, recordId))
       .limit(1);
-    return Boolean(row?.sensitivityTags.length);
+    return Boolean(row) && isRestricted(row!);
   }
   if (entity === "claim") {
     const [row] = await tx
-      .select({ sensitivityTags: patients.sensitivityTags })
+      .select({ sensitivityTags: patients.sensitivityTags, sourceRestricted: patients.sourceRestricted })
       .from(claims)
       .innerJoin(patients, eq(patients.id, claims.patientId))
       .where(eq(claims.id, recordId))
       .limit(1);
-    return Boolean(row?.sensitivityTags.length);
+    return Boolean(row) && isRestricted(row!);
   }
   if (entity === "denial") {
     const [row] = await tx
-      .select({ sensitivityTags: patients.sensitivityTags })
+      .select({ sensitivityTags: patients.sensitivityTags, sourceRestricted: patients.sourceRestricted })
       .from(denials)
       .innerJoin(claims, eq(claims.id, denials.claimId))
       .innerJoin(patients, eq(patients.id, claims.patientId))
       .where(eq(denials.id, recordId))
       .limit(1);
-    return Boolean(row?.sensitivityTags.length);
+    return Boolean(row) && isRestricted(row!);
   }
   return false; // payer: no linked patient.
 }

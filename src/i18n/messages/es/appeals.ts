@@ -113,6 +113,7 @@ export const appeals: Messages["appeals"] = {
   "field.billed": "Facturado",
   "field.mrn": "Número de historia clínica",
   "field.memberId": "ID de miembro",
+  "field.memberIdNone": "Ninguno en archivo",
   "field.addNote": "Agregar una nota",
   "note.placeholder": "Qué hizo, qué sigue, con quién habló.",
   "action.saveNote": "Guardar nota",

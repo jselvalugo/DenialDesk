@@ -95,6 +95,7 @@ export const denials: Messages["denials"] = {
   "field.dob": "Data de nascimento",
   "field.mrn": "Número de prontuário",
   "field.memberId": "ID de associado",
+  "field.memberIdNone": "Nenhum registrado",
   "field.addNote": "Adicionar uma nota",
   "note.placeholder": "O que você fez, o que vem a seguir, com quem falou.",
   "panel.denial": "Negativa",

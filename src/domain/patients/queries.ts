@@ -8,7 +8,13 @@ import type { Messages } from "@/i18n/messages/types";
 import { createTranslator, type Translator } from "@/i18n/translate";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { SYNTHETIC_MARKER } from "@/domain/synthetic/generator";
-import { changedPatientFields, nextMrn, type PatientInput, type SensitivityTag } from "./record";
+import {
+  changedPatientFields,
+  nextMrn,
+  SENSITIVITY_TAG_LABEL_KEYS,
+  type PatientInput,
+  type SensitivityTag,
+} from "./record";
 
 type PatientsT = Translator<Messages["patients"]>;
 /** English translator used when a caller doesn't have the request's language (e.g. integration tests). */
@@ -30,6 +36,7 @@ const listColumns = {
   state: patients.state,
   payerName: payers.name,
   sensitivityTags: patients.sensitivityTags,
+  sourceRestricted: patients.sourceRestricted,
 };
 
 export type PatientListRow = Awaited<ReturnType<typeof listPatients>>["rows"][number];
@@ -108,6 +115,7 @@ export async function getPatientChart(tx: TenantTx, patientId: string) {
         primaryPayerId: patients.primaryPayerId,
         memberIdLast4: patients.memberIdLast4,
         sensitivityTags: patients.sensitivityTags,
+        sourceRestricted: patients.sourceRestricted,
         createdAt: patients.createdAt,
         updatedAt: patients.updatedAt,
       },
@@ -211,10 +219,12 @@ export class PatientRecordError extends Error {
 /**
  * Registering or editing a patient by hand is refused while the practice's Patients table has an
  * EHR/PM connection outside draft/revoked (docs/specs/patient-integrations.md "PI1a"; ADR 0010):
- * once a connection is submitted, the EHR becomes the system of record.
+ * once a connection is submitted, the EHR becomes the system of record. `FOR SHARE` (correctness
+ * review N2) locks the candidate row(s) against a concurrent Submit, so this check can't pass in
+ * the same instant a connection moves out of draft/revoked underneath it.
  */
 async function assertPatientsRegisterOpen(tx: TenantTx, t: PatientsT = englishPatientsT) {
-  const [blocking] = await tx
+  const blocking = await tx
     .select({ id: integrationConnections.id })
     .from(integrationConnections)
     .where(
@@ -223,8 +233,8 @@ async function assertPatientsRegisterOpen(tx: TenantTx, t: PatientsT = englishPa
         notInArray(integrationConnections.status, ["draft", "revoked"]),
       ),
     )
-    .limit(1);
-  if (blocking) throw new PatientRecordError(t("error.integrationConnected"));
+    .for("share");
+  if (blocking.length > 0) throw new PatientRecordError(t("error.integrationConnected"));
 }
 
 /** FKs bypass RLS, so a payer ID from the form is checked against this practice first. */
@@ -314,6 +324,9 @@ export async function createPatient(
  * read-only here (docs/specs/patient-integrations.md "PI1a"; the `patients_synced_readonly`
  * trigger enforces this too, as defense in depth). Sensitivity tags stay editable on a synced
  * patient (spec "PI1a") through the separate `updatePatientSensitivityTags`, not this function.
+ * The synced-patient refusal is checked before the connection-open check (correctness review N8):
+ * a synced patient's own connection is virtually always outside draft/revoked too, and the more
+ * specific "this record is synced" message is the one worth showing.
  */
 export async function updatePatient(
   tx: TenantTx,
@@ -324,10 +337,10 @@ export async function updatePatient(
   reason: string,
   t: PatientsT = englishPatientsT,
 ): Promise<{ changedFields: string[] }> {
-  await assertPatientsRegisterOpen(tx, t);
   const [current] = await tx.select().from(patients).where(eq(patients.id, patientId)).for("update").limit(1);
   if (!current) throw new PatientRecordError(t("error.patientNotFound"));
   if (current.source === "fhir") throw new PatientRecordError(t("error.syncedReadOnly"));
+  await assertPatientsRegisterOpen(tx, t);
   if (current.updatedAt.toISOString() !== expectedUpdatedAt) {
     throw new PatientRecordError(t("error.staleRecord"));
   }
@@ -400,20 +413,28 @@ export async function updatePatient(
   return { changedFields: changed };
 }
 
+const VALID_SENSITIVITY_TAGS = new Set<string>(Object.keys(SENSITIVITY_TAG_LABEL_KEYS));
+
 /**
  * Sets a patient's sensitivity tags alone (R-3.5.1). Unlike `updatePatient`, this stays available
  * on a synced patient (docs/specs/patient-integrations.md "PI1a": "Sensitivity tags... stay
- * editable on synced patients") — tags are practice-owned, not part of the EHR/PM copy. Callers
- * gate this on `canTagSensitivity(role)`; it is not checked here.
+ * editable on synced patients") — tags are practice-owned, not part of the EHR/PM copy. Refused for
+ * a non-administrator (`actor.canTag`, same gate as `createPatient`/`updatePatient`) and for any
+ * value that isn't a known tag (compliance review B2 / security M6): callers pass form input here,
+ * not a value already validated by `patientSchema`.
  */
 export async function updatePatientSensitivityTags(
   tx: TenantTx,
-  actor: { tenantId: string; userId: string },
+  actor: { tenantId: string; userId: string; canTag: boolean },
   patientId: string,
   tags: SensitivityTag[],
   reason: string,
   t: PatientsT = englishPatientsT,
 ): Promise<{ changed: boolean }> {
+  if (!actor.canTag) throw new PatientRecordError(t("error.roleCannotTag"));
+  if (tags.some((tag) => !VALID_SENSITIVITY_TAGS.has(tag))) {
+    throw new PatientRecordError(t("error.invalidSensitivityTag"));
+  }
   const [current] = await tx
     .select({ sensitivityTags: patients.sensitivityTags })
     .from(patients)

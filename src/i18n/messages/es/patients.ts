@@ -107,7 +107,9 @@ export const patients: Messages["patients"] = {
   "error.syncedReadOnly":
     "Este paciente se sincroniza desde el EHR/PM conectado y no se puede editar aquí. Corrija los datos demográficos en el EHR/PM.",
   "error.integrationConnected":
-    "Los pacientes de esta práctica están conectados a un EHR/PM. Registrar o editar pacientes manualmente está desactivado mientras esa conexión esté activa.",
+    "Registrar o editar pacientes manualmente está desactivado mientras se configura una conexión con el EHR/PM.",
+  "error.roleCannotTag": "Su rol puede ver las etiquetas de sensibilidad, pero no modificarlas.",
+  "error.invalidSensitivityTag": "Esa no es una etiqueta de sensibilidad reconocida.",
 
   // Errores de las acciones del servidor (app/(app)/patients/actions.ts)
   "error.roleReadOnly": "Su rol puede ver pacientes, pero no modificarlos.",

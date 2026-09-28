@@ -437,7 +437,9 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                 <span className="font-mono">{patient.mrn}</span>
               </Field>
               <Field label={t("field.memberId")}>
-                {canWork ? (
+                {!patient.memberIdLast4 ? (
+                  <span className="text-subtle">{t("field.memberIdNone")}</span>
+                ) : canWork ? (
                   <MaskedMemberId
                     last4={patient.memberIdLast4}
                     reveal={revealMemberId.bind(null, denial.id)}

@@ -103,7 +103,9 @@ export const patients = {
   "error.syncedReadOnly":
     "This patient is synced from the connected EHR/PM and can't be edited here. Fix demographics in the EHR/PM instead.",
   "error.integrationConnected":
-    "This practice's patients are connected to an EHR/PM. Registering or editing patients by hand is turned off while that connection is active.",
+    "Registering or editing patients by hand is turned off while an EHR/PM connection is set up.",
+  "error.roleCannotTag": "Your role can view sensitivity tags but not change them.",
+  "error.invalidSensitivityTag": "That is not a recognized sensitivity tag.",
 
   // Server action errors (app/(app)/patients/actions.ts)
   "error.roleReadOnly": "Your role can view patients but not change them.",
