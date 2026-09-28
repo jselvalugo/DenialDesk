@@ -380,6 +380,9 @@ The product owner delegated technical decisions to the implementing agent ("make
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
+- SC-B7.1 AAD on member IDs and TOTP secrets: **plan proposed, not built** (ADR 0011,
+  `specs/field-encryption-aad.md`, `threat-models/field-encryption-aad.md`). Six PRs, expand →
+  convert → contract; the build waits on owner approval (OA-074).
 0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger, B2 monthly file
    import, C0 (own design: month-end activity file, routing-only rules), B3 journal vouchers, and
    B4 aging/deposits/reconciliation, and B5 statements and RCM dashboard (denial tie-ins by
@@ -415,6 +418,10 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Open questions for humans
 
+- **Field-encryption AAD (SC-B7.1) plan, ADR 0011 Proposed (OA-074 to OA-076, 2026-09-28):** approve
+  the `v2` envelope with key ID and mandatory AAD, and choose job vs. re-seed for pre-production, the
+  cut-off owner, and an empty Azure start (OA-074); a separate rate-limit hash key (OA-075); rotation of
+  append-only history, a rotation drill, and a member-ID blind index (OA-076).
 - **Confirm three PI2a coordinator decisions (OA-065, 2026-09-28; due before the first real connection):** (a) Submit's gate is stricter than the spec's plain wording: the newest Test connection must be a pass within 24 h, bound to the tested configuration and signing `kid` (a later failure or transport refusal voids it); (b) pre-production signs every connection with one shared key (`INTEGRATION_SIGNING_KEY`), a residual risk recorded in threat model S3, mitigated by the operator verifying `client_id` ownership at approval (PI1c); (c) a refused Submit ("This endpoint and client ID are already connected") reveals that *some* practice holds that endpoint and client ID pair, with no identity disclosed, bounded by the Test connection and Submit rate limits: accept or reject.
 - **PI1c operator approval, eight owner decisions (OA-066 to OA-073, 2026-09-28; all due before the first real connection unless noted):**
   (a) **OA-066** the approval verification-method and contact-role lists (`phone_callback`, `video_call`,
