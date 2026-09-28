@@ -99,14 +99,32 @@ export async function clearFailures(userId: string): Promise<void> {
 }
 
 /**
+ * Gives back the attempt `reserveAttempt` counted, after a step-up succeeded (never after a
+ * failure). Without it every successful step-up would leave the shared sign-in counter one higher,
+ * and five of them in one session would lock the account. Earlier failures are kept (the counter
+ * drops only by this attempt's own one, never to zero), and an account that has since been locked
+ * stays locked.
+ */
+export async function releaseAttempt(userId: string): Promise<void> {
+  await systemDb()
+    .update(users)
+    .set({ failedLoginCount: sql`greatest(${users.failedLoginCount} - 1, 0)` })
+    .where(and(eq(users.id, userId), isNull(users.lockedUntil)));
+}
+
+/**
  * Checks a TOTP code and claims its time step atomically, so two simultaneous submissions of the
- * same code can't both succeed (single-use codes). On success the attempt counter resets and, when
- * enrolling, enrollment is recorded.
+ * same code can't both succeed (single-use codes). On success, when enrolling, enrollment is
+ * recorded. `resetLockout` (default true, what sign-in and enrollment want) also clears the
+ * account's failed-attempt counter and lock; step-up re-verification passes false (security review
+ * of #81): it shares the sign-in attempt counter, but succeeding at it must not erase an earlier
+ * run of bad sign-in guesses on the same account.
  */
 export async function claimTotp(
   user: { id: string; totpSecretEnc: string; totpLastStep: number | null },
   code: string,
   enrolling: boolean,
+  resetLockout = true,
 ): Promise<"ok" | "mismatch" | "reused"> {
   const step = verifyTotp(decryptField(user.totpSecretEnc), code, user.totpLastStep);
   if (step === null) return "mismatch";
@@ -114,8 +132,7 @@ export async function claimTotp(
     .update(users)
     .set({
       totpLastStep: step,
-      failedLoginCount: 0,
-      lockedUntil: null,
+      ...(resetLockout ? { failedLoginCount: 0, lockedUntil: null } : {}),
       ...(enrolling ? { mfaEnrolledAt: new Date() } : {}),
     })
     .where(and(eq(users.id, user.id), or(isNull(users.totpLastStep), lt(users.totpLastStep, step))))

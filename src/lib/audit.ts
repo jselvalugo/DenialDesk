@@ -38,6 +38,8 @@ export type AuditAction =
   | "system.demo_seeded"
   | "system.admin_repaired"
   | "auth.password_changed"
+  | "auth.step_up_verified"
+  | "auth.step_up_failed"
   | "security.rate_limited"
   | "operator.console_viewed"
   | "operator.login_succeeded"
@@ -105,6 +107,8 @@ export type AuditAction =
   | "operator.university_access_revoked"
   | "integration.connection_created"
   | "integration.connection_updated"
+  | "integration.connection_paused"
+  | "integration.connection_resumed"
   | "integration.connection_revoked";
 
 /**

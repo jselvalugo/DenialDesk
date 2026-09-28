@@ -78,4 +78,9 @@ export const auth: Messages["auth"] = {
     "Somente para o operador da plataforma. Os usuários da clínica acessam pela <a>página de acesso da clínica</a>.",
   "operatorMfaVerify.pageTitle": "Verificar acesso do operador",
   "operatorMfaSetup.pageTitle": "Configurar a verificação em duas etapas do operador",
+  "stepUp.pageTitle": "Verifique sua identidade",
+  "stepUp.title": "Verifique sua identidade",
+  "stepUp.subtitle": "Esta ação precisa de um novo código do seu aplicativo autenticador.",
+  "stepUp.cancel": "Cancelar",
+  "error.tooManyAttempts": "Muitas tentativas. Tente novamente em {minutes} minutos.",
 };

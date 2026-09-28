@@ -107,6 +107,16 @@ async function connectionStatus(id: string): Promise<string> {
 
 /** Sets a column only writable while the connection is still draft (the endpoint set). */
 async function setDraftField(ctx: Ctx, id: string, column: string, value: string) {
+  // drizzle/0041: a token_endpoint_key can't exist apart from the token_endpoint it is derived from
+  // (integration_connections_token_endpoint_key_matches_url), so the key fixtures set both, in one
+  // statement, as discovery will.
+  if (column === "token_endpoint_key") {
+    return withTenant(ctx, (tx) =>
+      tx.execute(
+        sql`update integration_connections set token_endpoint = ${value}, token_endpoint_key = ${value} where id = ${id}::uuid`,
+      ),
+    );
+  }
   return withTenant(ctx, (tx) =>
     tx.execute(sql`update integration_connections set ${sql.raw(column)} = ${value} where id = ${id}::uuid`),
   );
