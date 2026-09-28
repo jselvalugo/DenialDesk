@@ -18,7 +18,7 @@ import {
   submitBlockedReason,
   US_RESIDENCY_ATTESTATION_VERSION,
 } from "@/domain/integrations/connections";
-import { isRejectReasonCode, REJECT_REASON_LABEL_KEYS } from "@/domain/integrations/approval-codes";
+import { isRejectReasonCode, REJECT_NOTICE_KEYS } from "@/domain/integrations/approval-codes";
 import { getFormat, getT } from "@/i18n/server";
 import { ConnectionForm } from "../ConnectionForm";
 import { integrationActor } from "../form-state";
@@ -181,7 +181,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
               role="status"
               className="rounded-panel border border-warning-border bg-warning-bg p-3 text-body text-warning-fg"
             >
-              {t("rejected.notice", { reason: t(REJECT_REASON_LABEL_KEYS[connection.statusReason]) })}
+              {t(REJECT_NOTICE_KEYS[connection.statusReason])}
             </p>
           )}
           {connection.status === "draft" && (

@@ -207,15 +207,16 @@ export const integrations: Messages["integrations"] = {
     "El texto de la confirmación cambió desde que abrió la página. Recargue la página, lea la confirmación de nuevo y envíe.",
   "error.anotherConnectionLive":
     "Ya hay otra conexión en uso (enviada, activa, en pausa o con error). Retírela o revóquela primero.",
-  "rejected.notice":
-    "DenialDesk no aprobó esta conexión porque {reason}. Corríjala, ejecute Probar conexión y envíela de nuevo.",
-  "rejected.reason.endpoint_not_verified":
-    "no se pudo verificar el punto de conexión con su administrador de EHR/PM",
-  "rejected.reason.client_id_not_verified":
-    "no se pudo verificar el ID de cliente con su administrador de EHR/PM",
-  "rejected.reason.contact_not_verified":
-    "no se pudo contactar a su administrador de EHR/PM para confirmarla",
-  "rejected.reason.population_not_scoped": "los pacientes a sincronizar no se limitaron a su consultorio",
-  "rejected.reason.configuration_incorrect": "la configuración es incorrecta",
-  "rejected.reason.other": "hay otro motivo; DenialDesk se pondrá en contacto con usted",
+  "rejected.notice.endpoint_not_verified":
+    "DenialDesk no aprobó esta conexión: no se pudo verificar el punto de conexión con su administrador de EHR/PM. Corríjala, ejecute Probar conexión y envíela de nuevo.",
+  "rejected.notice.client_id_not_verified":
+    "DenialDesk no aprobó esta conexión: no se pudo verificar el ID de cliente con su administrador de EHR/PM. Corríjala, ejecute Probar conexión y envíela de nuevo.",
+  "rejected.notice.contact_not_verified":
+    "DenialDesk no aprobó esta conexión: no se pudo contactar a su administrador de EHR/PM para confirmarla. Corríjala si hace falta, ejecute Probar conexión y envíela de nuevo.",
+  "rejected.notice.population_not_scoped":
+    "DenialDesk no aprobó esta conexión: los pacientes a sincronizar no se limitaron a su consultorio. Corríjala, ejecute Probar conexión y envíela de nuevo.",
+  "rejected.notice.configuration_incorrect":
+    "DenialDesk no aprobó esta conexión: la configuración es incorrecta. Corríjala, ejecute Probar conexión y envíela de nuevo.",
+  "rejected.notice.other":
+    "DenialDesk no aprobó esta conexión. DenialDesk se pondrá en contacto con usted para explicar el motivo. Cuando se resuelva, ejecute Probar conexión y envíela de nuevo.",
 };

@@ -256,7 +256,7 @@ export async function approveIntegration(
         ...ids.data,
         expectedUpdatedAt: field(formData, "updatedAt", 40),
         methodCode: field(formData, "methodCode", 64),
-        verifiedOn: field(formData, "verifiedOn", 10),
+        verifiedOn: field(formData, "verifiedOn", 32),
         contactRole: field(formData, "contactRole", 64),
         populationScope: field(formData, "populationScope", 64),
         mrnNineDigitsVerified: formData.get("mrnNineDigits") === "on",

@@ -28,6 +28,7 @@ export function ApproveConnectionForm({
   updatedAt,
   clientId,
   today,
+  minDate,
 }: {
   tenantId: string;
   connectionId: string;
@@ -35,6 +36,8 @@ export function ApproveConnectionForm({
   clientId: string;
   /** The console's "today" (YYYY-MM-DD), the latest date the verification can carry. */
   today: string;
+  /** The Florida date the practice submitted the connection (YYYY-MM-DD): the earliest verification date. */
+  minDate: string;
 }) {
   const [state, action] = useActionState<IntegrationDecisionState, FormData>(approveIntegration, {});
   const t = useT("operator");
@@ -64,6 +67,7 @@ export function ApproveConnectionForm({
         name="verifiedOn"
         id="approve-date"
         type="date"
+        min={minDate}
         max={today}
         required
         hint={t("integrations.approve.dateHint")}
@@ -89,7 +93,11 @@ export function ApproveConnectionForm({
           choose,
           ...POPULATION_SCOPES.map((scope) => ({
             value: scope,
-            label: t(POPULATION_SCOPE_LABEL_KEYS[scope]),
+            // Only a Group export can be approved for now; the server refuses the other.
+            label:
+              scope === "group_export"
+                ? t(POPULATION_SCOPE_LABEL_KEYS[scope])
+                : `${t(POPULATION_SCOPE_LABEL_KEYS[scope])} (${t("integrations.scope.notYet")})`,
           })),
         ]}
       />

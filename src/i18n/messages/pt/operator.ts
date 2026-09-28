@@ -217,12 +217,13 @@ export const operator: Messages["operator"] = {
   "integrations.choose": "Escolha…",
   "integrations.approve.methodLabel": "Como você verificou",
   "integrations.approve.dateLabel": "Data da verificação",
-  "integrations.approve.dateHint": "Não pode ser futura.",
+  "integrations.approve.dateHint":
+    "Não pode ser futura nem anterior ao dia em que a clínica enviou a conexão.",
   "integrations.approve.roleLabel": "Função do contato na clínica",
   "integrations.approve.roleHint": "Somente a função, nunca um nome.",
   "integrations.approve.scopeLabel": "Escopo da população",
   "integrations.approve.scopeHint":
-    "Limita a sincronização aos pacientes da própria clínica: uma exportação de Group ou um filtro de busca que você verificou.",
+    "Limita a sincronização aos pacientes da própria clínica. Por enquanto só uma exportação de Group pode ser aprovada: um filtro de busca verificado ainda não tem onde ser registrado.",
   "integrations.approve.nineDigitsLabel": "Os MRNs têm 9 dígitos (verificado)",
   "integrations.approve.nineDigitsHint": "Opcional. Marque somente se a clínica confirmou.",
   "integrations.approve.ownershipLabel":
@@ -265,4 +266,20 @@ export const operator: Messages["operator"] = {
     "O registro do endpoint desta conexão não corresponde mais à configuração. Ela não pode ser aprovada; rejeite-a.",
   "errors.integrationPracticeSuspended":
     "Esta clínica está suspensa. Reative-a antes de aprovar uma conexão.",
+  "integrations.scope.notYet": "ainda não disponível",
+  "errors.approvalScopeUnsupported":
+    "Um filtro de busca verificado ainda não tem onde ser registrado, então só uma exportação de Group pode ser aprovada.",
+  "errors.integrationRealEndpointRefused":
+    "Neste ambiente não é possível aprovar conexões reais de EHR: ele contém apenas dados sintéticos.",
+  "errors.approvalDateBeforeSubmission":
+    "A data da verificação não pode ser anterior ao dia em que a clínica enviou a conexão ({date}).",
+  "errors.approvalBaaRequired":
+    "Esta clínica não tem um Acordo de Associado Comercial (BAA) em vigor. Registre o acordo assinado na página da clínica antes de aprovar uma conexão.",
+  "integrations.rejectReason.endpoint_not_verified": "Endpoint não verificado com o administrador de EHR/PM",
+  "integrations.rejectReason.client_id_not_verified":
+    "ID do cliente não verificado com o administrador de EHR/PM",
+  "integrations.rejectReason.contact_not_verified": "Não foi possível contatar o administrador de EHR/PM",
+  "integrations.rejectReason.population_not_scoped": "População de pacientes não limitada à clínica",
+  "integrations.rejectReason.configuration_incorrect": "A configuração está incorreta",
+  "integrations.rejectReason.other": "Outro motivo",
 };

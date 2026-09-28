@@ -8,7 +8,10 @@ import { Field, FieldList } from "@/components/records/FieldList";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { getPendingApproval } from "@/domain/integrations/approval";
+import { agreementStatus, listAgreements } from "@/domain/platform/agreements";
 import { getFormat, getT } from "@/i18n/server";
+import { auditSystem } from "@/lib/audit";
+import { AgreementStatusBadge } from "../../../../AgreementStatusBadge";
 import { ApproveConnectionForm } from "./ApproveConnectionForm";
 import { RejectConnectionForm } from "./RejectConnectionForm";
 
@@ -33,13 +36,21 @@ export default async function ReviewConnectionPage({
 }: {
   params: Promise<{ tenantId: string; connectionId: string }>;
 }) {
+  // The operator session first: a malformed address must not tell a signed-out visitor anything.
+  const operator = await requireOperator();
   const ids = z.object({ tenantId: z.uuid(), connectionId: z.uuid() }).safeParse(await params);
   if (!ids.success) notFound();
-  const operator = await requireOperator();
   const t = await getT("operator");
   const tc = await getT("common");
   const f = await getFormat();
   const item = await getPendingApproval(ids.data.tenantId, ids.data.connectionId, operator);
+  await auditSystem({
+    action: "operator.integration_viewed",
+    actorUserId: operator.userId,
+    tenantId: ids.data.tenantId,
+    entityType: "integration_connection",
+    entityId: ids.data.connectionId,
+  });
 
   const back = (
     <Link href="/operator/integrations" className="text-body font-medium text-link hover:underline">
@@ -59,6 +70,8 @@ export default async function ReviewConnectionPage({
     );
   }
 
+  const baa = agreementStatus(await listAgreements(item.practiceId), todayIn());
+  const baaInForce = baa === "active" || baa === "expiring";
   const keyModeKey =
     item.keyMode && item.keyMode in keyModeLabels
       ? keyModeLabels[item.keyMode as keyof typeof keyModeLabels]
@@ -110,6 +123,9 @@ export default async function ReviewConnectionPage({
             {t(keyModeKey ?? "integrations.keyMode.unassigned")}
           </Field>
           <Field label={t("integrations.field.scope")}>{t("integrations.scope.unset")}</Field>
+          <Field label={t("practice.baaTitle")}>
+            <AgreementStatusBadge status={baa} />
+          </Field>
           <Field label={t("integrations.field.attested")} tabular empty={tc("word.notSet")}>
             {item.attestedAt ? f.dateTime(item.attestedAt) : null}
           </Field>
@@ -117,12 +133,21 @@ export default async function ReviewConnectionPage({
       </Panel>
 
       <Panel title={t("integrations.approve.title")} description={t("integrations.approve.description")}>
+        {!baaInForce && (
+          <p
+            role="note"
+            className="mb-4 max-w-3xl rounded-panel border border-warning-border bg-warning-bg p-3 text-body text-warning-fg"
+          >
+            {t("errors.approvalBaaRequired")}
+          </p>
+        )}
         <ApproveConnectionForm
           tenantId={item.practiceId}
           connectionId={item.connectionId}
           updatedAt={item.updatedAt}
           clientId={item.clientId}
           today={todayIn()}
+          minDate={item.submittedAt ? todayIn(undefined, item.submittedAt) : "1970-01-01"}
         />
       </Panel>
 

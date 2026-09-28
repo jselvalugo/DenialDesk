@@ -1,5 +1,6 @@
 import { generateKeyPairSync, randomUUID } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { todayIn } from "@rules/calendar";
 import { asc, eq } from "drizzle-orm";
 import type { OperatorContext } from "@/auth/operator";
 import { closeDatabase, systemDb } from "@/db/client";
@@ -11,6 +12,7 @@ import {
   type IntegrationActor,
   type SigningDeps,
 } from "@/domain/integrations/connections";
+import { recordAgreement } from "@/domain/platform/agreements";
 import { testConnection, type TxRunner } from "@/domain/integrations/test-connection";
 import { en } from "@/i18n/messages/en";
 import { es } from "@/i18n/messages/es";
@@ -86,10 +88,37 @@ beforeEach(async () => {
   b = await createTestTenant("Approval action B");
   session = operator;
   language = "en";
+  // The domain checks the operator by the console's rule (the configured email, no membership), and
+  // Approve only runs where real data is allowed: production, off Netlify.
+  vi.stubEnv("PLATFORM_OPERATOR_EMAIL", operator.email);
+  vi.stubEnv("APP_ENV", "production");
+  for (const name of ["NETLIFY", "NETLIFY_DB_URL", "DEPLOY_ID", "SITE_ID"]) vi.stubEnv(name, "");
 });
+afterEach(() => vi.unstubAllEnvs());
 afterAll(() => closeDatabase());
 
-async function pending(ctx: Ctx) {
+/** A signed BAA in force for the practice (Approve requires one); synthetic bytes only. */
+async function recordBaa(tenantId: string) {
+  await recordAgreement(
+    {
+      tenantId,
+      effectiveDate: "2026-01-01",
+      expiresOn: null,
+      signedOn: "2025-12-31",
+      practiceSigner: "Synthetic Signer, Practice Administrator",
+      ourSigner: "Synthetic Officer, DenialDesk",
+      note: null,
+      filename: "synthetic-baa.pdf",
+      content: Buffer.from("%PDF-1.7\n% synthetic approval action test\n%%EOF\n", "latin1"),
+      attestedSynthetic: false,
+    },
+    operator,
+    { syntheticOnly: false },
+  );
+}
+
+async function pending(ctx: Ctx, baa = true) {
+  if (baa) await recordBaa(ctx.tenantId);
   const { id } = await withTenant(ctx, (tx) =>
     createConnection(tx, admin(ctx), {
       displayName: "Main EHR",
@@ -157,8 +186,9 @@ async function run<T>(action: (state: object, data: FormData) => Promise<T>, dat
 }
 const errorOf = (result: { state?: unknown }) => (result.state as { error?: string } | undefined)?.error;
 
-// One day back: the operator's "today" is a Florida date, which can trail UTC's by a day.
-const VERIFIED_ON = new Date(Date.now() - 36 * 3_600_000).toISOString().slice(0, 10);
+// The console's "today" (a Florida date): the latest a verification can be dated and, for a
+// connection submitted just now, also the earliest.
+const VERIFIED_ON = todayIn();
 
 async function approveForm(ctx: Ctx, id: string, extra: Record<string, string> = {}) {
   return form({
@@ -275,6 +305,46 @@ describe("approveIntegration", () => {
     const result = await run(approveIntegration, await approveForm(a, id, { methodCode: "" }));
     expect(errorOf(result)).toBe(es.operator["errors.approvalFormInvalid"]);
     expect(errorOf(result)).not.toBe(en.operator["errors.approvalFormInvalid"]);
+  });
+
+  it("refuses a verified search filter in words, and approves the Group export", async () => {
+    const id = await pending(a);
+    const refused = await run(
+      approveIntegration,
+      await approveForm(a, id, { populationScope: "verified_filter" }),
+    );
+    expect(errorOf(refused)).toBe(en.operator["errors.approvalScopeUnsupported"]);
+    expect((await row(id)).status).toBe("pending_approval");
+    const approved = await run(approveIntegration, await approveForm(a, id));
+    expect(approved.redirectedTo).toBe("/operator/integrations?decided=approved");
+  });
+
+  it("refuses where only synthetic data is allowed (the server's environment, not the request's)", async () => {
+    const id = await pending(a);
+    vi.stubEnv("APP_ENV", "development");
+    const result = await run(approveIntegration, await approveForm(a, id));
+    expect(errorOf(result)).toBe(en.operator["errors.integrationRealEndpointRefused"]);
+    expect((await row(id)).status).toBe("pending_approval");
+  });
+
+  it("refuses a practice without a Business Associate Agreement in force", async () => {
+    const id = await pending(a, false);
+    const result = await run(approveIntegration, await approveForm(a, id));
+    expect(errorOf(result)).toBe(en.operator["errors.approvalBaaRequired"]);
+    expect((await row(id)).status).toBe("pending_approval");
+  });
+
+  it("reads the verification date whole: a long or malformed value is refused, never truncated into a valid one", async () => {
+    const id = await pending(a);
+    for (const verifiedOn of [
+      `${VERIFIED_ON}T00:00:00Z`,
+      `${VERIFIED_ON}xxxx`,
+      `${VERIFIED_ON}${" ".repeat(20)}9`,
+    ]) {
+      const result = await run(approveIntegration, await approveForm(a, id, { verifiedOn }));
+      expect(errorOf(result)).toBe(en.operator["errors.approvalDateInvalid"]);
+    }
+    expect((await row(id)).status).toBe("pending_approval");
   });
 
   it("a page opened before the practice changed the connection is refused as stale", async () => {

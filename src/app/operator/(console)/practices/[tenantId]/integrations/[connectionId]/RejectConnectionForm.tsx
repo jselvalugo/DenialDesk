@@ -24,7 +24,6 @@ export function RejectConnectionForm({
 }) {
   const [state, action] = useActionState<IntegrationDecisionState, FormData>(rejectIntegration, {});
   const t = useT("operator");
-  const ti = useT("integrations");
 
   return (
     <form action={action} className="flex max-w-3xl flex-col gap-4">
@@ -39,7 +38,7 @@ export function RejectConnectionForm({
         required
         options={[
           { value: "", label: t("integrations.choose") },
-          ...REJECT_REASON_CODES.map((code) => ({ value: code, label: ti(REJECT_REASON_LABEL_KEYS[code]) })),
+          ...REJECT_REASON_CODES.map((code) => ({ value: code, label: t(REJECT_REASON_LABEL_KEYS[code]) })),
         ]}
       />
       <div>

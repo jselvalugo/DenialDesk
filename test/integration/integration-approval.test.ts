@@ -1,7 +1,7 @@
 import { generateKeyPairSync, randomUUID } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { todayIn } from "@rules/calendar";
+import { addCalendarDays, todayIn } from "@rules/calendar";
 import type { OperatorContext } from "@/auth/operator";
 import { closeDatabase, systemDb } from "@/db/client";
 import {
@@ -33,6 +33,7 @@ import {
   type IntegrationActor,
   type SigningDeps,
 } from "@/domain/integrations/connections";
+import { recordAgreement } from "@/domain/platform/agreements";
 import { PracticeError } from "@/domain/platform/errors";
 import {
   testConnection,
@@ -81,11 +82,9 @@ const testDeps = (transport: FakeFhirTransport): TestConnectionDeps => ({
   keyStore: () => keyStore,
 });
 
-/** A fixed "now" for the operator's date check, so the boundary tests can't straddle midnight. */
-const NOW = new Date("2026-09-28T16:00:00Z");
-const TODAY = todayIn(undefined, NOW);
-const YESTERDAY = "2026-09-27";
-const TOMORROW = "2026-09-29";
+/** Real-environment rules (Approve refuses where only synthetic data is allowed); the real clock. */
+const OPTS = { syntheticOnly: false };
+const today = () => todayIn();
 
 beforeAll(async () => {
   const email = `operator-approval-${randomUUID().slice(0, 8)}@synthetic.test`;
@@ -94,13 +93,18 @@ beforeAll(async () => {
     .values({ email, displayName: "Platform operator", passwordHash: "unused" })
     .returning({ id: users.id });
   operator = { sessionId: randomUUID(), userId: user!.id, displayName: "Platform operator", email };
+  // The domain checks the operator by the console's rule: the configured operator email AND no membership.
+  vi.stubEnv("PLATFORM_OPERATOR_EMAIL", email);
 });
 // Test connection is rate limited per practice, so every test gets fresh practices.
 beforeEach(async () => {
   a = await createTestTenant("Approval A");
   b = await createTestTenant("Approval B");
 });
-afterAll(() => closeDatabase());
+afterAll(async () => {
+  vi.unstubAllEnvs();
+  await closeDatabase();
+});
 
 async function draft(ctx: Ctx = a, clientId = `client-${randomUUID().slice(0, 8)}`) {
   const { id } = await withTenant(ctx, (tx) =>
@@ -139,8 +143,44 @@ async function submit(ctx: Ctx, id: string) {
   );
 }
 
+const pdf = Buffer.from("%PDF-1.7\n% synthetic approval test\n%%EOF\n", "latin1");
+
+/** Records a signed BAA for the practice the way the operator does (synthetic bytes only). */
+async function recordBaa(
+  tenantId: string,
+  dates: { effectiveDate: string; expiresOn: string | null } = {
+    effectiveDate: "2026-01-01",
+    expiresOn: null,
+  },
+) {
+  await recordAgreement(
+    {
+      tenantId,
+      ...dates,
+      signedOn: "2025-12-31",
+      practiceSigner: "Synthetic Signer, Practice Administrator",
+      ourSigner: "Synthetic Officer, DenialDesk",
+      note: null,
+      filename: "synthetic-baa.pdf",
+      content: pdf,
+      attestedSynthetic: false,
+    },
+    operator,
+    { syntheticOnly: false },
+  );
+}
+
+/** Owner-only setup: when the practice submitted it (the approval date can't precede its Florida date). */
+async function setSubmittedAt(id: string, at: string) {
+  await systemDb().execute(
+    sql`update integration_connections set submitted_at = ${at}::timestamptz where id = ${id}::uuid`,
+  );
+}
+
 /** A connection submitted for approval (tested, attested, registry claimed). */
-async function pending(ctx: Ctx = a, clientId?: string) {
+async function pending(ctx: Ctx = a, clientId?: string, options: { baa?: boolean } = {}) {
+  // Approve needs a Business Associate Agreement in force (docs/specs/practice-agreements.md).
+  if (options.baa !== false) await recordBaa(ctx.tenantId);
   const created = await draft(ctx, clientId);
   await passTest(ctx, created.id);
   await submit(ctx, created.id);
@@ -181,7 +221,7 @@ async function approvalOf(
     connectionId: id,
     expectedUpdatedAt: await stampOf(id),
     methodCode: "video_call",
-    verifiedOn: TODAY,
+    verifiedOn: today(),
     contactRole: "ehr_administrator",
     populationScope: "group_export",
     mrnNineDigitsVerified: true,
@@ -233,20 +273,33 @@ async function practiceMember(ctx: Ctx, role: "manager" | "specialist" | "compli
   return user!.id;
 }
 
+/** A user with no practice membership whose email is not the operator's: not the operator. */
+async function plainUser() {
+  const [user] = await systemDb()
+    .insert(users)
+    .values({
+      email: `plain-${randomUUID().slice(0, 8)}@synthetic.test`,
+      displayName: "Synthetic bystander",
+      passwordHash: "unused",
+    })
+    .returning({ id: users.id });
+  return user!.id;
+}
+
 const asUser = (userId: string): OperatorContext => ({ ...operator, userId });
 
 describe("the queue of connections awaiting approval", () => {
   it("lists every practice's pending connections, oldest first, with configuration only", async () => {
     const first = await pending(a);
     const second = await pending(b);
-    // Not in the queue: a draft, an active sandbox, an approved connection, a withdrawn one.
+    // Not in the queue: a draft, a sandbox (never submitted for approval), an approved connection, a withdrawn one.
     const notSubmitted = await draft(a);
     const sandbox = await withTenant(a, (tx) =>
       createSandboxConnection(tx, { ...admin(a), syntheticOnly: true }, { displayName: "Sandbox" }),
     );
     const c = await createTestTenant("Approval C");
     const approved = await pending(c);
-    await approveConnection(await approvalOf(c, approved.id), operator, NOW);
+    await approveConnection(await approvalOf(c, approved.id), operator, OPTS);
     const d = await createTestTenant("Approval D");
     const withdrawn = await pending(d);
     await withTenant(d, async (tx) =>
@@ -323,7 +376,7 @@ describe("the queue of connections awaiting approval", () => {
   it("is for the operator only: a practice administrator or member is refused", async () => {
     await pending(a);
     const specialist = await practiceMember(a, "specialist");
-    for (const userId of [a.userId, specialist]) {
+    for (const userId of [a.userId, specialist, await plainUser(), randomUUID()]) {
       await refusedWith(listPendingApprovals(asUser(userId)), "errors.integrationNotOperator");
       await refusedWith(listPendingForPractice(a.tenantId, asUser(userId)), "errors.integrationNotOperator");
       await refusedWith(
@@ -340,7 +393,7 @@ describe("approveConnection", () => {
     const before = await row(id);
     const reviewed = await stampOf(id);
 
-    const result = await approveConnection(await approvalOf(a, id), operator, NOW);
+    const result = await approveConnection(await approvalOf(a, id), operator, OPTS);
     expect(result).toEqual({ connectionId: id });
 
     const stored = await row(id);
@@ -374,17 +427,19 @@ describe("approveConnection", () => {
 
   it("records the verification in the audit event: method, date, the contact's role, scope, ownership, configuration", async () => {
     const { id, clientId } = await pending();
+    await setSubmittedAt(id, new Date(Date.now() - 3 * 86_400_000).toISOString());
     const before = await row(id);
+    const yesterday = addCalendarDays(today(), -1);
     await approveConnection(
       await approvalOf(a, id, {
         methodCode: "phone_callback",
-        verifiedOn: YESTERDAY,
+        verifiedOn: yesterday,
         contactRole: "it_contact",
-        populationScope: "verified_filter",
+        populationScope: "group_export",
         mrnNineDigitsVerified: false,
       }),
       operator,
-      NOW,
+      OPTS,
     );
     const events = await audits(id, "operator.integration_approved");
     expect(events).toHaveLength(1);
@@ -400,12 +455,13 @@ describe("approveConnection", () => {
       previous_status: "pending_approval",
       status: "active",
       approval_method: "phone_callback",
-      verified_on: YESTERDAY,
+      verified_on: yesterday,
       contact_role: "it_contact",
-      population_scope: "verified_filter",
+      population_scope: "group_export",
       mrn_nine_digits_verified: false,
       client_id_ownership_verified: true,
       registry_verified: true,
+      session_id: operator.sessionId,
       base_url: FAKE_BASE_URL,
       client_id: clientId,
       mrn_identifier_system: "https://fhir.example.com/mrn",
@@ -418,21 +474,45 @@ describe("approveConnection", () => {
     expect(JSON.stringify(event!.metadata)).not.toMatch(/token=|secret|password/i);
   });
 
-  it("takes the verification date as of the operator's today: yesterday and today, not tomorrow", async () => {
+  it("takes the verification date as of the operator's today: today is accepted, the future is not", async () => {
     const { id } = await pending();
     const reviewed = await stampOf(id);
-    for (const verifiedOn of [TOMORROW, "2026-09-30", "2027-01-01"]) {
+    for (const days of [1, 2, 400]) {
       await refusedWith(
-        approveConnection(await approvalOf(a, id, { verifiedOn }), operator, NOW),
+        approveConnection(
+          await approvalOf(a, id, { verifiedOn: addCalendarDays(today(), days) }),
+          operator,
+          OPTS,
+        ),
         "errors.approvalDateInvalid",
       );
     }
     await expectStillPending(id, reviewed);
-    await approveConnection(await approvalOf(a, id, { verifiedOn: TODAY }), operator, NOW);
+    await approveConnection(await approvalOf(a, id, { verifiedOn: today() }), operator, OPTS);
     expect((await row(id)).status).toBe("active");
-    const next = await pending(b);
-    await approveConnection(await approvalOf(b, next.id, { verifiedOn: YESTERDAY }), operator, NOW);
-    expect((await row(next.id)).status).toBe("active");
+  });
+
+  it("puts the earliest verification date at the Florida date of the submission: day before refused, day of and day after accepted", async () => {
+    // Submitted at 22:30 on June 15 in Florida, which is already June 16 in UTC: the Florida date counts.
+    const submittedAt = "2026-06-16T02:30:00Z";
+    const first = await pending(a);
+    await setSubmittedAt(first.id, submittedAt);
+    for (const verifiedOn of ["2026-06-14", "2025-12-31"]) {
+      const error = await refusedWith(
+        approveConnection(await approvalOf(a, first.id, { verifiedOn }), operator, OPTS),
+        "errors.approvalDateBeforeSubmission",
+      );
+      expect(error.params).toEqual({ date: "2026-06-15" });
+    }
+    await expectStillPending(first.id, await stampOf(first.id));
+    // The day of (by the Florida calendar, though UTC says the 16th) ...
+    await approveConnection(await approvalOf(a, first.id, { verifiedOn: "2026-06-15" }), operator, OPTS);
+    expect((await row(first.id)).status).toBe("active");
+    // ... and the day after.
+    const second = await pending(b);
+    await setSubmittedAt(second.id, submittedAt);
+    await approveConnection(await approvalOf(b, second.id, { verifiedOn: "2026-06-16" }), operator, OPTS);
+    expect((await row(second.id)).status).toBe("active");
   });
 
   it.each(["", "not a date", "2026-02-30", "2026-9-28", "28/09/2026", "2026-09-28T00:00:00Z"])(
@@ -441,7 +521,7 @@ describe("approveConnection", () => {
       const { id } = await pending();
       const reviewed = await stampOf(id);
       await refusedWith(
-        approveConnection(await approvalOf(a, id, { verifiedOn }), operator, NOW),
+        approveConnection(await approvalOf(a, id, { verifiedOn }), operator, OPTS),
         "errors.approvalDateInvalid",
       );
       await expectStillPending(id, reviewed);
@@ -463,25 +543,108 @@ describe("approveConnection", () => {
       const { id } = await pending();
       const reviewed = await stampOf(id);
       await refusedWith(
-        approveConnection(await approvalOf(a, id, { [field]: value }), operator, NOW),
+        approveConnection(await approvalOf(a, id, { [field]: value }), operator, OPTS),
         "errors.approvalFormInvalid",
       );
       await expectStillPending(id, reviewed);
     },
   );
 
+  it("refuses a verified search filter: it would record a claim with nowhere to put the filter", async () => {
+    const { id } = await pending();
+    const reviewed = await stampOf(id);
+    await refusedWith(
+      approveConnection(await approvalOf(a, id, { populationScope: "verified_filter" }), operator, OPTS),
+      "errors.approvalScopeUnsupported",
+    );
+    await expectStillPending(id, reviewed);
+    await approveConnection(await approvalOf(a, id, { populationScope: "group_export" }), operator, OPTS);
+    expect((await row(id)).populationScope).toBe("group_export");
+  });
+
+  it("applies the environment rule: a real connection is never approved where only synthetic data is allowed", async () => {
+    const { id } = await pending();
+    const reviewed = await stampOf(id);
+    await refusedWith(
+      approveConnection(await approvalOf(a, id), operator, { syntheticOnly: true }),
+      "errors.integrationRealEndpointRefused",
+    );
+    // Without an explicit option it is the server's own environment: pinned here to a non-production one.
+    const appEnv = process.env.APP_ENV ?? "development";
+    vi.stubEnv("APP_ENV", "development");
+    try {
+      await refusedWith(
+        approveConnection(await approvalOf(a, id), operator),
+        "errors.integrationRealEndpointRefused",
+      );
+    } finally {
+      vi.stubEnv("APP_ENV", appEnv);
+    }
+    await expectStillPending(id, reviewed);
+    await approveConnection(await approvalOf(a, id), operator, { syntheticOnly: false });
+    expect((await row(id)).status).toBe("active");
+  });
+
+  it("requires a Business Associate Agreement in force: none, expired, or not yet effective is refused", async () => {
+    const none = await pending(a, undefined, { baa: false });
+    await refusedWith(
+      approveConnection(await approvalOf(a, none.id), operator, OPTS),
+      "errors.approvalBaaRequired",
+    );
+    await expectStillPending(none.id, await stampOf(none.id));
+    // Recorded now, it covers today and the connection can be approved.
+    await recordBaa(a.tenantId);
+    await approveConnection(await approvalOf(a, none.id), operator, OPTS);
+    expect((await row(none.id)).status).toBe("active");
+
+    const expired = await createTestTenant("Approval expired BAA");
+    const expiredConnection = await pending(expired, undefined, { baa: false });
+    await recordBaa(expired.tenantId, { effectiveDate: "2020-01-01", expiresOn: "2020-12-31" });
+    await refusedWith(
+      approveConnection(await approvalOf(expired, expiredConnection.id), operator, OPTS),
+      "errors.approvalBaaRequired",
+    );
+    await expectStillPending(expiredConnection.id, await stampOf(expiredConnection.id));
+
+    const future = await createTestTenant("Approval future BAA");
+    const futureConnection = await pending(future, undefined, { baa: false });
+    await recordBaa(future.tenantId, { effectiveDate: addCalendarDays(today(), 30), expiresOn: null });
+    await refusedWith(
+      approveConnection(await approvalOf(future, futureConnection.id), operator, OPTS),
+      "errors.approvalBaaRequired",
+    );
+    await expectStillPending(futureConnection.id, await stampOf(futureConnection.id));
+  });
+
+  it("accepts an agreement that is in force but expiring soon", async () => {
+    const soon = await createTestTenant("Approval expiring BAA");
+    const { id } = await pending(soon, undefined, { baa: false });
+    await recordBaa(soon.tenantId, { effectiveDate: "2026-01-01", expiresOn: addCalendarDays(today(), 20) });
+    await approveConnection(await approvalOf(soon, id), operator, OPTS);
+    expect((await row(id)).status).toBe("active");
+  });
+
+  it("does not require a BAA to reject: refusing a connection is the safe direction", async () => {
+    const { id } = await pending(a, undefined, { baa: false });
+    await rejectConnection(
+      { tenantId: a.tenantId, connectionId: id, expectedUpdatedAt: await stampOf(id), reasonCode: "other" },
+      operator,
+    );
+    expect((await row(id)).status).toBe("draft");
+  });
+
   it("requires the operator's confirmation that the practice owns the client ID", async () => {
     const { id } = await pending();
     const reviewed = await stampOf(id);
     await refusedWith(
-      approveConnection(await approvalOf(a, id, { clientIdOwnershipVerified: false }), operator, NOW),
+      approveConnection(await approvalOf(a, id, { clientIdOwnershipVerified: false }), operator, OPTS),
       "errors.approvalOwnershipRequired",
     );
     await refusedWith(
       approveConnection(
         await approvalOf(a, id, { clientIdOwnershipVerified: "on" as unknown as boolean }),
         operator,
-        NOW,
+        OPTS,
       ),
       "errors.approvalOwnershipRequired",
     );
@@ -495,8 +658,16 @@ describe("approveConnection", () => {
     const specialist = await practiceMember(a, "specialist");
     const manager = await practiceMember(a, "manager");
     const otherPracticeAdmin = b.userId;
-    for (const userId of [a.userId, specialist, manager, otherPracticeAdmin]) {
-      await refusedWith(approveConnection(input, asUser(userId), NOW), "errors.integrationNotOperator");
+    // The last two belong to no practice but are not the operator either (not its email; unknown).
+    for (const userId of [
+      a.userId,
+      specialist,
+      manager,
+      otherPracticeAdmin,
+      await plainUser(),
+      randomUUID(),
+    ]) {
+      await refusedWith(approveConnection(input, asUser(userId), OPTS), "errors.integrationNotOperator");
     }
     await expectStillPending(id, reviewed);
   });
@@ -507,17 +678,17 @@ describe("approveConnection", () => {
     const reviewed = { mine: await stampOf(mine.id), theirs: await stampOf(theirs.id) };
     // The connection is A's; the request names B.
     await refusedWith(
-      approveConnection({ ...(await approvalOf(a, mine.id)), tenantId: b.tenantId }, operator, NOW),
+      approveConnection({ ...(await approvalOf(a, mine.id)), tenantId: b.tenantId }, operator, OPTS),
       "errors.integrationNotFound",
     );
     // A connection ID that exists nowhere.
     await refusedWith(
-      approveConnection({ ...(await approvalOf(a, mine.id)), connectionId: randomUUID() }, operator, NOW),
+      approveConnection({ ...(await approvalOf(a, mine.id)), connectionId: randomUUID() }, operator, OPTS),
       "errors.integrationNotFound",
     );
     // A practice that doesn't exist.
     await refusedWith(
-      approveConnection({ ...(await approvalOf(a, mine.id)), tenantId: randomUUID() }, operator, NOW),
+      approveConnection({ ...(await approvalOf(a, mine.id)), tenantId: randomUUID() }, operator, OPTS),
       "errors.practiceNotFound",
     );
     await expectStillPending(mine.id, reviewed.mine);
@@ -532,12 +703,12 @@ describe("approveConnection", () => {
     const renamed = await stampOf(id);
     expect(renamed).not.toBe(reviewed);
     await refusedWith(
-      approveConnection(await approvalOf(a, id, { expectedUpdatedAt: reviewed }), operator, NOW),
+      approveConnection(await approvalOf(a, id, { expectedUpdatedAt: reviewed }), operator, OPTS),
       "errors.integrationStale",
     );
     await expectStillPending(id, renamed);
     // Reviewed again, it goes through.
-    await approveConnection(await approvalOf(a, id), operator, NOW);
+    await approveConnection(await approvalOf(a, id), operator, OPTS);
     expect((await row(id)).status).toBe("active");
   });
 
@@ -547,32 +718,32 @@ describe("approveConnection", () => {
       const { id } = await pending();
       const reviewed = await stampOf(id);
       await refusedWith(
-        approveConnection(await approvalOf(a, id, { expectedUpdatedAt }), operator, NOW),
+        approveConnection(await approvalOf(a, id, { expectedUpdatedAt }), operator, OPTS),
         "errors.integrationStale",
       );
       await expectStillPending(id, reviewed);
     },
   );
 
-  it("refuses a connection that is no longer awaiting approval: withdrawn, already approved, or revoked", async () => {
+  it("refuses a connection that is no longer awaiting approval: withdrawn, or already approved", async () => {
     const withdrawn = await pending(a);
     const stale = await approvalOf(a, withdrawn.id);
     await withTenant(a, async (tx) =>
       withdrawConnection(tx, admin(a), withdrawn.id, await stampOf(withdrawn.id)),
     );
-    await refusedWith(approveConnection(stale, operator, NOW), "errors.integrationNotPending");
+    await refusedWith(approveConnection(stale, operator, OPTS), "errors.integrationNotPending");
     // A withdrawn draft is not approvable even with a freshly read stamp.
     await refusedWith(
-      approveConnection(await approvalOf(a, withdrawn.id), operator, NOW),
+      approveConnection(await approvalOf(a, withdrawn.id), operator, OPTS),
       "errors.integrationNotPending",
     );
     expect((await row(withdrawn.id)).status).toBe("draft");
 
     const done = await pending(b);
-    await approveConnection(await approvalOf(b, done.id), operator, NOW);
+    await approveConnection(await approvalOf(b, done.id), operator, OPTS);
     const approvedAt = (await row(done.id)).approvedAt;
     await refusedWith(
-      approveConnection(await approvalOf(b, done.id), operator, NOW),
+      approveConnection(await approvalOf(b, done.id), operator, OPTS),
       "errors.integrationNotPending",
     );
     // The first approval's record is not overwritten by a second attempt.
@@ -585,7 +756,7 @@ describe("approveConnection", () => {
       createSandboxConnection(tx, { ...admin(a), syntheticOnly: true }, { displayName: "Sandbox" }),
     );
     await refusedWith(
-      approveConnection(await approvalOf(a, sandbox.id), operator, NOW),
+      approveConnection(await approvalOf(a, sandbox.id), operator, OPTS),
       "errors.integrationNotFound",
     );
     expect((await row(sandbox.id)).approvedBy).toBeNull();
@@ -598,7 +769,7 @@ describe("approveConnection", () => {
       sql`delete from integration_endpoint_registry where connection_id = ${missing.id}::uuid`,
     );
     await refusedWith(
-      approveConnection(await approvalOf(a, missing.id), operator, NOW),
+      approveConnection(await approvalOf(a, missing.id), operator, OPTS),
       "errors.integrationNotClaimed",
     );
     await expectStillPending(missing.id, missingStamp);
@@ -614,24 +785,24 @@ describe("approveConnection", () => {
             where connection_id = ${other.id}::uuid`,
       );
       await refusedWith(
-        approveConnection(await approvalOf(ctx, other.id), operator, NOW),
+        approveConnection(await approvalOf(ctx, other.id), operator, OPTS),
         "errors.integrationNotClaimed",
       );
       await expectStillPending(other.id, stamp);
     }
   });
 
-  it("refuses a suspended practice (suspension is a stop the operator set) and an unknown one", async () => {
+  it("refuses a suspended practice (suspension is a stop the operator set), and approves once it is reactivated", async () => {
     const { id } = await pending();
     const reviewed = await stampOf(id);
     await systemDb().update(tenants).set({ suspendedAt: new Date() }).where(eq(tenants.id, a.tenantId));
     await refusedWith(
-      approveConnection(await approvalOf(a, id), operator, NOW),
+      approveConnection(await approvalOf(a, id), operator, OPTS),
       "errors.integrationPracticeSuspended",
     );
     await expectStillPending(id, reviewed);
     await systemDb().update(tenants).set({ suspendedAt: null }).where(eq(tenants.id, a.tenantId));
-    await approveConnection(await approvalOf(a, id), operator, NOW);
+    await approveConnection(await approvalOf(a, id), operator, OPTS);
     expect((await row(id)).status).toBe("active");
   });
 
@@ -653,20 +824,10 @@ describe("approveConnection", () => {
       /activation requires a fresh approval/,
     );
     // ... and the operator's Approve writes a new one.
-    await approveConnection(await approvalOf(a, id), operator, NOW);
+    await approveConnection(await approvalOf(a, id), operator, OPTS);
     const stored = await row(id);
     expect(stored.approvedAt!.getTime()).toBeGreaterThan(carried.getTime());
     expect(stored.approvedAt!.getTime()).toBeGreaterThanOrEqual(stored.submittedAt!.getTime());
-  });
-
-  it("rolls the whole decision back on a database failure (an operator account that doesn't exist)", async () => {
-    const { id } = await pending();
-    const reviewed = await stampOf(id);
-    // An operator ID that isn't a user: the foreign keys (approved_by, updated_by) refuse the write.
-    const ghost = asUser(randomUUID());
-    await expect(approveConnection(await approvalOf(a, id), ghost, NOW)).rejects.toThrow();
-    await expectStillPending(id, reviewed);
-    expect(await registryRows(id)).toHaveLength(1);
   });
 });
 
@@ -747,6 +908,7 @@ describe("rejectConnection", () => {
       registry_released: true,
       attestation_cleared: true,
       discovery_cleared: true,
+      session_id: operator.sessionId,
       previous_attested_by: before.usResidencyAttestedBy,
       previous_attested_at: before.usResidencyAttestedAt!.toISOString(),
       base_url: FAKE_BASE_URL,
@@ -819,7 +981,7 @@ describe("rejectConnection", () => {
     expect(again.submittedAt!.getTime()).toBeGreaterThan(first.submittedAt!.getTime());
     expect(await registryRows(id)).toHaveLength(1);
     // And it can be approved this time.
-    await approveConnection(await approvalOf(a, id), operator, NOW);
+    await approveConnection(await approvalOf(a, id), operator, OPTS);
     expect((await row(id)).status).toBe("active");
   });
 
@@ -844,7 +1006,7 @@ describe("rejectConnection", () => {
     const { id } = await pending();
     const reviewed = await stampOf(id);
     const specialist = await practiceMember(a, "specialist");
-    for (const userId of [a.userId, specialist, b.userId]) {
+    for (const userId of [a.userId, specialist, b.userId, await plainUser(), randomUUID()]) {
       await refusedWith(
         rejectConnection(
           { tenantId: a.tenantId, connectionId: id, expectedUpdatedAt: reviewed, reasonCode: "other" },
@@ -896,7 +1058,7 @@ describe("rejectConnection", () => {
     );
     const e = await createTestTenant("Approval E");
     const live = await pending(e);
-    await approveConnection(await approvalOf(e, live.id), operator, NOW);
+    await approveConnection(await approvalOf(e, live.id), operator, OPTS);
     await refusedWith(
       rejectConnection(
         {
@@ -923,19 +1085,6 @@ describe("rejectConnection", () => {
     );
     expect((await row(id)).status).toBe("draft");
     expect(await registryRows(id)).toEqual([]);
-  });
-
-  it("rolls the whole decision back on a database failure (an operator account that doesn't exist)", async () => {
-    const { id } = await pending();
-    const reviewed = await stampOf(id);
-    await expect(
-      rejectConnection(
-        { tenantId: a.tenantId, connectionId: id, expectedUpdatedAt: reviewed, reasonCode: "other" },
-        asUser(randomUUID()),
-      ),
-    ).rejects.toThrow();
-    await expectStillPending(id, reviewed);
-    expect(await registryRows(id)).toHaveLength(1);
   });
 });
 
@@ -980,7 +1129,7 @@ describe("what a practice session can and cannot do (the privileges the operator
   it("the operator's decision is recorded under the practice it concerns, never another's", async () => {
     const mine = await pending(a);
     const theirs = await pending(b);
-    await approveConnection(await approvalOf(a, mine.id), operator, NOW);
+    await approveConnection(await approvalOf(a, mine.id), operator, OPTS);
     const own = await systemDb()
       .select({ id: auditEvents.id })
       .from(auditEvents)

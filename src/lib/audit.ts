@@ -108,6 +108,7 @@ export type AuditAction =
   | "operator.university_access_revoked"
   | "operator.integration_approved"
   | "operator.integration_rejected"
+  | "operator.integration_viewed"
   | "integration.connection_created"
   | "integration.connection_updated"
   | "integration.connection_submitted"

@@ -15,6 +15,7 @@ import {
   POPULATION_SCOPE_LABEL_KEYS,
   POPULATION_SCOPES,
   REJECT_REASON_CODES,
+  REJECT_NOTICE_KEYS,
   REJECT_REASON_LABEL_KEYS,
 } from "./approval-codes";
 
@@ -80,11 +81,22 @@ describe("labels", () => {
     }
   });
 
-  it("every reject reason has a label the practice can read, in every language", () => {
+  it("every reject reason has an operator label and a whole-sentence practice notice, in every language", () => {
     for (const [language, dictionary] of dictionaries) {
       for (const key of Object.values(REJECT_REASON_LABEL_KEYS)) {
-        expect(dictionary.integrations[key], `${language} ${key}`).toBeTruthy();
+        expect(dictionary.operator[key], `${language} ${key}`).toBeTruthy();
       }
+      for (const key of Object.values(REJECT_NOTICE_KEYS)) {
+        const notice = dictionary.integrations[key];
+        expect(notice, `${language} ${key}`).toBeTruthy();
+        // A whole sentence, not a fragment to splice into another one (that doesn't translate).
+        expect(notice, `${language} ${key}`).not.toContain("{");
+        expect(notice, `${language} ${key}`).toMatch(/[.]$/);
+      }
+    }
+    // The operator's labels are not the practice's sentences.
+    for (const code of REJECT_REASON_CODES) {
+      expect(en.operator[REJECT_REASON_LABEL_KEYS[code]]).not.toBe(en.integrations[REJECT_NOTICE_KEYS[code]]);
     }
   });
 
@@ -95,7 +107,6 @@ describe("labels", () => {
     expect(operatorKeys.length).toBeGreaterThan(40);
     for (const [language, dictionary] of dictionaries) {
       for (const key of operatorKeys) expect(dictionary.operator[key], `${language} ${key}`).toBeTruthy();
-      expect(dictionary.integrations["rejected.notice"], language).toContain("{reason}");
     }
   });
 

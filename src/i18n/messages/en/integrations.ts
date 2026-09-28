@@ -200,14 +200,16 @@ export const integrations = {
     "The confirmation wording changed since you opened the page. Reload the page, read the confirmation again, and submit.",
   "error.anotherConnectionLive":
     "Another connection is already in use (submitted, active, paused, or in error). Withdraw or revoke it first.",
-  "rejected.notice":
-    "DenialDesk did not approve this connection because {reason}. Correct it, run Test connection, and submit it again.",
-  "rejected.reason.endpoint_not_verified":
-    "the endpoint could not be verified with your EHR/PM administrator",
-  "rejected.reason.client_id_not_verified":
-    "the client ID could not be verified with your EHR/PM administrator",
-  "rejected.reason.contact_not_verified": "your EHR/PM administrator could not be reached to confirm it",
-  "rejected.reason.population_not_scoped": "the patients to sync weren't limited to your practice",
-  "rejected.reason.configuration_incorrect": "the configuration is incorrect",
-  "rejected.reason.other": "of another reason; DenialDesk will contact you",
+  "rejected.notice.endpoint_not_verified":
+    "DenialDesk did not approve this connection: the endpoint could not be verified with your EHR/PM administrator. Correct it, run Test connection, and submit it again.",
+  "rejected.notice.client_id_not_verified":
+    "DenialDesk did not approve this connection: the client ID could not be verified with your EHR/PM administrator. Correct it, run Test connection, and submit it again.",
+  "rejected.notice.contact_not_verified":
+    "DenialDesk did not approve this connection: your EHR/PM administrator could not be reached to confirm it. Correct it if needed, run Test connection, and submit it again.",
+  "rejected.notice.population_not_scoped":
+    "DenialDesk did not approve this connection: the patients to sync weren't limited to your practice. Correct it, run Test connection, and submit it again.",
+  "rejected.notice.configuration_incorrect":
+    "DenialDesk did not approve this connection: the configuration is incorrect. Correct it, run Test connection, and submit it again.",
+  "rejected.notice.other":
+    "DenialDesk did not approve this connection. DenialDesk will contact you about why. Once it is resolved, run Test connection and submit it again.",
 } as const;

@@ -219,12 +219,13 @@ export const operator: Messages["operator"] = {
   "integrations.choose": "Elija…",
   "integrations.approve.methodLabel": "Cómo lo verificó",
   "integrations.approve.dateLabel": "Fecha de la verificación",
-  "integrations.approve.dateHint": "No puede ser futura.",
+  "integrations.approve.dateHint":
+    "No puede ser futura ni anterior al día en que el consultorio envió la conexión.",
   "integrations.approve.roleLabel": "Cargo del contacto en el consultorio",
   "integrations.approve.roleHint": "Solo el cargo, nunca un nombre.",
   "integrations.approve.scopeLabel": "Alcance de la población",
   "integrations.approve.scopeHint":
-    "Limita la sincronización a los pacientes propios de este consultorio: una exportación de Group o un filtro de búsqueda que usted verificó.",
+    "Limita la sincronización a los pacientes propios de este consultorio. Por ahora solo se puede aprobar una exportación de Group: un filtro de búsqueda verificado aún no tiene dónde registrarse.",
   "integrations.approve.nineDigitsLabel": "Los MRN tienen 9 dígitos (verificado)",
   "integrations.approve.nineDigitsHint": "Opcional. Márquelo solo si el consultorio lo confirmó.",
   "integrations.approve.ownershipLabel":
@@ -268,4 +269,21 @@ export const operator: Messages["operator"] = {
     "El registro del punto de conexión de esta conexión ya no coincide con su configuración. No se puede aprobar; rechácela.",
   "errors.integrationPracticeSuspended":
     "Este consultorio está suspendido. Reactívelo antes de aprobar una conexión.",
+  "integrations.scope.notYet": "aún no disponible",
+  "errors.approvalScopeUnsupported":
+    "Un filtro de búsqueda verificado aún no tiene dónde registrarse, así que solo se puede aprobar una exportación de Group.",
+  "errors.integrationRealEndpointRefused":
+    "En este entorno no se pueden aprobar conexiones reales de EHR: solo contiene datos sintéticos.",
+  "errors.approvalDateBeforeSubmission":
+    "La fecha de verificación no puede ser anterior al día en que el consultorio envió la conexión ({date}).",
+  "errors.approvalBaaRequired":
+    "Este consultorio no tiene un Acuerdo de Asociado Comercial (BAA) vigente. Registre el acuerdo firmado en la página del consultorio antes de aprobar una conexión.",
+  "integrations.rejectReason.endpoint_not_verified":
+    "Punto de conexión no verificado con el administrador de EHR/PM",
+  "integrations.rejectReason.client_id_not_verified":
+    "ID de cliente no verificado con el administrador de EHR/PM",
+  "integrations.rejectReason.contact_not_verified": "No se pudo contactar al administrador de EHR/PM",
+  "integrations.rejectReason.population_not_scoped": "Población de pacientes no limitada al consultorio",
+  "integrations.rejectReason.configuration_incorrect": "La configuración es incorrecta",
+  "integrations.rejectReason.other": "Otro motivo",
 };

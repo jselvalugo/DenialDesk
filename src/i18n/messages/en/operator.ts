@@ -213,12 +213,12 @@ export const operator = {
   "integrations.choose": "Choose…",
   "integrations.approve.methodLabel": "How you verified it",
   "integrations.approve.dateLabel": "Date verified",
-  "integrations.approve.dateHint": "Not in the future.",
+  "integrations.approve.dateHint": "Not in the future, and not before the day the practice submitted it.",
   "integrations.approve.roleLabel": "Contact's role at the practice",
   "integrations.approve.roleHint": "The role only, never a name.",
   "integrations.approve.scopeLabel": "Population scope",
   "integrations.approve.scopeHint":
-    "Limits the sync to this practice's own patients: a Group export, or a search filter you verified.",
+    "Limits the sync to this practice's own patients. Only a Group export can be approved for now: a verified search filter has nowhere to be recorded yet.",
   "integrations.approve.nineDigitsLabel": "MRNs are 9 digits (verified)",
   "integrations.approve.nineDigitsHint": "Optional. Tick it only if the practice confirmed it.",
   "integrations.approve.ownershipLabel":
@@ -261,4 +261,19 @@ export const operator = {
     "This connection's endpoint registration no longer matches its configuration. It can't be approved; reject it.",
   "errors.integrationPracticeSuspended":
     "This practice is suspended. Reactivate it before approving a connection.",
+  "integrations.scope.notYet": "not available yet",
+  "errors.approvalScopeUnsupported":
+    "A verified search filter has nowhere to be recorded yet, so only a Group export can be approved.",
+  "errors.integrationRealEndpointRefused":
+    "Real EHR connections can't be approved in this environment: it holds synthetic data only.",
+  "errors.approvalDateBeforeSubmission":
+    "The verification date can't be before the day the practice submitted the connection ({date}).",
+  "errors.approvalBaaRequired":
+    "This practice has no Business Associate Agreement in force. Record the signed agreement on the practice page before approving a connection.",
+  "integrations.rejectReason.endpoint_not_verified": "Endpoint not verified with the EHR/PM administrator",
+  "integrations.rejectReason.client_id_not_verified": "Client ID not verified with the EHR/PM administrator",
+  "integrations.rejectReason.contact_not_verified": "EHR/PM administrator could not be reached",
+  "integrations.rejectReason.population_not_scoped": "Patient population not limited to the practice",
+  "integrations.rejectReason.configuration_incorrect": "Configuration is incorrect",
+  "integrations.rejectReason.other": "Other reason",
 } as const;

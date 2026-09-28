@@ -2,9 +2,11 @@ import "server-only";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import type { OperatorContext } from "@/auth/operator";
+import { isOperatorAccount } from "@/auth/operator-account";
 import { systemDb } from "@/db/client";
-import { integrationConnections, integrationEndpointRegistry, memberships, tenants } from "@/db/schema";
+import { integrationConnections, integrationEndpointRegistry, tenants, users } from "@/db/schema";
 import { withTenantAsPlatform, type TenantTx } from "@/db/tenant";
+import { agreementStatus, listAgreements } from "@/domain/platform/agreements";
 import { PracticeError } from "@/domain/platform/errors";
 import { audit } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
@@ -34,6 +36,9 @@ import { normalizedUrlForAudit } from "./connections";
 // Every statement names the practice and the connection explicitly: the tenant policy is defense in
 // depth only in this context. Configuration only, never PHI. Operator console only: nothing under
 // src/app/(app) may import this module.
+
+/** Practices read at a time when building the queue (the pool holds 10 connections). */
+const QUEUE_CONCURRENCY = 3;
 
 /** Columns the operator sees: configuration only (no key reference, no exception text). */
 const reviewColumns = {
@@ -89,18 +94,20 @@ export function jwksPathFor(connectionId: string, synthetic: boolean = synthetic
 }
 
 /**
- * Refuses anyone who is not the platform operator: the operator belongs to no practice, so an account
- * with any practice membership (a practice administrator included) is refused, whatever it is called.
- * `requireOperator` already applies this rule to every console request; repeating it here means the
- * domain refuses a practice user's ID even if a caller were to build the context by hand.
+ * Refuses anyone who is not the platform operator, by the one rule the console uses
+ * (`isOperatorAccount`, docs/specs/operator-login.md): the account's email, as the database has it
+ * (never the context's copy), is the configured operator email AND it belongs to no practice. A
+ * practice administrator is refused (a membership), and so is any other account without one (not the
+ * operator's email). `requireOperator` already applies this rule to every console request; repeating
+ * it here means the domain refuses a hand-built context too. Fails closed on an unknown user.
  */
 async function assertOperator(operator: OperatorContext): Promise<void> {
-  const [membership] = await systemDb()
-    .select({ id: memberships.id })
-    .from(memberships)
-    .where(eq(memberships.userId, operator.userId))
+  const [user] = await systemDb()
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(eq(users.id, operator.userId))
     .limit(1);
-  if (membership) throw new PracticeError("errors.integrationNotOperator");
+  if (!user || !(await isOperatorAccount(user))) throw new PracticeError("errors.integrationNotOperator");
 }
 
 async function pendingIn(tx: TenantTx, tenantId: string) {
@@ -172,14 +179,21 @@ export async function listPendingApprovals(operator: OperatorContext): Promise<P
     .from(tenants)
     .where(eq(tenants.kind, "customer"))
     .orderBy(asc(tenants.createdAt), asc(tenants.id));
-  const perPractice = await Promise.all(
-    practices.map(async (practice) => {
-      const rows = await withTenantAsPlatform({ tenantId: practice.id, userId: operator.userId }, (tx) =>
-        pendingIn(tx, practice.id),
-      );
-      return rows.map((row) => toPending(practice, row));
-    }),
-  );
+  // A few practices at a time: the connection pool is small (10), and the same pool serves every
+  // other request, so an unbounded fan-out over all practices could starve them.
+  const perPractice: PendingApproval[][] = [];
+  for (let start = 0; start < practices.length; start += QUEUE_CONCURRENCY) {
+    perPractice.push(
+      ...(await Promise.all(
+        practices.slice(start, start + QUEUE_CONCURRENCY).map(async (practice) => {
+          const rows = await withTenantAsPlatform({ tenantId: practice.id, userId: operator.userId }, (tx) =>
+            pendingIn(tx, practice.id),
+          );
+          return rows.map((row) => toPending(practice, row));
+        }),
+      )),
+    );
+  }
   return perPractice
     .flat()
     .sort(
@@ -285,9 +299,19 @@ function configurationMetadata(current: {
 export async function approveConnection(
   input: ApproveInput,
   operator: OperatorContext,
-  now: Date = new Date(),
+  options: {
+    /** For tests: the clock the "not in the future" date check uses. */
+    now?: Date;
+    /** `syntheticDataOnly()`; always the server's environment, never a request value. */
+    syntheticOnly?: boolean;
+  } = {},
 ) {
+  const now = options.now ?? new Date();
   await assertOperator(operator);
+  // The environment rule, as for the practice's own transitions: where only synthetic data is allowed
+  // a real endpoint is never made live (approval only ever concerns a real connection).
+  if (options.syntheticOnly ?? syntheticDataOnly())
+    throw new PracticeError("errors.integrationRealEndpointRefused");
   if (
     !isApprovalMethodCode(input.methodCode) ||
     !isContactRoleCode(input.contactRole) ||
@@ -295,6 +319,9 @@ export async function approveConnection(
   ) {
     throw new PracticeError("errors.approvalFormInvalid");
   }
+  // A verified filter is a claim with nowhere to record the filter itself (the connection has one
+  // `population_scope` code and no filter column), so it can't be approved yet: only a Group export.
+  if (input.populationScope !== "group_export") throw new PracticeError("errors.approvalScopeUnsupported");
   if (!isIsoDate(input.verifiedOn) || input.verifiedOn > todayIn(undefined, now)) {
     throw new PracticeError("errors.approvalDateInvalid");
   }
@@ -306,11 +333,28 @@ export async function approveConnection(
       .select({ suspendedAt: tenants.suspendedAt })
       .from(tenants)
       .where(and(eq(tenants.id, input.tenantId), eq(tenants.kind, "customer")))
-      .limit(1);
+      .limit(1)
+      // A shared row lock until this decision commits: a suspension that lands meanwhile waits for it
+      // rather than racing the check below.
+      .for("share");
     if (!practice) throw new PracticeError("errors.practiceNotFound");
     if (practice.suspendedAt) throw new PracticeError("errors.integrationPracticeSuspended");
 
     const current = await lockPending(tx, input.tenantId, input.connectionId, input.expectedUpdatedAt);
+
+    // The verification happens after the practice submitted: not before the Florida date of the
+    // submission (the same calendar the "not in the future" check uses).
+    if (current.submittedAt) {
+      const submittedOn = todayIn(undefined, current.submittedAt);
+      if (input.verifiedOn < submittedOn) {
+        throw new PracticeError("errors.approvalDateBeforeSubmission", { date: submittedOn });
+      }
+    }
+
+    // A real connection carries PHI: the practice needs a Business Associate Agreement in force
+    // (docs/specs/practice-agreements.md), as for the rest of the platform.
+    const baa = agreementStatus(await listAgreements(input.tenantId), todayIn(undefined, now));
+    if (baa !== "active" && baa !== "expiring") throw new PracticeError("errors.approvalBaaRequired");
 
     // Submit claimed the registry for exactly this configuration. The lifecycle trigger requires an
     // entry to exist; this also requires it to be this connection's endpoint, token endpoint, and
@@ -373,6 +417,7 @@ export async function approveConnection(
         mrn_nine_digits_verified: input.mrnNineDigitsVerified === true,
         client_id_ownership_verified: true,
         registry_verified: true,
+        session_id: operator.sessionId,
         ...configurationMetadata(current),
       },
     });
@@ -473,6 +518,7 @@ export async function rejectConnection(input: RejectInput, operator: OperatorCon
         registry_released: registryReleased,
         attestation_cleared: true,
         discovery_cleared: true,
+        session_id: operator.sessionId,
         previous_attested_by: current.attestedBy ?? null,
         previous_attested_at: current.attestedAt?.toISOString() ?? null,
         ...configurationMetadata(current),

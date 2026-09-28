@@ -7,7 +7,7 @@
 // (`^[a-z_]{1,64}$`), since a reject code is stored as the connection's `status_reason`.
 //
 // ⚠️ The verification-method and contact-role lists are the builder's proposal (the spec says
-// "method code" and "the contact's role" without listing them); the owner can change them (OA-051).
+// "method code" and "the contact's role" without listing them); the owner can change them (OA-066).
 
 export const APPROVAL_METHOD_CODES = [
   "phone_callback",
@@ -71,16 +71,26 @@ export const POPULATION_SCOPE_LABEL_KEYS = {
   verified_filter: "integrations.scope.verified_filter",
 } as const satisfies Record<PopulationScope, `integrations.scope.${PopulationScope}`>;
 
-/**
- * Message keys (`integrations` namespace) for a reject reason. The practice's administrators see
- * this text too (the connection page says why a connection came back to draft), so it is written
- * for them and names no other practice.
- */
+/** Message keys (`operator` namespace) for the reject form's option labels: short, for the operator. */
 export const REJECT_REASON_LABEL_KEYS = {
-  endpoint_not_verified: "rejected.reason.endpoint_not_verified",
-  client_id_not_verified: "rejected.reason.client_id_not_verified",
-  contact_not_verified: "rejected.reason.contact_not_verified",
-  population_not_scoped: "rejected.reason.population_not_scoped",
-  configuration_incorrect: "rejected.reason.configuration_incorrect",
-  other: "rejected.reason.other",
-} as const satisfies Record<RejectReasonCode, `rejected.reason.${RejectReasonCode}`>;
+  endpoint_not_verified: "integrations.rejectReason.endpoint_not_verified",
+  client_id_not_verified: "integrations.rejectReason.client_id_not_verified",
+  contact_not_verified: "integrations.rejectReason.contact_not_verified",
+  population_not_scoped: "integrations.rejectReason.population_not_scoped",
+  configuration_incorrect: "integrations.rejectReason.configuration_incorrect",
+  other: "integrations.rejectReason.other",
+} as const satisfies Record<RejectReasonCode, `integrations.rejectReason.${RejectReasonCode}`>;
+
+/**
+ * Message keys (`integrations` namespace) for the notice a practice's administrators read on the
+ * connection page after a reject: one whole sentence per reason code (not a fragment spliced into
+ * another sentence, which would not translate), written for them, naming no other practice.
+ */
+export const REJECT_NOTICE_KEYS = {
+  endpoint_not_verified: "rejected.notice.endpoint_not_verified",
+  client_id_not_verified: "rejected.notice.client_id_not_verified",
+  contact_not_verified: "rejected.notice.contact_not_verified",
+  population_not_scoped: "rejected.notice.population_not_scoped",
+  configuration_incorrect: "rejected.notice.configuration_incorrect",
+  other: "rejected.notice.other",
+} as const satisfies Record<RejectReasonCode, `rejected.notice.${RejectReasonCode}`>;
