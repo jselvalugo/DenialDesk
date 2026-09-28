@@ -382,10 +382,11 @@ The product owner delegated technical decisions to the implementing agent ("make
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
-- Close the `docs/SECURE_CODING.md` known gaps (tracked, not waived): nonce-based CSP, AAD on
+- Close the `docs/SECURE_CODING.md` known gaps (tracked, not waived): AAD on
   member-ID and TOTP-secret encryption, exact version pins, images pinned by digest, 7-day release
   quarantine (pnpm + Dependabot), justify or replace `exceljs`/`qrcode`, CI license check,
   SAST/DAST/container/IaC scanning, SBOM, signed commits and artifacts, license notice file.
+  Closed: SC-B10.1 (strict CSP: `base-uri 'none'`, no `'unsafe-eval'` even in development).
 0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger, B2 monthly file
    import, C0 (own design: month-end activity file, routing-only rules), B3 journal vouchers, and
    B4 aging/deposits/reconciliation, and B5 statements and RCM dashboard (denial tie-ins by

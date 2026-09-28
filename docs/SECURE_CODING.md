@@ -220,6 +220,10 @@ tsx) and their type packages.
   `no-referrer`, frame denial, Permissions-Policy) plus a strict Content-Security-Policy: a
   per-request nonce with `strict-dynamic`, no `unsafe-eval`, no `unsafe-inline` for scripts,
   `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors 'none'`.
+  The policy is built in `src/lib/csp.ts` and set per request by `src/proxy.ts` (a nonce needs a
+  request, so it cannot live in `next.config.ts`); `'unsafe-eval'` is absent in development too,
+  where React only loses its reconstructed server call stacks. Tested in `src/lib/csp.test.ts`,
+  `src/proxy.test.ts`, and the e2e smoke (`test/e2e/shell.spec.ts`).
 - **SC-B10.2 MUST** Authenticated and PHI responses send `Cache-Control: no-store` (HC-2.3).
 
 ### B11. Tests for controls
@@ -255,7 +259,6 @@ exception.
 
 | Rule | Gap |
 | --- | --- |
-| SC-B10.1 | No Content-Security-Policy header in `next.config.ts`. |
 | SC-B7.1 | Member IDs (`src/domain/patients/queries.ts`, `src/db/seed.ts`) and TOTP secrets (`src/auth/enrollment.ts`) are encrypted without AAD; only custom field values bind AAD. |
 | SC-A4.1 | Some existing ranges are not exact (`server-only`, `@types/*`, `eslint`, `tsx`, `typescript-eslint`). |
 | SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest, and `corepack enable` fetches pnpm without a hash check; CI's `postgres:16` service images are tag-only. |

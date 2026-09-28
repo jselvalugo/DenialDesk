@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { openFromSwitcher } from "./support";
 
 test("sign-in page shows the synthetic-data banner", async ({ page }) => {
   await page.goto("/login");
@@ -17,17 +18,51 @@ test("health endpoint reports status without leaking config", async ({ request }
   expect(JSON.stringify(body)).not.toContain("postgres://");
 });
 
-test("pages send a nonce-based Content-Security-Policy and load without violations", async ({ page }) => {
+function collectCspViolations(page: Page): string[] {
   const violations: string[] = [];
   page.on("console", (message) => {
     if (message.text().includes("Content Security Policy")) violations.push(message.text());
   });
+  return violations;
+}
+
+test("pages send a strict nonce-based Content-Security-Policy and load without violations", async ({
+  page,
+}) => {
+  const violations = collectCspViolations(page);
   const response = await page.goto("/login");
   const csp = response?.headers()["content-security-policy"] ?? "";
-  expect(csp).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
+  // SC-B10.1: nonce + strict-dynamic, no eval, no inline scripts, no plugins, no <base>, no framing.
+  expect(csp).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'(;|$)/);
+  expect(csp).not.toContain("'unsafe-eval'");
+  expect(csp).toContain("object-src 'none'");
+  expect(csp).toContain("base-uri 'none'");
   expect(csp).toContain("frame-ancestors 'none'");
   await page.getByLabel("Work email").fill("csp-check@e2e.denialdesk.test");
   expect(violations).toEqual([]);
+});
+
+test.describe("signed in", () => {
+  test.use({ storageState: "test/e2e/.auth/worker.json" });
+
+  test("app pages load without Content-Security-Policy violations", async ({ page }) => {
+    const violations = collectCspViolations(page);
+    const nonces = new Set<string>();
+    for (const path of ["/", "/claims", "/denials"]) {
+      const response = await page.goto(path);
+      expect(response?.status(), path).toBe(200);
+      const nonce = response?.headers()["content-security-policy"]?.match(/'nonce-([^']+)'/)?.[1];
+      expect(nonce, path).toBeDefined();
+      nonces.add(nonce ?? "");
+    }
+    // A fresh nonce per response; a cached or static page would repeat one.
+    expect(nonces.size).toBe(3);
+    // Client-side navigation runs the nonce-trusted runtime and whatever it loads.
+    await page.goto("/");
+    await openFromSwitcher(page, "Claims");
+    await expect(page.getByRole("heading", { level: 1, name: "Claims" })).toBeVisible();
+    expect(violations).toEqual([]);
+  });
 });
 
 test("the preview seed endpoint rejects requests without the secret token", async ({ request }) => {
