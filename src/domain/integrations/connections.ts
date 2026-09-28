@@ -176,8 +176,7 @@ export function parseEndpointInput(
   // Any URL on the sandbox host, not only the sandbox's exact base URL (security review L-1): a real
   // connection must never look like the sandbox, whatever PI2b keys its transport choice on.
   if (url.host === SANDBOX_HOST) fail(t, "error.url.sandbox", "baseUrl");
-  if (syntheticOnly && !VENDOR_SANDBOX_HOSTS.includes(url.host))
-    fail(t, "error.realEndpointRefused", "baseUrl");
+  assertEnvironmentAllowsHost(url.host, syntheticOnly, t, "baseUrl");
   const clientId = input.clientId.trim();
   if (clientId.length === 0) fail(t, "error.clientIdRequired", "clientId");
   if (!CLIENT_ID.test(clientId)) fail(t, "error.clientIdInvalid", "clientId");
@@ -194,6 +193,21 @@ export function parseEndpointInput(
     clientId,
     mrnIdentifierSystem: system.system,
   };
+}
+
+/**
+ * The environment rule (spec "Environment and population rules"), checked at save and again before
+ * every network call (Test connection): where only synthetic data is allowed, the only hosts that may
+ * be dialed are the reviewed vendor sandboxes (`VENDOR_SANDBOX_HOSTS`, empty, OA-049); the built-in
+ * sandbox is in-process and never dialed. `syntheticOnly` always comes from the server's environment.
+ */
+export function assertEnvironmentAllowsHost(
+  host: string,
+  syntheticOnly: boolean,
+  t: IntegrationsT = englishT,
+  field?: ConnectionField,
+): void {
+  if (syntheticOnly && !VENDOR_SANDBOX_HOSTS.includes(host)) fail(t, "error.realEndpointRefused", field);
 }
 
 function assertAdmin(actor: IntegrationActor, t: IntegrationsT) {
@@ -459,9 +473,25 @@ export async function updateConnection(
     (key) => key !== "endpointKey" && next[key] !== current[key as keyof typeof current],
   );
   if (changed.length === 0) return;
+  // What Test connection pinned (token endpoint, its key, issuer) and any residency attestation
+  // belong to the endpoint and client that were tested: a new base URL or client ID starts over.
+  const startsOver = changed.includes("baseUrl") || changed.includes("clientId");
   await tx
     .update(integrationConnections)
-    .set({ ...next, updatedBy: actor.userId, updatedAt: sql`now()` })
+    .set({
+      ...next,
+      ...(startsOver
+        ? {
+            tokenEndpoint: null,
+            tokenEndpointKey: null,
+            issuer: null,
+            usResidencyAttestedBy: null,
+            usResidencyAttestedAt: null,
+          }
+        : {}),
+      updatedBy: actor.userId,
+      updatedAt: sql`now()`,
+    })
     .where(eq(integrationConnections.id, id));
   const endpointFieldsChanged = changed.some((key) => key !== "displayName");
   await audit(tx, {
@@ -472,6 +502,7 @@ export async function updateConnection(
     entityId: id,
     metadata: {
       fields: changed.join(","),
+      ...(startsOver ? { discovery_cleared: true } : {}),
       ...(endpointFieldsChanged
         ? {
             ...endpointMetadata("old_", current),

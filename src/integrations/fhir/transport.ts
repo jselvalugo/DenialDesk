@@ -75,6 +75,10 @@ export interface TransportResponse {
   status: number;
   /** The response's `Content-Type`, lower-cased and without parameters (e.g. `; charset=utf-8`). */
   contentType: string | undefined;
+  /**
+   * The decoded body of a 2xx response. Always `""` for any other status: a non-2xx body is
+   * discarded unread (reviewer N3), so callers can't log or store it by accident.
+   */
   body: string;
 }
 
@@ -315,6 +319,15 @@ export class HttpsTransport implements Transport {
           }
 
           const contentType = contentTypeOf(res);
+          if (status < 200 || status >= 300) {
+            // Reviewer N3 (PR #83): a non-2xx response resolves with its status and the body is
+            // never read, whatever its Content-Type or Content-Encoding, so a 401/403/5xx page can
+            // be told apart (`auth_refused`, `unreachable`) instead of surfacing as
+            // `content_type_refused`, and an error body (which can echo a token, a URL, or PHI)
+            // never enters memory, a log, or an error. Callers branch on `status`.
+            if (settle(() => resolve({ status, contentType, body: "" }))) teardown();
+            return;
+          }
           if (!contentType || !init.accept.some((accepted) => accepted.toLowerCase() === contentType)) {
             fail(new TransportError("content_type_refused"));
             return;

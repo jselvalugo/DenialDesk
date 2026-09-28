@@ -146,4 +146,32 @@ export const integrations: Messages["integrations"] = {
     "Ese sistema es un número de Seguro Social, Medicare, licencia de conducir o pasaporte, no un número de historia clínica.",
   "error.endpointLocked":
     "La URL, el ID de cliente y el sistema de identificadores solo pueden cambiar mientras la conexión sea un borrador que nunca se ha sincronizado.",
+  "test.outcome.ok":
+    "La prueba fue exitosa. DenialDesk llegó al servidor, encontró su punto de inicio de sesión y recibió un token de acceso. No se solicitó información de pacientes.",
+  "test.outcome.unreachable":
+    "DenialDesk no pudo comunicarse con el servidor. Revise la URL base y que el servidor esté abierto a internet y no bloqueado por un firewall. Inténtelo de nuevo en unos minutos.",
+  "test.outcome.tls_failed":
+    "No se pudo verificar la conexión segura (TLS) del servidor. Su certificado debe ser válido, emitido por una autoridad pública y coincidir con el nombre del host, y el servidor debe admitir TLS 1.2 o posterior.",
+  "test.outcome.not_fhir_r4":
+    "El servidor no respondió como FHIR R4 (versión 4.0.1). Compruebe que la URL base sea el punto de acceso FHIR R4.",
+  "test.outcome.smart_config_invalid":
+    "La configuración SMART del servidor falta o no se puede usar. DenialDesk necesita SMART Backend Services con JWT de clave privada firmado con ES384 o RS384.",
+  "test.outcome.auth_refused":
+    "El servidor rechazó las credenciales de DenialDesk. Revise el ID de cliente y que el administrador del EHR/PM haya registrado la clave pública de DenialDesk para este cliente.",
+  "test.outcome.capability_missing":
+    "El servidor no puede hacer lo que DenialDesk necesita: buscar Patient por fecha de última actualización, buscar Coverage por paciente y conceder acceso de lectura a Patient, Coverage y Organization.",
+  "test.error.rateLimited": "Demasiadas pruebas de conexión. Espere unos minutos e inténtelo de nuevo.",
+  "test.error.keyNotConfigured":
+    "La clave de firma de DenialDesk no está configurada en este entorno, por lo que no se pueden probar las conexiones. Pida al operador de la plataforma que la configure.",
+  "test.error.keyUnavailable":
+    "La clave de firma de DenialDesk no se puede usar en este momento. Pida al operador de la plataforma que la revise.",
+  "test.error.sandboxUnavailable": "El entorno de pruebas integrado todavía no se puede probar.",
+  "test.error.failed": "No se pudo completar la prueba. Recargue la página e inténtelo de nuevo.",
+  "test.title": "Probar conexión",
+  "test.description":
+    "Comprueba que DenialDesk puede comunicarse con el servidor, leer su configuración SMART y obtener un token de acceso. No se solicita información de pacientes.",
+  "test.submit": "Probar conexión",
+  "test.pending": "Probando…",
+  "test.resultOk": "Prueba exitosa",
+  "test.resultFailed": "Prueba fallida",
 };

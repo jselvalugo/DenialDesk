@@ -140,4 +140,32 @@ export const integrations = {
     "That system is a Social Security, Medicare, driver's license, or passport number, not a medical record number.",
   "error.endpointLocked":
     "The URL, client ID, and identifier system can only change while the connection is a draft that has never synced.",
+  "test.outcome.ok":
+    "The test passed. DenialDesk reached the server, found its sign-in endpoint, and received an access token. No patient information was requested.",
+  "test.outcome.unreachable":
+    "DenialDesk couldn't reach the server. Check the base URL, and that the server is open to the internet and not blocked by a firewall. Try again in a few minutes.",
+  "test.outcome.tls_failed":
+    "The server's secure connection (TLS) couldn't be verified. Its certificate must be valid, issued by a public authority, and match the host name, and the server must support TLS 1.2 or later.",
+  "test.outcome.not_fhir_r4":
+    "The server didn't answer as FHIR R4 (version 4.0.1). Check that the base URL is the FHIR R4 endpoint.",
+  "test.outcome.smart_config_invalid":
+    "The server's SMART configuration is missing or unusable. DenialDesk needs SMART Backend Services with private key JWT signed with ES384 or RS384.",
+  "test.outcome.auth_refused":
+    "The server refused DenialDesk's credentials. Check the client ID, and that the EHR/PM administrator registered DenialDesk's public key for this client.",
+  "test.outcome.capability_missing":
+    "The server can't do what DenialDesk needs: search Patient by last-updated date, search Coverage by patient, and grant read access to Patient, Coverage, and Organization.",
+  "test.error.rateLimited": "Too many connection tests. Wait a few minutes and try again.",
+  "test.error.keyNotConfigured":
+    "DenialDesk's signing key isn't configured in this environment, so connections can't be tested. Ask the platform operator to set it up.",
+  "test.error.keyUnavailable":
+    "DenialDesk's signing key isn't usable right now. Ask the platform operator to check it.",
+  "test.error.sandboxUnavailable": "The built-in test sandbox can't be tested yet.",
+  "test.error.failed": "The test couldn't be completed. Reload the page and try again.",
+  "test.title": "Test connection",
+  "test.description":
+    "Checks that DenialDesk can reach the server, read its SMART configuration, and get an access token. No patient information is requested.",
+  "test.submit": "Test connection",
+  "test.pending": "Testing…",
+  "test.resultOk": "Test passed",
+  "test.resultFailed": "Test failed",
 } as const;

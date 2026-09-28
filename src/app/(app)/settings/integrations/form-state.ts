@@ -7,6 +7,7 @@ import {
   type IntegrationActor,
 } from "@/domain/integrations/connections";
 import type { Messages } from "@/i18n/messages/types";
+import type { ConnectionOutcome } from "@/integrations/fhir/outcomes";
 import type { Translator } from "@/i18n/translate";
 import { syntheticDataOnly } from "@/lib/env";
 
@@ -39,6 +40,26 @@ export function integrationActor(
     recentMfa: hasRecentMfa(auth.mfaVerifiedAt ?? null, now),
     stepUpVerifiedAt: auth.mfaVerifiedAt?.toISOString() ?? null,
   };
+}
+
+/**
+ * What the Test connection button shows: a refusal (`error`, in the alert style), or the collapsed
+ * outcome with its translated message. Never anything the remote server sent.
+ */
+export interface TestConnectionState {
+  error?: string;
+  outcome?: ConnectionOutcome;
+  message?: string;
+}
+
+/** A Test connection refusal as state: domain refusals keep their message, database errors become one generic line. */
+export function testConnectionFailure(
+  error: unknown,
+  t: Translator<Messages["integrations"]>,
+): TestConnectionState {
+  if (error instanceof IntegrationConnectionError) return { error: error.message };
+  if (isDatabaseError(error)) return { error: t("test.error.failed") };
+  throw error;
 }
 
 /**

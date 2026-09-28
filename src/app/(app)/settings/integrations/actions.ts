@@ -17,12 +17,20 @@ import {
   withdrawConnection,
   type IntegrationActor,
 } from "@/domain/integrations/connections";
+import { testConnection } from "@/domain/integrations/test-connection";
 import type { TenantTx } from "@/db/tenant";
 import type { Messages } from "@/i18n/messages/types";
 import type { Translator } from "@/i18n/translate";
 import { isRevokeReasonCode } from "@/domain/integrations/revoke-reasons";
 import { getT } from "@/i18n/server";
-import { connectionFormFailure, integrationActor, type ConnectionFormState } from "./form-state";
+import {
+  connectionFormFailure,
+  integrationActor,
+  testConnectionFailure,
+  type ConnectionFormState,
+  type TestConnectionState,
+} from "./form-state";
+import { connectionTestDeps } from "./test-deps";
 
 // Settings › Integrations (docs/specs/patient-integrations.md PI1b-2). Every action re-checks the
 // role on the server (menu and page visibility are not access control); the domain checks it again.
@@ -96,6 +104,37 @@ export async function updateConnectionAction(
   // The whole signed-in layout: the tab-bar data-source drop-down reads the connection too.
   revalidatePath("/", "layout");
   redirect(`/settings/integrations/${id.data}`);
+}
+
+/**
+ * Test connection (spec PI2a): discovery plus one token request, no patient data. Admin only,
+ * re-checked here and in the domain. The domain does the network calls with no transaction open,
+ * rate-limits per connection and per practice, and audits. Nothing the remote server sent is returned.
+ */
+export async function testConnectionAction(
+  _: TestConnectionState,
+  formData: FormData,
+): Promise<TestConnectionState> {
+  const auth = await requireAuth();
+  const t = await getT("integrations");
+  if (!canManageIntegrations(auth.role)) return { error: t("error.notAdmin") };
+  const id = uuid.safeParse(text(formData, "id", 40));
+  if (!id.success) return { error: t("error.notFound") };
+  const actor = integrationActor(auth);
+  try {
+    const result = await testConnection(
+      (fn) => withTenant(auth, fn),
+      actor,
+      id.data,
+      connectionTestDeps(),
+      t,
+    );
+    // A passing test pins the token endpoint and issuer on a draft: the page shows them.
+    revalidatePath(`/settings/integrations/${id.data}`);
+    return result;
+  } catch (error) {
+    return testConnectionFailure(error, t);
+  }
 }
 
 export async function revokeConnectionAction(

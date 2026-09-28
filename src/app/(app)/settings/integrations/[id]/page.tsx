@@ -18,6 +18,7 @@ import { getFormat, getT } from "@/i18n/server";
 import { ConnectionForm } from "../ConnectionForm";
 import { ConnectionLifecycleButton } from "./ConnectionLifecycle";
 import { RevokeConnectionForm } from "./RevokeConnectionForm";
+import { TestConnectionForm } from "./TestConnectionForm";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT("integrations");
@@ -149,6 +150,12 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
         )
       ) : (
         <>
+          {/* The built-in sandbox has no transport to test against until PI2b. */}
+          {!connection.isSandbox && (
+            <Panel title={t("test.title")} description={t("test.description")}>
+              <TestConnectionForm id={connection.id} />
+            </Panel>
+          )}
           {lifecycle && (
             <Panel title={t("lifecycle.title")}>
               <div className="flex flex-col gap-4">
