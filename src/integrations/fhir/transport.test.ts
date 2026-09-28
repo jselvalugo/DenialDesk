@@ -339,6 +339,64 @@ describe("HttpsTransport — content type refused", () => {
   });
 });
 
+describe("HttpsTransport — non-2xx responses (reviewer N3)", () => {
+  it.each([
+    [400, "application/json"],
+    [401, "text/html"],
+    [403, "text/html; charset=utf-8"],
+    [404, undefined],
+    [429, "application/fhir+json"],
+    [500, "text/plain"],
+    [503, "application/octet-stream"],
+  ])("resolves %s (%s) with its status and an empty body, not content_type_refused", async (status, type) => {
+    server = await startTestServer((_req, res) => {
+      res.writeHead(status, type ? { "content-type": type } : {});
+      res.end("SENSITIVE-ERROR-BODY access_token=abc123");
+    });
+    const response = await fhirGet(loopbackTransport(), server.url);
+    expect(response.status).toBe(status);
+    expect(response.body).toBe("");
+    expect(JSON.stringify(response)).not.toContain("SENSITIVE");
+  });
+
+  it("discards a non-2xx body without reading it: an oversized error body is not too_large", async () => {
+    server = await startTestServer((_req, res) => {
+      res.writeHead(500, { "content-type": "text/html" });
+      res.end(Buffer.alloc(64 * 1024, 0x41));
+    });
+    const response = await fhirGet(loopbackTransport({ maxResponseBytes: 1024 }), server.url);
+    expect(response).toMatchObject({ status: 500, body: "" });
+  });
+
+  it("does not decode or refuse an error body sent with an unsupported Content-Encoding", async () => {
+    server = await startTestServer((_req, res) => {
+      res.writeHead(502, { "content-type": "text/html", "content-encoding": "zstd" });
+      res.end("nope");
+    });
+    expect(await fhirGet(loopbackTransport(), server.url)).toMatchObject({ status: 502, body: "" });
+  });
+
+  it("still refuses a 3xx as redirect_refused (not resolved as a status)", async () => {
+    server = await startTestServer((_req, res) => {
+      res.writeHead(307, { location: "https://localhost:1/" });
+      res.end();
+    });
+    await expect(fhirGet(loopbackTransport(), server.url)).rejects.toMatchObject({
+      code: "redirect_refused",
+    });
+  });
+
+  it("a 2xx with a wrong Content-Type is still refused", async () => {
+    server = await startTestServer((_req, res) => {
+      res.writeHead(204, { "content-type": "text/html" });
+      res.end();
+    });
+    await expect(fhirGet(loopbackTransport(), server.url)).rejects.toMatchObject({
+      code: "content_type_refused",
+    });
+  });
+});
+
 describe("HttpsTransport — size limit", () => {
   it("aborts once an uncompressed response exceeds the cap", async () => {
     server = await startTestServer((_req, res) => {

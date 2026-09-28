@@ -5,7 +5,7 @@
  * `timeout`, `redirect_refused`, `paging_loop`, `address_refused`, plus `content_type_refused`
  * (folded into `unreachable` by callers that don't need the finer distinction). Discovery- and
  * auth-specific codes (`not_fhir_r4`, `smart_config_invalid`, `auth_refused`, `capability_missing`,
- * `scope_insufficient`, `issuer_mismatch`, ...) belong to PI2a part 2 / PI2b, not this layer.
+ * `scope_insufficient`, `issuer_mismatch`, ...) belong to `outcomes.ts` (PI2a part 2) and PI2b, not this layer.
  */
 export type TransportErrorCode =
   | "unreachable"
