@@ -62,7 +62,9 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
   (c) Playwright's browser download in CI. Any change to these lists needs human sign-off.
 - **SC-A2.6 MUST — No phone-home.** No telemetry, analytics, update checks, remote code or config
   loading, or runtime network calls. Packages that do so are refused even if they can be "turned
-  off."
+  off." Build tools that phone home by default are switched off everywhere they run: Next.js
+  telemetry via `NEXT_TELEMETRY_DISABLED=1` in CI, `.env.example`, the `Dockerfile`, and
+  `netlify.toml` (enforced by `src/supply-chain/telemetry.test.ts`).
 - **SC-A2.7 MUST — Vendor SDKs are vendors.** A package that talks to an outside service also needs
   `docs/HIPAA_COMPLIANCE.md` §8 (BAA, U.S.-only, reviewed SOC 2) before it may see PHI, and a row in
   `docs/data-sources.xlsx`.
@@ -262,6 +264,5 @@ exception.
 | SC-A4.3 | No release-age quarantine configured for pnpm, and no `cooldown` in `.github/dependabot.yml`. |
 | SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
 | SC-A2.2 | No automated license check in CI. |
-| SC-A2.6 | Next.js telemetry is disabled in the `Dockerfile` and `netlify.toml` but not in CI or local development (`NEXT_TELEMETRY_DISABLED=1`). |
 | SC-B12.1, SC-B12.2 | No SAST, DAST, container/IaC scanning, SBOM, signed commits or artifacts, or license notice file yet. |
 | SC-B12.4 | Branch protection on `main` is not verifiable from the repository; the owner confirms the settings (OA-066). |

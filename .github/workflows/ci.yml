@@ -16,6 +16,8 @@ concurrency:
 
 env:
   NODE_VERSION: "24"
+  # No phone-home from build tools (SC-A2.6); applies to every job and step.
+  NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
   checks:
