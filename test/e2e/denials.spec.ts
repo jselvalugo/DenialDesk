@@ -37,9 +37,17 @@ test.describe("denial work", () => {
     await expect(page.getByText("Called payer; requested reconsideration form. (synthetic)")).toBeVisible();
     await expect(page.getByLabel("Add a note")).toHaveValue("");
 
-    await page.getByLabel("Assignee").selectOption({ label: "Riley Worker" });
+    const [assigneeId] = await page.getByLabel("Assignee").selectOption({ label: "Riley Worker" });
     await page.getByRole("button", { name: "Assign" }).click();
     await expect(page.getByText("changed assignee")).toBeVisible();
+    // Regression guard: the select and the read-only field both show the new assignee, not the
+    // pre-assignment one (an uncontrolled `defaultValue` doesn't update after the server action
+    // unless the control remounts, R-7.1.3).
+    await expect(page.getByLabel("Assignee")).toHaveValue(assigneeId!);
+    const denialDetails = page.locator("section", {
+      has: page.getByRole("heading", { name: "Denial details" }),
+    });
+    await expect(denialDetails.getByText("Riley Worker")).toBeVisible();
 
     await page.getByLabel("Status").selectOption("needs_records");
     await page.getByRole("button", { name: "Update status" }).click();

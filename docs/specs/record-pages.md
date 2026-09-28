@@ -48,8 +48,27 @@ a masked identifier (member ID, SSN) — those stay in the aside behind `MaskedV
 - [x] Existing behaviour unchanged: POST search, audited reveal, reason on edit, synthetic
       attestation, role gating; the patients e2e suite passes without edits.
 - [x] Every new string is a key in English, Spanish, and Portuguese.
-- [ ] P2 — Claims and Denials record pages move to `RecordHeader` / `RecordLayout` (their headers
-      are hand-built today).
+- [x] P2 — Claims and Denials record pages move to `RecordHeader` / `RecordLayout`. Claims: title is
+      the claim number (mono); badges the status tag; meta strip is Patient (link), Payer, Date of
+      service, Version, Billed, Paid. Denials: title is the denial category + CARC-RARC code;
+      badges the status tag plus, when the category came from an unmapped remittance, an
+      "unverified category" tag; meta strip is Claim (link), Patient (link), Denied amount, and
+      Appeal deadline (with a small "pending verification" marker when the deadline basis or a
+      rolled date is still pending counsel). Both pages use `FieldList`/`Field` in place of
+      hand-rolled `dl`s for every fact panel, including a "Payer" field with its regime line and a
+      "Payer received" field restored in the claim's own "Claim details" aside. The single primary
+      action ("Correct claim", "Start appeal"/"View appeal") is in the header, passed as `undefined`
+      (not an always-truthy empty fragment) when none applies. The claim correction form opens from
+      the header action while living in the claim-lines panel (`CorrectionProvider` shares open
+      state and save result across the two; opening focuses the form's first field, and Cancel
+      returns focus to the header button). The denial's assign/status controls move into the
+      "Denial" panel in the main column, next to the codes they act on, each keyed to its current
+      value (`key={denial.status}` / `key={denial.assigneeId ?? "none"}`) so a successful change
+      remounts them with the fresh value instead of an uncontrolled `defaultValue` sticking to the
+      old one; a read-only Assignee field in the "Denial details" aside shows the same value from
+      plain server data regardless. Unchanged: data loading, `claim.viewed`/`denial.viewed` audits,
+      the member ID reveal, the custom-field reveal, role gates, server actions, and the
+      timely-filing and appeal-deadline values (read as-is, never recomputed).
 - [x] P3 — Appeals, Remittances, Prompt pay, Settings › Custom fields, Operator › Practices forms
       move to `FormShell`: the "new" create-flow pages (appeal, remittance, prompt-pay contest,
       custom field, practice) now use `Breadcrumbs` + `FormSection`/`FormRow`/`FormActions`/

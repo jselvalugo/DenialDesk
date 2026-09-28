@@ -63,9 +63,9 @@ export const denials = {
 
   // Denial detail page (src/app/(app)/denials/[id])
   "detail.title": "Denial",
+  "detail.eyebrow": "Denial record",
   "nav.breadcrumb": "Breadcrumb",
   "detail.breadcrumb": "Denial queue",
-  "detail.subtitle": "{category} denial · {payer} · notice dated {date}",
   "detail.remittanceLink": "captured from remittance",
   "detail.categoryUnverifiedBadge": "Category unverified",
   "detail.carcUnknown": "Code not in DenialDesk's reference list yet.",
@@ -82,6 +82,7 @@ export const denials = {
   "field.line": "Line {number} · {code}",
   "field.wholeClaim": "Whole claim",
   "field.dateOfService": "Date of service",
+  "field.noticeDate": "Notice date",
   "field.provider": "Provider",
   "field.npi": "NPI {npi}",
   "field.location": "Location",
@@ -95,6 +96,7 @@ export const denials = {
   "field.addNote": "Add a note",
   "note.placeholder": "What you did, what's next, who you spoke with.",
   "panel.denial": "Denial",
+  "panel.details": "Denial details",
   "panel.notesTitle": "Notes",
   "panel.notesDescription": "Visible to everyone on this practice's team.",
   "panel.patient": "Patient",
