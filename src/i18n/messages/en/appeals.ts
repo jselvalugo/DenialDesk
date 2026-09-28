@@ -109,6 +109,7 @@ export const appeals = {
   "field.billed": "Billed",
   "field.mrn": "MRN",
   "field.memberId": "Member ID",
+  "field.memberIdNone": "None on file",
   "field.addNote": "Add a note",
   "note.placeholder": "What you did, what's next, who you spoke with.",
   "action.saveNote": "Save note",

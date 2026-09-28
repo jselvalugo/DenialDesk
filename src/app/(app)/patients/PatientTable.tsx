@@ -7,7 +7,7 @@ import { SortableHeader, Table, Td, Th, Tr, type SortDir } from "@/components/ui
 import { ListCell } from "@/components/custom-fields/ListCell";
 import type { ListColumnDefinition } from "@/domain/custom-fields/list-values";
 import type { PatientListRow } from "@/domain/patients/queries";
-import { ageOn, patientName, sexLabel } from "@/domain/patients/record";
+import { ageOn, isRestricted, patientName, sexLabel } from "@/domain/patients/record";
 import { useFormat, useT } from "@/i18n/client";
 
 /** One sortable column header's resolved props (computed server-side; see `patients/page.tsx`). */
@@ -74,7 +74,7 @@ export function PatientTable({
           const age = ageOn(row.birthDate, today);
           // A restricted (sensitivity-tagged) record shows only what identifies it in a list; sex
           // and location wait for the chart (minimum necessary, OA-043).
-          const restricted = row.sensitivityTags.length > 0;
+          const restricted = isRestricted(row);
           const location = restricted ? "" : [row.city, row.state].filter(Boolean).join(", ");
           return (
             <Tr key={row.id}>

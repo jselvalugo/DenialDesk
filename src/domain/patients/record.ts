@@ -28,6 +28,20 @@ export function sensitivityTagLabel(tag: SensitivityTag, t: PatientsT = englishP
   return t(SENSITIVITY_TAG_LABEL_KEYS[tag]);
 }
 
+/**
+ * Whether a patient's chart should show restricted: an administrator-set tag, or (PI1a onward)
+ * `source_restricted` from the connected EHR/PM's own sensitivity label (docs/specs/
+ * patient-integrations.md "Field mapping" I4). One helper, used at every call site that used to
+ * test `sensitivityTags.length` alone (compliance review #1), so `source_restricted` is already
+ * honored everywhere before PI2b starts writing it.
+ */
+export function isRestricted(patient: {
+  sensitivityTags: readonly string[];
+  sourceRestricted: boolean;
+}): boolean {
+  return patient.sensitivityTags.length > 0 || patient.sourceRestricted;
+}
+
 export const SEX_LABEL_KEYS = { F: "sex.female", M: "sex.male", U: "sex.unknown" } as const satisfies Record<
   string,
   PatientsKey

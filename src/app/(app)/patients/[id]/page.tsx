@@ -25,6 +25,7 @@ import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { getPatientChart } from "@/domain/patients/queries";
 import {
   ageOn,
+  isRestricted,
   patientName,
   sensitivityTagLabel,
   sexLabel,
@@ -95,14 +96,15 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
         eyebrow={t("detail.eyebrow")}
         title={patientName(patient)}
         badges={
-          // Tag names reveal a sensitive category, so only administrators see them (R-3.5.1).
-          canTagSensitivity(auth.role)
+          // Tag names reveal a sensitive category, so only administrators see them (R-3.5.1). A
+          // source-only restriction (no tag) shows the generic badge to everyone, admins included.
+          canTagSensitivity(auth.role) && patient.sensitivityTags.length > 0
             ? patient.sensitivityTags.map((tag) => (
                 <Badge key={tag} tone="warning">
                   {sensitivityTagLabel(tag as SensitivityTag, t)}
                 </Badge>
               ))
-            : patient.sensitivityTags.length > 0 && <Badge tone="warning">{t("badge.restricted")}</Badge>
+            : isRestricted(patient) && <Badge tone="warning">{t("badge.restricted")}</Badge>
         }
         meta={[
           { label: t("field.mrn"), value: patient.mrn, mono: true },

@@ -100,6 +100,12 @@ export const patients = {
   "error.staleRecord": "This patient changed since you opened the form. Reload and try again.",
   "error.notFound": "Not found.",
   "error.noMemberIdOnFile": "No member ID on file.",
+  "error.syncedReadOnly":
+    "This patient is synced from the connected EHR/PM and can't be edited here. Fix demographics in the EHR/PM instead.",
+  "error.integrationConnected":
+    "Registering or editing patients by hand is turned off while an EHR/PM connection is set up.",
+  "error.roleCannotTag": "Your role can view sensitivity tags but not change them.",
+  "error.invalidSensitivityTag": "That is not a recognized sensitivity tag.",
 
   // Server action errors (app/(app)/patients/actions.ts)
   "error.roleReadOnly": "Your role can view patients but not change them.",

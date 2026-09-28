@@ -1652,12 +1652,16 @@ describe("custom field values on payers (PR4)", () => {
     expect(own.length).toBeGreaterThan(0);
     for (const e of own) expect(JSON.stringify(e)).not.toContain("contract rate 12%");
 
-    // Writing this masked field is refused for a role outside canWorkDenials, and nothing changes.
-    await expect(
-      withTenant(compliance, (tx) =>
-        saveValuesForRecord(tx, compliance, "payer", a.payerId, new Map([[fieldId, "overwrite"]])),
-      ),
-    ).rejects.toBeInstanceOf(CustomFieldValueError);
+    // Writing it is refused for compliance, and nothing changes. On a payer the narrower
+    // `canEditPayerFields` role check runs first (before the field-level `canWorkDenials` mask
+    // check), so the refusal is the payer-editor one.
+    const write = withTenant(compliance, (tx) =>
+      saveValuesForRecord(tx, compliance, "payer", a.payerId, new Map([[fieldId, "overwrite"]])),
+    );
+    await expect(write).rejects.toBeInstanceOf(CustomFieldValueError);
+    await expect(write).rejects.toThrow(
+      "Only administrators and managers can change a payer's custom fields.",
+    );
     const stillOriginal = await withTenant(a.ctx, (tx) =>
       revealCustomFieldValue(tx, a.ctx, { fieldId, entity: "payer", recordId: a.payerId, reason: "other" }),
     );
@@ -1745,7 +1749,7 @@ describe("custom field values on payers (PR4)", () => {
     expect(valuesByRecord.get(a.payerId)?.get("payer_list_shown_pr4")).toBe("Tier 2");
   });
 
-  it("stops returning a payer field's value once it is marked sensitive, even though it was previously show_in_list with a stored value", async () => {
+  it("stops listing a payer field and its stored value once an edit turns show_in_list off and marks it sensitive together", async () => {
     const fieldId = await withTenant(a.ctx, (tx) =>
       createCustomField(
         tx,
@@ -1760,10 +1764,10 @@ describe("custom field values on payers (PR4)", () => {
     expect(before.columns.map((c) => c.key)).toContain("payer_flip_sensitive_pr4");
     expect(before.valuesByRecord.get(a.payerId)?.get("payer_flip_sensitive_pr4")).toBe("Tier 9");
 
-    // A field can't be both `show_in_list` and sensitive at once (DB check
-    // `custom_fields_show_in_list_not_sensitive`, migration 0036) — proven below — so marking it
-    // sensitive the way an administrator's edit form does (custom-fields.ts: sensitivity turns
-    // show_in_list off) turns both off together, in one statement.
+    // Mirrors an administrator's edit (custom-fields.ts: sensitivity turns show_in_list off):
+    // both change in one statement. This proves the list drops the column and value after such
+    // an edit; it is the CHECK-constraint test below (`custom_fields_show_in_list_not_sensitive`,
+    // migration 0036) that guarantees a show_in_list + sensitive field can't exist at all.
     await systemDb()
       .update(customFields)
       .set({ sensitivity: "genetic", showInList: false })
@@ -1784,7 +1788,13 @@ describe("custom field values on payers (PR4)", () => {
     );
   });
 
-  it("isolates tenants at the query itself: tenant B's own show_in_list payer field never surfaces tenant A's payer or value", async () => {
+  it("isolates tenants at the query itself: tenant B's own show_in_list payer field never surfaces tenant A's payer, field, or value", async () => {
+    const aFieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_list_iso_a_pr4", showInList: true })),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[aFieldId, "alpha list only"]])),
+    );
     await withTenant(b.ctx, (tx) =>
       createCustomField(tx, b.ctx, field({ entity: "payer", key: "payer_list_iso_pr4", showInList: true })),
     );
@@ -1793,6 +1803,17 @@ describe("custom field values on payers (PR4)", () => {
     // tenant A's payer id.
     const bResult = await withTenant(b.ctx, (tx) => loadListValues(tx, b.ctx, "payer", [a.payerId]));
     expect(bResult.valuesByRecord.size).toBe(0);
+    expect(bResult.columns.map((c) => c.key)).not.toContain("payer_list_iso_a_pr4");
+    // Tenant A's field id, queried directly from tenant B: RLS must hide both the field and its
+    // value, so a policy regression fails here even if `loadListValues` filtered by accident.
+    const bField = await withTenant(b.ctx, (tx) =>
+      tx.select().from(customFields).where(eq(customFields.id, aFieldId)),
+    );
+    expect(bField).toEqual([]);
+    const bValues = await withTenant(b.ctx, (tx) =>
+      tx.select().from(customFieldValues).where(eq(customFieldValues.fieldId, aFieldId)),
+    );
+    expect(bValues).toEqual([]);
   });
 
   it("refuses a specialist writing a payer's custom fields at all, even a plain non-sensitive one (canEditPayerFields, not canWorkDenials)", async () => {
@@ -1802,13 +1823,28 @@ describe("custom field values on payers (PR4)", () => {
     const specialist = await addUser(a.ctx.tenantId, "specialist", "payer-write-refused");
     // A specialist may work denials (`canWorkDenials`) and so could write a merely-masked field on
     // any other entity, but payers are practice configuration: only `canEditPayerFields` (admin,
-    // manager) may write a payer's values at all, enforced in the domain right beside
-    // `lockRecordRow` as defense in depth beneath the Settings pages' own role gate.
+    // manager) may write a payer's values at all, enforced in the domain before `lockRecordRow`
+    // as defense in depth beneath the Settings pages' own role gate.
+    const refused = withTenant(specialist, (tx) =>
+      saveValuesForRecord(tx, specialist, "payer", a.payerId, new Map([[fieldId, "should not persist"]])),
+    );
+    await expect(refused).rejects.toBeInstanceOf(CustomFieldValueError);
+    await expect(refused).rejects.toThrow(
+      "Only administrators and managers can change a payer's custom fields.",
+    );
+    // The role check runs before the payer row is looked up, so a bad id gets the same role error
+    // (not "Record not found."): the lookup that takes the lock never runs.
     await expect(
       withTenant(specialist, (tx) =>
-        saveValuesForRecord(tx, specialist, "payer", a.payerId, new Map([[fieldId, "should not persist"]])),
+        saveValuesForRecord(
+          tx,
+          specialist,
+          "payer",
+          randomUUID(),
+          new Map([[fieldId, "should not persist"]]),
+        ),
       ),
-    ).rejects.toBeInstanceOf(CustomFieldValueError);
+    ).rejects.toThrow("Only administrators and managers can change a payer's custom fields.");
     const rows = await systemDb()
       .select()
       .from(customFieldValues)

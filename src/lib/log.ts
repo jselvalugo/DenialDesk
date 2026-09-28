@@ -22,11 +22,19 @@ export const LOG_VALUE_PATTERNS: Record<string, RegExp> = {
   constraint: /^[A-Za-z_][A-Za-z0-9_$]{0,62}$/,
 };
 const EVENT_NAME = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)+$/;
+const ID_KEY = /^[a-z][A-Za-z0-9]*Id$/;
+const UUID_SHAPED = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * Names that look like an ID key but hold a value that isn't a database primary key (patient
+ * integrations threat model I1): a FHIR id, a member/subscriber ID, an OAuth client ID, and a
+ * source `versionId` string can all carry or hint at PHI, or (client ID) a business identifier.
+ * Refused outright rather than merely UUID-checked, since none of them is ever UUID-shaped anyway.
+ */
+const DENYLISTED_ID_KEYS = new Set(["externalId", "memberId", "clientId", "sourceVersionId"]);
 
 export function isAllowedKey(key: string): boolean {
-  return (
-    /^[a-z][A-Za-z0-9]*Id$/.test(key) || ALLOWED_EXTRA_KEYS.has(key) || Object.hasOwn(LOG_VALUE_PATTERNS, key)
-  );
+  if (DENYLISTED_ID_KEYS.has(key)) return false;
+  return ID_KEY.test(key) || ALLOWED_EXTRA_KEYS.has(key) || Object.hasOwn(LOG_VALUE_PATTERNS, key);
 }
 
 export function buildLogRecord(level: Level, event: string, fields: LogFields = {}) {
@@ -48,7 +56,12 @@ export function buildLogRecord(level: Level, event: string, fields: LogFields = 
   if (malformed.length > 0) {
     throw new Error(`Log field values don't match their pattern: ${malformed.join(", ")}`);
   }
-  return { ts: new Date().toISOString(), level, event, ...fields };
+  // An `…Id` key must actually carry a database ID; anything else is dropped rather than logged
+  // (a bug upstream should not also leak whatever non-ID value it passed).
+  const kept = Object.fromEntries(
+    Object.entries(fields).filter(([key, value]) => !ID_KEY.test(key) || UUID_SHAPED.test(String(value))),
+  );
+  return { ts: new Date().toISOString(), level, event, ...kept };
 }
 
 function write(level: Level, event: string, fields?: LogFields) {

@@ -91,6 +91,7 @@ export const denials = {
   "field.dob": "Date of birth",
   "field.mrn": "MRN",
   "field.memberId": "Member ID",
+  "field.memberIdNone": "None on file",
   "field.addNote": "Add a note",
   "note.placeholder": "What you did, what's next, who you spoke with.",
   "panel.denial": "Denial",

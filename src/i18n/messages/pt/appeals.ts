@@ -112,6 +112,7 @@ export const appeals: Messages["appeals"] = {
   "field.billed": "Faturado",
   "field.mrn": "Número de prontuário",
   "field.memberId": "ID de associado",
+  "field.memberIdNone": "Nenhum registrado",
   "field.addNote": "Adicionar uma nota",
   "note.placeholder": "O que você fez, o que vem a seguir, com quem falou.",
   "action.saveNote": "Salvar nota",

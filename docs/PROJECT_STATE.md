@@ -30,10 +30,26 @@ _Last updated: 2026-09-28_
   principal as audit actor; deny-by-default SSRF guard; real endpoints refused on Netlify whatever
   `APP_ENV` says; endpoints immutable once data is synced; SSN/MBI identifier systems refused as MRN;
   practice-scoped population only in production; EHR sensitivity labels mark a patient restricted.
-  Phases: PI0 docs (done), PI1a data layer, PI1b Settings › Integrations + drop-down, PI1c operator
-  approval, PI2a transport/discovery/keys/test connection, PI2b sync engine + sandbox + jobs + history
-  + payer mapping, PI3 scheduled sync + source-state hardening, PI4 Bulk Data before the first real
-  practice. Owner questions OA-045–OA-057; data source DS-12 in `docs/data-sources.xlsx`.
+  Phases: PI0 docs (done), **PI1a data layer (done, `drizzle/0039_patient_integrations_data_layer.sql`:
+  patients provenance + read-only trigger, `integration_connections` lifecycle/editability trigger,
+  the endpoint registry with SECURITY DEFINER claim/release, sync runs/issues, payer mappings;
+  `canManageIntegrations`; domain refusals in `src/domain/patients/queries.ts`; revised 2026-09-28
+  after correctness/security/compliance review — sandbox self-activation and approval-presence CHECK
+  constraints, endpoint-field-set locked to `draft` only, self-approval-freshness enforcement,
+  registry claim requires a discovered token endpoint + `FOR UPDATE`, `search_path` hardened to
+  `pg_catalog, public, pg_temp` with `pg_temp` last and `REVOKE ALL FROM PUBLIC` before granting the
+  two registry functions, a partial unique index caps one queued/running run per connection and one
+  non-draft/revoked connection per tenant, `purge_demo_practices()` extended for the five new tables,
+  `updatePatientSensitivityTags` now takes `actor.canTag`, and `src/lib/log.ts` drops non-UUID
+  `*Id`-shaped fields and denylists raw identifier keys — see `docs/specs/patient-integrations.md`
+  PI1a for the full list; R-15.9 human sign-off on the privilege (REVOKE/GRANT/column-grant)
+  statements is still needed before this migration runs anywhere but a local/test database)**, PI1b
+  Settings ›
+  Integrations + drop-down, PI1c operator approval, PI2a transport/discovery/keys/test connection,
+  PI2b sync engine + sandbox + jobs + history + payer mapping (includes `withTenantAsSystem`,
+  `denialdesk_jobs`, the integration service principal — deferred from PI1a per the spec's own phase
+  split), PI3 scheduled sync + source-state hardening, PI4 Bulk Data before the first real practice.
+  Owner questions OA-045–OA-057; data source DS-12 in `docs/data-sources.xlsx`.
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
   (`RecordHeader`, `RecordLayout`, `FieldList`, `FormShell`) and `src/components/ui/`
@@ -330,7 +346,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
    PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›
-   Payers with its own "edit custom fields" page) done. Next: S3 (Users and roles tab).
+   Payers with its own "edit custom fields" page) done (#76), review polish follow-up done (payer
+   role check runs before the row lock; tighter tests; `payerSourceLabel` unit test). Next: S3
+   (Users and roles tab).
 7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
    payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
    timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.
@@ -458,6 +476,15 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   branches pick the same number: branch databases start from the main preview database, so a
   base migration 0025 blocks a PR's own 0025. Before pushing a migration, merge the base branch
   and take the next free number (custom field values hit this on 2026-09-26: #49, then #52).
+  Hit again on patient-integrations PR #77 (2026-09-28): a first push landed migration 0039;
+  three later review-fix rounds hand-edited that same file in place across several commits before
+  anyone pushed, and the third push (commit 1efe153) broke Netlify's preview build with exactly
+  this error, because the preview database had already applied 0039 as it stood after the first
+  push. Fix was to restore 0039 byte-for-byte to what was first pushed and move every later delta
+  into a new migration 0040 (`pnpm drizzle-kit generate --custom --name=<name>`, then hand-write the
+  DROP/ADD CONSTRAINT and CREATE OR REPLACE FUNCTION statements — a plain ALTER FUNCTION can't
+  change a function body). The rule holds even mid-PR, across commits on the same branch, not only
+  after merge: the moment a migration is pushed once, it is immutable for that branch's preview.
 - Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
 - Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):
