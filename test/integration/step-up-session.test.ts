@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { claimTotp, releaseAttempt, reserveAttempt } from "@/auth/credentials";
-import { MFA_STEP_UP_WINDOW_MS, SESSION_COOKIE } from "@/auth/policy";
+import { claimTotp, releaseAttempt, reserveAttempt, reserveStepUpAttempt } from "@/auth/credentials";
+import { MFA_STEP_UP_WINDOW_MS, OPERATOR_SESSION_COOKIE, SESSION_COOKIE } from "@/auth/policy";
 import { currentStep, generateTotpSecret, totpAt } from "@/auth/totp";
 import { closeDatabase, systemDb } from "@/db/client";
 import { sessions, users } from "@/db/schema";
@@ -23,7 +23,8 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers(),
 }));
 
-const { completeMfa, completeStepUpMfa, getSession, hasRecentMfa } = await import("@/auth/session");
+const { completeMfa, completeStepUpMfa, createSession, getSession, hasRecentMfa } =
+  await import("@/auth/session");
 
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -77,6 +78,37 @@ describe("sessions.mfa_verified_at", () => {
   });
 });
 
+describe("createSession and mfa_verified_at", () => {
+  const stored = async (cookie: string) => {
+    const [row] = await systemDb()
+      .select()
+      .from(sessions)
+      .where(eq(sessions.tokenHash, hash(jar.get(cookie)!)));
+    return row!;
+  };
+
+  it("a practice session starts unverified, with no verification time", async () => {
+    await createSession(practice.userId, { tenantId: practice.tenantId });
+    const row = await stored(SESSION_COOKIE);
+    expect(row.mfaVerified).toBe(false);
+    expect(row.mfaVerifiedAt).toBeNull();
+  });
+
+  it("an operator session that skipped MFA (two-step switched off outside production) records the time it started", async () => {
+    await createSession(practice.userId, { authMethod: "operator", mfaVerified: true });
+    const row = await stored(OPERATOR_SESSION_COOKIE);
+    expect(row.mfaVerified).toBe(true);
+    expect(hasRecentMfa(row.mfaVerifiedAt)).toBe(true);
+  });
+
+  it("an operator session that hasn't done MFA has no verification time", async () => {
+    await createSession(practice.userId, { authMethod: "operator" });
+    const row = await stored(OPERATOR_SESSION_COOKIE);
+    expect(row.mfaVerified).toBe(false);
+    expect(row.mfaVerifiedAt).toBeNull();
+  });
+});
+
 describe("completeStepUpMfa", () => {
   it("records a fresh verification and rotates the session token: the old one stops working", async () => {
     const { id, token: before } = await newSession({
@@ -85,7 +117,7 @@ describe("completeStepUpMfa", () => {
     });
     expect(hasRecentMfa((await getSession())!.mfaVerifiedAt)).toBe(false);
 
-    await completeStepUpMfa(id);
+    expect(await completeStepUpMfa(id)).toBe(true);
     const after = jar.get(SESSION_COOKIE)!;
     expect(after).not.toBe(before);
 
@@ -103,7 +135,10 @@ describe("completeStepUpMfa", () => {
   it("doesn't revive a session that was revoked", async () => {
     const { id } = await newSession({ mfaVerified: true });
     await systemDb().update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, id));
-    await completeStepUpMfa(id);
+    // No live row was updated: it says so (the caller must not audit a verification), sets no cookie.
+    const cookieBefore = jar.get(SESSION_COOKIE);
+    expect(await completeStepUpMfa(id)).toBe(false);
+    expect(jar.get(SESSION_COOKIE)).toBe(cookieBefore);
     expect(await getSession()).toBeNull();
     const [row] = await systemDb().select().from(sessions).where(eq(sessions.id, id));
     expect(row!.mfaVerifiedAt).toBeNull();
@@ -180,6 +215,47 @@ describe("the sign-in attempt counter under a step-up", () => {
     const after = await user();
     expect(after.failedLoginCount).toBe(0);
     expect(after.lockedUntil).toBeNull();
+  });
+
+  it("a step-up on 4 earlier failures is refused before any code is checked: it would reach the limit, and a correct code must not lock the account", async () => {
+    await freshUser(4);
+    expect(await reserveStepUpAttempt(userId)).toBe(false);
+    const after = await user();
+    // Nothing changed: no attempt was counted, and the account isn't locked.
+    expect(after.failedLoginCount).toBe(4);
+    expect(after.lockedUntil).toBeNull();
+    // (Sign-in's own reservation, by contrast, counts the 5th attempt and locks after it.)
+    expect(await reserveAttempt(userId)).toBe(true);
+    expect((await user()).lockedUntil).not.toBeNull();
+  });
+
+  it("a step-up counts its attempt while below the limit, and never sets the lock itself", async () => {
+    await freshUser(2);
+    expect(await reserveStepUpAttempt(userId)).toBe(true);
+    expect((await user()).failedLoginCount).toBe(3);
+    expect(await reserveStepUpAttempt(userId)).toBe(true);
+    expect((await user()).failedLoginCount).toBe(4);
+    expect(await reserveStepUpAttempt(userId)).toBe(false);
+    const after = await user();
+    expect(after.failedLoginCount).toBe(4);
+    expect(after.lockedUntil).toBeNull();
+  });
+
+  it("a step-up is refused while the account is locked, and starts over once the lock has expired", async () => {
+    await freshUser(5);
+    const until = new Date(Date.now() + 10 * 60_000);
+    await systemDb().update(users).set({ lockedUntil: until }).where(eq(users.id, userId));
+    expect(await reserveStepUpAttempt(userId)).toBe(false);
+    expect((await user()).failedLoginCount).toBe(5);
+
+    await systemDb()
+      .update(users)
+      .set({ lockedUntil: new Date(Date.now() - 1_000) })
+      .where(eq(users.id, userId));
+    expect(await reserveStepUpAttempt(userId)).toBe(true);
+    const restarted = await user();
+    expect(restarted.failedLoginCount).toBe(1);
+    expect(restarted.lockedUntil).toBeNull();
   });
 
   it("never goes below zero, and never unlocks a locked account", async () => {

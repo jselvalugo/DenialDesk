@@ -37,6 +37,7 @@ export function integrationActor(
     role: auth.role,
     syntheticOnly: synthetic(),
     recentMfa: hasRecentMfa(auth.mfaVerifiedAt ?? null, now),
+    stepUpVerifiedAt: auth.mfaVerifiedAt?.toISOString() ?? null,
   };
 }
 

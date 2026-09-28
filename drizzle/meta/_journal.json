@@ -295,6 +295,13 @@
       "when": 1790624973733,
       "tag": "0041_session_step_up_mfa",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1790626427618,
+      "tag": "0042_submit_requires_fresh_attestation",
+      "breakpoints": true
     }
   ]
 }

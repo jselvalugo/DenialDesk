@@ -83,6 +83,28 @@ export async function reserveAttempt(userId: string): Promise<boolean> {
   return row !== undefined;
 }
 
+/**
+ * The attempt reservation for a step-up (R-7.2.2): the same counter and limit as `reserveAttempt`,
+ * but it never sets the lock. `reserveAttempt` lets the attempt that reaches the limit go on to be
+ * checked and locks the account after it, which suits sign-in (a correct code then signs in and
+ * clears the lock). A step-up doesn't clear the counter, so a correct code on that last attempt
+ * would succeed and still leave the account locked. So when this attempt would reach the limit it
+ * is refused before any code is checked, changing nothing: no guess is evaluated, the counter stays
+ * where it was, and the account isn't locked by someone who just proved possession of the
+ * authenticator. Also refused while locked. One UPDATE, so parallel attempts can't slip past.
+ */
+export async function reserveStepUpAttempt(userId: string): Promise<boolean> {
+  const result = await systemDb().execute<{ id: string }>(sql`
+    update users set
+      failed_login_count = (case when locked_until <= now() then 0 else failed_login_count end) + 1,
+      locked_until = null
+    where id = ${userId}
+      and (locked_until is null or locked_until <= now())
+      and (case when locked_until <= now() then 0 else failed_login_count end) + 1 < ${MAX_FAILED_ATTEMPTS}
+    returning id`);
+  return result.rows.length > 0;
+}
+
 export async function recordFailure(userId: string, action: AuditAction): Promise<void> {
   await auditSystem({
     action,

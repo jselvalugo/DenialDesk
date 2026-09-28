@@ -90,6 +90,8 @@ export interface IntegrationActor {
    * built without it can't pass a step-up gate.
    */
   recentMfa?: boolean;
+  /** When that verification happened (ISO), recorded with the actions it unlocked; from the session. */
+  stepUpVerifiedAt?: string | null;
 }
 
 /** SMART client IDs are opaque strings; visible ASCII without spaces covers every vendor we know. */
@@ -536,6 +538,7 @@ export async function revokeConnection(
     metadata: {
       reason_code: reasonCode,
       previous_status: current.status,
+      previous_status_reason: current.statusReason,
       sandbox: current.isSandbox,
       registry_released: registryReleased,
       ...(current.isSandbox ? {} : endpointMetadata("", current)),
@@ -600,14 +603,25 @@ export async function resumeConnection(
     tenantId: actor.tenantId,
     entityType: "integration_connection",
     entityId: id,
-    metadata: { previous_status: current.status, sandbox: current.isSandbox },
+    metadata: {
+      previous_status: current.status,
+      previous_status_reason: current.statusReason,
+      sandbox: current.isSandbox,
+      step_up_verified_at: actor.stepUpVerifiedAt ?? null,
+    },
   });
 }
 
 /**
  * Withdraw (`pending_approval` → `draft`): the administrator takes a submitted connection back
  * before the operator approves it, releasing its registry claim so it can be corrected and
- * submitted again. The endpoint set is editable again afterwards (a draft that never synced).
+ * submitted again. The endpoint set is editable again afterwards (a draft that never synced), so
+ * everything that belonged to the old submission is cleared too: the U.S.-residency attestation (a
+ * different endpoint must be attested afresh, and Submit refuses a stale one, drizzle/0042) and the
+ * token endpoint, its registry key, and the issuer that discovery recorded for the old endpoint
+ * (the next Test connection finds them again). The submission stamp
+ * (`submitted_by/_at`) stays as the record that it was submitted once; the page shows it only
+ * while the connection is not a draft.
  */
 export async function withdrawConnection(
   tx: TenantTx,
@@ -620,16 +634,32 @@ export async function withdrawConnection(
   await writeStatus(tx, actor, id, { status: "draft" });
   // After the status change: the database function refuses to release while still pending.
   const registryReleased = await releaseRegistry(tx, id, current.isSandbox);
+  // A separate statement, and only now: the lifecycle trigger refuses to change the attestation or
+  // the discovered endpoint fields in the statement that leaves pending_approval, and allows it
+  // once the row is a draft. All of these columns are in the app role's UPDATE grant (0039).
+  await tx
+    .update(integrationConnections)
+    .set({
+      usResidencyAttestedBy: null,
+      usResidencyAttestedAt: null,
+      tokenEndpoint: null,
+      tokenEndpointKey: null,
+      issuer: null,
+      updatedBy: actor.userId,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(integrationConnections.id, id));
   await audit(tx, {
-    action: "integration.connection_updated",
+    action: "integration.connection_withdrawn",
     actorUserId: actor.userId,
     tenantId: actor.tenantId,
     entityType: "integration_connection",
     entityId: id,
     metadata: {
-      transition: "withdrawn",
       previous_status: current.status,
       registry_released: registryReleased,
+      attestation_cleared: true,
+      discovery_cleared: true,
       ...endpointMetadata("", current),
     },
   });

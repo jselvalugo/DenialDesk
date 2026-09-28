@@ -29,7 +29,12 @@ describe("integrationActor (PI1b-2)", () => {
   it("allows real endpoints only in production outside Netlify", () => {
     process.env.APP_ENV = "production";
     for (const key of ["NETLIFY", "NETLIFY_DB_URL", "DEPLOY_ID", "SITE_ID"]) delete process.env[key];
-    expect(integrationActor(auth)).toEqual({ ...auth, syntheticOnly: false, recentMfa: false });
+    expect(integrationActor(auth)).toEqual({
+      ...auth,
+      syntheticOnly: false,
+      recentMfa: false,
+      stepUpVerifiedAt: null,
+    });
   });
 });
 

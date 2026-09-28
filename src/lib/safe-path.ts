@@ -20,16 +20,18 @@ function hasControlOrWhitespace(value: string): boolean {
 /**
  * Returns `value` as a same-origin, allow-listed `pathname + search`, or `fallback` when it isn't
  * one. Rejects a backslash, control characters, and whitespace outright (a browser can treat any
- * of them as a scheme/host separator); requires a single leading slash (`^/[^/\\]`, so `//host` and
- * `/\host` are refused before they ever reach the URL parser); then resolves against a fixed,
+ * of them as a scheme/host separator); requires a single leading slash (not followed by another
+ * slash or a backslash, so `//host` and `/\host` are refused before they ever reach the URL
+ * parser; a lone `/` is fine); then resolves against a fixed,
  * unreachable internal origin and requires the parse to land back on that exact origin (catches
  * anything the character checks missed, e.g. a bare `scheme:` prefix); finally requires the
- * resulting path to start with one of the app's own top-level sections.
+ * resulting pathname (never the query string) to be one of the app's own top-level sections or
+ * below one; a query string on an allowed path is kept.
  */
 export function safeInternalPath(value: unknown, fallback = "/"): string {
   if (typeof value !== "string" || value.length === 0) return fallback;
   if (value.includes("\\") || hasControlOrWhitespace(value)) return fallback;
-  if (!/^\/[^/\\]/.test(value)) return fallback;
+  if (!/^\/(?![/\\])/.test(value)) return fallback;
 
   let url: URL;
   try {
@@ -39,9 +41,9 @@ export function safeInternalPath(value: unknown, fallback = "/"): string {
   }
   if (url.origin !== "https://internal.invalid") return fallback;
 
-  const resolved = `${url.pathname}${url.search}`;
+  // The allow-list applies to the path alone; a query string on an allowed path is kept.
   const allowed = ALLOWED_PREFIXES.some(
-    (prefix) => resolved === prefix || (prefix !== "/" && resolved.startsWith(`${prefix}/`)),
+    (prefix) => url.pathname === prefix || (prefix !== "/" && url.pathname.startsWith(`${prefix}/`)),
   );
-  return allowed ? resolved : fallback;
+  return allowed ? `${url.pathname}${url.search}` : fallback;
 }

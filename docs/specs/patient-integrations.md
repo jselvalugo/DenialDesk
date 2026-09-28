@@ -301,6 +301,10 @@ get their own tests in PI2a.
 Also carries PI1b's Submit, attestation, step-up, and pause/resume (re-sequenced 2026-09-28). Order
 is now PI2a → PI1c (approval has nothing to approve before Submit exists); sandbox Submit becomes
 possible only in PI2b, which adds the in-process sandbox a test can pass against.
+- [ ] Resume from `error` requires a passing Test connection first (the error usually means the
+      endpoint, key, or registration changed; resuming blindly restarts the failure). Resume from
+      `paused` doesn't. (PI2a-2, once Test connection exists; today Resume from `error` needs only the
+      step-up.)
 - [ ] Submit (admin, draft → `pending_approval` for a real connection, → `active` for the sandbox;
       stamps `submitted_by/_at` in both cases — the drop-down treats a revoked connection as a past
       source only if it was ever submitted or synced):
@@ -319,20 +323,39 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `MFA_STEP_UP_WINDOW_MS`, inclusive at 5:00; unit-tested at 4:59 / 5:00 / 5:01); `/step-up`
       re-verifies the sign-in TOTP and returns to a `returnTo` that `safeInternalPath` keeps to an
       allow-listed same-origin path (open-redirect fix, `src/lib/safe-path.ts`); a success rotates
-      the session token and cookie (`completeStepUpMfa`); it shares the sign-in attempt limiter, a
+      the session token and cookie (`completeStepUpMfa`); it shares the sign-in attempt counter but
+      refuses, before checking any code, the attempt that would reach the lockout limit
+      (`reserveStepUpAttempt`: a correct code must not lock the account, since a step-up doesn't
+      clear the counter), a
       failure never resets the sign-in lockout counter, and a success keeps earlier failures
       (`claimTotp(..., resetLockout: false)`) while giving back only its own attempt
       (`releaseAttempt`), so successful step-ups can't add up to a lockout; audited
-      `auth.step_up_verified|failed` (session, tenant, path without query string). The gate for
+      `auth.step_up_verified|failed` (session, tenant, and the page as a route template plus the
+      connection UUID, e.g. `/settings/integrations/[id]`: never the raw path, so free text in a
+      crafted `returnTo` can't reach the log; `returnTo` is capped at 256 characters and must be one
+      of the integrations pages with a UUID id segment, else it resolves to the default page). A
+      step-up that finds its session revoked meanwhile (`completeStepUpMfa` returns false) audits
+      nothing as verified and sends the browser to sign in. `hasRecentMfa` also refuses a
+      verification more than 30 s in the future (clock skew between instances is tolerated up to
+      that). The gate for
       domain actions is `requireStepUp(actor)` (`connections.ts`: `actor.recentMfa` comes from the
       session, never the request; refusal carries `stepUpRequired`, and the page links to
       `/step-up`). Resume uses it now; **Submit (PI2a-2) and payer mapping (PI2b) call the same
       helper.** No GRANT changes: `sessions` is reached through the connection owner only.
       Owner decisions: OA-063 (incl. TOTP vs WebAuthn, R-7.2.2).
 - [x] Withdraw (`pending_approval` → `draft`, releases the registry claim through the SECURITY
-      DEFINER function after the status change; audited `integration.connection_updated` with
-      `transition: withdrawn`). Admin-only, tenant-scoped (another practice's connection is "not
-      found" and its claim is untouched), environment-rule checked, stale-page checked.
+      DEFINER function after the status change; audited `integration.connection_withdrawn`).
+      Admin-only, tenant-scoped (another practice's connection is "not found" and its claim is
+      untouched), environment-rule checked, stale-page checked. The endpoint is editable again once
+      it is a draft, so a **second UPDATE clears the residency attestation**
+      (`us_residency_attested_by/_at`; a separate statement, because the lifecycle trigger refuses
+      to change the attestation in the statement that leaves `pending_approval`) and a different
+      endpoint is attested afresh; the submission stamp (`submitted_by/_at`) stays as the record
+      that it was submitted once, and the page shows "Submitted" only while the connection is not a
+      draft. Database backstop (drizzle/0042): `draft → pending_approval` requires the attestation
+      and submission stamps that are present to differ from the row's previous ones (the fresh-stamp
+      pattern 0040 uses for approval), so a stale attestation can't be carried into a new
+      submission whatever the app does; a missing stamp is still refused by the 0039 CHECK.
 - [x] Pause (`active` → `paused`) and resume (`paused`/`error` → `active`, MFA step-up; resume also
       clears `status_reason`), audited `integration.connection_paused|resumed`; same admin, tenant,
       environment, and stale-page checks. Pause and Revoke deliberately need **no** step-up (the safe
@@ -349,8 +372,9 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `token_endpoint_key = lower(token_endpoint)` evaluates to NULL, which a CHECK accepts, for a key
       written with no endpoint, so the second CHECK is spelled out. An endpoint without a key stays
       allowed (discovery sets the endpoint first; the registry claim refuses a missing key). Security
-      review L-3; existing rows verified by `test/integration/integration-lifecycle.test.ts` and
-      validated by the migration itself. The PI1a fixtures that set a bare `token_endpoint_key` now
+      review L-3; existing rows are guarded by 0041's `ADD CONSTRAINT` validation, which fails the
+      migration if any row violates a CHECK (`integration-lifecycle.test.ts` only asserts the
+      invariant holds afterwards). The PI1a fixtures that set a bare `token_endpoint_key` now
       set the endpoint with it (`setDraftField`).
 - [x] `HttpsTransport` (node:https, PI2a part 1, `src/integrations/fhir/transport.ts`): TLS options
       explicit (`minVersion: 'TLSv1.2'`, a TLS 1.2 cipher list of ECDHE with AES-GCM/ChaCha20-Poly1305
@@ -458,6 +482,10 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `not_fhir_r4`, `smart_config_invalid`, `auth_refused`, `capability_missing`; audited.
 
 ### PI2b — sync engine, sandbox, jobs, history, payer mapping
+- [ ] Pause and `error` stop work already in flight: a connection leaving `active` (pause, error)
+      abandons its queued runs (as revoke does), and the sync loop re-checks `status = 'active'`
+      before each page commit, so a run that started before a Pause stops at its next page instead of
+      finishing. PI2a's Pause only stops new runs from being queued.
 - [ ] The transport is chosen from `is_sandbox` only (never the host), and a sandbox run is refused
       unless `syntheticDataOnly()`, so `SYN` patients never land in a production tenant (compliance
       review #13, security review L-1).
@@ -599,7 +627,7 @@ issues — Internal; JWKS — Public; private signing keys and the job secret �
 outside the §9.1 data classes, R-7.3.5).
 
 **Audit events** (never MRNs, names, external ids, tokens, query strings):
-`integration.connection_created|updated|submitted|tested|activated|paused|resumed|errored|revoked`
+`integration.connection_created|updated|submitted|tested|activated|paused|resumed|withdrawn|errored|revoked`
 with old/new base URL, token endpoint host + path, and client ID — always the normalized value
 with no query string or fragment (configuration, not PHI);
 `integration.registry_conflict`, `integration.payer_mapping_changed`,

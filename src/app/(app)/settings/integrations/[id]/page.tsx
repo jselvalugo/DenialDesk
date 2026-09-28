@@ -117,7 +117,8 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
           <Field label={t("detail.lastSync")} tabular empty={t("list.never")}>
             {connection.lastSuccessAt ? format.dateTime(connection.lastSuccessAt) : null}
           </Field>
-          {connection.submittedAt && (
+          {/* A withdrawn connection is a draft again: its old submission date would read as pending. */}
+          {connection.submittedAt && connection.status !== "draft" && (
             <Field label={t("detail.submitted")} tabular>
               {format.dateTime(connection.submittedAt)}
             </Field>

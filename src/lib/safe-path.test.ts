@@ -30,8 +30,29 @@ describe("safeInternalPath", () => {
     ["/settings/integrations", "/settings/integrations"],
     ["/settings/integrations/new", "/settings/integrations/new"],
     ["/settings/integrations/abc?tab=history", "/settings/integrations/abc?tab=history"],
+    // The allow-list applies to the pathname; a query string on an allowed path is kept.
+    ["/patients?page=2", "/patients?page=2"],
+    ["/settings/integrations?tab=history", "/settings/integrations?tab=history"],
+    ["/?welcome=1", "/?welcome=1"],
   ])("keeps a valid, allow-listed path %j", (value, expected) => {
     expect(safeInternalPath(value)).toBe(expected);
+  });
+
+  it("never lets a query string make a path outside the allow-list pass, or hide one that is inside", () => {
+    expect(safeInternalPath("/claims/abc?next=/patients")).toBe("/");
+    expect(safeInternalPath("/claims?x=/patients/1", "/settings/integrations")).toBe(
+      "/settings/integrations",
+    );
+    expect(safeInternalPath("/patients/../claims/1?x=1", "/settings/integrations")).toBe(
+      "/settings/integrations",
+    );
+  });
+
+  it("uses a non-root fallback for every refusal, and still returns the root for an exact /", () => {
+    for (const value of ["//evil.com", "https://evil.com", "/claims/abc", "", undefined, "/\\evil.com"]) {
+      expect(safeInternalPath(value, "/settings/integrations")).toBe("/settings/integrations");
+    }
+    expect(safeInternalPath("/", "/settings/integrations")).toBe("/");
   });
 
   it("refuses a path outside the allow-list even when otherwise well-formed", () => {

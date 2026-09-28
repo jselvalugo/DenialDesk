@@ -131,15 +131,20 @@ export async function completeMfa(sessionId: string, realm: Realm = "practice"):
 /**
  * Records a step-up re-verification (R-7.2.2) on an already signed-in practice session. Rotates
  * the token like `completeMfa`: a step-up is another proof of possession of the authenticator, so
- * the token it was performed under should not outlive it.
+ * the token it was performed under should not outlive it. Returns whether a live session row was
+ * updated: false (the session was revoked or ended meanwhile) sets no cookie, and the caller must
+ * not treat the step-up as done.
  */
-export async function completeStepUpMfa(sessionId: string): Promise<void> {
+export async function completeStepUpMfa(sessionId: string): Promise<boolean> {
   const token = randomBytes(32).toString("base64url");
-  await systemDb()
+  const updated = await systemDb()
     .update(sessions)
     .set({ mfaVerifiedAt: new Date(), tokenHash: hashToken(token), lastSeenAt: new Date() })
-    .where(and(eq(sessions.id, sessionId), isNull(sessions.revokedAt)));
+    .where(and(eq(sessions.id, sessionId), isNull(sessions.revokedAt)))
+    .returning({ id: sessions.id });
+  if (updated.length === 0) return false;
   await setCookie(token, "practice");
+  return true;
 }
 
 /** Revokes a session without touching the cookie (for when a new session replaces it). */

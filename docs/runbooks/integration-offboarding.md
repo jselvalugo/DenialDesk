@@ -10,10 +10,14 @@ A practice administrator (`canManageIntegrations`) revokes in the app. The EHR/P
 practice's EHR/PM administrator; DenialDesk staff never act on a practice's EHR/PM.
 
 ## In DenialDesk
-0. Not ready to give the connection up? **Pause** (active connections) stops syncing without
-   deleting anything and can be undone with **Resume**, which asks the administrator to verify with
-   their authenticator app first (step-up, R-7.2.2). A connection still **awaiting approval** can be
-   **withdrawn** back to a draft (its registry claim is released). Revoking is the permanent step.
+0. Not ready to give the connection up? **Pause** (active connections) stops new sync runs
+   without deleting anything, and **Resume** undoes it. Stopping a run that is already in progress
+   is part of the sync engine (PI2b); until then a run that started before the Pause finishes.
+   Resume needs a verification within the last 5 minutes: signing in counts, so it only asks for a
+   fresh authenticator code once the sign-in is older than that. A connection still **awaiting
+   approval** can be **withdrawn** back to a draft (its registry claim and its residency
+   attestation are cleared, so it is attested afresh when submitted again). Revoking is the
+   permanent step.
 1. Settings › Integrations › open the connection › **Revoke connection**; choose the reason (a fixed
    list: no longer used, switching systems, set up by mistake, security concern, other; never patient
    information), tick the confirmation, and revoke. Revoking needs no fresh verification on purpose,

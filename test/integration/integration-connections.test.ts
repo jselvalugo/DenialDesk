@@ -471,6 +471,7 @@ describe("revokeConnection", () => {
     expect((await lastAudit(id)).metadata).toEqual({
       reason_code: "no_longer_used",
       previous_status: "active",
+      previous_status_reason: null,
       sandbox: true,
       registry_released: false,
     });

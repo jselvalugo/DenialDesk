@@ -68,7 +68,7 @@ _Last updated: 2026-09-28_
   `auth.step_up_verified|failed`, and the shared `requireStepUp` gate Submit will call; admin-only,
   audited, tenant-scoped, environment-checked Pause, Resume (step-up), and Withdraw (releases the
   registry claim) wired into the connection page; Revoke takes a reason code (audit "why"); the
-  `endpoint_key`/`token_endpoint_key` CHECKs (0041). No GRANT or privilege change (`sessions` is
+  `endpoint_key`/`token_endpoint_key` CHECKs (0041). Compliance follow-up: Withdraw clears the residency attestation, and migration 0042 makes Submit (`draft → pending_approval`) require fresh attestation and submission stamps. No GRANT or privilege change (`sessions` is
   owner-only; the CHECKs add no privilege). Owner decisions and the TOTP-vs-WebAuthn gap: `OA-063`.
   Owner questions OA-045 onward; data source DS-12 in `docs/data-sources.xlsx`.
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient

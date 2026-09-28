@@ -28,4 +28,15 @@ describe("hasRecentMfa", () => {
   it("is true at exactly 0 seconds (just verified)", () => {
     expect(hasRecentMfa(verifiedAt, verifiedAt)).toBe(true);
   });
+
+  // A verification written by an instance whose clock runs ahead reads as slightly in the future.
+  it("tolerates up to 30 seconds of clock skew into the future", () => {
+    expect(hasRecentMfa(verifiedAt, new Date(verifiedAt.getTime() - 29_000))).toBe(true);
+    expect(hasRecentMfa(verifiedAt, new Date(verifiedAt.getTime() - 30_000))).toBe(true);
+  });
+
+  it("refuses a verification more than 30 seconds in the future", () => {
+    expect(hasRecentMfa(verifiedAt, new Date(verifiedAt.getTime() - 31_000))).toBe(false);
+    expect(hasRecentMfa(verifiedAt, new Date(verifiedAt.getTime() - 3_600_000))).toBe(false);
+  });
 });

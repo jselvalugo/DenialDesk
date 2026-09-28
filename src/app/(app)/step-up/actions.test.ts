@@ -13,11 +13,11 @@ vi.mock("@/auth/session", () => ({
   clientIp: () => clientIp(),
 }));
 
-const reserveAttempt = vi.fn();
+const reserveStepUpAttempt = vi.fn();
 const releaseAttempt = vi.fn();
 const claimTotp = vi.fn();
 vi.mock("@/auth/credentials", () => ({
-  reserveAttempt: (...args: unknown[]) => reserveAttempt(...args),
+  reserveStepUpAttempt: (...args: unknown[]) => reserveStepUpAttempt(...args),
   releaseAttempt: (...args: unknown[]) => releaseAttempt(...args),
   claimTotp: (...args: unknown[]) => claimTotp(...args),
   codeSchema: {
@@ -85,9 +85,10 @@ function form(entries: Record<string, string>) {
 describe("verifyStepUp", () => {
   beforeEach(() => {
     requireAuth.mockResolvedValue(auth);
-    completeStepUpMfa.mockClear();
+    completeStepUpMfa.mockReset();
+    completeStepUpMfa.mockResolvedValue(true);
     auditSystem.mockClear();
-    reserveAttempt.mockResolvedValue(true);
+    reserveStepUpAttempt.mockResolvedValue(true);
     claimTotp.mockClear();
     releaseAttempt.mockClear();
     limitCurrentRequest.mockClear();
@@ -95,11 +96,13 @@ describe("verifyStepUp", () => {
     selectResult.mfaEnrolledAt = new Date();
   });
 
-  it("on success records a fresh verification, audits with the return path, and redirects there", async () => {
+  const ID = "0b9f5a5e-1f0a-4c3e-8d6e-2b1a9c7d4e10";
+
+  it("on success records a fresh verification, audits the route and connection ID, and redirects there", async () => {
     claimTotp.mockResolvedValue("ok");
     await expect(
-      verifyStepUp({}, form({ code: "123456", returnTo: "/settings/integrations/abc" })),
-    ).rejects.toThrow("redirect:/settings/integrations/abc");
+      verifyStepUp({}, form({ code: "123456", returnTo: `/settings/integrations/${ID}` })),
+    ).rejects.toThrow(`redirect:/settings/integrations/${ID}`);
     expect(completeStepUpMfa).toHaveBeenCalledWith(auth.sessionId);
     // resetLockout=false is passed as claimTotp's 4th argument (never resets sign-in lockout).
     expect(claimTotp).toHaveBeenCalledWith(expect.anything(), "123456", false, false);
@@ -109,36 +112,58 @@ describe("verifyStepUp", () => {
         tenantId: auth.tenantId,
         entityType: "session",
         entityId: auth.sessionId,
-        metadata: { path: "/settings/integrations/abc" },
+        metadata: { route: "/settings/integrations/[id]", route_id: ID },
       }),
     );
     // A success returns the attempt it reserved, so successful step-ups never add up to a lockout.
     expect(releaseAttempt).toHaveBeenCalledWith(auth.userId);
   });
 
-  it("audits the path without its query string", async () => {
+  it("audits a template, never the raw path or its query string", async () => {
     claimTotp.mockResolvedValue("ok");
     await expect(
-      verifyStepUp({}, form({ code: "123456", returnTo: "/settings/integrations/abc?tab=history" })),
-    ).rejects.toThrow("redirect:/settings/integrations/abc?tab=history");
-    expect(auditSystem).toHaveBeenCalledWith(
-      expect.objectContaining({ metadata: { path: "/settings/integrations/abc" } }),
-    );
+      verifyStepUp({}, form({ code: "123456", returnTo: `/settings/integrations/${ID}?note=Jane+Doe` })),
+    ).rejects.toThrow(`redirect:/settings/integrations/${ID}`);
+    const [event] = auditSystem.mock.calls.at(-1) as [{ metadata: Record<string, unknown> }];
+    expect(JSON.stringify(event.metadata)).not.toMatch(/Jane|note/);
   });
 
-  it.each(["https://evil.example/x", "//evil.example", "/\\evil.example", "/claims/abc", ""])(
-    "never redirects to %j (open redirect): falls back to Settings › Integrations",
+  it.each([
+    "https://evil.example/x",
+    "//evil.example",
+    "/\\evil.example",
+    "/claims/abc",
+    "/settings/integrations/Jane%20Doe",
+    "/settings/integrations/not-a-uuid",
+    `/settings/integrations/${"a".repeat(300)}`,
+    "",
+  ])(
+    "never redirects to %j: falls back to Settings › Integrations, auditing only the fallback",
     async (returnTo) => {
       claimTotp.mockResolvedValue("ok");
       await expect(verifyStepUp({}, form({ code: "123456", returnTo }))).rejects.toThrow(
         "redirect:/settings/integrations",
       );
+      expect(auditSystem).toHaveBeenCalledWith(
+        expect.objectContaining({ metadata: { route: "/settings/integrations", route_id: null } }),
+      );
     },
   );
 
+  it("does not audit a verification, and sends the browser to sign in, when the session was revoked meanwhile", async () => {
+    claimTotp.mockResolvedValue("ok");
+    completeStepUpMfa.mockResolvedValue(false);
+    await expect(
+      verifyStepUp({}, form({ code: "123456", returnTo: "/settings/integrations" })),
+    ).rejects.toThrow("redirect:/login");
+    expect(auditSystem).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: "auth.step_up_verified" }),
+    );
+  });
+
   it("refuses a mismatched code without completing step-up", async () => {
     claimTotp.mockResolvedValue("mismatch");
-    const result = await verifyStepUp({}, form({ code: "000000", returnTo: "/patients" }));
+    const result = await verifyStepUp({}, form({ code: "000000", returnTo: `/settings/integrations/${ID}` }));
     expect(result.error).toBeTruthy();
     expect(completeStepUpMfa).not.toHaveBeenCalled();
     expect(releaseAttempt).not.toHaveBeenCalled();
@@ -146,7 +171,7 @@ describe("verifyStepUp", () => {
       expect.objectContaining({
         action: "auth.step_up_failed",
         tenantId: auth.tenantId,
-        metadata: { path: "/patients" },
+        metadata: { route: "/settings/integrations/[id]", route_id: ID },
       }),
     );
     // A failure never clears the sign-in lockout counter: the reset flag is false either way.
@@ -162,7 +187,7 @@ describe("verifyStepUp", () => {
   });
 
   it("refuses when the account is locked out, never reaching claimTotp", async () => {
-    reserveAttempt.mockResolvedValue(false);
+    reserveStepUpAttempt.mockResolvedValue(false);
     const result = await verifyStepUp({}, form({ code: "123456" }));
     expect(result.error).toBeTruthy();
     expect(claimTotp).not.toHaveBeenCalled();

@@ -99,10 +99,12 @@ async function setStatus(ctx: Ctx, id: string, status: ConnectionStatus, reason:
 /** Stand-ins for discovery, Submit (PI2a-2), and the registry claim. */
 async function submit(ctx: Ctx, id: string) {
   const tokenEndpoint = `https://auth-${randomUUID().slice(0, 8)}.example.com/token`;
+  const issuer = `https://issuer-${randomUUID().slice(0, 8)}.example.com`;
   await withTenant(ctx, async (tx) => {
     await tx.execute(sql`
       update integration_connections
-      set token_endpoint = ${tokenEndpoint}, token_endpoint_key = ${tokenEndpoint}
+      set token_endpoint = ${tokenEndpoint}, token_endpoint_key = ${tokenEndpoint},
+          issuer = ${issuer}
       where id = ${id}::uuid
     `);
     await tx.execute(sql`
@@ -113,6 +115,23 @@ async function submit(ctx: Ctx, id: string) {
     `);
     await tx.execute(sql`select integration_registry_claim(${id}::uuid)`);
   });
+}
+
+/** The stamps Submit writes and the fields discovery records, read as the owner. */
+async function stamps(id: string) {
+  const [row] = await systemDb()
+    .select({
+      attestedBy: integrationConnections.usResidencyAttestedBy,
+      attestedAt: integrationConnections.usResidencyAttestedAt,
+      submittedBy: integrationConnections.submittedBy,
+      submittedAt: integrationConnections.submittedAt,
+      tokenEndpoint: integrationConnections.tokenEndpoint,
+      tokenEndpointKey: integrationConnections.tokenEndpointKey,
+      issuer: integrationConnections.issuer,
+    })
+    .from(integrationConnections)
+    .where(eq(integrationConnections.id, id));
+  return row!;
 }
 
 /** The operator's approval (PI1c): table-owner privileges, since the app role can't activate. */
@@ -308,7 +327,31 @@ describe("resumeConnection (step-up, R-7.2.2)", () => {
       action: "integration.connection_resumed",
       actorUserId: ctx.userId,
       tenantId: ctx.tenantId,
-      metadata: { previous_status: "paused", sandbox: false },
+      metadata: {
+        previous_status: "paused",
+        previous_status_reason: null,
+        sandbox: false,
+        step_up_verified_at: null,
+      },
+    });
+  });
+
+  it("records when the step-up happened, and why an errored connection had stopped", async () => {
+    const { ctx, id } = await realConnection("error");
+    const verifiedAt = new Date(Date.now() - 60_000).toISOString();
+    await withTenant(ctx, async (tx) =>
+      resumeConnection(
+        tx,
+        { ...admin(ctx, { mfa: true }), stepUpVerifiedAt: verifiedAt },
+        id,
+        (await getConnection(tx, id))!.updatedAt.toISOString(),
+      ),
+    );
+    expect((await lastAudit(id)).metadata).toEqual({
+      previous_status: "error",
+      previous_status_reason: "auth_failed",
+      sandbox: false,
+      step_up_verified_at: verifiedAt,
     });
   });
 
@@ -431,11 +474,33 @@ describe("withdrawConnection", () => {
     expect((await detail(ctx, id)).status).toBe("draft");
     expect(await registered(id)).toHaveLength(0);
     expect(await lastAudit(id)).toMatchObject({
-      action: "integration.connection_updated",
+      action: "integration.connection_withdrawn",
       actorUserId: ctx.userId,
       tenantId: ctx.tenantId,
-      metadata: { transition: "withdrawn", previous_status: "pending_approval", registry_released: true },
+      entityType: "integration_connection",
+      metadata: { previous_status: "pending_approval", registry_released: true, attestation_cleared: true },
     });
+  });
+
+  it("clears the residency attestation and the old endpoint's discovery, keeps the record that it was submitted once", async () => {
+    const { ctx, id } = await realConnection("pending_approval");
+    const before = await stamps(id);
+    expect(before.attestedAt).not.toBeNull();
+    expect(before.submittedAt).not.toBeNull();
+    expect(before.tokenEndpoint).not.toBeNull();
+    expect(before.tokenEndpointKey).not.toBeNull();
+    expect(before.issuer).not.toBeNull();
+    await withTenant(ctx, async (tx) =>
+      withdrawConnection(tx, admin(ctx), id, (await getConnection(tx, id))!.updatedAt.toISOString()),
+    );
+    const after = await stamps(id);
+    expect(after.attestedBy).toBeNull();
+    expect(after.attestedAt).toBeNull();
+    expect(after.tokenEndpoint).toBeNull();
+    expect(after.tokenEndpointKey).toBeNull();
+    expect(after.issuer).toBeNull();
+    expect(after.submittedBy).toBe(ctx.userId);
+    expect(after.submittedAt?.getTime()).toBe(before.submittedAt?.getTime());
   });
 
   it("makes the endpoint editable again, since the connection is a never-synced draft", async () => {
@@ -448,6 +513,30 @@ describe("withdrawConnection", () => {
       updateConnection(tx, admin(ctx), id, (await getConnection(tx, id))!.updatedAt.toISOString(), corrected),
     );
     expect(await detail(ctx, id)).toMatchObject({ status: "draft", displayName: "Corrected EHR" });
+  });
+
+  it("can be submitted again after the endpoint is corrected, on a fresh attestation", async () => {
+    const { ctx, id } = await realConnection("pending_approval");
+    const first = await stamps(id);
+    await withTenant(ctx, async (tx) =>
+      withdrawConnection(tx, admin(ctx), id, (await getConnection(tx, id))!.updatedAt.toISOString()),
+    );
+    await withTenant(ctx, async (tx) =>
+      updateConnection(
+        tx,
+        admin(ctx),
+        id,
+        (await getConnection(tx, id))!.updatedAt.toISOString(),
+        endpoint(),
+      ),
+    );
+    // Discovery and Submit run again for the corrected endpoint (the old discovery was cleared).
+    await submit(ctx, id);
+    expect((await detail(ctx, id)).status).toBe("pending_approval");
+    const second = await stamps(id);
+    expect(second.attestedAt!.getTime()).toBeGreaterThan(first.attestedAt!.getTime());
+    expect(second.submittedAt!.getTime()).toBeGreaterThan(first.submittedAt!.getTime());
+    expect(await registered(id)).toHaveLength(1);
   });
 
   it.each(["draft", "active", "paused"] as const)("refuses a %s connection", async (state) => {
@@ -538,6 +627,18 @@ describe("revokeConnection's reason code", () => {
       expect(await auditCount(id)).toBe(before);
     },
   );
+
+  it("records the reason a connection had stopped with before it was revoked", async () => {
+    const { ctx, id } = await realConnection("error");
+    await withTenant(ctx, async (tx) =>
+      revokeConnection(tx, admin(ctx), id, (await getConnection(tx, id))!.updatedAt.toISOString(), "other"),
+    );
+    expect((await lastAudit(id)).metadata).toMatchObject({
+      previous_status: "error",
+      previous_status_reason: "auth_failed",
+      reason_code: "other",
+    });
+  });
 
   it("still revokes without a step-up and outside the environment rule (the emergency stop)", async () => {
     const { ctx, id } = await realConnection("active");
@@ -672,5 +773,94 @@ describe("registry keys can't be written apart from their URLs (drizzle/0041 CHE
       endpoint: "https://auth.example.com/Token",
       key: "https://auth.example.com/token",
     });
+  });
+});
+
+describe("Submit needs a fresh attestation and submission stamp (drizzle/0042 trigger rule)", () => {
+  const app = (ctx: Ctx, run: ReturnType<typeof sql>) => withTenant(ctx, (tx) => tx.execute(run));
+
+  /** A draft that still carries the old attestation, as if the app hadn't cleared it on withdraw. */
+  async function draftWithOldStamps() {
+    const { ctx, id } = await realConnection("pending_approval");
+    await withTenant(ctx, async (tx) => {
+      await tx.execute(sql`update integration_connections set status = 'draft' where id = ${id}::uuid`);
+      await tx.execute(sql`select integration_registry_release(${id}::uuid)`);
+    });
+    expect((await stamps(id)).attestedAt).not.toBeNull();
+    return { ctx, id };
+  }
+
+  it("refuses a submission that carries over the earlier attestation", async () => {
+    const { ctx, id } = await draftWithOldStamps();
+    await expectDbError(
+      app(
+        ctx,
+        sql`update integration_connections
+            set status = 'pending_approval', submitted_by = ${ctx.userId}::uuid, submitted_at = now()
+            where id = ${id}::uuid`,
+      ),
+      /submitting requires a fresh residency attestation/,
+    );
+    expect((await detail(ctx, id)).status).toBe("draft");
+  });
+
+  it("refuses a submission that carries over the earlier submission stamp", async () => {
+    const { ctx, id } = await draftWithOldStamps();
+    await expectDbError(
+      app(
+        ctx,
+        sql`update integration_connections
+            set status = 'pending_approval', us_residency_attested_by = ${ctx.userId}::uuid,
+                us_residency_attested_at = now()
+            where id = ${id}::uuid`,
+      ),
+      /submitting requires a fresh residency attestation/,
+    );
+    expect((await detail(ctx, id)).status).toBe("draft");
+  });
+
+  it("accepts a submission with both stamps fresh, even over stale ones", async () => {
+    const { ctx, id } = await draftWithOldStamps();
+    await app(
+      ctx,
+      sql`update integration_connections
+          set status = 'pending_approval', submitted_by = ${ctx.userId}::uuid, submitted_at = now(),
+              us_residency_attested_by = ${ctx.userId}::uuid, us_residency_attested_at = now()
+          where id = ${id}::uuid`,
+    );
+    expect((await detail(ctx, id)).status).toBe("pending_approval");
+  });
+
+  it("still refuses a submission with no attestation at all (the 0039 CHECK)", async () => {
+    const { ctx, id } = await realConnection("draft");
+    await expectDbError(
+      app(
+        ctx,
+        sql`update integration_connections
+            set status = 'pending_approval', submitted_by = ${ctx.userId}::uuid, submitted_at = now()
+            where id = ${id}::uuid`,
+      ),
+      /integration_connections_pending_requires_submission/,
+    );
+  });
+
+  it("lets the app clear the attestation on a draft, but not on a pending connection", async () => {
+    const { ctx, id } = await draftWithOldStamps();
+    await app(
+      ctx,
+      sql`update integration_connections
+          set us_residency_attested_by = null, us_residency_attested_at = null where id = ${id}::uuid`,
+    );
+    expect((await stamps(id)).attestedAt).toBeNull();
+    const pending = await realConnection("pending_approval");
+    await expectDbError(
+      app(
+        pending.ctx,
+        sql`update integration_connections
+            set us_residency_attested_by = null, us_residency_attested_at = null
+            where id = ${pending.id}::uuid`,
+      ),
+      /the endpoint can only change while draft/,
+    );
   });
 });
