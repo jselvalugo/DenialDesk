@@ -114,8 +114,10 @@ function claimsOrderBy(sort: ClaimSortKey, dir: "asc" | "desc") {
     case "claimNumber":
       return [d(claims.claimNumber), asc(claims.id)];
     case "patientName":
-      // Postgres compares text byte-wise by default; `substring(... from 1 for 1)` on the first
-      // name mirrors the in-memory comparator's "first initial" key, not the full first name.
+      // Text ordering follows the database's collation (byte-wise under `C`, linguistic under e.g.
+      // `en_US.utf8`), so it can differ from `CLAIM_NAME_COLLATOR` on case, accents, or punctuation.
+      // `substring(... from 1 for 1)` on the first name mirrors the in-memory comparator's "first
+      // initial" key, not the full first name.
       return [
         d(patients.lastName),
         d(sql`substring(${patients.firstName} from 1 for 1)`),
@@ -146,8 +148,8 @@ interface UnsubmittedIndexRow {
   regime: Regime | null;
   serviceDate: string;
   billedCents: number;
-  /** Only read when sorting by `patientName` (minimum necessary, security review P4 item 6): the
-   * default urgency-ordered index never touches a patient's name. */
+  /** Only read when the `unsubmitted` group is sorted by `patientName` (minimum necessary, security
+   * review P4 item 6): every other index read never touches a patient's name. */
   patientFirst?: string;
   patientLast?: string;
 }
@@ -168,8 +170,9 @@ const unsubmittedBaseSelect = {
  * then not configured (no filing rule for the regime), with a stable id tie-break. Loads the columns
  * needed both for that urgency order and for an explicit column sort (P4): a practice's unsubmitted
  * backlog is a working set (capped at `UNSUBMITTED_LIMIT`), so sorting it in memory is cheap.
- * `needPatientName` joins `patients` and reads names only when the caller is about to sort by
- * `patientName` — the default (urgency) index never reads a patient's name (minimum necessary).
+ * `needPatientName` joins `patients` and reads names only when the caller is about to sort this
+ * index by `patientName` (the `unsubmitted` group) — otherwise it never reads a patient's name
+ * (minimum necessary).
  */
 async function unsubmittedIndex(tx: TenantTx, today: string, needPatientName: boolean) {
   const rows: UnsubmittedIndexRow[] = needPatientName
@@ -284,7 +287,13 @@ export async function claimsOverview(
   filters: ClaimFilters,
   today: string,
 ): Promise<{ rows: ClaimListRow[]; total: number; truncated: boolean; summary: FilingSummary }> {
-  const { index, truncated } = await unsubmittedIndex(tx, today, filters.sort === "patientName");
+  // Patient names are read only when they will actually order the unsubmitted page (minimum
+  // necessary): a `patientName` sort on the SQL-backed groups sorts in Postgres instead.
+  const { index, truncated } = await unsubmittedIndex(
+    tx,
+    today,
+    filters.group === "unsubmitted" && filters.sort === "patientName",
+  );
   const summary: FilingSummary = {
     unsubmitted: index.length,
     unsubmittedCents: index.reduce((sum, row) => sum + row.billedCents, 0),

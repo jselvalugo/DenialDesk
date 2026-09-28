@@ -2,13 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { addCalendarDays, todayIn } from "@rules/calendar";
 import { closeDatabase } from "@/db/client";
-import { auditEvents, claimLines, claims, claimVersions, payers } from "@/db/schema";
+import { auditEvents, claimLines, claims, claimVersions, patients, payers } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { DatabaseError, withTenant } from "@/db/tenant";
-import { claimsOverview, getClaim } from "@/domain/claims/queries";
+import { CLAIM_NAME_COLLATOR, claimsOverview, getClaim } from "@/domain/claims/queries";
 import { ClaimCorrectionError, correctClaim } from "@/domain/claims/versions";
 import { generateDataset } from "@/domain/synthetic/generator";
-import { expectDbError } from "./helpers";
+import { expectDbError, uuidWithPrefix } from "./helpers";
 
 type Ctx = { tenantId: string; userId: string };
 let a: Ctx;
@@ -548,24 +548,112 @@ describe("claims list and timely-filing summary (R-3.1.5)", () => {
     });
     expect(byClaimNumber.rows.length).toBeGreaterThan(1);
     const numbers = byClaimNumber.rows.map((r) => r.claimNumber);
-    expect(numbers).toEqual([...numbers].sort());
+    // The shared `CLAIM_NAME_COLLATOR`, not `Array.prototype.sort()`'s UTF-16 order. (The in-memory
+    // claim-number comparator itself uses `localeCompare`; for these ASCII claim numbers they agree.)
+    expect(numbers).toEqual([...numbers].sort((x, y) => CLAIM_NAME_COLLATOR.compare(x, y)));
     // The total (urgency-filtered set) is unaffected by which order it's read in.
     expect(byClaimNumber.total).toBe(byDefault.total);
   });
 
+  it("sorts by patient name (last name, then first initial, then claim number, then id) in both the SQL and in-memory groups (P4 review)", async () => {
+    const { claim } = await draftClaim(a);
+    const stamp = Date.now();
+    const { payerId, ids } = await withTenant(a, async (tx) => {
+      const [payer] = await tx
+        .insert(payers)
+        .values({ tenantId: a.tenantId, name: `Patient-name sort payer ${stamp}` })
+        .returning();
+      // Capitalized ASCII names only: they order the same under a byte-wise (`C`) and a linguistic
+      // (`en_US.utf8`) database collation, so the SQL group's order is comparable with the collator.
+      // "Alpha, Avery" and "Alpha, Adam" tie on last name + first initial, so claim number decides
+      // (not the full first name), and their ids run opposite to claim-number order. Claim numbers
+      // and ids otherwise follow neither name order, so losing the name keys fails in both directions.
+      const fixtures = [
+        { key: "charlie", first: "Lee", last: "Charlie", n: 1, id: uuidWithPrefix("1") },
+        { key: "alphaZoe", first: "Zoe", last: "Alpha", n: 5, id: uuidWithPrefix("2") },
+        { key: "alphaAdam", first: "Adam", last: "Alpha", n: 4, id: uuidWithPrefix("3") },
+        { key: "bravo", first: "Kim", last: "Bravo", n: 2, id: uuidWithPrefix("4") },
+        { key: "alphaAvery", first: "Avery", last: "Alpha", n: 3, id: uuidWithPrefix("f") },
+      ] as const;
+      const ids: Record<(typeof fixtures)[number]["key"], string> = {} as never;
+      for (const f of fixtures) {
+        const [patient] = await tx
+          .insert(patients)
+          .values({
+            tenantId: a.tenantId,
+            mrn: `SYN-PN-${stamp}-${f.n}`,
+            firstName: f.first,
+            lastName: f.last,
+            birthDate: "1980-01-01",
+            memberIdEnc: "x",
+            memberIdLast4: "",
+          })
+          .returning({ id: patients.id });
+        await tx.insert(claims).values({
+          id: f.id,
+          tenantId: a.tenantId,
+          patientId: patient!.id,
+          providerId: claim.providerId,
+          locationId: claim.locationId,
+          payerId: payer!.id,
+          claimNumber: `PN-${stamp}-${f.n}`,
+          serviceDate: claim.serviceDate,
+          diagnosisCodes: claim.diagnosisCodes,
+          billedCents: claim.billedCents,
+          status: "draft",
+        });
+        ids[f.key] = f.id;
+      }
+      return { payerId: payer!.id, ids };
+    });
+    // The same comparator the in-memory path uses, built on the shared collator: last name, first
+    // initial (both flipped by `dir`), then claim number and id (always ascending).
+    const byName =
+      (sign: 1 | -1) =>
+      (x: { patientLast: string; patientFirst: string; claimNumber: string; id: string }, y: typeof x) =>
+        CLAIM_NAME_COLLATOR.compare(x.patientLast, y.patientLast) * sign ||
+        CLAIM_NAME_COLLATOR.compare(x.patientFirst.slice(0, 1), y.patientFirst.slice(0, 1)) * sign ||
+        CLAIM_NAME_COLLATOR.compare(x.claimNumber, y.claimNumber) ||
+        (x.id < y.id ? -1 : x.id > y.id ? 1 : 0);
+    const expected = {
+      asc: [ids.alphaAvery, ids.alphaAdam, ids.alphaZoe, ids.bravo, ids.charlie],
+      desc: [ids.charlie, ids.bravo, ids.alphaZoe, ids.alphaAvery, ids.alphaAdam],
+    };
+    for (const group of ["all", "unsubmitted"] as const) {
+      for (const [dir, sign] of [
+        ["asc", 1],
+        ["desc", -1],
+      ] as const) {
+        const { rows, total } = await withTenant(a, (tx) =>
+          claimsOverview(tx, { group, payerId, sort: "patientName", dir, page: 1 }, today),
+        );
+        expect(total).toBe(5);
+        expect(rows).toEqual([...rows].sort(byName(sign)));
+        expect(rows.map((r) => r.id)).toEqual(expected[dir]);
+      }
+    }
+  });
+
   it("keeps the pre-P4 default order (service date desc, then claim number, then id) with no sort requested (P4 review)", async () => {
     const { claim } = await draftClaim(a);
-    const { lowerNumberId, higherNumberId, rows } = await withTenant(a, async (tx) => {
-      // Two new claims with a tied service date (a claim's `claims_require_version` trigger blocks
-      // updating an existing one's service date outside the correction flow), in a claim-number
-      // order that would fail if the tie-break were left to chance instead of the documented rule.
+    const { newerId, lowerNumberId, higherNumberId, rows } = await withTenant(a, async (tx) => {
+      // New claims under a payer of their own, read back filtered by it, so the assertion is exact and
+      // never depends on how many other claims this tenant has on page 1. Two share a service date (a
+      // claim's `claims_require_version` trigger blocks updating an existing one's service date
+      // outside the correction flow); their ids run opposite to claim-number order, so a regression to
+      // an id-only tie-break fails on every run. A third, newer claim with the highest claim number
+      // checks service date (descending) still leads.
+      const [payer] = await tx
+        .insert(payers)
+        .values({ tenantId: a.tenantId, name: `Default-order tie payer ${Date.now()}` })
+        .returning();
       const tiedDate = "2026-01-15";
       const base = {
         tenantId: a.tenantId,
         patientId: claim.patientId,
         providerId: claim.providerId,
         locationId: claim.locationId,
-        payerId: claim.payerId,
+        payerId: payer!.id,
         diagnosisCodes: claim.diagnosisCodes,
         billedCents: claim.billedCents,
         serviceDate: tiedDate,
@@ -573,20 +661,25 @@ describe("claims list and timely-filing summary (R-3.1.5)", () => {
       };
       const [higher] = await tx
         .insert(claims)
-        .values({ ...base, claimNumber: `TIE-ORDER-B-${Date.now()}` })
+        .values({ ...base, id: uuidWithPrefix("0"), claimNumber: `TIE-ORDER-B-${Date.now()}` })
         .returning({ id: claims.id });
       const [lower] = await tx
         .insert(claims)
-        .values({ ...base, claimNumber: `TIE-ORDER-A-${Date.now()}` })
+        .values({ ...base, id: uuidWithPrefix("f"), claimNumber: `TIE-ORDER-A-${Date.now()}` })
         .returning({ id: claims.id });
-      const result = await claimsOverview(tx, { group: "all", page: 1 }, today);
-      return { lowerNumberId: lower!.id, higherNumberId: higher!.id, rows: result.rows };
+      const [newer] = await tx
+        .insert(claims)
+        .values({
+          ...base,
+          id: uuidWithPrefix("e"),
+          claimNumber: `TIE-ORDER-Z-${Date.now()}`,
+          serviceDate: "2026-02-15",
+        })
+        .returning({ id: claims.id });
+      const result = await claimsOverview(tx, { group: "all", payerId: payer!.id, page: 1 }, today);
+      return { newerId: newer!.id, lowerNumberId: lower!.id, higherNumberId: higher!.id, rows: result.rows };
     });
-    const lowerIdx = rows.findIndex((r) => r.id === lowerNumberId);
-    const higherIdx = rows.findIndex((r) => r.id === higherNumberId);
-    expect(lowerIdx).toBeGreaterThanOrEqual(0);
-    expect(higherIdx).toBeGreaterThanOrEqual(0);
-    expect(lowerIdx).toBeLessThan(higherIdx);
+    expect(rows.map((r) => r.id)).toEqual([newerId, lowerNumberId, higherNumberId]);
   });
 
   it("falls back to service date ascending, then id, in the unsubmitted urgency default when deadline and billed amount tie (P4 review)", async () => {
@@ -595,6 +688,7 @@ describe("claims list and timely-filing summary (R-3.1.5)", () => {
       // An unverified payer has no regime, so `filingStatus` reports no deadline for either claim
       // (both `daysRemaining: null`) — the urgency default's first two tie-break levels both tie,
       // leaving only the (pre-P4) service-date fallback and the id tie-break to decide the order.
+      // Ids run opposite to service-date order, so an id-only tie-break fails on every run.
       const [payer] = await tx
         .insert(payers)
         .values({ tenantId: a.tenantId, name: `Urgency tie-break payer ${Date.now()}` })
@@ -612,11 +706,21 @@ describe("claims list and timely-filing summary (R-3.1.5)", () => {
       };
       const [earlier] = await tx
         .insert(claims)
-        .values({ ...base, claimNumber: `TIE-EARLY-${Date.now()}`, serviceDate: addCalendarDays(today, -10) })
+        .values({
+          ...base,
+          id: uuidWithPrefix("f"),
+          claimNumber: `TIE-EARLY-${Date.now()}`,
+          serviceDate: addCalendarDays(today, -10),
+        })
         .returning({ id: claims.id });
       const [later] = await tx
         .insert(claims)
-        .values({ ...base, claimNumber: `TIE-LATE-${Date.now()}`, serviceDate: addCalendarDays(today, -5) })
+        .values({
+          ...base,
+          id: uuidWithPrefix("0"),
+          claimNumber: `TIE-LATE-${Date.now()}`,
+          serviceDate: addCalendarDays(today, -5),
+        })
         .returning({ id: claims.id });
       const result = await claimsOverview(tx, { group: "unsubmitted", payerId: payer!.id, page: 1 }, today);
       return { earlierId: earlier!.id, laterId: later!.id, rows: result.rows };

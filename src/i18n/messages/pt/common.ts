@@ -64,6 +64,7 @@ export const common: Messages["common"] = {
   "sortable.hint": "ordenar {direction}",
   "sortable.ascending": "crescente",
   "sortable.descending": "decrescente",
+  "sortable.defaultOrder": "ordenar na ordem padrão",
 
   "pagination.label": "Paginação",
   "pagination.noResults": "Nenhum resultado",

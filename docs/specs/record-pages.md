@@ -107,6 +107,14 @@ a masked identifier (member ID, SSN) — those stay in the aside behind `MaskedV
       `*.list_viewed`/`*.queue_viewed` audits (Claims' and Denials' events already record the filter
       query string, which now includes `sort`/`dir` when non-default; Appeals' and Patients' events
       record no such string and were not changed, to avoid inventing a new audit shape).
+  - [x] P4 review follow-ups (2026-09-28): the unsubmitted index reads patient names only when the
+        `unsubmitted` group is sorted by `patientName` (a `patientName` sort on the other groups sorts
+        in Postgres, whose text order follows the database collation — byte-wise under `C`,
+        linguistic under `en_US.utf8` — so it can differ from the in-memory `CLAIM_NAME_COLLATOR` on
+        case, accents, or punctuation); the "Filing deadline" header's hint says "sort in default
+        order" and is omitted when no column sort is applied; default-order tie-break tests insert
+        rows with explicit ids running opposite to the expected order, so an id-only regression fails
+        on every run; queue sort tests insert their own denials instead of mutating seeded ones.
 
 ## Data / API changes
 `listPatients` also selects `sex`, `city`, `state` for the list columns (same table, same RLS;

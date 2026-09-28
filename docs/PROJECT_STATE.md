@@ -67,7 +67,9 @@ _Last updated: 2026-09-28_
   regained its "Notice date" column, sortable, restoring the pre-P4 "sort by notice" criterion), and
   Appeals, Patients, and Payers. Server-side sort, no new dependency; ADR 0004 addendum. `density`
   (a `Table` prop, a CSS custom property, no new React context) is available on `DataTable` but not
-  yet turned on for any list — a later change, not part of P4. Open (owner): which column replaces
+  yet turned on for any list — a later change, not part of P4. P4 review follow-ups done 2026-09-28
+  (deterministic tie-break tests, patient-name sort test, names read only for the unsubmitted
+  `patientName` sort, "Filing deadline" hint says "default order"). Open (owner): which column replaces
   Sex on the list.
 - Internationalization (`specs/internationalization.md`, ADR 0009, R-11.1): the whole product (practice
   app, sign-in, operator console, Insight .xlsx export) reads in English, Spanish, or Portuguese. Own
@@ -394,6 +396,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - A vector (SVG) version of the logo from a designer; the app currently uses the PNG.
 - Confirm and record the license and generating tool for the sign-in reception image
   (`public/brand/README.md`); it is owner-supplied and described as a synthetic render.
+- Claims list: are patient names read only to order the unsubmitted queue by patient (never shown
+  beyond the displayed page) covered by the `claim.list_viewed` audit event? `OA-060`.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
   to `main` and protect it (R-7.4.4) before more PRs land.
 - Insight exported .xlsx workbooks (R-9.2.1, SOC 2 C1.1/CC6.7): owner said "not sure, let's
