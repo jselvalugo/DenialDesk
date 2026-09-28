@@ -44,8 +44,11 @@ _Last updated: 2026-09-28_
   `*Id`-shaped fields and denylists raw identifier keys — see `docs/specs/patient-integrations.md`
   PI1a for the full list; R-15.9 human sign-off on the privilege (REVOKE/GRANT/column-grant)
   statements is still needed before this migration runs anywhere but a local/test database)**, PI1b
-  Settings ›
-  Integrations + drop-down, PI1c operator approval, PI2a transport/discovery/keys/test connection,
+  Settings › Integrations + drop-down (split 2026-09-28: **PI1b-1 domain done** —
+  `src/domain/integrations/connections.ts` create/edit/revoke with a strict allow-list, URL and
+  MRN-identifier-system rules in `src/integrations/fhir/`, environment rule at save; PI1b-2 pages,
+  PI1b-3 drop-down; Submit/attestation/MFA step-up/pause-resume moved to PI2a, where Test
+  connection first makes Submit possible), PI1c operator approval, PI2a transport/discovery/keys/test connection,
   PI2b sync engine + sandbox + jobs + history + payer mapping (includes `withTenantAsSystem`,
   `denialdesk_jobs`, the integration service principal — deferred from PI1a per the spec's own phase
   split), PI3 scheduled sync + source-state hardening, PI4 Bulk Data before the first real practice.
