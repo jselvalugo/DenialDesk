@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 import { canManageIntegrations } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { hasRecentMfa } from "@/auth/step-up";
 import { Field, FieldList } from "@/components/records/FieldList";
 import { Badge } from "@/components/ui/Badge";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
@@ -13,11 +14,14 @@ import {
   CONNECTION_STATUS_TONE,
   endpointEditable,
   getConnection,
+  hasPassingTestNow,
 } from "@/domain/integrations/connections";
 import { getFormat, getT } from "@/i18n/server";
 import { ConnectionForm } from "../ConnectionForm";
+import { connectionTestDeps } from "../test-deps";
 import { ConnectionLifecycleButton } from "./ConnectionLifecycle";
 import { RevokeConnectionForm } from "./RevokeConnectionForm";
+import { SubmitConnectionForm } from "./SubmitConnectionForm";
 import { TestConnectionForm } from "./TestConnectionForm";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -37,6 +41,14 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
   if (!id.success) notFound();
   const connection = await withTenant(auth, (tx) => getConnection(tx, id.data));
   if (!connection) notFound();
+  // Whether Submit can go through the test gate right now (a pass in the last 24 h, for this
+  // configuration and the live key): only a draft can be submitted. Submit checks it again itself.
+  const testPassed =
+    connection.status === "draft"
+      ? await withTenant(auth, (tx) =>
+          hasPassingTestNow(tx, auth.tenantId, connection.id, connectionTestDeps()),
+        )
+      : false;
   const t = await getT("integrations");
   const ts = await getT("settings");
   const format = await getFormat();
@@ -57,7 +69,8 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
   );
   const offboarding = !connection.isSandbox;
   // The lifecycle action each state offers (PI2a): pause a live connection, resume a stopped one
-  // (a step-up is needed), withdraw a submitted one. A draft has none (Submit ships with PI2a-2).
+  // (a step-up is needed; from an error also a passing test), withdraw a submitted one. A draft has
+  // none: it has the Submit panel.
   const lifecycle = (
     {
       active: { kind: "pause", description: "lifecycle.active" },
@@ -154,6 +167,22 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
           {!connection.isSandbox && (
             <Panel title={t("test.title")} description={t("test.description")}>
               <TestConnectionForm id={connection.id} />
+            </Panel>
+          )}
+          {connection.status === "draft" && (
+            <Panel title={t("submit.title")}>
+              <SubmitConnectionForm
+                id={connection.id}
+                updatedAt={updatedAt}
+                sandbox={connection.isSandbox}
+                testPassed={testPassed}
+                needsStepUp={!hasRecentMfa(auth.mfaVerifiedAt)}
+              />
+            </Panel>
+          )}
+          {connection.status === "pending_approval" && (
+            <Panel title={t("submit.awaitingTitle")}>
+              <p className="text-body text-text">{t("submit.awaitingDescription")}</p>
             </Panel>
           )}
           {lifecycle && (

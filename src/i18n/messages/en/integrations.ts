@@ -82,7 +82,7 @@ export const integrations = {
   "lifecycle.paused":
     "Sync is paused. Resuming restarts it, and needs you to verify your identity with your authenticator app first.",
   "lifecycle.error":
-    "DenialDesk stopped syncing after an error. Once it's fixed with your EHR/PM administrator, resume. Resuming needs you to verify your identity with your authenticator app first.",
+    "DenialDesk stopped syncing after an error. Once it's fixed with your EHR/PM administrator, resume. Resuming needs you to verify your identity with your authenticator app first, and a passing Test connection.",
   "lifecycle.pending_approval":
     "This connection is waiting for approval. Withdrawing it returns it to a draft you can edit and submit again.",
   "pause.submit": "Pause sync",
@@ -168,4 +168,29 @@ export const integrations = {
   "test.pending": "Testing…",
   "test.resultOk": "Test passed",
   "test.resultFailed": "Test failed",
+  "submit.title": "Submit connection",
+  "submit.descriptionReal":
+    "Submitting sends this connection to DenialDesk for approval. Nothing syncs until it's approved, and you can withdraw the submission until then. It needs a passing Test connection, your confirmation below, and a recent identity verification.",
+  "submit.descriptionSandbox":
+    "The built-in test sandbox holds synthetic data only, so it needs no approval: submitting activates it. It needs a passing Test connection and a recent identity verification.",
+  "submit.attestation": "This EHR/PM endpoint stores and processes data only in the United States",
+  "submit.attestationHint": "Recorded in the audit log with your name and the date.",
+  "submit.stepUpNotice": "Submitting needs you to verify your identity with your authenticator app first.",
+  "submit.blocked.noPassingTest":
+    "Submit is unavailable: this connection has no passing Test connection from the last 24 hours. Run Test connection above. A failed test, or a change to the connection or to DenialDesk's signing key, needs a new pass.",
+  "submit.blocked.sandbox":
+    "Submit is unavailable: it needs a passing Test connection, and the built-in test sandbox can't be tested yet.",
+  "submit.submit": "Submit for approval",
+  "submit.submitSandbox": "Activate sandbox",
+  "submit.pending": "Submitting…",
+  "submit.awaitingTitle": "Awaiting DenialDesk approval",
+  "submit.awaitingDescription":
+    "DenialDesk reviews every real connection before it starts syncing. Nothing syncs until it's approved. To change the connection first, withdraw the submission.",
+  "error.testRequired":
+    "Test connection has to pass first. A pass counts for 24 hours, and only for the configuration and signing key it tested. Run it again, then submit.",
+  "error.testRequiredToResume":
+    "This connection stopped after an error. Run Test connection and get a pass before resuming.",
+  "error.attestationRequired":
+    "Confirm that the endpoint stores and processes data only in the United States.",
+  "error.registryConflict": "This endpoint and client ID are already connected",
 } as const;

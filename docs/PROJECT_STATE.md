@@ -70,7 +70,16 @@ _Last updated: 2026-09-28_
   Submit's gate: the newest test for the connection must be a pass within 24 h, bound to the current base URL, client ID, token endpoint, token endpoint key, issuer, and signing `kid`; coordinator decision pending owner confirmation, OA-065). **Open for the Azure cutover (R-15.9
   sign-off):** per-connection Key Vault keys, the grant on `key_mode`/`key_ref`, SECURITY DEFINER
   `integration_jwks_lookup`, `/.well-known/jwks/<uuid>.json`, key rotation and compromise runbooks.
-  Still open in PI2a: Submit, the residency attestation, the Submit registry claim, and Resume from `error` requiring a passing Test connection. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  **PI2a Submit slice done** (branch `pi2a-submit`, no migration, no GRANT): Submit
+  (`submitConnection`: admin, row lock, step-up, the passing-test gate with the live signing `kid`,
+  the U.S.-residency attestation for a real connection, one UPDATE with fresh `submitted_*` and
+  `us_residency_attested_*` stamps, then the registry claim; a conflict rolls back, refuses with "This
+  endpoint and client ID are already connected", and audits `integration.registry_conflict`), the
+  Submit panel and "Awaiting DenialDesk approval" on the connection page (en/es/pt), and Resume from
+  `error` requiring a passing Test connection (paused still doesn't). The passing test is required for
+  the sandbox too (only the attestation is real-only), so sandbox Submit is domain-tested with a seeded
+  pass and unreachable from the page until PI2b. **Next: PI1c operator approval** (Submit now produces
+  `pending_approval` connections with a claimed registry entry for it to approve). (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
   **PI2a lifecycle + step-up slice done** (PR #86, ported from closed #81 onto the
   #82/#84/#85 domain layer; Submit, the residency attestation, and the Submit registry claim wait on
   Test connection, PI2a-2): step-up MFA (R-7.2.2) — migration 0041 `sessions.mfa_verified_at`,

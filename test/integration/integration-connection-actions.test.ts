@@ -36,6 +36,7 @@ const {
   pauseConnectionAction,
   resumeConnectionAction,
   revokeConnectionAction,
+  submitConnectionAction,
   updateConnectionAction,
   withdrawConnectionAction,
 } = await import("@/app/(app)/settings/integrations/actions");
@@ -96,6 +97,7 @@ describe("Settings › Integrations actions (PI1b-2)", () => {
         [pauseConnectionAction, form({ id, updatedAt: stamp })],
         [resumeConnectionAction, form({ id, updatedAt: stamp })],
         [withdrawConnectionAction, form({ id, updatedAt: stamp })],
+        [submitConnectionAction, form({ id, updatedAt: stamp, attest: "on" })],
       ] as const) {
         const result = await run(action, data);
         expect(result.state?.error).toMatch(/Only an administrator/);
@@ -296,7 +298,12 @@ describe("Pause, resume, withdraw, and the revoke reason (PI2a)", () => {
     const stamp = await stampOf(id);
     const other = await createTestTenant("Lifecycle actions other");
     auth = { ...other, role: "admin", mfaVerifiedAt: new Date() };
-    for (const action of [pauseConnectionAction, resumeConnectionAction, withdrawConnectionAction]) {
+    for (const action of [
+      pauseConnectionAction,
+      resumeConnectionAction,
+      withdrawConnectionAction,
+      submitConnectionAction,
+    ]) {
       for (const target of [id, "not-a-uuid"]) {
         const result = await run(action, form({ id: target, updatedAt: stamp }));
         expect(result.state?.error).toMatch(/not found/);

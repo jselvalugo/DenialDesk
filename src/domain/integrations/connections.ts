@@ -8,6 +8,7 @@ import {
   integrationSyncRunStatusEnum,
 } from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
+import { isLocale, type Locale } from "@/i18n/config";
 import { en } from "@/i18n/messages/en";
 import type { MessageKey, Messages } from "@/i18n/messages/types";
 import { createTranslator, type Translator } from "@/i18n/translate";
@@ -25,8 +26,10 @@ import {
   SANDBOX_HOST,
   SANDBOX_MRN_SYSTEM,
 } from "@/integrations/fhir/url-rules";
+import { SigningKeyStoreError, type SigningKeyStore } from "@/integrations/fhir/keys";
 import { VENDOR_SANDBOX_HOSTS } from "@/integrations/fhir/vendor-sandboxes";
 import { audit } from "@/lib/audit";
+import { hasRecentPassingTest } from "./passing-test";
 import { isRevokeReasonCode } from "./revoke-reasons";
 
 // EHR/PM connections as an administrator creates and edits them (docs/specs/patient-integrations.md
@@ -76,7 +79,11 @@ export class IntegrationConnectionError extends Error {
   }
 }
 
-export type ConnectionField = "displayName" | "baseUrl" | "clientId" | "mrnIdentifierSystem" | "reason";
+export type ConnectionField =
+  "displayName" | "baseUrl" | "clientId" | "mrnIdentifierSystem" | "reason" | "attestation";
+
+/** Runs a function in one tenant transaction (`withTenant` bound to the signed-in user). */
+export type TxRunner = <T>(fn: (tx: TenantTx) => Promise<T>) => Promise<T>;
 
 export interface IntegrationActor {
   tenantId: string;
@@ -629,9 +636,78 @@ export async function pauseConnection(
 }
 
 /**
+ * What the two transitions that need a passing Test connection (Submit, and Resume from `error`)
+ * need to find the live signing key: the store (the `kid` a pass is bound to comes from it) and,
+ * for tests, the clock. Same shape as the Test connection deps, so the actions pass the same object.
+ */
+export interface SigningDeps {
+  keyStore(): SigningKeyStore;
+  now?: () => Date;
+}
+
+/** The live signing key's `kid`, or a translated refusal (never key detail) when no key is usable. */
+async function liveSigningKid(id: string, deps: SigningDeps, t: IntegrationsT): Promise<string> {
+  try {
+    return (await deps.keyStore().signer(id)).kid;
+  } catch (error) {
+    if (error instanceof SigningKeyStoreError) {
+      fail(t, error.code === "not_configured" ? "test.error.keyNotConfigured" : "test.error.keyUnavailable");
+    }
+    throw error;
+  }
+}
+
+/**
+ * Whether a passing Test connection is on record right now (the Submit panel's enabled state). The
+ * same check Submit itself makes under the row lock, so the page and the action agree; a key store
+ * that can't produce a key means no pass can count, so it is `false` rather than an error.
+ */
+export async function hasPassingTestNow(
+  tx: TenantTx,
+  tenantId: string,
+  id: string,
+  deps: SigningDeps,
+): Promise<boolean> {
+  let kid: string;
+  try {
+    kid = (await deps.keyStore().signer(id)).kid;
+  } catch (error) {
+    if (error instanceof SigningKeyStoreError) return false;
+    throw error;
+  }
+  return hasRecentPassingTest(tx, tenantId, id, kid, deps.now?.());
+}
+
+/**
+ * The gate shared by Submit and Resume from `error`: a passing Test connection in the last 24 h,
+ * for this configuration and the live signing key (`hasRecentPassingTest`). Called under the row
+ * lock, in the transaction that then changes the status, so a concurrent test can't land between
+ * the check and the move. Returns the `kid` the pass was checked against, for the audit record.
+ */
+async function requirePassingTest(
+  tx: TenantTx,
+  actor: IntegrationActor,
+  id: string,
+  deps: SigningDeps | undefined,
+  refusal: IntegrationsKey,
+  t: IntegrationsT,
+): Promise<string> {
+  // No way to identify the key means no pass can be verified: fail closed.
+  if (!deps) fail(t, refusal);
+  const kid = await liveSigningKid(id, deps, t);
+  if (!(await hasRecentPassingTest(tx, actor.tenantId, id, kid, deps.now?.()))) fail(t, refusal);
+  return kid;
+}
+
+/**
  * Resume (`paused` or `error` → `active`), gated by a step-up (R-7.2.2): restarting the sync of a
  * practice's patients deserves a fresh proof of the authenticator. Clears the reason a connection
  * went to `error` with, since it is no longer in that state.
+ *
+ * Resume from `error` also needs a passing Test connection (spec PI2a): the error usually means the
+ * endpoint, the key, or the registration changed, and resuming blindly restarts the failure. Resume
+ * from `paused` doesn't: nothing is known to be wrong. `signing` is how the live key is found for
+ * that check; without it an `error` connection can't be resumed (fail closed).
  */
 export async function resumeConnection(
   tx: TenantTx,
@@ -639,9 +715,14 @@ export async function resumeConnection(
   id: string,
   expectedUpdatedAt: string,
   t: IntegrationsT = englishT,
+  signing?: SigningDeps,
 ): Promise<void> {
   const current = await lockForTransition(tx, actor, id, expectedUpdatedAt, ["paused", "error"], t);
   requireStepUp(actor, t);
+  const testKid =
+    current.status === "error"
+      ? await requirePassingTest(tx, actor, id, signing, "error.testRequiredToResume", t)
+      : null;
   await writeStatus(tx, actor, id, { status: "active", statusReason: null });
   await audit(tx, {
     action: "integration.connection_resumed",
@@ -654,8 +735,148 @@ export async function resumeConnection(
       previous_status_reason: current.statusReason,
       sandbox: current.isSandbox,
       step_up_verified_at: actor.stepUpVerifiedAt ?? null,
+      ...(testKid ? { test_kid: testKid } : {}),
     },
   });
+}
+
+/**
+ * Version of the U.S.-residency attestation wording an administrator agrees to on Submit. The text
+ * itself is the message `submit.attestation` (English is canonical: "This EHR/PM endpoint stores and
+ * processes data only in the United States"; Spanish and Portuguese are translations of it). There is
+ * no column for it, so the audit record carries the version and the language shown. Change the
+ * wording, bump this number; a unit test pins the English text to it.
+ */
+export const US_RESIDENCY_ATTESTATION_VERSION = 1;
+
+export interface SubmitInput {
+  /** The attestation checkbox, as the server read it. Only `true` counts; a real connection needs it. */
+  attested: boolean;
+  /** The language the wording was shown in, recorded with the attestation. */
+  locale: Locale;
+}
+
+/** A refused registry claim: carries what the audit event records, so the caller can write it after the rollback. */
+class RegistryConflictError extends IntegrationConnectionError {
+  constructor(
+    message: string,
+    readonly endpoint: { baseUrl: string; clientId: string; mrnIdentifierSystem: string },
+  ) {
+    super(message);
+    this.name = "RegistryConflictError";
+  }
+}
+
+/**
+ * Submit (spec PI2a; `draft` → `pending_approval` for a real connection, → `active` for the built-in
+ * sandbox). Administrator only, in one transaction:
+ *
+ * 1. lock the row `FOR UPDATE`, refuse another practice's (not found), a stale page, a status other
+ *    than `draft`, and the wrong environment;
+ * 2. `requireStepUp` (R-7.2.2);
+ * 3. a passing Test connection in the last 24 h for this configuration and the live signing key
+ *    (`hasRecentPassingTest`), for the sandbox too: the spec exempts only the attestation from it;
+ * 4. real only: the U.S.-residency attestation (§ 408.051(3); stricter: U.S. only);
+ * 5. one UPDATE writes the status **and** both fresh stamps (`submitted_*`, `us_residency_attested_*`);
+ *    the 0042 trigger refuses a Submit whose stamps are carried over from an earlier one;
+ * 6. real only: claim the endpoint registry (SECURITY DEFINER `integration_registry_claim`, which
+ *    itself requires the row to be `pending_approval`, hence after the UPDATE). A conflict, another
+ *    practice holding this endpoint and client ID, rolls everything back and is refused without
+ *    naming anyone; `integration.registry_conflict` is audited in a second transaction, since the
+ *    first one's audit would roll back with it.
+ *
+ * Audited `integration.connection_submitted` (configuration only, never patient information).
+ * Takes a `run` rather than a transaction for that reason, like Test connection.
+ */
+export async function submitConnection(
+  run: TxRunner,
+  actor: IntegrationActor,
+  id: string,
+  expectedUpdatedAt: string,
+  input: SubmitInput,
+  signing: SigningDeps,
+  t: IntegrationsT = englishT,
+): Promise<{ status: "pending_approval" | "active" }> {
+  assertAdmin(actor, t);
+  try {
+    return await run(async (tx) => {
+      const current = await lockForTransition(tx, actor, id, expectedUpdatedAt, ["draft"], t);
+      requireStepUp(actor, t);
+      const testKid = await requirePassingTest(tx, actor, id, signing, "error.testRequired", t);
+      const sandbox = current.isSandbox;
+      if (!sandbox && input.attested !== true) fail(t, "error.attestationRequired", "attestation");
+      const locale = isLocale(input.locale) ? input.locale : "en";
+      const next = sandbox ? "active" : "pending_approval";
+
+      // The stamps are the database's clock (`now()`), in the same statement as the status change.
+      await tx
+        .update(integrationConnections)
+        .set({
+          status: next,
+          submittedBy: actor.userId,
+          submittedAt: sql`now()`,
+          ...(sandbox ? {} : { usResidencyAttestedBy: actor.userId, usResidencyAttestedAt: sql`now()` }),
+          updatedBy: actor.userId,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(integrationConnections.id, id));
+
+      if (!sandbox) {
+        const claim = await tx.execute<{ claimed: boolean }>(
+          sql`select integration_registry_claim(${id}::uuid) as claimed`,
+        );
+        // Under the lock and after the checks above, the practice, the status, and the pinned token
+        // endpoint are all as the function needs, so a refusal here is another practice's claim.
+        if (claim.rows[0]?.claimed !== true) {
+          throw new RegistryConflictError(t("error.registryConflict"), current);
+        }
+      }
+
+      await audit(tx, {
+        action: "integration.connection_submitted",
+        actorUserId: actor.userId,
+        tenantId: actor.tenantId,
+        entityType: "integration_connection",
+        entityId: id,
+        reason: "connection_submit",
+        metadata: {
+          previous_status: current.status,
+          status: next,
+          sandbox,
+          step_up_verified_at: actor.stepUpVerifiedAt ?? null,
+          test_kid: testKid,
+          ...(sandbox
+            ? {}
+            : {
+                ...endpointMetadata("", current),
+                token_endpoint: normalizedUrlForAudit(current.tokenEndpoint),
+                issuer: normalizedUrlForAudit(current.issuer),
+                registry_claimed: true,
+                us_residency_attested: true,
+                attestation_version: US_RESIDENCY_ATTESTATION_VERSION,
+                attestation_locale: locale,
+              }),
+        },
+      });
+      return { status: next };
+    });
+  } catch (error) {
+    if (error instanceof RegistryConflictError) {
+      // The submission was rolled back with its transaction; this records that it was tried.
+      await run((tx) =>
+        audit(tx, {
+          action: "integration.registry_conflict",
+          actorUserId: actor.userId,
+          tenantId: actor.tenantId,
+          entityType: "integration_connection",
+          entityId: id,
+          reason: "connection_submit",
+          metadata: { sandbox: false, ...endpointMetadata("", error.endpoint) },
+        }),
+      );
+    }
+    throw error;
+  }
 }
 
 /**

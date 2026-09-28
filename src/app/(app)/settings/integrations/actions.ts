@@ -13,6 +13,7 @@ import {
   pauseConnection,
   resumeConnection,
   revokeConnection,
+  submitConnection,
   updateConnection,
   withdrawConnection,
   type IntegrationActor,
@@ -22,7 +23,7 @@ import type { TenantTx } from "@/db/tenant";
 import type { Messages } from "@/i18n/messages/types";
 import type { Translator } from "@/i18n/translate";
 import { isRevokeReasonCode } from "@/domain/integrations/revoke-reasons";
-import { getT } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
 import {
   connectionFormFailure,
   integrationActor,
@@ -198,12 +199,50 @@ export async function pauseConnectionAction(
   return transitionAction(formData, pauseConnection);
 }
 
-/** Resume a paused or errored connection; refused without a step-up in the last five minutes (R-7.2.2). */
+/**
+ * Resume a paused or errored connection; refused without a step-up in the last five minutes
+ * (R-7.2.2), and from `error` also without a passing Test connection (spec PI2a).
+ */
 export async function resumeConnectionAction(
   _: ConnectionFormState,
   formData: FormData,
 ): Promise<ConnectionFormState> {
-  return transitionAction(formData, resumeConnection);
+  return transitionAction(formData, (tx, actor, id, expectedUpdatedAt, t) =>
+    resumeConnection(tx, actor, id, expectedUpdatedAt, t, connectionTestDeps()),
+  );
+}
+
+/**
+ * Submit a draft (spec PI2a): a real connection goes to DenialDesk for approval, the sandbox
+ * activates. Admin only, re-checked here and in the domain. The attestation checkbox is read on the
+ * server, the language it was shown in comes from the request, and the step-up and the passing test
+ * are checked by the domain in the transaction that changes the status.
+ */
+export async function submitConnectionAction(
+  _: ConnectionFormState,
+  formData: FormData,
+): Promise<ConnectionFormState> {
+  const auth = await requireAuth();
+  const t = await getT("integrations");
+  if (!canManageIntegrations(auth.role)) return { error: t("error.notAdmin") };
+  const id = uuid.safeParse(text(formData, "id", 40));
+  if (!id.success) return { error: t("error.notFound") };
+  const actor = integrationActor(auth);
+  try {
+    await submitConnection(
+      (fn) => withTenant(auth, fn),
+      actor,
+      id.data,
+      text(formData, "updatedAt", 40),
+      { attested: formData.get("attest") === "on", locale: await getLocale() },
+      connectionTestDeps(),
+      t,
+    );
+  } catch (error) {
+    return connectionFormFailure(error, t);
+  }
+  revalidatePath("/", "layout");
+  redirect(`/settings/integrations/${id.data}`);
 }
 
 /** Withdraw a connection awaiting approval, back to a draft (PI2a). */

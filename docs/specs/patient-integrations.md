@@ -303,11 +303,15 @@ get their own tests in PI2a.
 Also carries PI1b's Submit, attestation, step-up, and pause/resume (re-sequenced 2026-09-28). Order
 is now PI2a → PI1c (approval has nothing to approve before Submit exists); sandbox Submit becomes
 possible only in PI2b, which adds the in-process sandbox a test can pass against.
-- [ ] Resume from `error` requires a passing Test connection first (the error usually means the
+- [x] Resume from `error` requires a passing Test connection first (the error usually means the
       endpoint, key, or registration changed; resuming blindly restarts the failure). Resume from
-      `paused` doesn't. (PI2a Submit PR: Test connection exists since #87 but nothing calls
-      `hasRecentPassingTest` yet; today Resume from `error` needs only the step-up.)
-- [ ] Submit (admin, draft → `pending_approval` for a real connection, → `active` for the sandbox;
+      `paused` doesn't. Built (PI2a Submit slice): `resumeConnection` takes `SigningDeps`, checks the
+      step-up first, then calls `hasRecentPassingTest` under the row lock with the live signing `kid`
+      for an `error` connection only; without `SigningDeps` an `error` connection can't be resumed
+      (fail closed). The refusal reads "Run Test connection and get a pass before resuming"
+      (`error.testRequiredToResume`, en/es/pt); the resumed event records `test_kid`. Tests:
+      `test/integration/integration-submit.test.ts`, `integration-submit-actions.test.ts`.
+- [x] Submit (admin, draft → `pending_approval` for a real connection, → `active` for the sandbox;
       stamps `submitted_by/_at` in both cases — the drop-down treats a revoked connection as a past
       source only if it was ever submitted or synced):
       requires a passing Test connection in the last 24 h, the residency attestation (real only),
@@ -320,11 +324,38 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       (`submitted_at`, `us_residency_attested_at`) in the same UPDATE that changes status. Before
       the first real connection, a later migration should require the stamps to be ≥
       `transaction_timestamp()` and `attested_by` non-null (compliance N3; owner/counsel decision).
-- [ ] Residency attestation on Submit of a real connection: "This EHR/PM endpoint stores and
+      **Built** (`submitConnection`, `src/domain/integrations/connections.ts`; action
+      `submitConnectionAction`; panel `SubmitConnectionForm` on the connection page). Order of checks,
+      all under the row lock in one transaction: admin, not found (another practice's connection),
+      revoked, stale page, status `draft`, the environment rule, `requireStepUp`, the passing test,
+      the attestation (real only), then one UPDATE (status + both fresh stamps, database clock),
+      then the registry claim (real only), then the audit. No migration and no GRANT: the UPDATE
+      names only columns 0039 already grants, and a test pins that the approval columns stay
+      ungranted. **The passing test is required for the sandbox too**: only the attestation is
+      "real only" (this line and "sandbox Submit becomes possible only in PI2b, which adds the
+      in-process sandbox a test can pass against"), so the sandbox Submit path is implemented and
+      tested at the domain level with a seeded pass, and is unreachable from the page until PI2b
+      (the panel shows the button disabled, with the reason). Tests cover: refused without a recent
+      passing test, when the newest test failed, when the pass was for another key or an edited
+      connection, without a step-up, without the attestation, in the wrong status, for another
+      practice (not found), on a stale page, in the wrong environment, and two concurrent Submits
+      (one wins); a successful Submit stamps both columns and claims the registry; Withdraw, then
+      Submit again needs a fresh test and a fresh attestation.
+- [x] Residency attestation on Submit of a real connection: "This EHR/PM endpoint stores and
       processes data only in the United States" — stricter than § 408.051(3), which also allows
-      territories and Canada (DenialDesk defaults to U.S.-only, R-3.3.1). Audited.
-- [ ] Submit claims the registry; a conflict refuses Submit with "This endpoint and client ID are
+      territories and Canada (DenialDesk defaults to U.S.-only, R-3.3.1). Audited. The checkbox
+      carries this exact wording (`submit.attestation`, with Spanish and Portuguese translations); a
+      unit test pins the English text to `US_RESIDENCY_ATTESTATION_VERSION`. `integration_connections`
+      has no column for the wording's version or language, so both go in the `connection_submitted`
+      audit metadata (`attestation_version`, `attestation_locale`, plus `us_residency_attested`); the
+      who/when are the `us_residency_attested_by/_at` stamps. Only a form value of `on` counts.
+- [x] Submit claims the registry; a conflict refuses Submit with "This endpoint and client ID are
       already connected" (no other practice named) and audits `integration.registry_conflict`.
+      The claim (SECURITY DEFINER `integration_registry_claim`) requires the row to be
+      `pending_approval`, so it runs after the UPDATE inside the same transaction; a refusal rolls the
+      whole Submit back, and the conflict event is written in a second transaction (the first one's
+      audit would roll back with it). Its metadata is the practice's own configuration
+      (`base_url`, `client_id`, `mrn_identifier_system`), never the other practice.
 - [x] Step-up MFA (R-7.2.2; PI2a lifecycle slice): migration 0041 adds `sessions.mfa_verified_at`
       (set at sign-in MFA and at each step-up; null on a session from before 0041, which must step
       up first); `hasRecentMfa` (`src/auth/step-up.ts`, 5-minute window from
@@ -352,7 +383,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       that). The gate for
       domain actions is `requireStepUp(actor)` (`connections.ts`: `actor.recentMfa` comes from the
       session, never the request; refusal carries `stepUpRequired`, and the page links to
-      `/step-up`). Resume uses it now; **Submit (PI2a-2) and payer mapping (PI2b) call the same
+      `/step-up`). Resume and Submit use it now; **payer mapping (PI2b) calls the same
       helper.** No GRANT changes: `sessions` is reached through the connection owner only.
       Owner decisions: OA-063 (incl. TOTP vs WebAuthn, R-7.2.2).
 - [x] Withdraw (`pending_approval` → `draft`, releases the registry claim through the SECURITY
@@ -585,7 +616,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       metadata (`PASS_BINDING_METADATA_KEYS`, pinned by a test). So any later failed test, or refused
       address/TLS/redirect, voids the pass. *This departs from the PI2a wording ("a passing test in
       the last 24 h") and is the coordinator's decision, pending owner confirmation.* The tenant is
-      checked explicitly as well as by row-level security. Submit (later PI2a work) calls it.
+      checked explicitly as well as by row-level security. Submit and Resume from `error` call it (both under the row lock, with the live signing `kid`).
       Messages in en/es/pt (`integrations.test.*`).
 
 ### PI2b — sync engine, sandbox, jobs, history, payer mapping
@@ -747,6 +778,14 @@ and the code only), `security.env_signing_key_in_production`,
 run-level `sync_completed` is the record of receipt for unchanged and skipped resources),
 `patient.synced_created|synced_updated|linked_to_source|source_inactivated|source_merged|source_gone`
 (patient, connection, run IDs; changed field names).
+
+_Audit note (PI2a Submit slice): `integration.connection_submitted` carries `previous_status`,
+`status` (`pending_approval` or `active`), `sandbox`, `step_up_verified_at`, and `test_kid`; for a
+real connection also the endpoint configuration (normalized base URL, client ID, MRN identifier
+system, token endpoint and issuer), `registry_claimed`, `us_residency_attested`,
+`attestation_version`, and `attestation_locale`. A Submit refused for a missing test, step-up, or
+attestation writes nothing. `security.env_signing_key_in_production` is emitted by Test connection
+only; Submit and Resume refuse the same misconfiguration without a second security event._
 
 _Audit change for SIEM consumers (PI2a lifecycle slice): withdraw is recorded as
 `integration.connection_withdrawn`, not `integration.connection_updated` with

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { desc, eq, sql } from "drizzle-orm";
 import { closeDatabase, systemDb } from "@/db/client";
@@ -16,8 +16,10 @@ import {
   withdrawConnection,
   type ConnectionStatus,
   type IntegrationActor,
+  type SigningDeps,
 } from "@/domain/integrations/connections";
 import { REVOKE_REASON_CODES } from "@/domain/integrations/revoke-reasons";
+import { EnvSharedKeyStore } from "@/integrations/fhir/keys";
 import { createTestTenant, expectDbError } from "./helpers";
 
 // docs/specs/patient-integrations.md PI2a: pause, resume (step-up), withdraw, revoke with a reason
@@ -159,6 +161,44 @@ async function realConnection(
   if (state === "paused") await setStatus(ctx, id, "paused");
   if (state === "error") await setStatus(ctx, id, "error", "auth_failed");
   return { ctx, id };
+}
+
+// Resume from `error` needs a passing Test connection (spec PI2a): the pass is a `connection_tested`
+// audit row bound to the connection's configuration and the signing key's kid. The full flow (a real
+// Test connection through a fake server) is in integration-submit.test.ts; here the row is written the
+// way the application writes it, so these tests stay about the transition.
+const SIGNING_KEY = generateKeyPairSync("ec", { namedCurve: "secp384r1" }).privateKey;
+const signing: SigningDeps = {
+  keyStore: () =>
+    new EnvSharedKeyStore(() => true, SIGNING_KEY.export({ format: "pem", type: "pkcs8" }).toString()),
+};
+
+async function recordPassingTest(ctx: Ctx, id: string) {
+  const [connection] = await systemDb()
+    .select()
+    .from(integrationConnections)
+    .where(eq(integrationConnections.id, id));
+  await systemDb()
+    .insert(auditEvents)
+    .values({
+      action: "integration.connection_tested",
+      tenantId: ctx.tenantId,
+      actorUserId: ctx.userId,
+      entityType: "integration_connection",
+      entityId: id,
+      reason: "connection_test",
+      metadata: {
+        outcome: "ok",
+        sandbox: false,
+        base_url: connection!.baseUrl,
+        client_id: connection!.clientId,
+        kid: (await signing.keyStore().signer(id)).kid,
+        token_endpoint: connection!.tokenEndpoint,
+        token_endpoint_key: connection!.tokenEndpointKey,
+        issuer: connection!.issuer,
+        pinned: false,
+      },
+    });
 }
 
 async function sandboxConnection(state: "draft" | "active" | "paused") {
@@ -338,6 +378,7 @@ describe("resumeConnection (step-up, R-7.2.2)", () => {
 
   it("records when the step-up happened, and why an errored connection had stopped", async () => {
     const { ctx, id } = await realConnection("error");
+    await recordPassingTest(ctx, id);
     const verifiedAt = new Date(Date.now() - 60_000).toISOString();
     await withTenant(ctx, async (tx) =>
       resumeConnection(
@@ -345,6 +386,8 @@ describe("resumeConnection (step-up, R-7.2.2)", () => {
         { ...admin(ctx, { mfa: true }), stepUpVerifiedAt: verifiedAt },
         id,
         (await getConnection(tx, id))!.updatedAt.toISOString(),
+        undefined,
+        signing,
       ),
     );
     expect((await lastAudit(id)).metadata).toEqual({
@@ -352,6 +395,7 @@ describe("resumeConnection (step-up, R-7.2.2)", () => {
       previous_status_reason: "auth_failed",
       sandbox: false,
       step_up_verified_at: verifiedAt,
+      test_kid: (await signing.keyStore().signer(id)).kid,
     });
   });
 
@@ -362,12 +406,15 @@ describe("resumeConnection (step-up, R-7.2.2)", () => {
       .from(integrationConnections)
       .where(eq(integrationConnections.id, id));
     expect(before[0]!.reason).toBe("auth_failed");
+    await recordPassingTest(ctx, id);
     await withTenant(ctx, async (tx) =>
       resumeConnection(
         tx,
         admin(ctx, { mfa: true }),
         id,
         (await getConnection(tx, id))!.updatedAt.toISOString(),
+        undefined,
+        signing,
       ),
     );
     const detailed = await detail(ctx, id);

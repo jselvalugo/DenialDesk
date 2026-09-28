@@ -84,7 +84,7 @@ export const integrations: Messages["integrations"] = {
   "lifecycle.paused":
     "A sincronização está pausada. Retomá-la a reinicia e exige que você verifique sua identidade com o aplicativo autenticador antes.",
   "lifecycle.error":
-    "O DenialDesk parou de sincronizar por causa de um erro. Depois que o administrador do seu EHR/PM resolver, retome. Retomar exige que você verifique sua identidade com o aplicativo autenticador antes.",
+    "O DenialDesk parou de sincronizar por causa de um erro. Depois que o administrador do seu EHR/PM resolver, retome. Retomar exige que você verifique sua identidade com o aplicativo autenticador antes e um teste de conexão aprovado.",
   "lifecycle.pending_approval":
     "Esta conexão está aguardando aprovação. Retirá-la a devolve a um rascunho que você pode editar e enviar de novo.",
   "pause.submit": "Pausar sincronização",
@@ -173,4 +173,30 @@ export const integrations: Messages["integrations"] = {
   "test.pending": "Testando…",
   "test.resultOk": "Teste bem-sucedido",
   "test.resultFailed": "Teste com falha",
+  "submit.title": "Enviar conexão",
+  "submit.descriptionReal":
+    "Ao enviar, esta conexão vai para o DenialDesk aprovar. Nada é sincronizado até que seja aprovada, e você pode retirar o envio até lá. Ela exige um teste de conexão aprovado, sua confirmação abaixo e uma verificação de identidade recente.",
+  "submit.descriptionSandbox":
+    "O ambiente de testes integrado contém apenas dados sintéticos, então não precisa de aprovação: ao enviá-lo, ele é ativado. Exige um teste de conexão aprovado e uma verificação de identidade recente.",
+  "submit.attestation": "Este endpoint de EHR/PM armazena e processa dados somente nos Estados Unidos",
+  "submit.attestationHint": "Registrado no log de auditoria com seu nome e a data.",
+  "submit.stepUpNotice":
+    "Para enviar, você precisa antes verificar sua identidade com o aplicativo autenticador.",
+  "submit.blocked.noPassingTest":
+    "Não é possível enviar: esta conexão não tem um teste de conexão aprovado nas últimas 24 horas. Execute Testar conexão acima. Um teste que falhou, ou uma mudança na conexão ou na chave de assinatura do DenialDesk, exige uma nova aprovação no teste.",
+  "submit.blocked.sandbox":
+    "Não é possível enviar: exige um teste de conexão aprovado, e o ambiente de testes integrado ainda não pode ser testado.",
+  "submit.submit": "Enviar para aprovação",
+  "submit.submitSandbox": "Ativar ambiente de testes",
+  "submit.pending": "Enviando…",
+  "submit.awaitingTitle": "Aguardando a aprovação do DenialDesk",
+  "submit.awaitingDescription":
+    "O DenialDesk revisa cada conexão real antes de ela começar a sincronizar. Nada é sincronizado até que seja aprovada. Para alterar a conexão antes, retire o envio.",
+  "error.testRequired":
+    "O teste de conexão precisa ser aprovado primeiro. Uma aprovação vale por 24 horas, e só para a configuração e a chave de assinatura que testou. Execute-o de novo e depois envie.",
+  "error.testRequiredToResume":
+    "Esta conexão parou por causa de um erro. Execute Testar conexão e obtenha uma aprovação antes de retomar.",
+  "error.attestationRequired":
+    "Confirme que o endpoint armazena e processa dados somente nos Estados Unidos.",
+  "error.registryConflict": "Este endpoint e este ID de cliente já estão conectados",
 };

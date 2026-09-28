@@ -85,7 +85,7 @@ export const integrations: Messages["integrations"] = {
   "lifecycle.paused":
     "La sincronización está en pausa. Reanudarla la reinicia y requiere que antes verifique su identidad con su aplicación autenticadora.",
   "lifecycle.error":
-    "DenialDesk dejó de sincronizar por un error. Cuando el administrador de su EHR/PM lo haya resuelto, reanude. Reanudar requiere que antes verifique su identidad con su aplicación autenticadora.",
+    "DenialDesk dejó de sincronizar por un error. Cuando el administrador de su EHR/PM lo haya resuelto, reanude. Reanudar requiere que antes verifique su identidad con su aplicación autenticadora y una prueba de conexión exitosa.",
   "lifecycle.pending_approval":
     "Esta conexión está esperando aprobación. Retirarla la devuelve a un borrador que puede editar y volver a enviar.",
   "pause.submit": "Pausar sincronización",
@@ -174,4 +174,30 @@ export const integrations: Messages["integrations"] = {
   "test.pending": "Probando…",
   "test.resultOk": "Prueba exitosa",
   "test.resultFailed": "Prueba fallida",
+  "submit.title": "Enviar conexión",
+  "submit.descriptionReal":
+    "Al enviar, esta conexión llega a DenialDesk para su aprobación. Nada se sincroniza hasta que se apruebe, y puede retirar el envío hasta entonces. Requiere una prueba de conexión exitosa, su confirmación a continuación y una verificación de identidad reciente.",
+  "submit.descriptionSandbox":
+    "El entorno de pruebas integrado solo contiene datos sintéticos, por lo que no requiere aprobación: al enviarlo se activa. Requiere una prueba de conexión exitosa y una verificación de identidad reciente.",
+  "submit.attestation":
+    "Este punto de conexión de EHR/PM almacena y procesa los datos únicamente en Estados Unidos",
+  "submit.attestationHint": "Se registra en el registro de auditoría con su nombre y la fecha.",
+  "submit.stepUpNotice": "Para enviar, primero debe verificar su identidad con su aplicación autenticadora.",
+  "submit.blocked.noPassingTest":
+    "No se puede enviar: esta conexión no tiene una prueba de conexión exitosa de las últimas 24 horas. Ejecute Probar conexión arriba. Una prueba fallida, o un cambio en la conexión o en la clave de firma de DenialDesk, requiere una nueva prueba exitosa.",
+  "submit.blocked.sandbox":
+    "No se puede enviar: requiere una prueba de conexión exitosa, y el entorno de pruebas integrado aún no se puede probar.",
+  "submit.submit": "Enviar para aprobación",
+  "submit.submitSandbox": "Activar entorno de pruebas",
+  "submit.pending": "Enviando…",
+  "submit.awaitingTitle": "Esperando la aprobación de DenialDesk",
+  "submit.awaitingDescription":
+    "DenialDesk revisa cada conexión real antes de que empiece a sincronizar. Nada se sincroniza hasta que se apruebe. Para cambiar la conexión antes, retire el envío.",
+  "error.testRequired":
+    "Primero debe pasar la prueba de conexión. Una prueba exitosa vale 24 horas, y solo para la configuración y la clave de firma que probó. Ejecútela de nuevo y luego envíe.",
+  "error.testRequiredToResume":
+    "Esta conexión se detuvo por un error. Ejecute Probar conexión y obtenga una prueba exitosa antes de reanudar.",
+  "error.attestationRequired":
+    "Confirme que el punto de conexión almacena y procesa los datos únicamente en Estados Unidos.",
+  "error.registryConflict": "Este punto de conexión y este ID de cliente ya están conectados",
 };
