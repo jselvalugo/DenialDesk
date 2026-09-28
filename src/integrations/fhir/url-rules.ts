@@ -9,7 +9,7 @@ export const SANDBOX_BASE_URL = "https://sandbox.fhir.denialdesk.invalid/r4";
 export const SANDBOX_CLIENT_ID = "sandbox-client";
 /** The sandbox's own MRN identifier system (its `SYN-` MRNs, PI2b); under the sandbox host, not a real OID. */
 export const SANDBOX_MRN_SYSTEM = "https://sandbox.fhir.denialdesk.invalid/mrn";
-const SANDBOX_HOST = new URL(SANDBOX_BASE_URL).hostname;
+export const SANDBOX_HOST = new URL(SANDBOX_BASE_URL).hostname;
 
 export const MAX_BASE_URL_LENGTH = 2048;
 
@@ -23,14 +23,28 @@ export type UrlRuleCode =
   | "reserved_host"
   | "single_label"
   | "trailing_dot"
-  | "port_not_allowed";
+  | "port_not_allowed"
+  | "path_characters";
 
 export type UrlRuleResult =
   { ok: true; baseUrl: string; endpointKey: string; host: string } | { ok: false; code: UrlRuleCode };
 
 /** Names that only ever reach the local machine or a private network, or are reserved as never
  * resolvable (RFC 6761, RFC 8375, RFC 6762). `.invalid` is refused too, except the sandbox. */
-const RESERVED_SUFFIXES = [".localhost", ".local", ".internal", ".home.arpa", ".invalid"];
+const RESERVED_SUFFIXES = [
+  ".localhost",
+  ".local",
+  ".localdomain",
+  ".internal",
+  ".arpa", // home.arpa, in-addr.arpa, ip6.arpa
+  ".onion",
+  ".invalid",
+];
+
+/** Path characters a FHIR base URL may use: unreserved plus "/". No percent-escapes, `;` parameters,
+ * or anything else, so one endpoint has one spelling (security review L-2) and free text can't ride
+ * into the stored URL and its audit metadata (compliance review #8). */
+const BASE_PATH = /^[A-Za-z0-9\-._~/]*$/;
 
 /** Ports allowed besides the default: `INTEGRATION_ALLOWED_PORTS` (comma-separated), default `443`. */
 export function allowedPorts(raw = process.env.INTEGRATION_ALLOWED_PORTS): Set<number> {
@@ -82,8 +96,16 @@ export function checkBaseUrl(raw: string, ports: Set<number> = allowedPorts()): 
   }
   if (url.port !== "" && !ports.has(Number(url.port))) return { ok: false, code: "port_not_allowed" };
 
-  const path = url.pathname.replace(/\/+$/, "");
+  // The raw path must be what the parser kept: no dot segments or escapes it silently rewrote.
+  const rawPath = text.replace(/^https:\/\/[^/]*/i, "");
+  if (!BASE_PATH.test(rawPath) || !BASE_PATH.test(url.pathname) || /(^|\/)\.\.?(\/|$)/.test(rawPath)) {
+    return { ok: false, code: "path_characters" };
+  }
+  // Repeated slashes collapse (`/api//r4` and `/api/r4` are one endpoint); a trailing one drops.
+  const path = url.pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "");
   const baseUrl = `${url.protocol}//${url.host}${path}`;
+  // Again after normalization: punycode can make the stored value longer than what was typed.
+  if (baseUrl.length > MAX_BASE_URL_LENGTH) return { ok: false, code: "too_long" };
   return {
     ok: true,
     baseUrl,

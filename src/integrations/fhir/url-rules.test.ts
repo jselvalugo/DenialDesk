@@ -28,6 +28,21 @@ describe("checkBaseUrl (PI1b URL rules on save)", () => {
     expect(a.ok && b.ok && a.endpointKey === b.endpointKey).toBe(true);
   });
 
+  it("collapses repeated slashes inside the path", () => {
+    expect(checkBaseUrl("https://fhir.example.com/api//FHIR///R4", ports443)).toMatchObject({
+      ok: true,
+      baseUrl: "https://fhir.example.com/api/FHIR/R4",
+      endpointKey: "https://fhir.example.com/api/fhir/r4",
+    });
+  });
+
+  it("keeps the endpoint key equal to the lowercased base URL (the registry's comparison)", () => {
+    for (const raw of ["https://FHIR.Example.com/Api/R4", "https://fhir.example.com", SANDBOX_BASE_URL]) {
+      const result = checkBaseUrl(raw, ports443);
+      expect(result.ok && result.endpointKey === result.baseUrl.toLowerCase()).toBe(true);
+    }
+  });
+
   it("accepts the built-in sandbox even though it is under .invalid", () => {
     expect(checkBaseUrl(SANDBOX_BASE_URL, ports443)).toMatchObject({
       ok: true,
@@ -63,6 +78,14 @@ describe("checkBaseUrl (PI1b URL rules on save)", () => {
     ["https://ehrserver/r4", "single_label"],
     ["https://fhir.example.com./r4", "trailing_dot"],
     ["https://fhir.example.com:8443/r4", "port_not_allowed"],
+    ["https://localhost.localdomain/r4", "reserved_host"],
+    // One endpoint, one spelling (security review L-2); no free text in the path (compliance #8).
+    ["https://fhir.example.com/%72%34", "path_characters"],
+    ["https://fhir.example.com/r4;jsessionid=x", "path_characters"],
+    ["https://fhir.example.com/api/../r4", "path_characters"],
+    ["https://fhir.example.com/./r4", "path_characters"],
+    ["https://fhir.example.com/John Smith/r4", "path_characters"],
+    ["https://fhir.example.com/r4/$export", "path_characters"],
   ])("refuses %s (%s)", (raw, code) => {
     expect(checkBaseUrl(raw, ports443)).toEqual({ ok: false, code });
   });

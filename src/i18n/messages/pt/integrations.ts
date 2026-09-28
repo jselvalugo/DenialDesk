@@ -23,6 +23,8 @@ export const integrations: Messages["integrations"] = {
   "error.url.single_label": "Use o nome de host completo, com o domínio (por exemplo fhir.example.com).",
   "error.url.trailing_dot": "Remova o ponto no final do nome de host.",
   "error.url.port_not_allowed": "Esta porta não é permitida. Use a porta HTTPS padrão (443).",
+  "error.url.path_characters":
+    "O caminho da URL só aceita letras, dígitos e - . _ ~ /. Copie a URL base exatamente como o EHR/PM a documenta.",
   "error.url.sandbox": "Para usar o ambiente de teste integrado, escolha-o ao criar a conexão.",
   "error.realEndpointRefused":
     "Este ambiente usa apenas dados sintéticos, então não pode se conectar a um EHR/PM real. Use o ambiente de teste integrado.",

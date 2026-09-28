@@ -1359,7 +1359,7 @@ export const auditEvents = pgTable(
     reason: text("reason"),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
-    /** IDs and enum values only — never PHI. */
+    /** IDs and enum values, plus integration configuration (src/lib/audit.ts) — never PHI. */
     metadata: jsonb("metadata").$type<Record<string, string | number | boolean | null>>(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
   },

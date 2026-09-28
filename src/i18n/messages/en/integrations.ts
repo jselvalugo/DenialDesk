@@ -21,6 +21,8 @@ export const integrations = {
   "error.url.single_label": "Use the full host name, including its domain (for example fhir.example.com).",
   "error.url.trailing_dot": "Remove the dot at the end of the host name.",
   "error.url.port_not_allowed": "This port isn't allowed. Use the standard HTTPS port (443).",
+  "error.url.path_characters":
+    "The URL path can only use letters, digits, and - . _ ~ /. Copy the base URL exactly as the EHR/PM documents it.",
   "error.url.sandbox": "To use the built-in test sandbox, choose it when you create the connection.",
   "error.realEndpointRefused":
     "This environment uses synthetic data only, so it can't connect to a real EHR/PM. Use the built-in test sandbox.",

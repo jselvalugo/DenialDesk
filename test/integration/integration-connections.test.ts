@@ -68,6 +68,26 @@ async function lastAudit(entityId: string) {
   return event!;
 }
 
+/** Stand-in for PI2a's Submit (draft → pending_approval), as the practice's app role. */
+async function submitStandIn(ctx: Ctx, id: string) {
+  await withTenant(ctx, (tx) =>
+    tx.execute(sql`
+      update integration_connections
+      set status = 'pending_approval', submitted_by = ${ctx.userId}::uuid, submitted_at = now(),
+          us_residency_attested_by = ${ctx.userId}::uuid, us_residency_attested_at = now()
+      where id = ${id}::uuid
+    `),
+  );
+}
+
+async function auditCount(entityId: string) {
+  const rows = await systemDb()
+    .select({ id: auditEvents.id })
+    .from(auditEvents)
+    .where(eq(auditEvents.entityId, entityId));
+  return rows.length;
+}
+
 async function detail(ctx: Ctx, id: string) {
   return (await withTenant(ctx, (tx) => getConnection(tx, id)))!;
 }
@@ -107,6 +127,7 @@ describe("createConnection", () => {
       sandbox: false,
       base_url: `https://${host}/api/FHIR/R4`,
       client_id: input.clientId,
+      mrn_identifier_system: input.mrnIdentifierSystem,
     });
   });
 
@@ -121,6 +142,17 @@ describe("createConnection", () => {
       withTenant(a, (tx) => createConnection(tx, admin(a), endpoint({ baseUrl: SANDBOX_BASE_URL }))),
     );
     expect(error.field).toBe("baseUrl");
+  });
+
+  it("refuses any URL on the sandbox host, and the sandbox's MRN system, for a real connection", async () => {
+    for (const override of [
+      { baseUrl: "https://sandbox.fhir.denialdesk.invalid/other" },
+      { baseUrl: `${SANDBOX_BASE_URL}/x` },
+      { mrnIdentifierSystem: "https://sandbox.fhir.denialdesk.invalid/mrn" },
+    ]) {
+      const error = await refusal(withTenant(a, (tx) => createConnection(tx, admin(a), endpoint(override))));
+      expect(error.field).toBe(Object.keys(override)[0]);
+    }
   });
 
   it("refuses anyone but an administrator", async () => {
@@ -146,6 +178,8 @@ describe("createConnection", () => {
     [{ displayName: "   " }, "displayName"],
     [{ displayName: "x".repeat(81) }, "displayName"],
     [{ displayName: "Bad\u0007name" }, "displayName"],
+    [{ displayName: "EHR\u202egnp.exe" }, "displayName"],
+    [{ baseUrl: "https://fhir.example.com/%72%34" }, "baseUrl"],
     [{ baseUrl: "http://fhir.example.com/r4" }, "baseUrl"],
     [{ baseUrl: "https://10.1.2.3/r4" }, "baseUrl"],
     [{ clientId: "" }, "clientId"],
@@ -155,6 +189,24 @@ describe("createConnection", () => {
   ])("refuses %j on field %s", async (override, field) => {
     const error = await refusal(withTenant(a, (tx) => createConnection(tx, admin(a), endpoint(override))));
     expect(error.field).toBe(field);
+  });
+});
+
+describe("missing or mistyped fields", () => {
+  it.each([
+    ["displayName", /Enter a name/],
+    ["baseUrl", /Enter the FHIR base URL/],
+    ["clientId", /Enter the client ID/],
+    ["mrnIdentifierSystem", /Enter the identifier system/],
+  ])("reports a missing %s as required, not too long", async (field, message) => {
+    for (const value of [undefined, null, 5]) {
+      const input: Record<string, unknown> = endpoint();
+      if (value === undefined) delete input[field];
+      else input[field] = value;
+      const error = await refusal(withTenant(a, (tx) => createConnection(tx, admin(a), input)));
+      expect(error.field).toBe(field);
+      expect(error.message).toMatch(message);
+    }
   });
 });
 
@@ -211,6 +263,8 @@ describe("updateConnection", () => {
       old_client_id: before.clientId,
       client_id: after.clientId,
       base_url: row.baseUrl,
+      old_mrn_identifier_system: before.mrnIdentifierSystem,
+      mrn_identifier_system: after.mrnIdentifierSystem,
     });
   });
 
@@ -239,7 +293,7 @@ describe("updateConnection", () => {
         updateConnection(tx, admin(a), id, stamp, { ...input, clientId: "other-client" }),
       ),
     );
-    expect(error.field).toBe("baseUrl");
+    expect(error.field).toBe("clientId");
     await withTenant(a, (tx) =>
       updateConnection(tx, admin(a), id, stamp, { ...input, displayName: "Kept EHR" }),
     );
@@ -250,6 +304,65 @@ describe("updateConnection", () => {
     await withTenant(a, (tx) =>
       updateConnection(tx, admin(a), id, stamp, { ...input, displayName: "Kept EHR" }),
     );
+  });
+
+  it("locks the endpoint while awaiting approval (status, not only has_synced), but still allows a rename", async () => {
+    const c = await createTestTenant("Connections live");
+    const input = endpoint();
+    const { id } = await withTenant(c, (tx) => createConnection(tx, admin(c), input));
+    await submitStandIn(c, id);
+    const stamp = (await detail(c, id)).updatedAt.toISOString();
+    for (const [field, value] of [
+      ["baseUrl", "https://other-ehr.example.com/r4"],
+      ["clientId", "other-client"],
+      ["mrnIdentifierSystem", "https://other-ehr.example.com/mrn"],
+    ] as const) {
+      const error = await refusal(
+        withTenant(c, (tx) => updateConnection(tx, admin(c), id, stamp, { ...input, [field]: value })),
+      );
+      expect(error.field).toBe(field);
+      expect(error.message).toMatch(/only change while the connection is a draft/);
+    }
+    // The page omits disabled (locked) inputs: a name-only form renames.
+    await withTenant(c, (tx) => updateConnection(tx, admin(c), id, stamp, { displayName: "Awaiting EHR" }));
+    expect(await detail(c, id)).toMatchObject({ displayName: "Awaiting EHR", status: "pending_approval" });
+  });
+
+  it("renames a locked connection without re-validating its stored endpoint against today's rules", async () => {
+    const c = await createTestTenant("Connections live");
+    const input = endpoint();
+    const { id } = await withTenant(c, (tx) => createConnection(tx, admin(c), input));
+    await submitStandIn(c, id);
+    // The stored endpoint now fails today's rules (here: this environment only allows synthetic
+    // data); a rename must still work, since the administrator can't change the endpoint anyway.
+    const stamp = (await detail(c, id)).updatedAt.toISOString();
+    await withTenant(c, (tx) =>
+      updateConnection(tx, admin(c, true), id, stamp, { ...input, displayName: "Still renamable" }),
+    );
+    expect((await detail(c, id)).displayName).toBe("Still renamable");
+  });
+
+  it("applies the environment rule when a draft's endpoint is edited", async () => {
+    const { id } = await withTenant(a, (tx) => createConnection(tx, admin(a), endpoint()));
+    const stamp = (await detail(a, id)).updatedAt.toISOString();
+    const error = await refusal(
+      withTenant(a, (tx) => updateConnection(tx, admin(a, true), id, stamp, endpoint())),
+    );
+    expect(error.message).toMatch(/synthetic data only/);
+  });
+
+  it("writes nothing and audits nothing when nothing changed", async () => {
+    const input = endpoint();
+    const { id } = await withTenant(a, (tx) => createConnection(tx, admin(a), input));
+    const before = await detail(a, id);
+    const events = await auditCount(id);
+    // Same values in another spelling (host case, trailing slash) are the same values.
+    const respelled = { ...input, baseUrl: input.baseUrl.replace("https://ehr-", "https://EHR-") + "/" };
+    await withTenant(a, (tx) =>
+      updateConnection(tx, admin(a), id, before.updatedAt.toISOString(), respelled),
+    );
+    expect((await detail(a, id)).updatedAt.toISOString()).toBe(before.updatedAt.toISOString());
+    expect(await auditCount(id)).toBe(events);
   });
 
   it("renames a sandbox connection; its endpoint can't be sent at all", async () => {
@@ -294,7 +407,7 @@ describe("revokeConnection", () => {
     expect(stored!.revokedBy).toBe(a.userId);
     expect(await lastAudit(id)).toMatchObject({
       action: "integration.connection_revoked",
-      metadata: { previous_status: "draft", sandbox: false },
+      metadata: { previous_status: "draft", sandbox: false, registry_released: false },
     });
     const next = row.updatedAt.toISOString();
     expect(
@@ -306,10 +419,11 @@ describe("revokeConnection", () => {
   });
 
   it("releases the connection's registry claim when a submitted connection is revoked", async () => {
-    const { id } = await withTenant(a, (tx) => createConnection(tx, admin(a), endpoint()));
+    const c = await createTestTenant("Connections live");
+    const { id } = await withTenant(c, (tx) => createConnection(tx, admin(c), endpoint()));
     const tokenKey = `https://auth-${randomUUID().slice(0, 8)}.example.com/token`;
     // Stand in for PI2a discovery and Submit, then claim the registry as Submit will (PI1c).
-    await withTenant(a, async (tx) => {
+    await withTenant(c, async (tx) => {
       await tx.execute(sql`
         update integration_connections
         set token_endpoint = ${tokenKey}, token_endpoint_key = ${tokenKey}
@@ -317,8 +431,8 @@ describe("revokeConnection", () => {
       `);
       await tx.execute(sql`
         update integration_connections
-        set status = 'pending_approval', submitted_by = ${a.userId}::uuid, submitted_at = now(),
-            us_residency_attested_by = ${a.userId}::uuid, us_residency_attested_at = now()
+        set status = 'pending_approval', submitted_by = ${c.userId}::uuid, submitted_at = now(),
+            us_residency_attested_by = ${c.userId}::uuid, us_residency_attested_at = now()
         where id = ${id}::uuid
       `);
       await tx.execute(sql`select integration_registry_claim(${id}::uuid)`);
@@ -329,10 +443,60 @@ describe("revokeConnection", () => {
         .from(integrationEndpointRegistry)
         .where(and(eq(integrationEndpointRegistry.connectionId, id)));
     expect(await claimed()).toHaveLength(1);
-    const stamp = (await detail(a, id)).updatedAt.toISOString();
-    await withTenant(a, (tx) => revokeConnection(tx, admin(a), id, stamp));
+    const stamp = (await detail(c, id)).updatedAt.toISOString();
+    await withTenant(c, (tx) => revokeConnection(tx, admin(c), id, stamp));
     expect(await claimed()).toHaveLength(0);
-    expect((await lastAudit(id)).metadata).toMatchObject({ previous_status: "pending_approval" });
+    expect((await lastAudit(id)).metadata).toMatchObject({
+      previous_status: "pending_approval",
+      registry_released: true,
+    });
+  });
+
+  it("revokes a live (active) connection and records the endpoint it pointed at", async () => {
+    const c = await createTestTenant("Connections live");
+    const { id } = await withTenant(c, (tx) =>
+      createSandboxConnection(tx, admin(c, true), { displayName: "Live sandbox" }),
+    );
+    // Stand-in for sandbox Submit (PI2b): the lifecycle trigger allows a sandbox draft → active.
+    await withTenant(c, (tx) =>
+      tx.execute(sql`update integration_connections set status = 'active' where id = ${id}::uuid`),
+    );
+    const stamp = (await detail(c, id)).updatedAt.toISOString();
+    await withTenant(c, (tx) => revokeConnection(tx, admin(c, true), id, stamp));
+    expect((await detail(c, id)).status).toBe("revoked");
+    expect((await lastAudit(id)).metadata).toEqual({
+      previous_status: "active",
+      sandbox: true,
+      registry_released: false,
+    });
+    const real = endpoint();
+    const { id: realId } = await withTenant(c, (tx) => createConnection(tx, admin(c), real));
+    const realStamp = (await detail(c, realId)).updatedAt.toISOString();
+    await withTenant(c, (tx) => revokeConnection(tx, admin(c), realId, realStamp));
+    expect((await lastAudit(realId)).metadata).toMatchObject({
+      base_url: (await detail(c, realId)).baseUrl,
+      client_id: real.clientId,
+      mrn_identifier_system: real.mrnIdentifierSystem,
+    });
+  });
+
+  it("refuses a stale revoke", async () => {
+    const { id } = await withTenant(a, (tx) => createConnection(tx, admin(a), endpoint()));
+    const stamp = (await detail(a, id)).updatedAt.toISOString();
+    await withTenant(a, (tx) =>
+      updateConnection(tx, admin(a), id, stamp, endpoint({ displayName: "Changed" })),
+    );
+    const error = await refusal(withTenant(a, (tx) => revokeConnection(tx, admin(a), id, stamp)));
+    expect(error.message).toMatch(/changed since you opened it/);
+    expect((await detail(a, id)).status).toBe("draft");
+  });
+
+  it("can't revoke another practice's connection", async () => {
+    const { id } = await withTenant(b, (tx) => createConnection(tx, admin(b), endpoint()));
+    const stamp = (await detail(b, id)).updatedAt.toISOString();
+    const error = await refusal(withTenant(a, (tx) => revokeConnection(tx, admin(a), id, stamp)));
+    expect(error.message).toMatch(/not found/);
+    expect((await detail(b, id)).status).toBe("draft");
   });
 
   it("refuses anyone but an administrator", async () => {

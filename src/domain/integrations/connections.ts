@@ -7,12 +7,17 @@ import type { TenantTx } from "@/db/tenant";
 import { en } from "@/i18n/messages/en";
 import type { MessageKey, Messages } from "@/i18n/messages/types";
 import { createTranslator, type Translator } from "@/i18n/translate";
-import { checkMrnIdentifierSystem, MAX_IDENTIFIER_SYSTEM_LENGTH } from "@/integrations/fhir/identifier-rules";
+import {
+  checkMrnIdentifierSystem,
+  INVISIBLE_CHARS,
+  MAX_IDENTIFIER_SYSTEM_LENGTH,
+} from "@/integrations/fhir/identifier-rules";
 import {
   checkBaseUrl,
   MAX_BASE_URL_LENGTH,
   SANDBOX_BASE_URL,
   SANDBOX_CLIENT_ID,
+  SANDBOX_HOST,
   SANDBOX_MRN_SYSTEM,
 } from "@/integrations/fhir/url-rules";
 import { VENDOR_SANDBOX_HOSTS } from "@/integrations/fhir/vendor-sandboxes";
@@ -48,8 +53,6 @@ export interface IntegrationActor {
   syntheticOnly: boolean;
 }
 
-// Control characters (C0, DEL, C1) never belong in a name shown in the tab bar and audit metadata.
-const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
 /** SMART client IDs are opaque strings; visible ASCII without spaces covers every vendor we know. */
 const CLIENT_ID = /^[\x21-\x7e]{1,255}$/;
 
@@ -68,6 +71,9 @@ const endpointInputSchema = z
   })
   .strict();
 const sandboxInputSchema = z.object({ displayName: z.string().max(400) }).strict();
+/** Editing a connection whose endpoint is locked: the name, plus the endpoint fields only if the
+ * form still sends them (a disabled input is omitted), so they can be compared, never re-validated. */
+const lockedInputSchema = endpointInputSchema.partial().required({ displayName: true }).strict();
 
 export interface EndpointInput {
   displayName: string;
@@ -88,21 +94,27 @@ function parseOrFail<T>(schema: z.ZodType<T>, raw: unknown, t: IntegrationsT): T
   const issue = parsed.error.issues[0];
   const field = issue?.path[0];
   if (issue?.code === "unrecognized_keys" || typeof field !== "string") fail(t, "error.unexpectedField");
-  const known: Record<string, [IntegrationsKey, ConnectionField]> = {
-    displayName: ["error.displayNameTooLong", "displayName"],
-    baseUrl: ["error.url.too_long", "baseUrl"],
-    clientId: ["error.clientIdInvalid", "clientId"],
-    mrnIdentifierSystem: ["error.mrnSystem.too_long", "mrnIdentifierSystem"],
+  // Missing or not a string (FormData.get returns null for an absent input) reads as "required";
+  // only an over-long string reads as "too long".
+  const tooLong = issue?.code === "too_big";
+  const known: Record<string, [IntegrationsKey, IntegrationsKey, ConnectionField]> = {
+    displayName: ["error.displayNameTooLong", "error.displayNameRequired", "displayName"],
+    baseUrl: ["error.url.too_long", "error.url.invalid", "baseUrl"],
+    clientId: ["error.clientIdInvalid", "error.clientIdRequired", "clientId"],
+    mrnIdentifierSystem: ["error.mrnSystem.too_long", "error.mrnSystem.invalid", "mrnIdentifierSystem"],
   };
-  const [key, formField] = known[field] ?? ["error.unexpectedField", undefined];
-  fail(t, key, formField);
+  const entry = known[field];
+  if (!entry) fail(t, "error.unexpectedField");
+  fail(t, tooLong ? entry[0] : entry[1], entry[2]);
 }
 
 function checkDisplayName(raw: string, t: IntegrationsT): string {
   const name = raw.trim();
   if (name.length === 0) fail(t, "error.displayNameRequired", "displayName");
   if (name.length > 80) fail(t, "error.displayNameTooLong", "displayName");
-  if (CONTROL_CHARS.test(name)) fail(t, "error.displayNameInvalid", "displayName");
+  // Control, zero-width, and bidi characters never belong in a name shown in the tab bar and the
+  // operator's approval queue (security review L-4).
+  if (INVISIBLE_CHARS.test(name)) fail(t, "error.displayNameInvalid", "displayName");
   return name;
 }
 
@@ -120,7 +132,9 @@ export function parseEndpointInput(
   const displayName = checkDisplayName(input.displayName, t);
   const url = checkBaseUrl(input.baseUrl);
   if (!url.ok) fail(t, `error.url.${url.code}`, "baseUrl");
-  if (url.endpointKey === SANDBOX_BASE_URL) fail(t, "error.url.sandbox", "baseUrl");
+  // Any URL on the sandbox host, not only the sandbox's exact base URL (security review L-1): a real
+  // connection must never look like the sandbox, whatever PI2b keys its transport choice on.
+  if (url.host === SANDBOX_HOST) fail(t, "error.url.sandbox", "baseUrl");
   if (syntheticOnly && !VENDOR_SANDBOX_HOSTS.includes(url.host))
     fail(t, "error.realEndpointRefused", "baseUrl");
   const clientId = input.clientId.trim();
@@ -128,6 +142,9 @@ export function parseEndpointInput(
   if (!CLIENT_ID.test(clientId)) fail(t, "error.clientIdInvalid", "clientId");
   const system = checkMrnIdentifierSystem(input.mrnIdentifierSystem);
   if (!system.ok) fail(t, `error.mrnSystem.${system.code}`, "mrnIdentifierSystem");
+  if (system.system.toLowerCase() === SANDBOX_MRN_SYSTEM) {
+    fail(t, "error.mrnSystem.invalid", "mrnIdentifierSystem");
+  }
   return {
     displayName,
     baseUrl: url.baseUrl,
@@ -196,9 +213,20 @@ export function endpointEditable(connection: {
   return connection.status === "draft" && !connection.hasSynced && !connection.isSandbox;
 }
 
-/** Configuration values recorded in audit metadata: always the normalized URL, never a query string. */
-function endpointMetadata(prefix: "" | "old_", values: { baseUrl: string; clientId: string }) {
-  return { [`${prefix}base_url`]: values.baseUrl, [`${prefix}client_id`]: values.clientId };
+/**
+ * Configuration values recorded in audit metadata (spec "Audit events"): the normalized URL (never a
+ * query string; the path is limited to unreserved characters), the client ID, and the MRN
+ * identifier system — the setting the SSN/MBI refusal protects (compliance review #6b).
+ */
+function endpointMetadata(
+  prefix: "" | "old_",
+  values: { baseUrl: string; clientId: string; mrnIdentifierSystem: string },
+) {
+  return {
+    [`${prefix}base_url`]: values.baseUrl,
+    [`${prefix}client_id`]: values.clientId,
+    [`${prefix}mrn_identifier_system`]: values.mrnIdentifierSystem,
+  };
 }
 
 /**
@@ -278,7 +306,30 @@ export async function createSandboxConnection(
   return { id };
 }
 
-/** Locks the row and checks it is still the version the administrator opened (stale-edit check). */
+/** The first endpoint field the form sent with a value different from the stored one, if any. */
+function lockedFieldChanged(
+  input: { baseUrl?: string; clientId?: string; mrnIdentifierSystem?: string },
+  current: { baseUrl: string; clientId: string; mrnIdentifierSystem: string },
+): ConnectionField | null {
+  if (input.baseUrl !== undefined) {
+    const url = checkBaseUrl(input.baseUrl);
+    const sent = url.ok ? url.baseUrl : input.baseUrl.trim();
+    if (sent !== current.baseUrl) return "baseUrl";
+  }
+  if (input.clientId !== undefined && input.clientId.trim() !== current.clientId) return "clientId";
+  if (
+    input.mrnIdentifierSystem !== undefined &&
+    input.mrnIdentifierSystem.trim() !== current.mrnIdentifierSystem
+  ) {
+    return "mrnIdentifierSystem";
+  }
+  return null;
+}
+
+/**
+ * Locks the row and checks it is still the version the administrator opened (stale-edit check).
+ * `updated_at` is always written by the database clock (`now()`), never the app server's.
+ */
 async function lockForChange(tx: TenantTx, id: string, expectedUpdatedAt: string, t: IntegrationsT) {
   const [current] = await tx
     .select(detailColumns)
@@ -309,14 +360,17 @@ export async function updateConnection(
   let next: Pick<EndpointInput, "displayName"> & Partial<EndpointInput>;
   if (current.isSandbox) {
     next = { displayName: checkDisplayName(parseOrFail(sandboxInputSchema, raw, t).displayName, t) };
+  } else if (endpointEditable(current)) {
+    next = parseEndpointInput(raw, actor.syntheticOnly, t);
   } else {
-    const input = parseEndpointInput(raw, actor.syntheticOnly, t);
-    const endpointChanged =
-      input.baseUrl !== current.baseUrl ||
-      input.clientId !== current.clientId ||
-      input.mrnIdentifierSystem !== current.mrnIdentifierSystem;
-    if (endpointChanged && !endpointEditable(current)) fail(t, "error.endpointLocked", "baseUrl");
-    next = endpointChanged ? input : { displayName: input.displayName };
+    // Locked: only the name may change. The stored endpoint isn't re-validated against today's
+    // rules (an allowed port or the refusal list may have changed since it was saved); a sent
+    // endpoint field is only compared, and a change is refused on that field.
+    const input = parseOrFail(lockedInputSchema, raw, t);
+    const displayName = checkDisplayName(input.displayName, t);
+    const changedField = lockedFieldChanged(input, current);
+    if (changedField) fail(t, "error.endpointLocked", changedField);
+    next = { displayName };
   }
   const changed = (Object.keys(next) as (keyof EndpointInput)[]).filter(
     (key) => key !== "endpointKey" && next[key] !== current[key as keyof typeof current],
@@ -324,7 +378,7 @@ export async function updateConnection(
   if (changed.length === 0) return;
   await tx
     .update(integrationConnections)
-    .set({ ...next, updatedBy: actor.userId, updatedAt: new Date() })
+    .set({ ...next, updatedBy: actor.userId, updatedAt: sql`now()` })
     .where(eq(integrationConnections.id, id));
   const endpointFieldsChanged = changed.some((key) => key !== "displayName");
   await audit(tx, {
@@ -338,7 +392,11 @@ export async function updateConnection(
       ...(endpointFieldsChanged
         ? {
             ...endpointMetadata("old_", current),
-            ...endpointMetadata("", { baseUrl: next.baseUrl!, clientId: next.clientId! }),
+            ...endpointMetadata("", {
+              baseUrl: next.baseUrl!,
+              clientId: next.clientId!,
+              mrnIdentifierSystem: next.mrnIdentifierSystem!,
+            }),
           }
         : {}),
     },
@@ -359,19 +417,22 @@ export async function revokeConnection(
 ): Promise<void> {
   assertAdmin(actor, t);
   const current = await lockForChange(tx, id, expectedUpdatedAt, t);
-  const now = new Date();
   await tx
     .update(integrationConnections)
     .set({
       status: "revoked",
       revokedBy: actor.userId,
-      revokedAt: now,
+      revokedAt: sql`now()`,
       updatedBy: actor.userId,
-      updatedAt: now,
+      updatedAt: sql`now()`,
     })
     .where(eq(integrationConnections.id, id));
+  let registryReleased = false;
   if (!current.isSandbox) {
-    await tx.execute(sql`select integration_registry_release(${id}::uuid)`);
+    const released = await tx.execute<{ released: boolean }>(
+      sql`select integration_registry_release(${id}::uuid) as released`,
+    );
+    registryReleased = released.rows[0]?.released === true;
   }
   await audit(tx, {
     action: "integration.connection_revoked",
@@ -379,6 +440,11 @@ export async function revokeConnection(
     tenantId: actor.tenantId,
     entityType: "integration_connection",
     entityId: id,
-    metadata: { previous_status: current.status, sandbox: current.isSandbox },
+    metadata: {
+      previous_status: current.status,
+      sandbox: current.isSandbox,
+      registry_released: registryReleased,
+      ...(current.isSandbox ? {} : endpointMetadata("", current)),
+    },
   });
 }
