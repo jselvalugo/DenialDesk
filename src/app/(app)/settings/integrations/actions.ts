@@ -13,16 +13,19 @@ import {
   pauseConnection,
   resumeConnection,
   revokeConnection,
+  submitConnection,
   updateConnection,
   withdrawConnection,
+  resolveSigningKid,
   type IntegrationActor,
+  type ResolvedSigningKid,
 } from "@/domain/integrations/connections";
 import { testConnection } from "@/domain/integrations/test-connection";
 import type { TenantTx } from "@/db/tenant";
 import type { Messages } from "@/i18n/messages/types";
 import type { Translator } from "@/i18n/translate";
 import { isRevokeReasonCode } from "@/domain/integrations/revoke-reasons";
-import { getT } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
 import {
   connectionFormFailure,
   integrationActor,
@@ -171,10 +174,19 @@ type Transition = (
   id: string,
   expectedUpdatedAt: string,
   t: Translator<Messages["integrations"]>,
+  signing: ResolvedSigningKid,
 ) => Promise<void>;
 
-/** Pause, resume, and withdraw share everything but the domain call: admin, id, actor, refusals. */
-async function transitionAction(formData: FormData, run: Transition): Promise<ConnectionFormState> {
+/**
+ * Pause, resume, and withdraw share everything but the domain call: admin, id, actor, refusals. The
+ * live signing key's `kid` (public material only) is resolved here, before the transaction and its
+ * row lock, for the transition that needs it (resume from `error`).
+ */
+async function transitionAction(
+  formData: FormData,
+  run: Transition,
+  needsKey = false,
+): Promise<ConnectionFormState> {
   const auth = await requireAuth();
   const t = await getT("integrations");
   if (!canManageIntegrations(auth.role)) return { error: t("error.notAdmin") };
@@ -182,7 +194,10 @@ async function transitionAction(formData: FormData, run: Transition): Promise<Co
   if (!id.success) return { error: t("error.notFound") };
   const actor = integrationActor(auth);
   try {
-    await withTenant(auth, (tx) => run(tx, actor, id.data, text(formData, "updatedAt", 40), t));
+    const signing = needsKey
+      ? await resolveSigningKid(connectionTestDeps(), id.data)
+      : { kid: null, refusal: null };
+    await withTenant(auth, (tx) => run(tx, actor, id.data, text(formData, "updatedAt", 40), t, signing));
   } catch (error) {
     return connectionFormFailure(error, t);
   }
@@ -198,12 +213,52 @@ export async function pauseConnectionAction(
   return transitionAction(formData, pauseConnection);
 }
 
-/** Resume a paused or errored connection; refused without a step-up in the last five minutes (R-7.2.2). */
+/**
+ * Resume a paused or errored connection; refused without a step-up in the last five minutes
+ * (R-7.2.2), and from `error` also without a passing Test connection (spec PI2a).
+ */
 export async function resumeConnectionAction(
   _: ConnectionFormState,
   formData: FormData,
 ): Promise<ConnectionFormState> {
-  return transitionAction(formData, resumeConnection);
+  return transitionAction(formData, resumeConnection, true);
+}
+
+/**
+ * Submit a draft (spec PI2a): a real connection goes to DenialDesk for approval, the sandbox
+ * activates. Admin only, re-checked here and in the domain. The attestation checkbox is read on the
+ * server, together with the language the form displayed it in: a form whose language no longer
+ * matches the request's (the language was switched in another tab, say) is refused, so the wording
+ * an administrator agrees to is always the wording recorded. The step-up and the passing test are
+ * checked by the domain in the transaction that changes the status.
+ */
+export async function submitConnectionAction(
+  _: ConnectionFormState,
+  formData: FormData,
+): Promise<ConnectionFormState> {
+  const auth = await requireAuth();
+  const t = await getT("integrations");
+  if (!canManageIntegrations(auth.role)) return { error: t("error.notAdmin") };
+  const id = uuid.safeParse(text(formData, "id", 40));
+  if (!id.success) return { error: t("error.notFound") };
+  const locale = await getLocale();
+  if (text(formData, "locale", 8) !== locale) return { error: t("error.localeChanged") };
+  const actor = integrationActor(auth);
+  try {
+    await submitConnection(
+      (fn) => withTenant(auth, fn),
+      actor,
+      id.data,
+      text(formData, "updatedAt", 40),
+      { attested: formData.get("attest") === "on", locale },
+      connectionTestDeps(),
+      t,
+    );
+  } catch (error) {
+    return connectionFormFailure(error, t);
+  }
+  revalidatePath("/", "layout");
+  redirect(`/settings/integrations/${id.data}`);
 }
 
 /** Withdraw a connection awaiting approval, back to a draft (PI2a). */

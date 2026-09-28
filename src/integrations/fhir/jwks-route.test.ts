@@ -38,6 +38,7 @@ describe("handleJwksRequest (/.well-known/jwks.json, spec PI2a 'JWKS routes')", 
   it("re-applies the allow-list to whatever the adapter returns (a leaky adapter can't publish `d`)", async () => {
     const leaky: SigningKeyStore = {
       signer: () => Promise.reject(new Error("unused")),
+      kid: () => Promise.reject(new Error("unused")),
       publicJwks: async () =>
         [
           {
@@ -98,6 +99,7 @@ describe("handleJwksRequest (/.well-known/jwks.json, spec PI2a 'JWKS routes')", 
   it("rethrows an unexpected failure (a bug is a 500, not a 404)", async () => {
     const broken: SigningKeyStore = {
       signer: () => Promise.reject(new Error("x")),
+      kid: () => Promise.reject(new Error("x")),
       publicJwks: () => Promise.reject(new TypeError("bug")),
     };
     await expect(

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 import { canManageIntegrations } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { hasRecentMfa } from "@/auth/step-up";
 import { Field, FieldList } from "@/components/records/FieldList";
 import { Badge } from "@/components/ui/Badge";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
@@ -13,11 +14,16 @@ import {
   CONNECTION_STATUS_TONE,
   endpointEditable,
   getConnection,
+  resolveSigningKid,
+  submitBlockedReason,
 } from "@/domain/integrations/connections";
 import { getFormat, getT } from "@/i18n/server";
 import { ConnectionForm } from "../ConnectionForm";
+import { integrationActor } from "../form-state";
+import { connectionTestDeps } from "../test-deps";
 import { ConnectionLifecycleButton } from "./ConnectionLifecycle";
 import { RevokeConnectionForm } from "./RevokeConnectionForm";
+import { SubmitConnectionForm } from "./SubmitConnectionForm";
 import { TestConnectionForm } from "./TestConnectionForm";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -38,6 +44,16 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
   const connection = await withTenant(auth, (tx) => getConnection(tx, id.data));
   if (!connection) notFound();
   const t = await getT("integrations");
+  // Why Submit is unavailable right now, if it is (environment, another live connection, no passing
+  // test in the last 24 h for this configuration and the live key): only a draft can be submitted.
+  // Submit checks all of it again itself. The key is identified from public material only (`kid`).
+  let submitBlocked: string | null = null;
+  if (connection.status === "draft") {
+    const signing = await resolveSigningKid(connectionTestDeps(), connection.id);
+    const actor = integrationActor(auth);
+    const reason = await withTenant(auth, (tx) => submitBlockedReason(tx, actor, connection, signing));
+    submitBlocked = reason ? t(reason) : null;
+  }
   const ts = await getT("settings");
   const format = await getFormat();
   const revoked = connection.status === "revoked";
@@ -57,7 +73,8 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
   );
   const offboarding = !connection.isSandbox;
   // The lifecycle action each state offers (PI2a): pause a live connection, resume a stopped one
-  // (a step-up is needed), withdraw a submitted one. A draft has none (Submit ships with PI2a-2).
+  // (a step-up is needed; from an error also a passing test), withdraw a submitted one. A draft has
+  // none: it has the Submit panel.
   const lifecycle = (
     {
       active: { kind: "pause", description: "lifecycle.active" },
@@ -154,6 +171,22 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
           {!connection.isSandbox && (
             <Panel title={t("test.title")} description={t("test.description")}>
               <TestConnectionForm id={connection.id} />
+            </Panel>
+          )}
+          {connection.status === "draft" && (
+            <Panel title={t("submit.title")}>
+              <SubmitConnectionForm
+                id={connection.id}
+                updatedAt={updatedAt}
+                sandbox={connection.isSandbox}
+                blockedReason={submitBlocked}
+                needsStepUp={!hasRecentMfa(auth.mfaVerifiedAt)}
+              />
+            </Panel>
+          )}
+          {connection.status === "pending_approval" && (
+            <Panel title={t("submit.awaitingTitle")}>
+              <p className="text-body text-text">{t("submit.awaitingDescription")}</p>
             </Panel>
           )}
           {lifecycle && (

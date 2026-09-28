@@ -11,7 +11,13 @@ import { requestContext } from "./request-context";
  * not legal rules.
  */
 export type Bucket =
-  "sign_in" | "mfa" | "seed" | "integration_test_connection" | "integration_test_practice" | "jwks";
+  | "sign_in"
+  | "mfa"
+  | "seed"
+  | "integration_test_connection"
+  | "integration_test_practice"
+  | "integration_submit"
+  | "jwks";
 
 const POLICY: Record<Bucket, { limit: number; windowSeconds: number; env?: string }> = {
   sign_in: { limit: 30, windowSeconds: 15 * 60, env: "RATE_LIMIT_SIGNIN" },
@@ -21,6 +27,9 @@ const POLICY: Record<Bucket, { limit: number; windowSeconds: number; env?: strin
   // practice, separately from sign-in (docs/specs/patient-integrations.md PI2a; threat model D2).
   integration_test_connection: { limit: 5, windowSeconds: 10 * 60 },
   integration_test_practice: { limit: 20, windowSeconds: 10 * 60 },
+  // Submit attempts per practice (PI2a): a refused Submit says whether an endpoint and client ID are
+  // already registered by some practice, so probing that is bounded like probing hosts is.
+  integration_submit: { limit: 10, windowSeconds: 10 * 60 },
   // Public JWKS reads, per client network; EHRs fetch a key at token time, not per request.
   jwks: { limit: 120, windowSeconds: 60 },
 };

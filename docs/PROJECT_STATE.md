@@ -70,7 +70,23 @@ _Last updated: 2026-09-28_
   Submit's gate: the newest test for the connection must be a pass within 24 h, bound to the current base URL, client ID, token endpoint, token endpoint key, issuer, and signing `kid`; coordinator decision pending owner confirmation, OA-065). **Open for the Azure cutover (R-15.9
   sign-off):** per-connection Key Vault keys, the grant on `key_mode`/`key_ref`, SECURITY DEFINER
   `integration_jwks_lookup`, `/.well-known/jwks/<uuid>.json`, key rotation and compromise runbooks.
-  Still open in PI2a: Submit, the residency attestation, the Submit registry claim, and Resume from `error` requiring a passing Test connection. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  **PI2a Submit slice done** (PR #88, branch `claude/vigilant-tesla-ps41e9-pi2a-submit`, no migration,
+  no GRANT; review fixes in the same PR: Resume from `error` needs a pass newer than the error, the
+  signing `kid` comes from public material before any transaction, a per-practice Submit rate limit,
+  one live connection per practice refused in words, the displayed language checked against the
+  request's, and a SHA-256 of the attestation text in the audit event; the **Spanish and Portuguese
+  attestation is agent-written and unreviewed, native-speaker and counsel review is OA-041**): Submit
+  (`submitConnection`: admin, row lock, step-up, the passing-test gate with the live signing `kid`,
+  the U.S.-residency attestation for a real connection, one UPDATE with fresh `submitted_*` and
+  `us_residency_attested_*` stamps, then the registry claim; a conflict rolls back, refuses with "This
+  endpoint and client ID are already connected", and audits `integration.registry_conflict`), the
+  Submit panel and "Awaiting DenialDesk approval" on the connection page (en/es/pt), and Resume from
+  `error` requiring a passing Test connection (paused still doesn't). The passing test is required for
+  the sandbox too (only the attestation is real-only), so sandbox Submit is domain-tested with a seeded
+  pass and unreachable from the page until PI2b (and a sandbox in `error` can't be resumed until PI2b
+  gives it a test path). **Open owner decisions from this slice:** OA-045 (N3 stamp time floor, N6
+  attestation wording scope), OA-065 (c). **Next: PI1c operator approval** (Submit now produces
+  `pending_approval` connections with a claimed registry entry for it to approve). (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
   **PI2a lifecycle + step-up slice done** (PR #86, ported from closed #81 onto the
   #82/#84/#85 domain layer; Submit, the residency attestation, and the Submit registry claim wait on
   Test connection, PI2a-2): step-up MFA (R-7.2.2) — migration 0041 `sessions.mfa_verified_at`,
@@ -400,7 +416,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Open questions for humans
 
-- **Confirm two PI2a coordinator decisions (OA-065, 2026-09-28):** (a) Submit's gate is stricter than the spec's plain wording: the newest Test connection must be a pass within 24 h, bound to the tested configuration and signing `kid` (a later failure or transport refusal voids it); (b) pre-production signs every connection with one shared key (`INTEGRATION_SIGNING_KEY`), a residual risk recorded in threat model S3, mitigated by the operator verifying `client_id` ownership at approval (PI1c).
+- **Confirm three PI2a coordinator decisions (OA-065, 2026-09-28; due before the first real connection):** (a) Submit's gate is stricter than the spec's plain wording: the newest Test connection must be a pass within 24 h, bound to the tested configuration and signing `kid` (a later failure or transport refusal voids it); (b) pre-production signs every connection with one shared key (`INTEGRATION_SIGNING_KEY`), a residual risk recorded in threat model S3, mitigated by the operator verifying `client_id` ownership at approval (PI1c); (c) a refused Submit ("This endpoint and client ID are already connected") reveals that *some* practice holds that endpoint and client ID pair, with no identity disclosed, bounded by the Test connection and Submit rate limits: accept or reject.
 - **TLS 1.3 minimum for the FHIR transport?** (2026-09-28, pending, `OA-062`.) R-7.3.1 is TLS 1.2+ (prefer 1.3); the transport enforces 1.2 with ECDHE + AEAD suites only and negotiates 1.3 when offered. A 1.3 minimum would refuse EHR vendors that only support 1.2. Must be decided before the first real endpoint is enabled.
 - Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter
   and BAA scope (OA-045); retire manual registration once connected (OA-046); phone/email not synced

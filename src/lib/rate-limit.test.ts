@@ -62,3 +62,10 @@ describe("jwks bucket policy", () => {
     expect(limitFor("jwks")).toEqual({ limit: 120, windowSeconds: 60 });
   });
 });
+
+describe("integration_submit bucket policy", () => {
+  it("is its own per-practice bucket: 10 attempts per 10 minutes, separate from Test connection", () => {
+    expect(limitFor("integration_submit")).toEqual({ limit: 10, windowSeconds: 600 });
+    expect(limitFor("integration_test_practice").limit).not.toBe(limitFor("integration_submit").limit);
+  });
+});
