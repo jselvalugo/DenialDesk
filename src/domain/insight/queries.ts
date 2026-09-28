@@ -9,6 +9,7 @@ import { claims, denials, patients, payers } from "@/db/schema";
 import { audit } from "@/lib/audit";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { isPayerVerified } from "@/domain/payers/verification";
+import { isRestricted } from "@/domain/patients/record";
 import {
   appealOutcomesReport,
   claimsByStatusReport,
@@ -93,12 +94,13 @@ export async function fetchDenialsByCategory(tx: TenantTx, filters: ReportFilter
       carc: denials.carc,
       deniedCents: denials.deniedCents,
       sensitivityTags: patients.sensitivityTags,
+      sourceRestricted: patients.sourceRestricted,
     })
     .from(denials)
     .innerJoin(claims, eq(claims.id, denials.claimId))
     .innerJoin(patients, eq(patients.id, claims.patientId))
     .where(where);
-  return denialsByCategoryReport(rows.map((r) => ({ ...r, patientSensitive: r.sensitivityTags.length > 0 })));
+  return denialsByCategoryReport(rows.map((r) => ({ ...r, patientSensitive: isRestricted(r) })));
 }
 
 export async function fetchDenialsByPayer(tx: TenantTx, filters: ReportFilters) {
@@ -111,6 +113,7 @@ export async function fetchDenialsByPayer(tx: TenantTx, filters: ReportFilters) 
       category: denials.category,
       deniedCents: denials.deniedCents,
       sensitivityTags: patients.sensitivityTags,
+      sourceRestricted: patients.sourceRestricted,
     })
     .from(denials)
     .innerJoin(claims, eq(claims.id, denials.claimId))
@@ -124,7 +127,7 @@ export async function fetchDenialsByPayer(tx: TenantTx, filters: ReportFilters) 
       verified: isPayerVerified({ ediPayerId: r.ediPayerId, regime: r.regime }),
       category: r.category,
       deniedCents: r.deniedCents,
-      patientSensitive: r.sensitivityTags.length > 0,
+      patientSensitive: isRestricted(r),
     })),
   );
 }
@@ -189,13 +192,14 @@ export async function fetchDenialsByDeadlineBucket(tx: TenantTx, filters: Report
       appealDeadline: denials.appealDeadline,
       deniedCents: denials.deniedCents,
       sensitivityTags: patients.sensitivityTags,
+      sourceRestricted: patients.sourceRestricted,
     })
     .from(denials)
     .innerJoin(claims, eq(claims.id, denials.claimId))
     .innerJoin(patients, eq(patients.id, claims.patientId))
     .where(where);
   return denialsByDeadlineBucketReport(
-    rows.map((r) => ({ ...r, patientSensitive: r.sensitivityTags.length > 0 })),
+    rows.map((r) => ({ ...r, patientSensitive: isRestricted(r) })),
     today,
   );
 }
@@ -212,11 +216,12 @@ export async function fetchClaimsByStatus(tx: TenantTx, filters: ReportFilters) 
       billedCents: claims.billedCents,
       paidCents: claims.paidCents,
       sensitivityTags: patients.sensitivityTags,
+      sourceRestricted: patients.sourceRestricted,
     })
     .from(claims)
     .innerJoin(patients, eq(patients.id, claims.patientId))
     .where(where);
-  return claimsByStatusReport(rows.map((r) => ({ ...r, patientSensitive: r.sensitivityTags.length > 0 })));
+  return claimsByStatusReport(rows.map((r) => ({ ...r, patientSensitive: isRestricted(r) })));
 }
 
 export async function fetchAppealOutcomes(tx: TenantTx, filters: ReportFilters) {
@@ -233,6 +238,7 @@ export async function fetchAppealOutcomes(tx: TenantTx, filters: ReportFilters) 
       status: denials.status,
       deniedCents: denials.deniedCents,
       sensitivityTags: patients.sensitivityTags,
+      sourceRestricted: patients.sourceRestricted,
     })
     .from(denials)
     .innerJoin(claims, eq(claims.id, denials.claimId))
@@ -246,14 +252,14 @@ export async function fetchAppealOutcomes(tx: TenantTx, filters: ReportFilters) 
       label: r.payerName,
       status: outcomeStatus(r.status),
       deniedCents: r.deniedCents,
-      patientSensitive: r.sensitivityTags.length > 0,
+      patientSensitive: isRestricted(r),
     })),
     rows.map((r) => ({
       key: r.category,
       label: r.category,
       status: outcomeStatus(r.status),
       deniedCents: r.deniedCents,
-      patientSensitive: r.sensitivityTags.length > 0,
+      patientSensitive: isRestricted(r),
     })),
   );
 }

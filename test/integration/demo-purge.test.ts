@@ -7,7 +7,12 @@ import {
   auditEvents,
   claims,
   claimVersions,
+  integrationConnections,
+  integrationPayerMappings,
+  integrationSyncIssues,
+  integrationSyncRuns,
   memberships,
+  patients,
   tenants,
   universityAccess,
   universityProgress,
@@ -32,6 +37,8 @@ const GUARDS = [
   "remittance_events_no_update",
   "prompt_pay_responses_no_update",
   "tenant_agreements_guard_row",
+  "integration_sync_issues_no_update",
+  "integration_sync_runs_no_delete",
   "audit_events_no_update", // never touched: the audit log stays append-only
 ];
 
@@ -78,12 +85,44 @@ describe("purge_demo_practices", () => {
     await systemDb()
       .insert(universityAccess)
       .values({ tenantId: demo.tenantId, requestedAt: new Date(), requestedBy: demo.userIds[0]! });
+    // A connection, a queued sync run, a sync issue and a payer mapping (PI1a, 0039) must not
+    // block the purge and must themselves be gone afterwards, in FK order.
+    const host = `demo-ehr-${s}.example.test`;
+    const [connection] = await systemDb()
+      .insert(integrationConnections)
+      .values({
+        tenantId: demo.tenantId,
+        displayName: "Demo EHR",
+        baseUrl: `https://${host}/r4`,
+        endpointKey: `https://${host}/r4`,
+        clientId: `demo-client-${s}`,
+        mrnIdentifierSystem: `https://${host}/mrn`,
+        createdBy: demo.userIds[0]!,
+        updatedBy: demo.userIds[0]!,
+      })
+      .returning({ id: integrationConnections.id });
+    const [syncRun] = await systemDb()
+      .insert(integrationSyncRuns)
+      .values({ tenantId: demo.tenantId, connectionId: connection!.id, trigger: "manual" })
+      .returning({ id: integrationSyncRuns.id });
+    await systemDb()
+      .insert(integrationSyncIssues)
+      .values({ tenantId: demo.tenantId, runId: syncRun!.id, code: "needs_review" });
+    await systemDb().insert(integrationPayerMappings).values({
+      tenantId: demo.tenantId,
+      connectionId: connection!.id,
+      payorKey: "Organization/demo-payor",
+      updatedBy: demo.userIds[0]!,
+    });
     await systemDb()
       .update(tenants)
       .set({ kind: "demo", suspendedAt: new Date() })
       .where(eq(tenants.id, demo.tenantId));
     const customerClaims = await countClaims(customer.tenantId, customer.userIds[0]!);
     expect(customerClaims).toBeGreaterThan(0);
+    expect(
+      await systemDb().select({ id: patients.id }).from(patients).where(eq(patients.tenantId, demo.tenantId)),
+    ).not.toHaveLength(0);
     const before = await auditFor(demo.tenantId, demo.userIds[0]!);
 
     const [result] = (await systemDb().execute(sql`SELECT purge_demo_practices() AS n`)).rows as {
@@ -96,6 +135,33 @@ describe("purge_demo_practices", () => {
     expect(await systemDb().select().from(users).where(eq(users.id, customer.userIds[0]!))).toHaveLength(1);
     expect(await countClaims(customer.tenantId, customer.userIds[0]!)).toBe(customerClaims);
     expect(await countClaims(demo.tenantId, customer.userIds[0]!)).toBe(0);
+
+    // The connection, its sync run, sync issue and payer mapping, and the demo tenant's patients
+    // are all gone too.
+    expect(
+      await systemDb()
+        .select()
+        .from(integrationConnections)
+        .where(eq(integrationConnections.id, connection!.id)),
+    ).toHaveLength(0);
+    expect(
+      await systemDb().select().from(integrationSyncRuns).where(eq(integrationSyncRuns.id, syncRun!.id)),
+    ).toHaveLength(0);
+    expect(
+      await systemDb()
+        .select()
+        .from(integrationSyncIssues)
+        .where(eq(integrationSyncIssues.runId, syncRun!.id)),
+    ).toHaveLength(0);
+    expect(
+      await systemDb()
+        .select()
+        .from(integrationPayerMappings)
+        .where(eq(integrationPayerMappings.connectionId, connection!.id)),
+    ).toHaveLength(0);
+    expect(await systemDb().select().from(patients).where(eq(patients.tenantId, demo.tenantId))).toHaveLength(
+      0,
+    );
 
     // Earlier audit events are kept, plus one purge record per practice and per user.
     const kept = await auditFor(demo.tenantId, demo.userIds[0]!);

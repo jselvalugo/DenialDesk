@@ -111,7 +111,8 @@ export async function getAppeal(tx: TenantTx, appealId: string) {
         firstName: patients.firstName,
         lastName: patients.lastName,
         mrn: patients.mrn,
-        memberIdLast4: patients.memberIdLast4,
+        // Null on a synced patient without a mapped coverage (PI1a); shown the same as self-pay.
+        memberIdLast4: sql<string>`coalesce(${patients.memberIdLast4}, '')`,
       },
       filedByName: users.displayName,
     })

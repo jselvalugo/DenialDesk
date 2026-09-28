@@ -104,6 +104,12 @@ export const patients: Messages["patients"] = {
   "error.staleRecord": "Este paciente cambió desde que abrió el formulario. Recargue e intente de nuevo.",
   "error.notFound": "No encontrado.",
   "error.noMemberIdOnFile": "No hay ID de miembro en archivo.",
+  "error.syncedReadOnly":
+    "Este paciente se sincroniza desde el EHR/PM conectado y no se puede editar aquí. Corrija los datos demográficos en el EHR/PM.",
+  "error.integrationConnected":
+    "Registrar o editar pacientes manualmente está desactivado mientras se configura una conexión con el EHR/PM.",
+  "error.roleCannotTag": "Su rol puede ver las etiquetas de sensibilidad, pero no modificarlas.",
+  "error.invalidSensitivityTag": "Esa no es una etiqueta de sensibilidad reconocida.",
 
   // Errores de las acciones del servidor (app/(app)/patients/actions.ts)
   "error.roleReadOnly": "Su rol puede ver pacientes, pero no modificarlos.",

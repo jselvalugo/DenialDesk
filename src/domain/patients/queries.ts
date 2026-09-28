@@ -1,6 +1,6 @@
-import { and, asc, count, desc, eq, ilike, inArray, like, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, like, ne, or, sql } from "drizzle-orm";
 import type { TenantTx } from "@/db/tenant";
-import { claims, denials, patients, payers } from "@/db/schema";
+import { claims, denials, integrationConnections, patients, payers } from "@/db/schema";
 import { decryptField, encryptField } from "@/lib/crypto/field";
 import { audit } from "@/lib/audit";
 import { en } from "@/i18n/messages/en";
@@ -8,7 +8,13 @@ import type { Messages } from "@/i18n/messages/types";
 import { createTranslator, type Translator } from "@/i18n/translate";
 import { OPEN_STATUSES } from "@/domain/denial-status";
 import { SYNTHETIC_MARKER } from "@/domain/synthetic/generator";
-import { changedPatientFields, nextMrn, type PatientInput } from "./record";
+import {
+  changedPatientFields,
+  nextMrn,
+  SENSITIVITY_TAG_LABEL_KEYS,
+  type PatientInput,
+  type SensitivityTag,
+} from "./record";
 
 type PatientsT = Translator<Messages["patients"]>;
 /** English translator used when a caller doesn't have the request's language (e.g. integration tests). */
@@ -30,6 +36,7 @@ const listColumns = {
   state: patients.state,
   payerName: payers.name,
   sensitivityTags: patients.sensitivityTags,
+  sourceRestricted: patients.sourceRestricted,
 };
 
 export type PatientListRow = Awaited<ReturnType<typeof listPatients>>["rows"][number];
@@ -108,6 +115,7 @@ export async function getPatientChart(tx: TenantTx, patientId: string) {
         primaryPayerId: patients.primaryPayerId,
         memberIdLast4: patients.memberIdLast4,
         sensitivityTags: patients.sensitivityTags,
+        sourceRestricted: patients.sourceRestricted,
         createdAt: patients.createdAt,
         updatedAt: patients.updatedAt,
       },
@@ -186,7 +194,9 @@ export async function getPatientForEdit(tx: TenantTx, patientId: string) {
       postalCode: patients.postalCode,
       phone: patients.phone,
       primaryPayerId: patients.primaryPayerId,
-      memberIdLast4: patients.memberIdLast4,
+      // No member ID on a synced patient without a mapped coverage (nullable, PI1a): the form
+      // treats that the same as self-pay ("").
+      memberIdLast4: sql<string>`coalesce(${patients.memberIdLast4}, '')`,
       sensitivityTags: patients.sensitivityTags,
       updatedAt: patients.updatedAt,
     })
@@ -204,6 +214,30 @@ export class PatientRecordError extends Error {
     super(message);
     this.name = "PatientRecordError";
   }
+}
+
+/**
+ * Registering or editing a patient by hand is refused while the practice's Patients table has an
+ * EHR/PM connection outside draft/revoked (docs/specs/patient-integrations.md "PI1a"; ADR 0010):
+ * once a connection is submitted, the EHR becomes the system of record.
+ *
+ * Correctness review N2 (final round): a naive `WHERE status NOT IN ('draft', 'revoked')` before
+ * the `FOR SHARE` lock only locks rows that already look blocking — a connection still `draft` at
+ * this statement's snapshot is never selected, so it's never locked, and a concurrent Submit can
+ * still move it out of draft in between this check and the write that follows it. Every
+ * non-`revoked` row for this table (draft included) is locked here instead, so a concurrent Submit
+ * has to wait for this transaction; only then is the blocking status decided, in code.
+ */
+async function assertPatientsRegisterOpen(tx: TenantTx, t: PatientsT = englishPatientsT) {
+  const candidates = await tx
+    .select({ status: integrationConnections.status })
+    .from(integrationConnections)
+    .where(
+      and(eq(integrationConnections.targetTable, "patients"), ne(integrationConnections.status, "revoked")),
+    )
+    .for("share");
+  const blocking = candidates.some((row) => row.status !== "draft");
+  if (blocking) throw new PatientRecordError(t("error.integrationConnected"));
 }
 
 /** FKs bypass RLS, so a payer ID from the form is checked against this practice first. */
@@ -246,6 +280,7 @@ export async function createPatient(
   input: PatientInput,
   t: PatientsT = englishPatientsT,
 ): Promise<{ id: string }> {
+  await assertPatientsRegisterOpen(tx, t);
   await assertPracticePayer(tx, input.primaryPayerId, t);
   if (input.primaryPayerId && !input.memberId) {
     throw new PatientRecordError(t("error.enterMemberIdForPayer"), "memberId");
@@ -267,7 +302,8 @@ export async function createPatient(
       postalCode: input.postalCode,
       phone: input.phone,
       primaryPayerId: input.primaryPayerId,
-      // No insurance on file yet: an empty encrypted value keeps the column's NOT NULL contract.
+      // A manual row always keeps a member ID (patients_member_id_presence CHECK): no insurance on
+      // file yet is an empty encrypted value, not a null one.
       memberIdEnc: encryptField(input.memberId ?? ""),
       memberIdLast4: input.memberId ? input.memberId.slice(-4) : "",
       sensitivityTags: actor.canTag ? input.sensitivityTags : [],
@@ -286,7 +322,14 @@ export async function createPatient(
 
 /**
  * Updates a patient. `expectedUpdatedAt` rejects edits made from a stale page. The reason is kept
- * in the audit trail with the names of the changed fields (never their values).
+ * in the audit trail with the names of the changed fields (never their values). Refused outright
+ * on a synced patient (source = 'fhir'): the EHR/PM is the system of record and demographics are
+ * read-only here (docs/specs/patient-integrations.md "PI1a"; the `patients_synced_readonly`
+ * trigger enforces this too, as defense in depth). Sensitivity tags stay editable on a synced
+ * patient (spec "PI1a") through the separate `updatePatientSensitivityTags`, not this function.
+ * The synced-patient refusal is checked before the connection-open check (correctness review N8):
+ * a synced patient's own connection is virtually always outside draft/revoked too, and the more
+ * specific "this record is synced" message is the one worth showing.
  */
 export async function updatePatient(
   tx: TenantTx,
@@ -299,6 +342,8 @@ export async function updatePatient(
 ): Promise<{ changedFields: string[] }> {
   const [current] = await tx.select().from(patients).where(eq(patients.id, patientId)).for("update").limit(1);
   if (!current) throw new PatientRecordError(t("error.patientNotFound"));
+  if (current.source === "fhir") throw new PatientRecordError(t("error.syncedReadOnly"));
+  await assertPatientsRegisterOpen(tx, t);
   if (current.updatedAt.toISOString() !== expectedUpdatedAt) {
     throw new PatientRecordError(t("error.staleRecord"));
   }
@@ -371,6 +416,57 @@ export async function updatePatient(
   return { changedFields: changed };
 }
 
+const VALID_SENSITIVITY_TAGS = new Set<string>(Object.keys(SENSITIVITY_TAG_LABEL_KEYS));
+
+/**
+ * Sets a patient's sensitivity tags alone (R-3.5.1). Unlike `updatePatient`, this stays available
+ * on a synced patient (docs/specs/patient-integrations.md "PI1a": "Sensitivity tags... stay
+ * editable on synced patients") — tags are practice-owned, not part of the EHR/PM copy. Refused for
+ * a non-administrator (`actor.canTag`, same gate as `createPatient`/`updatePatient`) and for any
+ * value that isn't a known tag (compliance review B2 / security M6): callers pass form input here,
+ * not a value already validated by `patientSchema`.
+ */
+export async function updatePatientSensitivityTags(
+  tx: TenantTx,
+  actor: { tenantId: string; userId: string; canTag: boolean },
+  patientId: string,
+  tags: SensitivityTag[],
+  reason: string,
+  t: PatientsT = englishPatientsT,
+): Promise<{ changed: boolean }> {
+  if (!actor.canTag) throw new PatientRecordError(t("error.roleCannotTag"));
+  if (tags.some((tag) => !VALID_SENSITIVITY_TAGS.has(tag))) {
+    throw new PatientRecordError(t("error.invalidSensitivityTag"));
+  }
+  const [current] = await tx
+    .select({ sensitivityTags: patients.sensitivityTags })
+    .from(patients)
+    .where(eq(patients.id, patientId))
+    .for("update")
+    .limit(1);
+  if (!current) throw new PatientRecordError(t("error.patientNotFound"));
+  const before: string[] = [...new Set(current.sensitivityTags)].sort();
+  const after: string[] = [...new Set(tags)].sort();
+  if (before.join(",") === after.join(",")) return { changed: false };
+  await tx
+    .update(patients)
+    .set({ sensitivityTags: after, updatedAt: sql`now()` })
+    .where(eq(patients.id, patientId));
+  await audit(tx, {
+    action: "patient.sensitivity_changed",
+    actorUserId: actor.userId,
+    tenantId: actor.tenantId,
+    entityType: "patient",
+    entityId: patientId,
+    reason,
+    metadata: {
+      added: after.filter((tag) => !before.includes(tag)).join(","),
+      removed: before.filter((tag) => !after.includes(tag)).join(","),
+    },
+  });
+  return { changed: true };
+}
+
 /** Search plus its audit event: result IDs and count, never the terms (CLAUDE.md #4). */
 export async function searchPatientsAudited(
   tx: TenantTx,
@@ -407,7 +503,7 @@ export async function revealPatientMemberIdFor(
     .where(eq(patients.id, patientId))
     .limit(1);
   if (!row) return { error: t("error.notFound") };
-  if (!row.memberIdLast4) return { error: t("error.noMemberIdOnFile") };
+  if (!row.memberIdLast4 || !row.memberIdEnc) return { error: t("error.noMemberIdOnFile") };
   await audit(tx, {
     action: "patient.member_id_revealed",
     actorUserId: actor.userId,

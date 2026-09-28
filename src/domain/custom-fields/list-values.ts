@@ -82,28 +82,29 @@ export async function loadListValues(
     isNull(customFields.sensitivity),
     eq(customFields.showInList, true),
   );
-  // Record-level masking mirrors `recordIsSensitive` in `custom-fields/values.ts`: a patient with
-  // sensitivity tags has every custom field locked on the chart, so the list must not decrypt
-  // them either — including a claim or denial belonging to that patient (claim -> patient,
-  // denial -> claim -> patient). The join keeps only untagged patients; their rows show no value
-  // at all. Payers have no linked patient, so their rows are never filtered this way.
-  const untagged = sql`cardinality(${patients.sensitivityTags}) = 0`;
+  // Record-level masking mirrors `recordIsSensitive`/`isRestricted` in `custom-fields/values.ts`
+  // and `domain/patients/record.ts`: a patient with sensitivity tags, or (PI1a onward)
+  // `source_restricted` from the connected EHR/PM, has every custom field locked on the chart, so
+  // the list must not decrypt them either — including a claim or denial belonging to that patient
+  // (claim -> patient, denial -> claim -> patient). The join keeps only unrestricted patients;
+  // their rows show no value at all. Payers have no linked patient, so never filtered this way.
+  const notRestricted = sql`cardinality(${patients.sensitivityTags}) = 0 AND ${patients.sourceRestricted} = false`;
   const rows =
     entity === "patient"
       ? await base
           .innerJoin(patients, eq(patients.id, customFieldValues.patientId))
-          .where(and(fieldFilter, untagged))
+          .where(and(fieldFilter, notRestricted))
       : entity === "claim"
         ? await base
             .innerJoin(claims, eq(claims.id, customFieldValues.claimId))
             .innerJoin(patients, eq(patients.id, claims.patientId))
-            .where(and(fieldFilter, untagged))
+            .where(and(fieldFilter, notRestricted))
         : entity === "denial"
           ? await base
               .innerJoin(denials, eq(denials.id, customFieldValues.denialId))
               .innerJoin(claims, eq(claims.id, denials.claimId))
               .innerJoin(patients, eq(patients.id, claims.patientId))
-              .where(and(fieldFilter, untagged))
+              .where(and(fieldFilter, notRestricted))
           : await base.where(fieldFilter);
 
   const byField = new Map(listFields.map((f) => [f.id, f]));
