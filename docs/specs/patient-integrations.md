@@ -358,6 +358,13 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       a non-2xx response body**, and must emit `address_refused`, `tls_failed` and
       `redirect_refused` as security events (audit/alert, IDs only, no URL or host). Not built in
       part 1; carried into those PRs' acceptance criteria.
+- [ ] Decide before PI2a part 2 (reviewer N3, PR #83): the transport checks `Content-Type` before
+      status, so a 401/403/5xx with `text/html` surfaces as `content_type_refused` and the caller
+      can't tell `auth_refused` apart. Part 2 either resolves non-2xx with the status (body
+      discarded) regardless of type, or rejects carrying the status. Also still open from #83's
+      reviews: an exact-cap boundary test, isolated tests for each timeout path, refusing a set
+      `NODE_EXTRA_CA_CERTS` in production, and the IPv4 AS112/AMT ranges (⚠️ VERIFY with the
+      registry pass).
 - [ ] Discovery: `.well-known/smart-configuration` and `metadata`; require `fhirVersion` 4.0.1,
       `private_key_jwt`, an allowed alg (ES384 or RS384), a token endpoint passing the URL rules,
       Patient `_lastUpdated` search, Coverage `patient` search. Scope style from `capabilities`:

@@ -44,7 +44,7 @@ export const TLS12_CIPHERS = [
  * Request headers a caller may not set: the transport owns framing and routing (request smuggling /
  * Host spoofing), and sets `Accept` and `Content-Type` itself from the typed fields.
  */
-const FORBIDDEN_REQUEST_HEADERS: ReadonlySet<string> = new Set([
+export const FORBIDDEN_REQUEST_HEADERS: ReadonlySet<string> = new Set([
   "host",
   "content-length",
   "transfer-encoding",
@@ -241,14 +241,15 @@ export class HttpsTransport implements Transport {
     for (const [name, value] of Object.entries(init.headers ?? {})) {
       const lower = name.toLowerCase();
       if (FORBIDDEN_REQUEST_HEADERS.has(lower)) {
-        throw new TransportError("unreachable", "A request header is not permitted");
+        // A programming error, not an endpoint failure: never reported to the user as "unreachable".
+        throw new TypeError(`The "${lower}" request header is set by the transport, not the caller`);
       }
       headers[lower] = value;
     }
     headers.accept = init.accept.join(", ");
     let bodyBuffer: Buffer | undefined;
     if (init.body !== undefined) {
-      if (!init.contentType) throw new Error("contentType is required when body is set");
+      if (!init.contentType) throw new TypeError("contentType is required when body is set");
       bodyBuffer = Buffer.from(init.body, "utf8");
       headers["content-type"] = init.contentType;
       headers["content-length"] = String(bodyBuffer.byteLength);

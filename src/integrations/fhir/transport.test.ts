@@ -14,6 +14,7 @@ import {
   FHIR_JSON,
   HttpsTransport,
   TLS12_CIPHERS,
+  FORBIDDEN_REQUEST_HEADERS,
 } from "./transport";
 
 /** Allows the transport to reach our loopback test server; the guard refuses loopback by default. */
@@ -179,21 +180,22 @@ describe("HttpsTransport — address guard applied by default", () => {
 });
 
 describe("HttpsTransport — request headers", () => {
-  it.each(["Host", "content-length", "Transfer-Encoding", "CONNECTION"])(
-    "refuses a caller-supplied %s header",
-    async (name) => {
-      let hits = 0;
-      server = await startTestServer((_req, res) => {
-        hits++;
-        res.writeHead(200, { "content-type": FHIR_JSON });
-        res.end("{}");
-      });
-      await expect(fhirGet(loopbackTransport(), server.url, { [name]: "x" })).rejects.toBeInstanceOf(
-        TransportError,
-      );
-      expect(hits).toBe(0);
-    },
-  );
+  it.each([
+    ...[...FORBIDDEN_REQUEST_HEADERS],
+    // Case-insensitive.
+    "Host",
+    "Transfer-Encoding",
+    "CONNECTION",
+  ])("refuses a caller-supplied %s header (a programming error, not an endpoint failure)", async (name) => {
+    let hits = 0;
+    server = await startTestServer((_req, res) => {
+      hits++;
+      res.writeHead(200, { "content-type": FHIR_JSON });
+      res.end("{}");
+    });
+    await expect(fhirGet(loopbackTransport(), server.url, { [name]: "x" })).rejects.toBeInstanceOf(TypeError);
+    expect(hits).toBe(0);
+  });
 
   it("sends other headers, with the real Host header", async () => {
     let seen: Record<string, string | string[] | undefined> = {};
