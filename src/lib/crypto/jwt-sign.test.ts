@@ -1,14 +1,6 @@
 import { generateKeyPairSync, verify as cryptoVerify, type KeyObject } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import {
-  algForKey,
-  exportPrivateKey,
-  importPrivateKey,
-  isJwtAlg,
-  signerForPrivateKey,
-  signJwt,
-  type JwtSigner,
-} from "./jwt-sign";
+import { algForKey, isJwtAlg, signerForPrivateKey, signJwt, type JwtSigner } from "./jwt-sign";
 
 // Keys are generated at test time; no key material is committed (spec PI2a; CLAUDE.md #1).
 const ec384 = () => generateKeyPairSync("ec", { namedCurve: "secp384r1" });
@@ -91,14 +83,5 @@ describe("algorithm allow-list", () => {
   it("refuses a public key as a signer", () => {
     const { publicKey } = ec384();
     expect(() => signerForPrivateKey(publicKey, "k")).toThrow(/private key/);
-  });
-});
-
-describe("private key round trip", () => {
-  it("exports and re-imports a PKCS#8 key that signs the same identity", async () => {
-    const { privateKey, publicKey } = ec384();
-    const restored = importPrivateKey(exportPrivateKey(privateKey));
-    const jwt = await signJwt(signerForPrivateKey(restored, "k"), { a: 1 });
-    expect(verifyJwt(jwt, publicKey, "ES384")).toBe(true);
   });
 });

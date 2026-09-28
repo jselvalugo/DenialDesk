@@ -1,4 +1,4 @@
-import { createPrivateKey, sign as cryptoSign, type KeyObject } from "node:crypto";
+import { sign as cryptoSign, type KeyObject } from "node:crypto";
 
 // Compact-JWT signing for SMART Backend Services client assertions (RFC 7523;
 // docs/specs/patient-integrations.md PI2a "Token"). `node:crypto` only, no JOSE dependency. The
@@ -59,13 +59,4 @@ export async function signJwt(signer: JwtSigner, claims: Record<string, unknown>
     throw new Error("ES384 signature must be 96 bytes (IEEE P1363)");
   }
   return `${signingInput}.${b64u(signature)}`;
-}
-
-/** PKCS#8 DER (base64) round trip, for the encrypted-at-rest development key store. */
-export function exportPrivateKey(key: KeyObject): string {
-  return key.export({ format: "der", type: "pkcs8" }).toString("base64");
-}
-
-export function importPrivateKey(pkcs8Base64: string): KeyObject {
-  return createPrivateKey({ key: Buffer.from(pkcs8Base64, "base64"), format: "der", type: "pkcs8" });
 }

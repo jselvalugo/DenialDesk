@@ -1,23 +1,29 @@
-import { generateKeyPairSync, randomBytes, verify as cryptoVerify } from "node:crypto";
+import { createPublicKey, generateKeyPairSync, verify as cryptoVerify, type KeyObject } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { signJwt } from "@/lib/crypto/jwt-sign";
 import {
+  assertNoEnvSigningKeyInProduction,
   AzureKeyVaultKeyStore,
+  EnvSharedKeyStore,
   getSigningKeyStore,
   jwksDocument,
-  LocalEncryptedKeyStore,
   PUBLIC_JWK_FIELDS,
   pickPublicJwkFields,
+  SIGNING_KEY_ENV,
   SigningKeyStoreError,
   thumbprintKid,
   toPublicJwk,
 } from "./keys";
 
 // Keys are generated at test time; nothing here is a committed secret.
-const KEY = randomBytes(32);
-const CONNECTION = "11111111-1111-4111-8111-111111111111";
-const OTHER = "22222222-2222-4222-8222-222222222222";
 const synthetic = () => true;
+const production = () => false;
+
+/** A fresh PKCS#8 PEM, as an operator would put in the hosting secret. */
+function pkcs8Pem(privateKey: KeyObject): string {
+  return privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+}
+const es384 = () => generateKeyPairSync("ec", { namedCurve: "secp384r1" }).privateKey;
 
 /** Private-field names a JWKS must never carry (RFC 7518 §6.2.2, §6.3.2, §6.4). */
 const PRIVATE_FIELDS = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"];
@@ -92,101 +98,164 @@ describe("thumbprintKid", () => {
   });
 });
 
-describe("LocalEncryptedKeyStore (non-production)", () => {
-  const store = () => new LocalEncryptedKeyStore(synthetic, KEY);
-
+describe("EnvSharedKeyStore (pre-production, INTEGRATION_SIGNING_KEY)", () => {
   it("refuses to exist where real data is allowed", () => {
-    expect(() => new LocalEncryptedKeyStore(() => false, KEY)).toThrow(SigningKeyStoreError);
+    expect(() => new EnvSharedKeyStore(production, pkcs8Pem(es384()))).toThrow(SigningKeyStoreError);
     try {
-      new LocalEncryptedKeyStore(() => false, KEY);
+      new EnvSharedKeyStore(production, pkcs8Pem(es384()));
     } catch (error) {
       expect((error as SigningKeyStoreError).code).toBe("not_permitted");
     }
   });
 
-  it("creates an ES384 key whose reference is ciphertext, not a private key", async () => {
-    const created = await store().create(CONNECTION);
-    expect(created.alg).toBe("ES384");
-    expect(created.keyRef.startsWith("local1:v1.")).toBe(true);
-    expect(created.keyRef).not.toMatch(/PRIVATE KEY/);
+  it("constructs without a key and reports not_configured on use (the app and the JWKS route start without it)", async () => {
+    for (const pem of ["", "   \n "]) {
+      const store = new EnvSharedKeyStore(synthetic, pem);
+      await expect(store.signer()).rejects.toMatchObject({ code: "not_configured" });
+      await expect(store.publicJwks()).rejects.toMatchObject({ code: "not_configured" });
+    }
   });
 
-  it("signs with the stored key and publishes the matching public key (round trip)", async () => {
-    const s = store();
-    const created = await s.create(CONNECTION);
-    const signer = await s.signer(CONNECTION, created.keyRef);
-    expect(signer.kid).toBe(created.kid);
-    const [jwk] = await s.publicJwks(CONNECTION, created.keyRef);
-    expect(jwk).toMatchObject({ kty: "EC", crv: "P-384", alg: "ES384", use: "sig", kid: created.kid });
+  it("signs with the key and publishes the matching public key (round trip)", async () => {
+    const privateKey = es384();
+    const store = new EnvSharedKeyStore(synthetic, pkcs8Pem(privateKey));
+    const signer = await store.signer();
+    expect(signer).toMatchObject({ alg: "ES384", kid: thumbprintKid(privateKey) });
+    const [jwk] = await store.publicJwks();
+    expect(jwk).toMatchObject({ kty: "EC", crv: "P-384", alg: "ES384", use: "sig", kid: signer.kid });
 
     const jwt = await signJwt(signer, { hello: "world" });
     const [h, p, sig] = jwt.split(".") as [string, string, string];
-    const { createPublicKey } = await import("node:crypto");
-    const publicKey = createPublicKey({ key: jwk as never, format: "jwk" });
     expect(
       cryptoVerify(
         "sha384",
         Buffer.from(`${h}.${p}`),
-        { key: publicKey, dsaEncoding: "ieee-p1363" },
+        { key: createPublicKey({ key: jwk as never, format: "jwk" }), dsaEncoding: "ieee-p1363" },
         Buffer.from(sig, "base64url"),
       ),
     ).toBe(true);
   });
 
-  it("each connection gets its own key", async () => {
-    const s = store();
-    const a = await s.create(CONNECTION);
-    const b = await s.create(OTHER);
-    expect(a.kid).not.toBe(b.kid);
-    expect(a.keyRef).not.toBe(b.keyRef);
+  it("the same key serves every connection (one shared key, spec 'Keys')", async () => {
+    const store = new EnvSharedKeyStore(synthetic, pkcs8Pem(es384()));
+    expect((await store.signer()).kid).toBe((await store.signer()).kid);
+    expect(await store.publicJwks()).toHaveLength(1);
   });
 
-  it("a key reference copied to another connection cannot be used (AAD binding)", async () => {
-    const s = store();
-    const created = await s.create(CONNECTION);
-    await expect(s.signer(OTHER, created.keyRef)).rejects.toMatchObject({ code: "key_unreadable" });
-    await expect(s.publicJwks(OTHER, created.keyRef)).rejects.toMatchObject({ code: "key_unreadable" });
+  it("accepts a PEM whose newlines were flattened to a literal backslash-n", async () => {
+    const privateKey = es384();
+    const flattened = pkcs8Pem(privateKey).trim().replace(/\n/g, "\\n");
+    const store = new EnvSharedKeyStore(synthetic, flattened);
+    expect((await store.signer()).kid).toBe(thumbprintKid(privateKey));
   });
 
-  it("refuses a reference with the wrong prefix, a tampered blob, or another encryption key", async () => {
-    const s = store();
-    const created = await s.create(CONNECTION);
-    await expect(s.signer(CONNECTION, created.keyRef.replace("local1:", "vault:"))).rejects.toMatchObject({
-      code: "key_unreadable",
-    });
-    const tampered = created.keyRef.slice(0, -3) + (created.keyRef.endsWith("AAA") ? "BBB" : "AAA");
-    await expect(s.signer(CONNECTION, tampered)).rejects.toMatchObject({ code: "key_unreadable" });
-    const other = new LocalEncryptedKeyStore(synthetic, randomBytes(32));
-    await expect(other.signer(CONNECTION, created.keyRef)).rejects.toMatchObject({ code: "key_unreadable" });
+  it("accepts an RS384-capable RSA key too (the allow-list is ES384 or RS384)", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const store = new EnvSharedKeyStore(synthetic, pkcs8Pem(privateKey));
+    expect((await store.signer()).alg).toBe("RS384");
+    expect((await store.publicJwks())[0]).toMatchObject({ kty: "RSA", alg: "RS384" });
   });
 
-  it("the unreadable-key error message names nothing about the key", async () => {
-    const s = store();
-    const created = await s.create(CONNECTION);
-    const error = await s.signer(OTHER, created.keyRef).then(
+  it.each([
+    ["garbage", "not a pem"],
+    [
+      "a public key",
+      () =>
+        generateKeyPairSync("ec", { namedCurve: "secp384r1" })
+          .publicKey.export({ format: "pem", type: "spki" })
+          .toString(),
+    ],
+    [
+      "a SEC1 EC PRIVATE KEY block (PKCS#8 only)",
+      () => es384().export({ format: "pem", type: "sec1" }).toString(),
+    ],
+    [
+      "a P-256 key (not ES384)",
+      () => pkcs8Pem(generateKeyPairSync("ec", { namedCurve: "prime256v1" }).privateKey),
+    ],
+    ["a 1024-bit RSA key", () => pkcs8Pem(generateKeyPairSync("rsa", { modulusLength: 1024 }).privateKey)],
+    ["an Ed25519 key", () => pkcs8Pem(generateKeyPairSync("ed25519").privateKey)],
+  ])("refuses %s as key_unreadable, with a message that quotes nothing", async (_name, make) => {
+    const pem = typeof make === "function" ? make() : make;
+    const store = new EnvSharedKeyStore(synthetic, pem);
+    const error = await store.signer().then(
       () => new Error("Expected the call to reject"),
-      (e: unknown) => e as Error,
+      (e: unknown) => e as SigningKeyStoreError,
     );
+    expect(error).toBeInstanceOf(SigningKeyStoreError);
+    expect((error as SigningKeyStoreError).code).toBe("key_unreadable");
     expect(error.message).toBe("Signing key could not be read");
-    expect(error.message).not.toContain(created.keyRef);
+  });
+
+  it("with the environment variable absent the default store is not_configured", async () => {
+    const saved = process.env[SIGNING_KEY_ENV];
+    delete process.env[SIGNING_KEY_ENV];
+    try {
+      await expect(new EnvSharedKeyStore(synthetic).signer()).rejects.toMatchObject({
+        code: "not_configured",
+      });
+    } finally {
+      if (saved !== undefined) process.env[SIGNING_KEY_ENV] = saved;
+    }
+  });
+
+  it("reads INTEGRATION_SIGNING_KEY from the environment by default", async () => {
+    const privateKey = es384();
+    const saved = process.env[SIGNING_KEY_ENV];
+    process.env[SIGNING_KEY_ENV] = pkcs8Pem(privateKey);
+    try {
+      expect((await new EnvSharedKeyStore(synthetic).signer()).kid).toBe(thumbprintKid(privateKey));
+    } finally {
+      if (saved === undefined) delete process.env[SIGNING_KEY_ENV];
+      else process.env[SIGNING_KEY_ENV] = saved;
+    }
+  });
+
+  it("never publishes private fields from the shared key", async () => {
+    const store = new EnvSharedKeyStore(synthetic, pkcs8Pem(es384()));
+    const json = JSON.stringify(jwksDocument(await store.publicJwks()));
+    for (const field of PRIVATE_FIELDS) expect(keysOf(json)).not.toContain(field);
   });
 });
 
 describe("AzureKeyVaultKeyStore (production stub)", () => {
-  it.each(["create", "signer", "publicJwks", "destroy"] as const)(
-    "%s fails closed as not configured",
-    async (method) => {
-      const vault = new AzureKeyVaultKeyStore();
-      const call = (vault[method] as unknown as (...args: unknown[]) => Promise<unknown>)(CONNECTION, "ref");
-      await expect(call).rejects.toMatchObject({ code: "not_configured" });
-      await expect(call).rejects.toThrow(/not configured/);
-    },
-  );
+  it.each(["signer", "publicJwks"] as const)("%s fails closed as not configured", async (method) => {
+    const vault = new AzureKeyVaultKeyStore();
+    const call = vault[method]();
+    await expect(call).rejects.toMatchObject({ code: "not_configured" });
+    await expect(call).rejects.toThrow(/not configured/);
+  });
+});
+
+describe("production refuses an environment signing key (spec 'Keys', R-7.3.5)", () => {
+  const withKey = { [SIGNING_KEY_ENV]: "-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----" };
+
+  it("throws env_key_in_production where real data is allowed and the variable is set", () => {
+    expect(() => assertNoEnvSigningKeyInProduction(production, withKey)).toThrow(SigningKeyStoreError);
+    expect(() => getSigningKeyStore(production, withKey)).toThrow(/refuse to start/);
+    try {
+      getSigningKeyStore(production, withKey);
+    } catch (error) {
+      expect((error as SigningKeyStoreError).code).toBe("env_key_in_production");
+      expect((error as Error).message).not.toContain("BEGIN");
+    }
+  });
+
+  it("is fine in production when the variable is absent or blank", () => {
+    for (const env of [{}, { [SIGNING_KEY_ENV]: "" }, { [SIGNING_KEY_ENV]: "  " }]) {
+      expect(() => assertNoEnvSigningKeyInProduction(production, env)).not.toThrow();
+      expect(getSigningKeyStore(production, env)).toBeInstanceOf(AzureKeyVaultKeyStore);
+    }
+  });
+
+  it("is allowed where only synthetic data is allowed (every Netlify deploy)", () => {
+    expect(() => assertNoEnvSigningKeyInProduction(synthetic, withKey)).not.toThrow();
+  });
 });
 
 describe("getSigningKeyStore", () => {
-  it("picks the local encrypted store only where only synthetic data is allowed", () => {
-    expect(getSigningKeyStore(() => true)).toBeInstanceOf(LocalEncryptedKeyStore);
-    expect(getSigningKeyStore(() => false)).toBeInstanceOf(AzureKeyVaultKeyStore);
+  it("picks the env shared-key store only where only synthetic data is allowed, else Key Vault", () => {
+    expect(getSigningKeyStore(synthetic, {})).toBeInstanceOf(EnvSharedKeyStore);
+    expect(getSigningKeyStore(production, {})).toBeInstanceOf(AzureKeyVaultKeyStore);
   });
 });
