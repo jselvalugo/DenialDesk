@@ -168,8 +168,10 @@ when the run succeeds, so a failed first run still locks the endpoint.
       on a transition to `draft` (withdraw/reject) or `revoked`, enforced in the database; isolation
       test: practice A cannot claim or release practice B's entry (M-a). Sandbox connections are not
       registered.
-      ⚠️ The WHATWG-normalization algorithm itself is `src/integrations/fhir/url-rules.ts` (PI2a);
-      PI1a stores whatever `endpoint_key`/`token_endpoint_key` the caller computes.
+      ⚠️ The WHATWG-normalization algorithm itself is `src/integrations/fhir/url-rules.ts` (shipped
+      in PI1b-1; PI2a derives `token_endpoint_key` with the same function, and must refuse the
+      sandbox host for a discovered endpoint, since `checkBaseUrl` exempts it from `.invalid`); PI1a stores whatever
+      `endpoint_key`/`token_endpoint_key` the caller computes.
       ⚠️ R-15.9: the `REVOKE`/`GRANT EXECUTE` and column-grant statements in this migration are a
       privilege change; per non-negotiable 5/R-15.9 they still need a human sign-off recorded on the
       PR before this migration is applied anywhere beyond a local/test database, same as any other
@@ -198,29 +200,58 @@ when the run succeeds, so a failed first run still locks the endpoint.
       even under a plausible-looking key name.
 
 ### PI1b — Settings › Integrations and the tab-bar drop-down
-- [ ] Integrations tab live: list (name, status, last sync); "New connection" →
-      `/settings/integrations/new` (own page, DESIGN.md §8); `/settings/integrations/[id]`.
-- [ ] Client-settable fields parsed by a strict zod allow-list (`.strict()`): `displayName` (≤ 80,
-      "no patient information" hint), `baseUrl`, `clientId` (≤ 255), `mrnIdentifierSystem`,
-      `usResidencyAttested`. Status, token endpoint, issuer, key reference, tenant, and approval
-      fields never come from the client. ZodErrors are mapped to field codes, never logged or returned.
-- [ ] URL rules on save: `https`; hostname only (no IP literal, userinfo, query, fragment); refuse
-      `localhost`, `.local`, `.internal`, `.home.arpa`, `.invalid` (except the sandbox constant),
-      single-label names, and a trailing dot; port 443 or one listed in `INTEGRATION_ALLOWED_PORTS`.
-- [ ] MRN identifier system refused when it names SSN, MBI/Medicare, driver's license, or passport
-      (`http://hl7.org/fhir/sid/us-ssn`, `urn:oid:2.16.840.1.113883.4.1`,
-      `http://hl7.org/fhir/sid/us-mbi`, `http://hl7.org/fhir/sid/us-medicare`, DL OIDs
-      `urn:oid:2.16.840.1.113883.4.3.*`, `http://hl7.org/fhir/sid/passport-*` — list ⚠️ VERIFY).
-- [ ] Residency attestation on Submit of a real connection: "This EHR/PM endpoint stores and
-      processes data only in the United States" — stricter than § 408.051(3), which also allows
-      territories and Canada (DenialDesk defaults to U.S.-only, R-3.3.1). Audited.
-- [ ] Submit, resume, attestation, and payer mapping require an MFA verification within the last
-      5 minutes (step-up; R-7.2.2). Activation notifies every practice administrator (in-app notice
-      now; e-mail once Notifications ships).
-- [ ] Revoke (admin, confirm dialog) → `revoked`; the page shows the offboarding steps (deregister
-      the client at the EHR).
-- [ ] Drop-down per `specs/erp-shell.md`; states include Awaiting approval and Revoked.
-- [ ] Every string in en/es/pt (R-11.1).
+Split into PRs (2026-09-28): **PI1b-1** domain (below, done), **PI1b-2** Settings pages, **PI1b-3**
+drop-down. Re-sequenced: Submit needs "a passing test in the last 24 h", and Test connection is
+PI2a (discovery + token request) — so **Submit, the residency attestation, the MFA step-up, and
+pause/resume move to PI2a**, where Submit first becomes possible. Until then no code path moves a
+connection out of `draft` except to `revoked`. That is the absence of a code path, not a database
+rule: the lifecycle trigger lets the app role move a real draft to `pending_approval` (only with the
+attestation and submission stamps, CHECK `pending_requires_submission`) and a sandbox draft to
+`active`; a real connection still can't go live without a fresh operator approval and a registry
+claim, both database-enforced. The "passing test in 24 h" and MFA step-up gates are app-only and
+get their own tests in PI2a.
+- [x] PI1b-1: client-settable fields parsed by a strict zod allow-list (`.strict()`): `displayName`
+      (1–80, no control, zero-width, or bidi characters), `baseUrl`, `clientId` (visible ASCII, ≤ 255),
+      `mrnIdentifierSystem`; a sandbox connection takes `displayName` only. Status, endpoint key,
+      token endpoint, issuer, key reference, tenant, and approval fields never come from the
+      client; an extra key is refused, not dropped. ZodErrors are mapped to field-level refusals,
+      never logged or returned. (`src/domain/integrations/connections.ts`)
+- [x] PI1b-1: URL rules on save (`src/integrations/fhir/url-rules.ts`): `https`; hostname only (no IP
+      literal in any form the WHATWG parser accepts, userinfo, query, fragment); refuse `localhost`,
+      `.localhost`, `.local`, `.internal`, `.localdomain`, `.arpa`, `.onion`, `.invalid` (except the sandbox constant),
+      single-label names, and a trailing dot; port 443 or one listed in `INTEGRATION_ALLOWED_PORTS`;
+      path limited to unreserved characters and `/` (no escapes, `;`, or dot segments; repeated
+      slashes collapse), and a real connection may not use the sandbox host or MRN system.
+      The endpoint key (scheme + host + non-default port + lowercased path, no trailing slash) is
+      computed here, ahead of PI2a, because `endpoint_key` is NOT NULL.
+- [x] PI1b-1: MRN identifier system refused when it names SSN, MBI/Medicare, driver's license, or
+      passport (`http://hl7.org/fhir/sid/us-ssn`, `urn:oid:2.16.840.1.113883.4.1`,
+      `http://hl7.org/fhir/sid/us-mbi`, `…/us-medicare`, `…/us-medicaid`, MBI/HICN OIDs `…4.927`,
+      `…4.572`, DL OIDs `urn:oid:2.16.840.1.113883.4.3.*`, passport `…4.330.*` and
+      `http://hl7.org/fhir/sid/passport-*` — list ⚠️ VERIFY), and must be a plain URI (http(s)
+      host/path without port, query, fragment, userinfo, or escapes; `urn:oid:`; `urn:uuid:`), so
+      spellings of a listed system can't slip past. (`src/integrations/fhir/identifier-rules.ts`)
+- [x] PI1b-1: environment rule at save: where `syntheticDataOnly()`, a real endpoint is refused
+      (only a host in `VENDOR_SANDBOX_HOSTS`, empty, OA-049); the built-in sandbox is its own create
+      path with the pinned endpoint and is refused in production; the sandbox URL typed as a real
+      endpoint is refused.
+- [x] PI1b-1: edit (stale-edit check; name in any state but revoked; endpoint set only while a
+      never-synced draft) and revoke (admin, any state → `revoked`, releases the registry claim),
+      audited `integration.connection_created|updated|revoked` with normalized base URL and client
+      ID (configuration, never PHI). Integration tests: `test/integration/integration-connections.test.ts`.
+- [ ] PI1b-2: Integrations tab live: list (name, status, last sync); "New connection" →
+      `/settings/integrations/new` (own page, DESIGN.md §8); `/settings/integrations/[id]`; the
+      name field carries a "no patient information" hint.
+- [ ] PI1b-2: Revoke (admin, confirm dialog) → `revoked`; the page shows the offboarding steps
+      (deregister the client at the EHR); offboarding runbook.
+- [ ] PI1b-3: Drop-down per `specs/erp-shell.md`; states include Awaiting approval and Revoked.
+- [ ] Every string in en/es/pt (R-11.1) — PI1b-1's refusal messages are in all three.
+- [ ] PI1b-2: the server actions pass `syntheticDataOnly()` as the actor's `syntheticOnly` (never a
+      client value), with a test; and map database errors from a connection write to a generic
+      message — PostgreSQL's CHECK/unique detail ("Failing row contains …") never reaches the
+      page or an error tracker (compliance review #5, #10). The pages are admin-only
+      (`listConnections`/`getConnection` rely on the caller's role check).
+- Moved to PI2a (see there): Submit, the residency attestation, the MFA step-up, pause/resume.
 
 ### PI1c — operator approval
 - [ ] The operator practice page (`/operator/practices/<id>`, pattern of BAA recording and
@@ -230,10 +261,31 @@ when the run succeeds, so a failed first run still locks the endpoint.
       and the contact's role at the practice), the population scope (`group_export` or
       `verified_filter`), and optionally "MRNs are 9 digits (verified)"; Reject records a reason
       code. Writes via `withTenantAsPlatform`; audited `operator.integration_approved|rejected`.
-- [ ] Submit claims the registry; a conflict refuses Submit with "This endpoint and client ID are
-      already connected" (no other practice named) and audits `integration.registry_conflict`.
+- [ ] Activation (Approve) notifies every practice administrator (in-app notice now; e-mail once
+      Notifications ships).
+- Moved to PI2a (Submit ships there): Submit claims the registry; a conflict refuses Submit.
 
 ### PI2a — transport, discovery, keys, test connection
+Also carries PI1b's Submit, attestation, step-up, and pause/resume (re-sequenced 2026-09-28). Order
+is now PI2a → PI1c (approval has nothing to approve before Submit exists); sandbox Submit becomes
+possible only in PI2b, which adds the in-process sandbox a test can pass against.
+- [ ] Submit (admin, draft → `pending_approval` for a real connection, → `active` for the sandbox):
+      requires a passing Test connection in the last 24 h, the residency attestation (real only),
+      and an MFA verification within the last 5 minutes (step-up; R-7.2.2). Tests: Submit refused
+      without a recent passing test, and without a recent step-up.
+- [ ] Residency attestation on Submit of a real connection: "This EHR/PM endpoint stores and
+      processes data only in the United States" — stricter than § 408.051(3), which also allows
+      territories and Canada (DenialDesk defaults to U.S.-only, R-3.3.1). Audited.
+- [ ] Submit claims the registry; a conflict refuses Submit with "This endpoint and client ID are
+      already connected" (no other practice named) and audits `integration.registry_conflict`.
+- [ ] Withdraw (`pending_approval` → `draft`, releases the registry claim).
+- [ ] Pause (`active` → `paused`) and resume (`paused`/`error` → `active`, MFA step-up); payer
+      mapping also requires step-up.
+- [ ] Revoke records a reason code (audit "why", compliance review #6a) now that it can stop a live
+      sync.
+- [ ] Database CHECKs `endpoint_key = lower(base_url)` and `token_endpoint_key =
+      lower(token_endpoint)`, so the registry key can't be written apart from the URL (security
+      review L-3; `url-rules.ts` already guarantees the equality).
 - [ ] `HttpsTransport` (node:https): TLS options explicit (`minVersion: 'TLSv1.2'`,
       `rejectUnauthorized: true`, `servername` = host, system CAs only); environment proxies ignored;
       no redirects; `application/fhir+json` only.
@@ -272,6 +324,12 @@ when the run succeeds, so a failed first run still locks the endpoint.
       `not_fhir_r4`, `smart_config_invalid`, `auth_refused`, `capability_missing`; audited.
 
 ### PI2b — sync engine, sandbox, jobs, history, payer mapping
+- [ ] The transport is chosen from `is_sandbox` only (never the host), and a sandbox run is refused
+      unless `syntheticDataOnly()`, so `SYN` patients never land in a production tenant (compliance
+      review #13, security review L-1).
+- [ ] Refuse SSN- and MBI-shaped MRN values at ingest, whatever the identifier system (security
+      review M-1: a deny-list can't know a vendor's local SSN OID); also check `Identifier.type`
+      (v2-0203 SS, MB, MC, DL, PPN).
 - [ ] Jobs: payload `{ runId }` only, with an HMAC-SHA256 header (body + timestamp, 5-min window)
       keyed by `INTEGRATION_JOB_SECRET`. The worker claims the run with SECURITY DEFINER
       `integration_claim_run(run_id)` (only a `queued` run; returns `tenant_id, connection_id`;
@@ -445,9 +503,11 @@ real vendor endpoints in pre-production.
 ## Implementation plan
 **builder** builds everything; **edi-x12-specialist** reviews the mapping for 837P fit (DMG03,
 N3/N4, NM109) and the C3 snapshot dependency; **florida-rules-engine** not involved (no legal
-values). PRs (< ~400 lines each): PI1a data layer → PI1b Settings UI + drop-down → PI1c operator
-approval → PI2a transport, guard, discovery, keys, JWKS, test → PI2b sync, jobs, sandbox, history,
-payer mapping → PI3 → PI4. Runbooks with PI2a: key rotation and **integration key compromise**
+values). PRs (< ~400 lines each): PI1a data layer → PI1b Settings UI + drop-down (PI1b-1 domain,
+PI1b-2 pages, PI1b-3 drop-down) → PI2a transport, guard, discovery, keys, JWKS, test,
+Submit/attestation/step-up/pause-resume → PI1c operator approval (needs submitted connections) →
+PI2b sync, jobs, sandbox, history, payer mapping (sandbox Submit needs the in-process sandbox to
+test against) → PI3 → PI4. Runbooks with PI2a: key rotation and **integration key compromise**
 (revoke at each EHR, customer notice within 72 h per R-3.4.2, FIPA 30-day clock per R-3.4.1); with
 PI1b: offboarding a connection.
 

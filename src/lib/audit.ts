@@ -4,8 +4,10 @@ import type { TenantTx } from "@/db/tenant";
 import { requestContext } from "./request-context";
 
 // Every PHI read or write emits an audit event: who, what, when, where, why (R-7.5.1).
-// IP and user agent are filled from the request automatically. Metadata holds IDs and enum
-// values only, never PHI.
+// IP and user agent are filled from the request automatically. Metadata holds IDs, enum values,
+// and — for integration connections only — Confidential configuration (normalized base URL, client
+// ID, MRN identifier system; docs/specs/patient-integrations.md "Audit events"); never PHI. Audit
+// rows are never forwarded to logs or analytics (`clientId` is on src/lib/log.ts's deny-list).
 
 export type AuditAction =
   | "auth.login_succeeded"
@@ -100,7 +102,10 @@ export type AuditAction =
   | "university.lesson_completed"
   | "university.access_requested"
   | "operator.university_access_granted"
-  | "operator.university_access_revoked";
+  | "operator.university_access_revoked"
+  | "integration.connection_created"
+  | "integration.connection_updated"
+  | "integration.connection_revoked";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
@@ -134,7 +139,8 @@ export interface AuditEvent {
     | "remittance"
     | "prompt_pay_response"
     | "university_lesson"
-    | "university_access";
+    | "university_access"
+    | "integration_connection";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;

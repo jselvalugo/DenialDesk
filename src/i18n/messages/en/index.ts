@@ -5,6 +5,7 @@ import { customFields } from "./customFields";
 import { common } from "./common";
 import { denials } from "./denials";
 import { insight } from "./insight";
+import { integrations } from "./integrations";
 import { operator } from "./operator";
 import { patients } from "./patients";
 import { promptPay } from "./promptPay";
@@ -30,6 +31,7 @@ export const en = {
   revenue,
   insight,
   settings,
+  integrations,
   operator,
   university,
 } as const;
