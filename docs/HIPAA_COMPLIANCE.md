@@ -116,10 +116,9 @@ evidence.
   as the change it records, so no change exists without its audit record and a failed audit write
   rolls the change back. Copying events to WORM storage happens afterward from that committed
   record (a transactional outbox; the design is an architect decision at the Azure cutover).
-- **HC-5.3 MUST** Audit events record identifiers, not PHI values (the only exception is the AI-record
-  store in HC-8.2). The audit log is append-only in
-  the database (no code path updates or deletes audit rows) and immutable (WORM) in production
-  storage (R-7.5.1). Anomalous access (mass export, after-hours, VIP or employee records) alerts in
+- **HC-5.3 MUST** Audit events record identifiers, not PHI values (the only exception is the
+  AI-record store in HC-8.2). The audit log is append-only in the database (no code path updates or
+  deletes audit rows) and immutable (WORM) in production storage (R-7.5.1). Anomalous access (mass export, after-hours, VIP or employee records) alerts in
   the SIEM (R-7.5.3), and the activity is reviewed regularly (45 CFR 164.308(a)(1)(ii)(D)).
 - **HC-5.4 MUST** Audit logs are retained at least 7 years (R-7.5.2, REQUIREMENTS §9.2) and stay in
   U.S. regions under a BAA (R-7.5.5).
@@ -128,7 +127,7 @@ evidence.
 
 - **HC-6.1 MUST** Claim, appeal, and code edits are versioned; nothing silently overwrites PHI.
 - **HC-6.2 MUST** Nothing changes CPT, ICD, or HCPCS codes without a recorded human approval
-  (R-3.10.1, R-3.10.2, R-7.11.2).
+  (R-3.10.1, R-3.10.2, R-7.11.4).
 - **HC-6.3 MUST** Data received from outside (X12, FHIR, CSV, uploads) is validated before it is
   stored, and rejected rather than "fixed" when it is malformed.
 
@@ -151,13 +150,13 @@ evidence.
   **all** of these hold, recorded in `docs/data-sources.xlsx` and the subprocessor list:
   1. a signed BAA with subcontractor flow-down (R-5.5.2);
   2. storage, processing, backups, and support access in U.S. regions only (Fla. Stat.
-     § 408.051(3), R-3.3), bound in the contract and listed with locations (R-3.3.4);
+     § 408.051(3), R-3.3.1, R-3.3.3), bound in the contract and listed with locations (R-3.3.4);
   3. screened for ownership ties to foreign countries of concern (R-3.3.6);
   4. a current SOC 2 Type II or HITRUST report reviewed, and reassessed every year (R-10.5);
   5. the service is on the vendor's HIPAA-eligible list;
   6. minimum-necessary data only (HC-3.3).
 - **HC-8.2 MUST** AI/LLM services additionally require zero data retention, no training on customer
-  data, and human approval before anything reaches a payer (R-7.11). Approvals are ordinary audit
+  data, and human approval before anything reaches a payer (R-7.11.1, R-7.11.2). Approvals are ordinary audit
   events. Prompts and outputs contain PHI, so they are the one exception to HC-5.3: they go to a
   separate AI-record store linked to the audit event by ID — encrypted, U.S.-only, access-
   controlled and audited like other PHI, with the audit log's retention (R-7.11.3) — and never to
@@ -187,7 +186,7 @@ evidence.
 - **HC-9.4 MUST** A secret or PHI committed to git is treated as an incident: rotate the secret or
   assess the exposure first; history rewriting is a human decision.
 
-## 10. Retention and disposal (45 CFR 164.310(d)(2)(i)-(ii); R-9.2)
+## 10. Retention and disposal (45 CFR 164.310(d)(2)(i)-(ii); REQUIREMENTS §9.2)
 
 - **HC-10.1 MUST** Retention follows REQUIREMENTS §9.2; legal hold overrides deletion (R-9.2.1).
 - **HC-10.2 MUST** Disposal follows NIST SP 800-88 and FIPA (R-9.2.3); deletion runs through the
@@ -211,7 +210,7 @@ evidence.
 - **HC-12.3 MUST** A sanction policy (164.308(a)(1)(ii)(C)) and security training at onboarding and
   yearly (164.308(a)(5), R-10.4).
 - **HC-12.4 MUST** A contingency plan — backups, disaster recovery, emergency-mode operation — tested
-  on schedule (164.308(a)(7), R-7.9), and a periodic technical and non-technical evaluation
+  on schedule (164.308(a)(7), R-7.9.1–R-7.9.3), and a periodic technical and non-technical evaluation
   (164.308(a)(8)).
 - **HC-12.5 MUST** Device and media controls: disposal, re-use, and inventory of anything that held
   PHI (164.310(d), REQUIREMENTS §7.8).
@@ -219,8 +218,11 @@ evidence.
 ## 13. Documentation (45 CFR 164.316(b)(2))
 
 - **HC-13.1 MUST** Policies, specs, threat models, ADRs, and this standard are kept for at least 6
-  years after they stop being in effect (164.316(b)(2)(i); we keep 7). Changes to this document go
-  through a PR with `compliance-checker` review and the owner's approval.
+  years after they stop being in effect (164.316(b)(2)(i); we keep 7).
+- **HC-13.2 MUST** Changes to this document or `docs/SECURE_CODING.md` go through a PR with
+  `compliance-checker` and `security-reviewer` review **and the owner's written approval in that
+  PR**. This narrows CLAUDE.md #12: an agent never merges a PR that changes either standard on its
+  own authority.
 
 ## 14. Review gate
 
@@ -238,7 +240,7 @@ These MUST rules are not yet met as of 2026-09-28. Pre-production holds syntheti
 | HC-4.6 | No just-in-time workforce access, session recording, or break-glass accounts yet. |
 | HC-5.3 | No WORM audit storage or SIEM alerting yet (Azure cutover, ADR 0003). |
 | HC-7.1 | No mTLS between internal services yet (Azure cutover). |
+| HC-7.4 | Pre-production keys come from platform environment variables, not Key Vault (ADR 0003, OA-064). |
 | HC-10.1 | No legal-hold capability yet; hard deletes of practice data are refused until it exists (`drizzle/0004_tenant_identity_rls.sql`). |
 | HC-11.1 | Disclosures are recorded as audit events, but there is no per-patient accounting-of-disclosures export yet (R-5.1.1). |
-| HC-7.4 | Pre-production keys come from platform environment variables, not Key Vault (ADR 0003, OA-064). |
 | HC-12.2–12.5 | Risk analysis, sanction policy, training, contingency plan, and media controls are not written yet (REQUIREMENTS §6.4 policy set). |
