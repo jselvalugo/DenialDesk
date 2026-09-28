@@ -10,6 +10,7 @@ import { claims, denialNotes, denials, memberships, patients } from "@/db/schema
 import { withTenant } from "@/db/tenant";
 import { denialStatusEnum } from "@/db/schema";
 import { nextAppealSubmittedOn } from "@/domain/denial-status";
+import { revealCustomFieldValue } from "@/domain/custom-fields/values";
 import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
@@ -183,4 +184,40 @@ export async function revealMemberId(
     });
     return { value: decryptField(row.memberIdEnc) };
   });
+}
+
+/** Reveals one custom field's value on a denial and records who looked and why (R-7.5.1). Same
+ * minimum-necessary roles as `revealMemberId` (`canWorkDenials`). */
+export async function revealDenialCustomField(
+  denial: string,
+  fieldId: string,
+  reason: string,
+): Promise<{ value?: string; error?: string }> {
+  const { auth, allowed } = await authorize();
+  const t = await getT("settings");
+  const tc = await getT("customFields");
+  if (!allowed) return { error: tc("error.cantView") };
+  const parsed = z
+    .object({
+      denial: denialId,
+      fieldId: z.uuid(),
+      reason: z.enum(["appeal", "eligibility", "payer_call", "other"]),
+    })
+    .safeParse({ denial, fieldId, reason });
+  if (!parsed.success) return { error: tc("error.chooseReason") };
+  const result = await withTenant(auth, (tx) =>
+    revealCustomFieldValue(
+      tx,
+      { tenantId: auth.tenantId, userId: auth.userId, role: auth.role },
+      {
+        fieldId: parsed.data.fieldId,
+        entity: "denial",
+        recordId: parsed.data.denial,
+        reason: parsed.data.reason,
+      },
+      t,
+    ),
+  );
+  if (result.error) return { error: result.error };
+  return { value: String(result.value) };
 }

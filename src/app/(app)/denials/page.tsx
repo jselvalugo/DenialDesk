@@ -20,6 +20,8 @@ import { withTenant } from "@/db/tenant";
 import { CATEGORY_LABEL_KEYS, CATEGORY_ORDER } from "@/domain/carc";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { DUE_SOON_DAYS, listDenials, PAGE_SIZE, payerOptions, queueSummary } from "@/domain/denials/queries";
+import { loadListValues } from "@/domain/custom-fields/list-values";
+import { ListCell } from "@/components/custom-fields/ListCell";
 import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { formatCents } from "@/lib/format";
@@ -52,7 +54,7 @@ export default async function DenialQueuePage({
         ? t("sortLabel.amount")
         : t("sortLabel.notice");
 
-  const { rows, total, summary, payers } = await withTenant(auth, async (tx) => {
+  const { rows, total, summary, payers, listColumns, listValues } = await withTenant(auth, async (tx) => {
     const [list, summary, payers] = await Promise.all([
       listDenials(tx, filters, auth.userId),
       queueSummary(tx, today),
@@ -70,7 +72,13 @@ export default async function DenialQueuePage({
         filters: filtersToQuery(filters, { page: 1 }) || "default",
       },
     });
-    return { ...list, summary, payers };
+    const { columns, valuesByRecord } = await loadListValues(
+      tx,
+      auth,
+      "denial",
+      list.rows.map((row) => row.id),
+    );
+    return { ...list, summary, payers, listColumns: columns, listValues: valuesByRecord };
   });
 
   if (total > 0 && filters.page > Math.ceil(total / PAGE_SIZE)) {
@@ -194,6 +202,9 @@ export default async function DenialQueuePage({
                 </Th>
                 <Th>{tc("word.status")}</Th>
                 <Th>{t("field.assignee")}</Th>
+                {listColumns.map((col) => (
+                  <Th key={col.fieldId}>{col.label}</Th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -265,6 +276,11 @@ export default async function DenialQueuePage({
                     <Td className={row.assigneeName ? "" : "text-subtle"}>
                       {row.assigneeName ?? t("assignee.unassigned")}
                     </Td>
+                    {listColumns.map((col) => (
+                      <Td key={col.fieldId}>
+                        <ListCell type={col.type} value={listValues.get(row.id)?.get(col.key)} />
+                      </Td>
+                    ))}
                   </Tr>
                 );
               })}

@@ -137,4 +137,5 @@ export const settings: Messages["settings"] = {
   "error.notLocked": "Este valor não está bloqueado.",
   "error.noValueOnFile": "Nenhum valor registrado.",
   "error.valueUnavailable": "Valor indisponível.",
+  "error.staleValues": "Esses campos mudaram desde que você os abriu. Recarregue e tente novamente.",
 };

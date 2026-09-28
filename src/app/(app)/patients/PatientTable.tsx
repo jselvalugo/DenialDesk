@@ -4,26 +4,11 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Code } from "@/components/ui/Code";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
+import { ListCell } from "@/components/custom-fields/ListCell";
 import type { ListColumnDefinition } from "@/domain/custom-fields/list-values";
 import type { PatientListRow } from "@/domain/patients/queries";
-import type { CustomFieldType } from "@/domain/settings/custom-fields";
 import { ageOn, patientName, sexLabel } from "@/domain/patients/record";
 import { useFormat, useT } from "@/i18n/client";
-
-/** A custom field value's typed cell, formatted plainly (dates and numbers follow the locale, a
- * checkbox reads Yes/blank; text and select show as stored — never translated, CLAUDE.md #5). */
-function ListCell({ type, value }: { type: CustomFieldType; value: string | number | boolean | undefined }) {
-  const t = useT("customFields");
-  const f = useFormat();
-  if (value === undefined || value === "") return <span className="text-muted">—</span>;
-  // Formatted by the field's type, as the chart does, so a text value that looks like a date is
-  // shown as typed.
-  if (type === "checkbox") return value === true ? <span>{t("input.checkboxYes")}</span> : <span>—</span>;
-  if (type === "number" && typeof value === "number")
-    return <span className="tabular">{f.number(value)}</span>;
-  if (type === "date" && typeof value === "string") return <span className="tabular">{f.date(value)}</span>;
-  return <span>{String(value)}</span>;
-}
 
 /**
  * Patient rows for the list and search results, plus up to 5 non-sensitive custom field columns

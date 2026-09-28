@@ -1,6 +1,13 @@
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { customFields, customFieldValues, customFieldValueVersions, patients } from "@/db/schema";
+import {
+  claims,
+  customFields,
+  customFieldValues,
+  customFieldValueVersions,
+  denials,
+  patients,
+} from "@/db/schema";
 import type { CustomFieldRow } from "@/domain/settings/queries";
 import type { TenantTx } from "@/db/tenant";
 import { decryptField, encryptField } from "@/lib/crypto/field";
@@ -209,21 +216,72 @@ export interface LoadedCustomFieldValue {
 /**
  * Whether the record itself carries record-level sensitivity (patient sensitivity tags, R-3.5.1):
  * every value on such a record is masked, even one on a field that isn't itself sensitive (threat
- * model I7). Only patients carry these tags today; other entities are never record-sensitive.
- * Looked up here, inside the module, rather than trusted from the caller.
+ * model I7). A claim or denial belongs to a patient (claim -> patient, denial -> claim -> patient),
+ * so their values are masked too when that patient carries any tag; payers have no linked patient
+ * and are never record-sensitive. Looked up here, inside the module, rather than trusted from the
+ * caller.
  */
 async function recordIsSensitive(
   tx: TenantTx,
   entity: CustomFieldEntity,
   recordId: string,
 ): Promise<boolean> {
-  if (entity !== "patient") return false;
-  const [row] = await tx
-    .select({ sensitivityTags: patients.sensitivityTags })
-    .from(patients)
-    .where(eq(patients.id, recordId))
-    .limit(1);
-  return Boolean(row?.sensitivityTags.length);
+  if (entity === "patient") {
+    const [row] = await tx
+      .select({ sensitivityTags: patients.sensitivityTags })
+      .from(patients)
+      .where(eq(patients.id, recordId))
+      .limit(1);
+    return Boolean(row?.sensitivityTags.length);
+  }
+  if (entity === "claim") {
+    const [row] = await tx
+      .select({ sensitivityTags: patients.sensitivityTags })
+      .from(claims)
+      .innerJoin(patients, eq(patients.id, claims.patientId))
+      .where(eq(claims.id, recordId))
+      .limit(1);
+    return Boolean(row?.sensitivityTags.length);
+  }
+  if (entity === "denial") {
+    const [row] = await tx
+      .select({ sensitivityTags: patients.sensitivityTags })
+      .from(denials)
+      .innerJoin(claims, eq(claims.id, denials.claimId))
+      .innerJoin(patients, eq(patients.id, claims.patientId))
+      .where(eq(denials.id, recordId))
+      .limit(1);
+    return Boolean(row?.sensitivityTags.length);
+  }
+  return false; // payer: no linked patient.
+}
+
+/**
+ * A concurrency token for the standalone "edit custom fields" page (claims, denials): a count and
+ * latest `updatedAt` over this record's `custom_field_values` rows. That page never updates the
+ * claim/denial row itself (custom fields are practice-internal, never billed content — no
+ * `claim_versions` row, no `claims`/`denials` column changes), so the record's own `updatedAt`
+ * isn't available as a stale-edit check there the way it is for patients (whose form saves the
+ * patient and its values in one transaction). Read on page load; re-derived from a locked read of
+ * the same rows inside `saveValuesForRecord` when `expectedValuesToken` is passed, so the compare
+ * and the write happen atomically in one transaction.
+ */
+function valuesToken(rows: { updatedAt: Date }[]): string {
+  const latest = rows.reduce<Date | null>((max, r) => (!max || r.updatedAt > max ? r.updatedAt : max), null);
+  return `${rows.length}:${latest ? latest.toISOString() : ""}`;
+}
+
+export async function customFieldValuesToken(
+  tx: TenantTx,
+  entity: CustomFieldEntity,
+  recordId: string,
+): Promise<string> {
+  const column = RECORD_COLUMN[entity];
+  const rows = await tx
+    .select({ updatedAt: customFieldValues.updatedAt })
+    .from(customFieldValues)
+    .where(eq(column, recordId));
+  return valuesToken(rows);
 }
 
 /**
@@ -304,6 +362,13 @@ export async function loadValuesForRecord(
  * `custom_field_value_versions` (owner decision 2026-09-26). Meant to run inside the same
  * transaction as the record's own create/update, so the record's `expectedUpdatedAt` check covers
  * these writes too. Returns the keys of the fields that changed (never their values).
+ *
+ * `expectedValuesToken`, when passed, is the record's own stale-edit check for a caller that has
+ * no record-row `expectedUpdatedAt` of its own to reuse (the claim/denial "edit custom fields"
+ * page, which never touches the claim/denial row): a `FOR UPDATE` read of this record's current
+ * `custom_field_values` rows must match the token computed when the form was opened
+ * (`customFieldValuesToken`), or the save is refused before any write, with the same reload
+ * message as a stale record edit.
  */
 export async function saveValuesForRecord(
   tx: TenantTx,
@@ -312,9 +377,20 @@ export async function saveValuesForRecord(
   recordId: string,
   inputs: Map<string, unknown>,
   t: SettingsT = englishSettingsT,
+  expectedValuesToken?: string,
 ): Promise<string[]> {
   const fields = await activeCustomFields(tx, entity);
   const column = RECORD_COLUMN[entity];
+  if (expectedValuesToken !== undefined) {
+    const locked = await tx
+      .select({ updatedAt: customFieldValues.updatedAt })
+      .from(customFieldValues)
+      .where(eq(column, recordId))
+      .for("update");
+    if (valuesToken(locked) !== expectedValuesToken) {
+      throw new CustomFieldValueError(t("error.staleValues"));
+    }
+  }
   const recordSensitive = await recordIsSensitive(tx, entity, recordId);
   const changed: string[] = [];
 

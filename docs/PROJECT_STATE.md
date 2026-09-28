@@ -105,10 +105,22 @@ _Last updated: 2026-09-27_
   add a non-sensitive field as a list column (capped at 5, `MAX_LIST_COLUMNS`), loaded by its own
   module `src/domain/custom-fields/list-values.ts` (never sensitive/hidden fields, one query per
   page) and rendered by `PatientTable`. Shared UI in `src/components/custom-fields/` for reuse by
-  claims/denials/payers. `test:integration` not run this session (no `DATABASE_URL`/docker
-  available) — needs a run before merge. Next: PR 3 claims and denials, PR 4 payers; an e2e admin
-  user fixture doesn't exist yet (`test/e2e/global-setup.ts` seeds specialist/compliance/manager
-  only), so the spec's "admin adds a field" E2E case is still open.
+  claims/denials/payers. PR 3 (claims and denials) done: `recordIsSensitive` and the list-values
+  masking join now also follow claim -> patient and denial -> claim -> patient, so a claim or denial
+  belonging to a sensitivity-tagged patient is masked and excluded from list columns the same as a
+  patient itself (I7); `/claims/[id]` and `/denials/[id]` show a "Custom fields" panel
+  (`CustomFieldValues`, masked reveal via `revealClaimCustomField`/`revealDenialCustomField`, same
+  roles as the member ID reveal); `/claims/[id]/fields` and `/denials/[id]/fields` are their own
+  edit pages (`FormShell` + `CustomFieldInputs` via the shared `CustomFieldsEditForm`), roles
+  `canCorrectClaims`/`canWorkDenials`; saving there only ever writes `custom_field_values` (no
+  `claims`/`denials` column change, no `claim_versions` row — confirmed by an integration test), so
+  its stale-edit check is a new values-table concurrency token (`customFieldValuesToken` /
+  `saveValuesForRecord`'s `expectedValuesToken`) instead of the record's own `updatedAt`; `/claims`
+  and `/denials` gained list columns via the same `loadListValues` module. `pnpm test`,
+  `test:integration` (371/371), `lint`, `typecheck`, `format:check` all green. Next: PR 4 payers; an
+  e2e admin user fixture doesn't exist yet (`test/e2e/global-setup.ts` seeds
+  specialist/compliance/manager only), so the spec's "admin adds a field" E2E case is still open for
+  every PR.
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
   rules engine, synthetic data, Netlify config (not yet deployed — see `docs/runbooks/netlify.md`).
 - Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
@@ -266,8 +278,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): ADR 0007 and threat model accepted; PR 1
-   (encrypted storage, value history, role-gated reveal) merged as #53. Next: PR 2 patient form,
-   PR 3 claims/denials, PR 4 payers.
+   (encrypted storage, value history, role-gated reveal) merged as #53; PR 2 (patients UI) and PR 3
+   (claims and denials UI, own "edit custom fields" pages) done. Next: PR 4 payers.
 7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
    payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
    timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.
