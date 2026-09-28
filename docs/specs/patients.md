@@ -4,6 +4,18 @@ Status: in progress — P1 approved by delegated technical authority (2026-09-26
 Roadmap item: Phase 1 → practice setup (REQUIREMENTS §8.1) and charge capture prerequisites (§8.2)
 Requirement IDs: R-3.5.1, R-3.4.3, R-5.1.2, R-7.2.4, R-7.3.3, R-7.5.1, R-15.1, §8.2
 
+> **Superseded in part by `specs/patient-integrations.md`** (owner decision 2026-09-27, ADR 0010).
+> The practice's EHR/PM becomes the system of record; DenialDesk keeps a read-only synced copy of
+> the billing minimum. Once a practice has a Patients connection outside `draft`/`revoked`
+> (awaiting approval, active, paused, or error): "Register patient" and "Edit" are hidden and
+> `registerPatient`/`savePatient` refuse, for synced and legacy manual patients alike; synced
+> patients show "Synced from <connection>" and a read-only notice (plus "Restricted in source" when
+> the EHR labels the record sensitive); phone is not synced (null); payer comes only from an
+> administrator's payor mapping, and a synced patient without usable coverage has no member ID
+> (the column becomes nullable for synced rows). Still editable on synced patients: sensitivity
+> tags (administrators) and custom field values. Without a connection, the P1 forms below work
+> unchanged (transition; retiring manual registration is OA-046).
+
 ## Goal
 The patient is the record every claim, and through claims every denial, hangs off. Until now
 patients existed only as seeded rows shown inside claim and denial pages. Staff can now find,
