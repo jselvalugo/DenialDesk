@@ -4,9 +4,11 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 import { canConfigureSettings } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { Panel } from "@/components/ui/Panel";
 import { customFields } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
+import { customFieldEntityLabel } from "@/domain/settings/custom-fields";
 import { getT } from "@/i18n/server";
 import { CustomFieldForm } from "../CustomFieldForm";
 
@@ -26,23 +28,35 @@ export default async function EditCustomFieldPage({ params }: { params: Promise<
   );
   if (!field) notFound();
   return (
-    <Panel title={t("fields.editTitle", { label: field.label })} description={t("fields.editDescription")}>
-      <CustomFieldForm
-        entity={field.entity}
-        field={{
-          id: field.id,
-          entity: field.entity,
-          key: field.key,
-          label: field.label,
-          fieldType: field.fieldType,
-          options: field.options,
-          required: field.required,
-          helpText: field.helpText,
-          sensitivity: field.sensitivity,
-          showInList: field.showInList,
-          updatedAt: field.updatedAt.toISOString(),
-        }}
+    <div className="flex flex-col gap-6">
+      <Breadcrumbs
+        label={t("fields.recordTypesLabel")}
+        items={[
+          {
+            label: customFieldEntityLabel(field.entity, t),
+            href: `/settings/fields?records=${field.entity}`,
+          },
+          { label: field.label },
+        ]}
       />
-    </Panel>
+      <Panel flush>
+        <CustomFieldForm
+          entity={field.entity}
+          field={{
+            id: field.id,
+            entity: field.entity,
+            key: field.key,
+            label: field.label,
+            fieldType: field.fieldType,
+            options: field.options,
+            required: field.required,
+            helpText: field.helpText,
+            sensitivity: field.sensitivity,
+            showInList: field.showInList,
+            updatedAt: field.updatedAt.toISOString(),
+          }}
+        />
+      </Panel>
+    </div>
   );
 }

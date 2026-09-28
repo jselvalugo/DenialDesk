@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
+import { FormActions, FormNotices, FormRow, FormSection } from "@/components/records/FormShell";
 import { Button } from "@/components/ui/Button";
-import { primaryLinkButtonClass } from "@/components/ui/linkButton";
+import { linkButtonReset, primaryLinkButtonClass } from "@/components/ui/linkButton";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { TextField } from "@/components/ui/TextField";
@@ -24,7 +25,7 @@ function CreatePracticeRound({ onAnother }: { onAnother: () => void }) {
   if (state.created) {
     const { tenantId, name, adminEmail, temporaryPassword } = state.created;
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 p-5">
         <div role="status" className="rounded-panel border border-success-border bg-success-bg p-4">
           <p className="text-body font-semibold text-success-fg">
             {t("newPractice.createdHeading", { name })}
@@ -54,27 +55,31 @@ function CreatePracticeRound({ onAnother }: { onAnother: () => void }) {
   }
 
   return (
-    <form action={action} className="flex flex-col gap-4" noValidate>
-      <FormAlert message={state.error} />
-      <TextField label={t("newPractice.practiceNameLabel")} name="name" required maxLength={120} />
-      <div className="grid grid-cols-2 gap-4">
-        <TextField label={t("newPractice.adminNameLabel")} name="adminName" required maxLength={120} />
-        <TextField
-          label={t("newPractice.adminEmailLabel")}
-          name="adminEmail"
-          type="email"
-          required
-          maxLength={254}
-        />
-      </div>
-      <div className="flex items-center gap-4">
+    <form action={action} className="flex flex-col" noValidate>
+      <FormNotices>
+        <FormAlert message={state.error} />
+      </FormNotices>
+      <FormSection title={t("newPractice.sectionTitle")}>
+        <TextField label={t("newPractice.practiceNameLabel")} name="name" required maxLength={120} />
+        <FormRow columns="md:grid-cols-2">
+          <TextField label={t("newPractice.adminNameLabel")} name="adminName" required maxLength={120} />
+          <TextField
+            label={t("newPractice.adminEmailLabel")}
+            name="adminEmail"
+            type="email"
+            required
+            maxLength={254}
+          />
+        </FormRow>
+      </FormSection>
+      <FormActions>
         <SubmitButton variant="primary" pendingLabel={t("newPractice.creating")}>
           {t("newPractice.submit")}
         </SubmitButton>
-        <Link href="/operator" className="text-body font-medium text-link hover:underline">
+        <Link href="/operator" className={linkButtonReset}>
           {tc("action.cancel")}
         </Link>
-      </div>
+      </FormActions>
     </form>
   );
 }
