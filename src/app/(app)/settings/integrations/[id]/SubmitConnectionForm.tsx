@@ -23,12 +23,15 @@ export function SubmitConnectionForm({
   sandbox,
   blockedReason,
   needsStepUp,
+  attestationVersion,
 }: {
   id: string;
   updatedAt: string;
   sandbox: boolean;
   blockedReason: string | null;
   needsStepUp: boolean;
+  /** The version of the attestation wording this page shows; the server refuses the form if it changed. */
+  attestationVersion: number;
 }) {
   const t = useT("integrations");
   const locale = useLocale();
@@ -49,6 +52,7 @@ export function SubmitConnectionForm({
       <input type="hidden" name="updatedAt" value={updatedAt} />
       {/* The language the attestation is shown in: the server refuses the form if it has changed. */}
       <input type="hidden" name="locale" value={locale} />
+      <input type="hidden" name="attestationVersion" value={attestationVersion} />
       <p className="text-body text-muted">
         {sandbox ? t("submit.descriptionSandbox") : t("submit.descriptionReal")}
       </p>
