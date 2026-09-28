@@ -51,14 +51,17 @@ expression is DenialDesk's own and does not reproduce any vendor's shell (ADR 00
       it today. Other tables opt in later by setting the slot (no shell redesign).
 - [ ] In the navy tab bar, directly after a tab with a `dataSource`, a menu button (Radix menu,
       `data-chrome="dark"` focus ring) reads "Source: Manual ▾", or "Source: <connection name> ·
-      Synced <relative time> ▾", "Sync running", "Paused", or "Needs attention" (error). Accessible
-      name "Patients data source: <state>"; the status is text, never color alone.
+      Synced <relative time> ▾", "Sync running", "Awaiting approval", "Paused", "Needs attention"
+      (error), or "Revoked". Accessible name "Patients data source: <state>"; the status is text,
+      never color alone.
 - [ ] Every role sees the current state, last successful sync, and last run outcome. Administrators
       (`canManageIntegrations`) also get "Sync now", "Pause sync" / "Resume sync", "Sync history"
       (→ `/settings/integrations/[id]/runs`), and "Connect an integration…" (→ Settings ›
-      Integrations; shown when no connection exists).
-- [ ] "Sync now" and pause/resume are server actions (POST), never links; the menu shows the result
-      as a status message.
+      Integrations; shown when no connection exists or the last one is revoked). Revoke lives on
+      the connection page only, not in the menu.
+- [ ] "Sync now" and pause/resume are server actions (POST), never links; resume requires an MFA
+      verification within the last 5 minutes (step-up, as in `specs/patient-integrations.md`); the
+      menu shows the result as a status message.
 - [ ] The summary (connection name, status, last sync time, run state) is loaded by `AppShell` for
       the tenant in one indexed query and passed through `ShellProvider`; it holds no PHI, no
       counts of patients, and nothing is placed in URLs or client storage (R-7.4.8).

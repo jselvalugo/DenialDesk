@@ -1,343 +1,403 @@
 # Spec: Patient integrations (Patient Register synced from the EHR/PM over FHIR R4)
 
-Status: approved by owner in chat 2026-09-27 (design); PI0 docs
+Status: approved by owner in chat 2026-09-27 (design); PI0 docs revised after security/compliance
+review 2026-09-28 (coordinator decisions pending owner confirmation, OA-057)
 Roadmap item: Phase 1 → integrations (REQUIREMENTS §8.8 "EHR/PM systems via FHIR R4"); prerequisite
 for charge capture by EHR integration (§8.2 step 2)
-Requirement IDs: §8.8, R-3.3.1, R-5.1.2, R-7.1.3, R-7.2.3, R-7.2.4, R-7.3.1, R-7.3.3, R-7.3.4,
-R-7.3.5, R-7.4.1, R-7.4.5, R-7.4.6, R-7.4.7, R-7.4.8, R-7.5.1, R-7.9.2, R-9.2.1, R-11.1, R-15.1,
-R-15.7. ⚠️ No numbered requirement covers EHR interoperability yet (§8.8 is a bullet list; R-4.4.1
-is the payer prior-auth API, not this): spec-writer to assign one (OA-054).
+Requirement IDs: §8.8, R-3.3.1, R-3.3.3, R-3.3.6, R-3.4.1, R-3.4.2, R-3.5.1, R-3.10.3, R-4.5.1,
+R-5.1.2, R-7.1.3, R-7.2.2, R-7.2.3, R-7.2.4, R-7.3.1, R-7.3.3, R-7.3.4, R-7.3.5, R-7.4.1, R-7.4.5,
+R-7.4.6, R-7.4.7, R-7.4.8, R-7.5.1, R-7.5.3, R-7.9.2, R-11.1, R-15.1, R-15.7; §9.1, §9.2.
+⚠️ No numbered requirement covers EHR interoperability yet (§8.8 is a bullet list; R-4.4.1 is the
+payer prior-auth API): OA-054.
 Design: ADR `docs/decisions/0010-patient-data-synced-from-ehr.md`. Threat model:
 `docs/threat-models/patient-integrations.md`. Supersedes in part: `specs/patients.md` (P1 forms).
 
 ## Goal
 The practice's EHR/PM is the system of record for patients. An administrator connects it once
-(HL7 FHIR R4, US Core) and the Patient Register becomes an encrypted, read-only copy of only the
-billing minimum, refreshed by sync. Staff stop typing demographics into DenialDesk; claims and
-denials keep working when the EHR is down.
+(HL7 FHIR R4, US Core), the platform operator verifies the connection with the practice, and the
+Patient Register becomes an encrypted, read-only copy of only the billing minimum, refreshed by
+sync. Staff stop typing demographics; claims and denials keep working when the EHR is down.
 
-## Owner decisions (2026-09-27, in chat)
+## Decisions
+Owner, 2026-09-27 (chat):
 1. "For Patient Register we want to sync data, not hold any of the data, so we will place a
    drop-down in the nav bar beside the table and select an integration so we can connect to this
    table only. We'll evaluate what tables this is needed in the future. Follow medical integration
    practices."
 2. "Not hold" means a **synced read-only copy**: the EHR/PM is the system of record; DenialDesk keeps
-   an encrypted, read-only copy of the billing minimum, refreshed by sync; no typing or editing of
-   synced demographics; claims/denials keep working if the EHR is down.
-3. First connector: **HL7 FHIR R4 / US Core only** (not HL7 v2 ADT, not CSV, not manual-as-connector).
-4. Scope: the Patients table only; other tables evaluated later.
+   an encrypted, read-only copy of the billing minimum; no editing of synced demographics;
+   claims/denials keep working if the EHR is down.
+3. First connector: **HL7 FHIR R4 / US Core only**. 4. Scope: the Patients table only.
+
+Coordinator, 2026-09-28, after the security and compliance reviews (owner to confirm, **OA-057**):
+operator approval of every real connection plus a cross-practice endpoint registry (confused
+deputy); per-connection signing keys by default; job and scheduler hardening with a system
+principal; environment gating; SSRF deny-by-default; immutable endpoints once data is synced;
+identifier-system and sensitivity-label rules; practice-scoped population in production.
 
 ## Standards (cite; vendor specifics are ⚠️ VERIFY)
-- FHIR R4 4.0.1 — https://hl7.org/fhir/R4/ (search `_lastUpdated`, paging via `Bundle.link[next]`:
-  https://hl7.org/fhir/R4/search.html, https://hl7.org/fhir/R4/http.html#paging).
+- FHIR R4 4.0.1 — https://hl7.org/fhir/R4/ (search, `_lastUpdated`, POST `_search`:
+  https://hl7.org/fhir/R4/search.html; paging: https://hl7.org/fhir/R4/http.html#paging).
 - US Core **6.1.0** Patient and Coverage — https://hl7.org/fhir/us/core/STU6.1/ . ⚠️ VERIFY: the
-  version certified EHRs must support under ONC HTI-1 (USCDI v3) from 2026-01-01.
-- SMART App Launch v2 **Backend Services** — https://hl7.org/fhir/smart-app-launch/STU2/backend-services.html ;
-  asymmetric client auth (`private_key_jwt`, RFC 7523) —
-  https://hl7.org/fhir/smart-app-launch/STU2/client-confidential-asymmetric.html ; scopes —
-  https://hl7.org/fhir/smart-app-launch/STU2/scopes-and-launch-context.html . ⚠️ VERIFY 2.0.0 vs 2.2.0.
-- FHIR Bulk Data Access 2.0.0 (`Group/[id]/$export`, `_since`) — https://hl7.org/fhir/uv/bulkdata/STU2/
-- Identifier types (MR, MB) — http://terminology.hl7.org/CodeSystem/v2-0203 ; confidentiality
-  codes — http://terminology.hl7.org/CodeSystem/v3-Confidentiality .
-- ONC 45 CFR 170.315(g)(10) (population services via Bulk Data + Backend Services) — ⚠️ VERIFY.
+  version required of products certified under ONC HTI-1 (USCDI v3) from 2026-01-01.
+- SMART App Launch v2 Backend Services — https://hl7.org/fhir/smart-app-launch/STU2/backend-services.html ;
+  asymmetric client auth (RFC 7523) — https://hl7.org/fhir/smart-app-launch/STU2/client-confidential-asymmetric.html ;
+  scopes — https://hl7.org/fhir/smart-app-launch/STU2/scopes-and-launch-context.html .
+  ⚠️ VERIFY 2.0.0 vs 2.2.0 and whether clients must support RS384, ES384, or either.
+- FHIR Bulk Data Access 2.0.0 — https://hl7.org/fhir/uv/bulkdata/STU2/
+- v2-0203 identifier types (MR, MB); v3-Confidentiality; v3-ActCode sensitivity codes
+  (http://terminology.hl7.org/CodeSystem/v3-ActCode).
+- 45 CFR 170.315(g)(10) — population services via Bulk Data + Backend Services, for products
+  certified to it (PM-only systems often are not). ⚠️ VERIFY.
 
-**Design change flagged:** US Core 6.1.0 does **not** require a server to support a population-wide
-`Patient?_lastUpdated=…` search (its SHALL searches are `_id`, `identifier`, `name`,
-`birthdate+name`, `gender+name`; ⚠️ VERIFY). Paged search therefore works only where the server
-advertises `_lastUpdated` on Patient in its CapabilityStatement (Coverage-only changes need it on
-Coverage too, else they wait for the patient to change or for PI3's reconciliation); "Test connection"
-checks this and activation is refused otherwise. Bulk Data `Group/$export` — what certified EHRs are
-required to offer for population access — moves from "later" to **PI4, before the first real
-practice** (OA-050).
+**Population search is not guaranteed.** US Core 6.1.0 does not require a population-wide
+`Patient?_lastUpdated=…` search (⚠️ VERIFY). PI2 uses it only where the CapabilityStatement
+advertises it; Bulk Data `Group/$export` (PI4) is required before the first real practice, and in
+production only a practice-scoped population is accepted (see Environment and population rules).
 
 ## User stories
-- As an administrator, I connect our EHR/PM to the Patient Register in Settings › Integrations,
-  test it without pulling any patient, and activate it.
-- As an administrator, I press "Sync now" or pause sync from the data-source drop-down beside the
-  Patients tab, and I read the sync history (counts only).
-- As an administrator, I map each insurer the EHR sends to one of our payers; unmapped insurers stay
-  unmapped, never guessed.
+- As an administrator, I connect our EHR/PM in Settings › Integrations, test it without pulling any
+  patient, attest U.S. residency, and submit it; once the platform operator approves, sync starts.
+- As the platform operator, I verify a submitted connection (base URL, token endpoint, client ID,
+  population scope) with the practice's EHR administrator out of band, then approve or reject it.
+- As an administrator, I sync now, pause, resume, or revoke from the drop-down beside the Patients
+  tab or from Settings, read sync history (counts only), and map each insurer to one of our payers.
 - As any user, I see beside the Patients tab where patient data comes from and when it last synced.
-- As a billing specialist, I bill a synced patient exactly as before; I cannot change their
-  demographics in DenialDesk and the chart tells me to fix them in the EHR.
+- As a billing specialist, I bill a synced patient as before; the chart tells me to fix demographics
+  in the EHR.
+
+## Environment and population rules
+| Environment | Built-in sandbox | Vendor sandboxes | Real EHR endpoints |
+|---|---|---|---|
+| `syntheticDataOnly()` (local, CI, every Netlify deploy, even with `APP_ENV=production`) | Allowed | Only hosts in a reviewed code constant (`src/integrations/fhir/vendor-sandboxes.ts`, empty; OA-049) | Refused |
+| `!syntheticDataOnly() && !onNetlify()` (Azure production) | Refused | Refused | Allowed after operator approval |
+
+- **Synthetic guard (non-production), before any transform:** every raw MRN and member ID must start
+  with `SYN`; the first page is requested with `_count=1`; one failing record rolls back the page and
+  fails the run (`not_synthetic`). No prefixing on ingest.
+- **Population (production):** only a practice-scoped population: Bulk Data export of the
+  practice's Group (PI4), or a search filter the operator verified at approval. Blocking before
+  real data.
+
+## Connection lifecycle
+`draft` → (admin **Submit**: passing test in the last 24 h, residency attested, MFA step-up) →
+sandbox: `active`; real: `pending_approval` (registry claimed) → operator **Approve** → `active` (all
+practice administrators notified) or **Reject** (reason code) → `draft` (registry released).
+`active` ⇄ `paused` (resume: MFA step-up); `active` → `error` (automatic, reason code) → re-test and
+resume. Any state → **`revoked`** (admin or operator; terminal; registry released; signing key
+destroyed; offboarding runbook). At most one connection per practice and target table outside
+`draft`/`revoked`.
+
+**Editability.** Display name: always. `draft`: every client-settable field. `pending_approval`:
+none (withdraw → `draft`). Once the connection has synced any patient, **base URL, token endpoint,
+issuer, and MRN identifier system are immutable** — a different endpoint is a new connection;
+a client ID change (`paused` only) goes back to `pending_approval`.
 
 ## Acceptance criteria
 
 ### PI0 — design docs
 - [x] This spec, ADR 0010, threat model, notes in `specs/patients.md` and `specs/erp-shell.md`.
+- [x] Revised after security/compliance review (2026-09-28).
 
-### PI1 — data model, provenance, read-only enforcement, connections (no network calls)
-- [ ] Migration adds provenance to `patients` (see Data changes); existing rows become
-      `source = 'manual'`; no data change otherwise.
-- [ ] A DB trigger refuses INSERT of a `fhir` row, any change to a synced column of a `fhir` row,
-      and any change of `source`/`source_connection_id`/`external_id`, unless the transaction-local
-      setting `app.sync_connection_id` equals the row's connection. `fhir → manual` is always refused.
-      Trigger message added to `TRIGGER_MESSAGE_FORMATS` (ADR 0006). Integration tests cover each case.
-- [ ] Domain: `updatePatient` refuses synced patients (before the trigger) with a translated error.
-      Sensitivity tags (administrators) and custom field values stay editable on synced patients.
-- [ ] New tables `integration_connections`, `integration_payer_mappings`, `integration_sync_runs`,
-      `integration_sync_issues`: RLS ENABLE + FORCE, tenant policy, isolation tests (read, insert,
-      update across tenants), no DELETE grant.
-- [ ] At most one non-draft connection per practice and target table (partial unique index).
-- [ ] New permission `canManageIntegrations` (admin only); pages and server actions refuse others.
-- [ ] Settings › **Integrations** tab is live: lists connections (name, kind, status, last sync);
-      "New connection" opens `/settings/integrations/new` (own page, DESIGN.md §8) for a FHIR R4
-      connection saved as **draft**; `/settings/integrations/[id]` shows and edits it.
-- [ ] Base URL validation on save: `https` only, hostname (no IP literal), no userinfo, no query or
-      fragment, port 443 unless listed; in non-production only the built-in sandbox or a host on the
-      pre-production allow-list (empty by default); in production the sandbox is refused.
-- [ ] Saving a real (non-sandbox) connection requires the administrator to tick "This EHR/PM
-      endpoint stores and processes data only in the United States" (§ 408.051(3)); recorded in the
-      audit event as `usResidencyAttested: true`.
-- [ ] Connection display name is warned "no patient information" (like custom field labels).
-- [ ] Base URL, client ID, and MRN identifier system can be changed only in `draft` or `paused`;
-      any change returns the connection to `draft` (re-test needed). Connections are never deleted.
-- [ ] Tab bar: the Patients tab carries a data-source drop-down (acceptance criteria in
-      `specs/erp-shell.md`); in PI1 it shows "Source: Manual" or the draft/paused state.
+### PI1a — data layer (no network calls, no UI)
+- [ ] Migration adds provenance to `patients` and the new tables (Data changes); existing patients
+      become `source = 'manual'`. Every new table has `tenant_id`, RLS ENABLE + FORCE, a tenant
+      policy, composite `(tenant_id, x)` FKs for every reference, tenant in every unique key, no
+      DELETE grant, and an isolation test (read, insert, update across tenants).
+- [ ] Trigger `patients_synced_readonly` refuses INSERT of a `fhir` row, any change to a synced
+      column, and any change of `source`/`source_connection_id`/`external_id`, unless
+      `app.sync_run_id` names a `running` run of `app.sync_connection_id` in the current tenant and
+      that connection owns the row. `fhir → manual` is always refused. Message added to
+      `TRIGGER_MESSAGE_FORMATS` (ADR 0006).
+- [ ] Trigger on `integration_connections` enforces the lifecycle and editability rules above; the
+      app role cannot write approval columns or move `pending_approval → active` (column grants +
+      trigger); `revoked` is terminal.
+- [ ] Endpoint registry `integration_endpoint_registry` (no RLS, no grants to `denialdesk_app`):
+      unique `(endpoint_key, client_id)` over all practices, reached only through SECURITY DEFINER
+      `integration_registry_claim(connection_id)` / `_release(connection_id)` returning a boolean.
+      `endpoint_key` = WHATWG-normalized scheme + host + port + path (no trailing slash). Sandbox
+      connections are not registered.
+- [ ] Domain refusals (before the triggers): `updatePatient` on synced patients; register/edit while
+      a connection is outside `draft`/`revoked`. Sensitivity tags (administrators) and custom field
+      values stay editable on synced patients.
+- [ ] `canManageIntegrations` (admin only).
+
+### PI1b — Settings › Integrations and the tab-bar drop-down
+- [ ] Integrations tab live: list (name, status, last sync); "New connection" →
+      `/settings/integrations/new` (own page, DESIGN.md §8); `/settings/integrations/[id]`.
+- [ ] Client-settable fields parsed by a strict zod allow-list (`.strict()`): `displayName` (≤ 80,
+      "no patient information" hint), `baseUrl`, `clientId` (≤ 255), `mrnIdentifierSystem`,
+      `usResidencyAttested`. Status, token endpoint, issuer, key reference, tenant, and approval
+      fields never come from the client. ZodErrors are mapped to field codes, never logged or returned.
+- [ ] URL rules on save: `https`; hostname only (no IP literal, userinfo, query, fragment); refuse
+      `localhost`, `.local`, `.internal`, `.home.arpa`, `.invalid` (except the sandbox constant),
+      single-label names, and a trailing dot; port 443 or one listed in `INTEGRATION_ALLOWED_PORTS`.
+- [ ] MRN identifier system refused when it names SSN, MBI/Medicare, driver's license, or passport
+      (`http://hl7.org/fhir/sid/us-ssn`, `urn:oid:2.16.840.1.113883.4.1`,
+      `http://hl7.org/fhir/sid/us-mbi`, `http://hl7.org/fhir/sid/us-medicare`, DL OIDs
+      `urn:oid:2.16.840.1.113883.4.3.*`, `http://hl7.org/fhir/sid/passport-*` — list ⚠️ VERIFY).
+- [ ] Residency attestation on Submit of a real connection: "This EHR/PM endpoint stores and
+      processes data only in the United States" — stricter than § 408.051(3), which also allows
+      territories and Canada (DenialDesk defaults to U.S.-only, R-3.3.1). Audited.
+- [ ] Submit, resume, attestation, and payer mapping require an MFA verification within the last
+      5 minutes (step-up; R-7.2.2). Activation notifies every practice administrator (in-app notice
+      now; e-mail once Notifications ships).
+- [ ] Revoke (admin, confirm dialog) → `revoked`; the page shows the offboarding steps (deregister
+      the client at the EHR).
+- [ ] Drop-down per `specs/erp-shell.md`; states include Awaiting approval and Revoked.
 - [ ] Every string in en/es/pt (R-11.1).
 
-### PI2 — FHIR client, synthetic sandbox, test, activate, Sync now, history
-- [ ] FHIR client in `src/integrations/fhir/` over a `FhirTransport` interface: `HttpsTransport`
-      (node:https, TLS ≥ 1.2, `lookup` hook rejecting loopback/private/link-local/CGNAT/multicast/
-      unique-local/IPv4-mapped addresses for every resolved IP, no redirects, 20 s timeout, 10 MB
-      response cap, `application/fhir+json` only) and `SandboxTransport` (in-process, no socket).
-- [ ] Discovery: `GET [base]/.well-known/smart-configuration` and `GET [base]/metadata`; require
-      `fhirVersion` 4.0.1, `private_key_jwt` with ES384 or RS384, a `token_endpoint` that passes the
-      same URL rules, Patient search with `_lastUpdated`, and Coverage search with `patient`.
-- [ ] The discovered token endpoint is shown to the administrator and **pinned** on the connection at
-      test time; a later discovery that returns a different one sets the connection to `error`
-      ("token endpoint changed — re-test") instead of following it.
-- [ ] Client assertion per SMART Backend Services: `iss = sub = client_id`, `aud = token endpoint`,
-      `exp` ≤ now + 5 min, unique `jti`, header `alg` (ES384 default), `kid`, `typ: JWT`; signed
-      with node:crypto (no new dependency). Scopes `system/Patient.rs system/Coverage.rs
-      system/Organization.rs`; fall back to v1 `.read` scopes only if the server lists no v2 scopes.
-      Access tokens stay in memory for the run and are re-requested on expiry or 401 (once).
-- [ ] DenialDesk publishes its public keys at `GET /.well-known/jwks.json` (public, rate-limited,
-      current + next key for rotation, no private material).
-- [ ] "Test connection" (admin): discovery + one token request; reads no patient data; records the
-      outcome code; audited `integration.connection_tested`. "Activate" requires a passing test.
-- [ ] Sync: `Patient?_lastUpdated=ge<watermark>&_count=100` following same-origin `next` links only;
-      Coverage per page by `Coverage?patient=<id>&status=active` (or `_revinclude` when advertised),
-      Coverage-only changes by `Coverage?_lastUpdated=ge<watermark>` when advertised. `_elements`
-      limited to mapped elements when advertised (the mapper discards everything else regardless).
-- [ ] Limits: 500 pages per run, 10 MB per response, 3 retries with exponential backoff honoring
-      `Retry-After` (capped at 60 s); 401/403/`invalid_client` stops the run and sets `error`.
-- [ ] Mapping exactly as in the table below; a resource that fails a required rule is skipped with an
-      issue code, never partially guessed. In synthetic-only environments, an MRN or member ID not
-      starting with `SYN` is skipped (`not_synthetic`) and the run fails closed after 1 such record.
-- [ ] Idempotent upsert keyed by `(tenant_id, source_connection_id, external_id)`; a resource whose
-      `meta.lastUpdated` is older than the stored `source_last_updated` is ignored (no regression);
-      same `versionId` = unchanged.
-- [ ] Linking: when no row has the external id, a manual patient with the same MRN **and** the same
-      birth date in the same practice is linked (`source → fhir`, audited
-      `patient.linked_to_source`); same MRN with a different birth date → not linked, not created,
-      issue `mrn_conflict` with the manual patient's ID for the administrator. Otherwise a new row.
-      No fuzzy or name-based matching. An MRN change in the source that collides → `mrn_conflict`.
-- [ ] Each page commits in its own transaction; the watermark advances only when the run succeeds,
-      to the server time of the first page (`Bundle.meta.lastUpdated`, else HTTP `Date`) minus a
-      5-minute overlap.
-- [ ] One run at a time per connection: partial unique index on `integration_sync_runs
-      (connection_id) WHERE status IN ('queued','running')`; a run with no heartbeat for 20 min is
-      marked `abandoned` by the next start. "Sync now" at most once per minute per connection.
-- [ ] "Sync now" (admin) enqueues a run via the platform job adapter (Netlify background function in
-      pre-production; Azure worker later); the drop-down shows "Sync running".
-- [ ] Payer mapping: every Coverage payor seen (`Organization/<id>` on that server, with the
-      Organization's name) is listed on the connection page; an administrator maps it to one of the
-      practice's payers or leaves it unmapped. Mapping sets `primary_payer_id` on affected synced
-      patients in one audited update; unmapping clears it.
-- [ ] Sync history (`/settings/integrations/[id]/runs`, admin): runs with start/end, trigger,
-      outcome, counts, issue codes; issues listing DenialDesk patient IDs link to the chart.
-- [ ] **Synthetic FHIR sandbox**: base URL `https://sandbox.fhir.denialdesk.invalid/r4` (RFC 6761
-      `.invalid`, can never resolve); served in-process only in non-production; its token endpoint
-      verifies the client assertion (signature against DenialDesk's JWKS, `aud`, `exp`, `jti`
-      replay); serves deterministic Synthea-style Patient/Coverage/Organization resources with
-      `SYN-` MRNs and member IDs, identifier system `urn:denialdesk:synthetic:mrn`, multi-page
-      results, one inactive, one `replaced-by` link, one partial birth date, one dependent coverage,
-      one unmapped payor, and one `R` confidentiality label. Every resource carries
-      `meta.tag` `urn:denialdesk:synthetic|synthetic`.
-- [ ] Synced patient chart: "Synced from <connection> · updated <date>" and a read-only notice;
-      "Edit" hidden.
-- [ ] While the practice has a non-draft Patients connection (active, paused, or error — **brief
-      refined**: paused still means the EHR is the system of record), "Register patient" and "Edit"
-      are hidden for every patient and `registerPatient`/`savePatient` refuse (translated error
-      "Patients come from <connection>; change them in your EHR"). Legacy manual patients that never
-      matched stay read-only (OA-046). With no connection, today's forms work unchanged.
-- [ ] Update `docs/data-sources.xlsx` (CLAUDE.md) with the FHIR R4 source.
+### PI1c — operator approval
+- [ ] The operator practice page (`/operator/practices/<id>`, pattern of BAA recording and
+      University access) lists connections awaiting approval with base URL, token endpoint, client
+      ID, JWKS URL, key mode, and population scope — configuration only, no PHI.
+- [ ] Approve records how it was verified with the practice's EHR administrator (method code, date,
+      and the contact's role at the practice), the population scope (`group_export` or
+      `verified_filter`), and optionally "MRNs are 9 digits (verified)"; Reject records a reason
+      code. Writes via `withTenantAsPlatform`; audited `operator.integration_approved|rejected`.
+- [ ] Submit claims the registry; a conflict refuses Submit with "This endpoint and client ID are
+      already connected" (no other practice named) and audits `integration.registry_conflict`.
+
+### PI2a — transport, discovery, keys, test connection
+- [ ] `HttpsTransport` (node:https): TLS options explicit (`minVersion: 'TLSv1.2'`,
+      `rejectUnauthorized: true`, `servername` = host, system CAs only); environment proxies ignored;
+      no redirects; `application/fhir+json` only.
+- [ ] Address guard, deny by default: a `node:net` `BlockList` built from the IANA IPv4 and IPv6
+      special-purpose registries plus explicit `168.63.129.16`; only global unicast passes; embedded
+      IPv4 decoded and re-checked (IPv4-mapped, IPv4-compatible, NAT64 `64:ff9b::/96`, 6to4
+      `2002::/16`, Teredo `2001::/32`); applied in the `lookup` hook to **every** resolved address at
+      connect time; host WHATWG-normalized before checks. Unit test per range.
+- [ ] Limits (M1): 5 s DNS timeout; 30 s total per request (DNS through body); 10 MB per response
+      after decompression; ≤ 1,000 entries per Bundle; per run: 12 min wall clock, 5,000 requests,
+      500 MB; a repeated `next` URL stops the run (`paging_loop`); `next` must be same origin.
+- [ ] Discovery: `.well-known/smart-configuration` and `metadata`; require `fhirVersion` 4.0.1,
+      `private_key_jwt`, an allowed alg (ES384 or RS384), a token endpoint passing the URL rules,
+      Patient `_lastUpdated` search, Coverage `patient` search. Scope style from `capabilities`:
+      `permission-v2` → `system/Patient.rs system/Coverage.rs system/Organization.rs`; else
+      `permission-v1` → `.read`. Issuer recorded (normalized base URL + CapabilityStatement
+      `implementation.url` when present).
+- [ ] Token: assertion `iss = sub = client_id`, `aud` = pinned token endpoint, `iat`, `exp` ≤ iat +
+      5 min, unique `jti`, header `alg` from the allow-list {ES384, RS384}, `kid`, `typ: JWT`;
+      node:crypto signing. Response must have `token_type` bearer and granted scopes including the
+      required ones (`scope_insufficient` otherwise). Token in memory only, re-requested on expiry
+      or one 401.
+- [ ] Keys (R-7.3.4, R-7.3.5): **per-connection key by default** — production creates a
+      non-exportable Azure Key Vault key per connection at creation, published at
+      `/.well-known/jwks/<connection-uuid>.json`; a shared key only as a documented per-vendor
+      exception (`key_mode = shared_vendor_exception` + reason code; e.g. a vendor with one client
+      per app, ⚠️ VERIFY). Pre-production uses one shared key from a functions-only hosting secret,
+      distinct from production. Production refuses to start integrations if an env signing key is
+      present (Key Vault only). Annual rotation with current + next `kid`.
+- [ ] JWKS routes: public-field allow-list (`kty`, `crv`, `x`, `y`, `n`, `e`, `kid`, `alg`, `use`),
+      own rate-limit bucket, `Cache-Control: public, max-age=300`; 404 for unknown or revoked.
+- [ ] Test connection: discovery + one token request, no patient data; its own rate-limit bucket
+      (per connection and per practice); outcomes collapsed to `ok`, `unreachable`, `tls_failed`,
+      `not_fhir_r4`, `smart_config_invalid`, `auth_refused`, `capability_missing`; audited.
+
+### PI2b — sync engine, sandbox, jobs, history, payer mapping
+- [ ] Jobs: payload `{ runId }` only, with an HMAC-SHA256 header (body + timestamp, 5-min window)
+      keyed by `INTEGRATION_JOB_SECRET`. The worker claims the run with SECURITY DEFINER
+      `integration_claim_run(run_id)` (only a `queued` run; returns `tenant_id, connection_id`;
+      EXECUTE granted to a `denialdesk_jobs` role, not `denialdesk_app`). Tests: unsigned call,
+      stale timestamp, and forged or already-claimed `runId` refused.
+- [ ] All sync reads and writes run as `denialdesk_app` under a new
+      `withTenantAsSystem(tenantId, runId)` (sets tenant, run, and connection settings; never
+      `withTenantAsPlatform` or `systemDb`). Audit actor: a fixed per-environment integration
+      service-principal UUID in reviewed code; the admin who pressed Sync now in
+      `metadata.triggeredBy`; reason `ehr_sync`; "where" = runtime function id and host.
+- [ ] Every run first checks the connection's issuer against discovery; a mismatch fails the run
+      before any upsert (`issuer_mismatch`); a changed token endpoint sets `error`.
+- [ ] Search: `Patient?_lastUpdated=ge<watermark>&_count=100`; Coverage for a page's patients by POST
+      `Coverage/_search` (`patient=<id>`) where supported so FHIR ids stay out of request URLs
+      (⚠️ VERIFY support), else GET (documented: the URL goes only to the practice's own EHR);
+      Coverage-only changes by `Coverage?_lastUpdated` when advertised; `_elements` when advertised.
+- [ ] Retries: 3, exponential backoff, `Retry-After` capped at 60 s; 401/403/`invalid_client` → `error`.
+- [ ] Mapping as in the table below; a record failing a required rule is skipped with a code, never
+      partially guessed. Server timestamps are clamped (future beyond 5 min skew → our now; the
+      watermark never exceeds our clock). `OperationOutcome.issue.code` kept only if it is an R4
+      IssueType code, else `unknown`; `diagnostics` never stored.
+- [ ] Upsert keyed by `(tenant_id, source_connection_id, external_id)`; no regression on
+      `meta.lastUpdated`; same `versionId` = unchanged. Linking: MRN **and** birth date equal to a
+      manual patient → linked (`patient.linked_to_source`); MRN equal, birth date different →
+      `mrn_conflict` with the manual patient's ID; otherwise a new row. No fuzzy matching.
+- [ ] Page-by-page commits; watermark advances only on success to the first page's server time minus
+      5 minutes. One run per connection (partial unique on `(tenant_id, connection_id)` while
+      `queued`/`running`); no heartbeat for 20 min → `abandoned`. Sync now once a minute.
+- [ ] Sync never writes `claims` or claim versions; the 837P builder (claims C3) snapshots patient
+      demographics into the claim version at submission (R-3.10.3).
+- [ ] Payer mapping page (step-up): payor keys (`Organization/<id>`, Organization name) → practice
+      payer or unmapped; one audited update of affected patients.
+- [ ] Sync history (`/settings/integrations/[id]/runs`, admin): counts and codes; issue rows link
+      to DenialDesk patient IDs.
+- [ ] Synthetic sandbox (base URL `https://sandbox.fhir.denialdesk.invalid/r4`, in-process
+      `SandboxTransport`, only when `syntheticDataOnly()`): token endpoint verifies the assertion
+      (signature, alg allow-list, `aud`, `exp`, `jti` remembered until `exp`); deterministic
+      `SYN-` resources with a synthetic `meta.tag`, multi-page, and one each of: inactive,
+      `replaced-by`, partial birth date, dependent coverage, unmapped payor, non-Organization payor,
+      `R` label, `HIV` label, unknown label, minor, SSN-shaped MRN.
+- [ ] Test: `APP_ENV=production` on Netlify refuses a real endpoint and allows only the sandbox.
+- [ ] Update `docs/data-sources.xlsx` with the FHIR R4 source.
 
 ### PI3 — scheduled sync and source-state hardening
-- [ ] Scheduled run every 15 minutes per active connection (platform scheduler adapter; the
-      scheduled function only enqueues, IDs only).
-- [ ] `source_status`: `inactive` (Patient.active = false), `merged` (Patient.link type
-      `replaced-by`), `gone` (404/410 on a direct read during a weekly reconciliation of rows not
-      seen); none deletes a row (claims reference patients, R-9.2.1). Chart and list show the state.
-- [ ] The weekly reconciliation also re-reads primary Coverage for every synced patient when the
-      server does not advertise Coverage `_lastUpdated`.
-- [ ] Three consecutive failed runs set the connection to `error` and show it in the drop-down.
+- [ ] Scheduled every 15 minutes (OA-056): SECURITY DEFINER `integration_enqueue_due_runs()`
+      (EXECUTE: `denialdesk_jobs`) inserts `queued` runs for due `active` connections and returns run
+      IDs only; the scheduled function posts one signed job per run ID. Isolation test: the
+      function exposes no other column and `denialdesk_app` cannot execute it.
+- [ ] `source_status`: `inactive`, `merged` (`replaced-by`), `gone` (404/410 in a weekly
+      reconciliation, which also re-reads Coverage when Coverage `_lastUpdated` is not advertised).
+      Nothing is deleted; synced rows follow the §9.2 retention of the claims they support.
+- [ ] Three consecutive failed runs → `error`. SIEM alerts at the Azure cutover (R-7.5.3):
+      activation, revocation, registry conflict, token-endpoint change, issuer mismatch, repeated
+      failures, unusually large runs.
 
 ### PI4 — Bulk Data (before the first real practice; OA-050)
-- [ ] `Group/[id]/$export?_type=Patient,Coverage,Organization&_since=…` with the practice's Group
-      id on the connection; NDJSON streamed with the same size limits and mapper.
+- [ ] `Group/<practice group>/$export?_type=Patient,Coverage,Organization&_since=…`; the status URL
+      and every output URL pass the URL rules and address guard; the bearer token is sent only to
+      the FHIR origin (`requiresAccessToken=true` files must be on it); other output hosts are
+      allowed only if listed per vendor in reviewed code; NDJSON line and file caps; the export is
+      deleted on the server when done.
 
 ## Field mapping (FHIR R4 / US Core 6.1.0 → `patients`)
-Must-support (MS) notes are from the US Core 6.1.0 profiles, ⚠️ VERIFY against the published
-StructureDefinitions at build.
+Must-support (MS) notes ⚠️ VERIFY against the published StructureDefinitions at build.
 
 | Column | FHIR source | US Core 6.1.0 | Rule |
 |---|---|---|---|
 | `external_id` | `Patient.id` | — | Required; FHIR `id` syntax, ≤ 64 chars |
-| `source_version_id` | `Patient.meta.versionId` | not MS | Optional |
-| `source_last_updated` | `Patient.meta.lastUpdated` | not MS | Absent → run time; no-regression rule |
-| `mrn` | `Patient.identifier` whose `system` = the connection's MRN system → `value` | `identifier` 1..*, MS `system`, `value` | Exactly one match, else skip `mrn_missing` / `mrn_ambiguous`. `type` = MR not required (not MS; **brief refined**). Existing length CHECKs |
-| `first_name`, `last_name` | `Patient.name`: `use` official, else usual, else the only name; `given[0]`, `family` | `name` MS (`family`, `given`) | Missing either → skip `name_incomplete` |
-| `birth_date` | `Patient.birthDate` | MS | Full `YYYY-MM-DD` only, 1900..today; partial → skip `birthdate_incomplete` |
+| `source_version_id`, `source_last_updated` | `Patient.meta.versionId`, `.lastUpdated` | not MS | Clamped; no-regression rule |
+| `mrn` | `Patient.identifier` whose `system` = the connection's MRN system | `identifier` 1..*, MS `system`, `value` | Exactly one, else `mrn_missing`/`mrn_ambiguous`. `ddd-dd-dddd` → `mrn_looks_like_ssn`; bare 9 digits too unless the operator recorded "MRNs are 9 digits"; MBI-shaped (CMS format, ⚠️ VERIFY) → `mrn_looks_like_mbi` |
+| `first_name`, `last_name` | `Patient.name` (official, else usual, else the only one): `given[0]`, `family` | MS | Missing → `name_incomplete` |
+| `birth_date` | `Patient.birthDate` | MS | Full date, 1900..today; partial → `birthdate_incomplete`. Under 18 → "minor" tag **suggested** to administrators, never set automatically |
 | `sex` | `Patient.gender` | 1..1 | female → F, male → M, other/unknown → U (837P DMG03) |
-| `address_line1`, `city`, `state`, `postal_code` | `Patient.address`: `use` home or absent, period current; `line[0]`, `city`, `state`, `postalCode` | `address` MS | State 2-letter USPS, ZIP or ZIP+4; otherwise all four null + issue `address_incomplete` (patient still synced) |
-| `source_status` | `Patient.active`, `Patient.link` (`replaced-by`) | not MS | See PI3 |
-| `source_confidentiality` | `Patient.meta.security` (v3-Confidentiality `R` / `V`) | — | Stored; chart shows "Restricted in source"; masking with P4 of `specs/patients.md` (OA-052) |
-| `primary_payer_id` | primary Coverage `payor` → `integration_payer_mappings` | `payor` 1..1 MS | Mapped exactly or null; never guessed (CLAUDE.md #9) |
-| `member_id_enc`, `member_id_last4` | primary Coverage `identifier` with type MB, else `subscriberId` | `identifier:memberid`, `subscriberId` MS | Encrypted (R-7.3.3), last 4 in clear |
+| `address_line1`, `city`, `state`, `postal_code` | `Patient.address` (home or no use, current) | MS | Invalid → all four null + `address_incomplete` |
+| `source_status` | `Patient.active`, `Patient.link` `replaced-by` | not MS | PI3 |
+| `source_restricted`, `source_sensitivity` | `Patient.meta.security` | — | Restricted if confidentiality `R`/`V`, an ActCode sensitivity code (`HIV`, `PSY`, `ETH`, `SDV`, `42CFRPart2`; ⚠️ VERIFY), or **any unrecognized label**. Codes stored as a fixed vocabulary (`unknown` for unrecognized) |
+| `primary_payer_id`, `coverage_payor_key` | primary Coverage `payor` | 1..1 MS | Must reference `Organization`, else `needs_review`; payer only by explicit mapping (CLAUDE.md #9) |
+| `member_id_enc`, `member_id_last4` | primary Coverage `identifier` type MB, else `subscriberId` | MS | Encrypted (R-7.3.3); null unless coverage is `mapped`/`unmapped` |
 | `coverage_status` | primary Coverage selection | — | `none` / `mapped` / `unmapped` / `needs_review` |
-| `phone` | **not synced** (null) | — | Owner may revisit (OA-047) |
+| `phone` | not synced (null) | — | OA-047 |
 
-Primary Coverage = `status` active, `beneficiary` this patient, `period` covering today, lowest
-`order`; `relationship` must be `self`. Several candidates with no `order` → `needs_review`, no
-payer, no member ID. A dependent (relationship ≠ self) → `needs_review` until patients P2 adds
-subscriber-other-than-patient (OA-055). **Not synced:** telecom, email, race, ethnicity, birth sex,
-gender identity, language, contacts, general practitioner, SSN, any clinical resource.
+Primary Coverage = active, beneficiary this patient, period covering today, lowest `order`,
+relationship `self`; ties with no `order`, dependents (OA-055), or a non-Organization payor →
+`needs_review`, no payer, no member ID. **Not synced:** telecom, e-mail, race, ethnicity, birth sex,
+gender identity, language, contacts, practitioners, SSN, clinical resources.
 
 ## Data / API changes
-Migrations take the next free numbers at build time (today 0039+; PROJECT_STATE lesson).
+Migration numbers: next free at build time (today 0039+).
 
-- `patients` + `source text NOT NULL DEFAULT 'manual' CHECK IN ('manual','fhir')`,
-  `source_connection_id uuid`, `external_id text`, `source_version_id text`,
-  `source_last_updated timestamptz`, `synced_at timestamptz`, `source_status text CHECK IN
-  ('active','inactive','merged','gone')`, `source_confidentiality text`, `coverage_status text`,
-  `coverage_payor_key text` (the `Organization/<id>` reference, for re-mapping without a refetch).
-  CHECK: `source = 'fhir'` ⇔ connection, external id, status all set. Unique
-  `(tenant_id, source_connection_id, external_id) WHERE source = 'fhir'`. Composite FK
-  `(tenant_id, source_connection_id) → integration_connections (tenant_id, id)`.
-  Trigger `patients_synced_readonly` (PI1 criteria).
-- `integration_connections`: `id`, `tenant_id`, `target_table` (CHECK `'patients'`), `kind`
-  (CHECK `'fhir_r4'`), `is_sandbox bool`, `display_name`, `base_url`, `token_endpoint` (pinned),
-  `client_id`, `mrn_identifier_system`, `signing_key_ref` (key name, never key material), `status`
-  (`draft`/`active`/`paused`/`error`), `status_reason` (code), `us_residency_attested_by/_at`,
-  `patient_watermark`, `coverage_watermark`, `last_success_at`, `last_run_id`, `bulk_group_id` (PI4),
-  `created_by/_at`, `updated_by/_at`. Partial unique `(tenant_id, target_table) WHERE status <> 'draft'`.
-- `integration_payer_mappings`: `tenant_id`, `connection_id`, `payor_key`, `payor_name` (Organization
-  name, not PHI), `payer_id` (nullable; composite tenant FK), `updated_by/_at`. Unique
-  `(connection_id, payor_key)`.
-- `integration_sync_runs`: `id`, `tenant_id`, `connection_id`, `trigger` (`manual`/`scheduled`),
-  `triggered_by` (user, nullable), `status` (`queued`/`running`/`succeeded`/`failed`/`abandoned`),
-  `started_at`, `heartbeat_at`, `finished_at`, `watermark_from`, `watermark_to`, counts (`fetched`,
-  `created`, `updated`, `linked`, `unchanged`, `skipped`, `inactivated`, `errors`), `issue_codes
-  text[]` (our fixed codes and FHIR `OperationOutcome.issue.code` values only), `http_status`.
-  **Refined from "append-only":** a trigger allows updates only while `queued`/`running` and freezes
-  the row once finished; no DELETE grant.
-- `integration_sync_issues` (append-only): `run_id`, `code`, `patient_id` (nullable; DenialDesk ID
-  only). Never MRNs, names, external ids, or resource content.
-- Routes: `GET /.well-known/jwks.json` (public). Pages `/settings/integrations`,
-  `/settings/integrations/new`, `/settings/integrations/[id]`, `/settings/integrations/[id]/runs`.
-  Server actions: create/update draft, test, activate, pause, resume, sync now, map payer. No
-  identifiers in any URL.
-- Environment: `INTEGRATION_SIGNING_KEY` (PEM, P-384) and `INTEGRATION_SIGNING_KEY_ID` in
-  pre-production; Azure Key Vault key (sign operation, non-exportable) at cutover (ADR 0010).
-  `INTEGRATION_SANDBOX_HOSTS` (non-production allow-list; empty).
+- `patients` + `source` (`manual`/`fhir`), `source_connection_id`, `external_id`,
+  `source_version_id`, `source_last_updated`, `synced_at`, `source_status`, `source_restricted`,
+  `source_sensitivity text[]`, `coverage_status`, `coverage_payor_key`. New unique
+  `patients_tenant_id_key (tenant_id, id)` as an FK target. Unique `(tenant_id,
+  source_connection_id, external_id) WHERE source = 'fhir'`; composite FK to connections.
+  `member_id_enc`/`member_id_last4` become nullable with CHECK: manual rows keep them NOT NULL (today's
+  behavior); `fhir` rows have them set iff `coverage_status IN ('mapped','unmapped')`. Readers of
+  the member ID handle null.
+- `integration_connections`: `id`, `tenant_id`, `target_table` (`patients`), `kind` (`fhir_r4`),
+  `is_sandbox`, `display_name`, `base_url`, `endpoint_key`, `token_endpoint`, `issuer`, `client_id`,
+  `mrn_identifier_system`, `mrn_nine_digits_verified`, `key_mode`
+  (`per_connection`/`shared_vendor_exception`/`preprod_shared`), `key_ref`, `key_exception_reason`,
+  `status` (`draft`/`pending_approval`/`active`/`paused`/`error`/`revoked`), `status_reason`,
+  `population_scope`, `us_residency_attested_by/_at`, `submitted_by/_at`, `approved_by/_at`,
+  `approval_method`, `revoked_by/_at`, watermarks, `last_success_at`, `bulk_group_id`, `has_synced`,
+  `created_by/_at`, `updated_by/_at`. Partial unique `(tenant_id, target_table) WHERE status NOT IN
+  ('draft','revoked')`.
+- `integration_endpoint_registry` (global, definer-only; above).
+- `integration_payer_mappings`: `tenant_id`, `connection_id`, `payor_key`, `payor_name`, `payer_id`;
+  unique `(tenant_id, connection_id, payor_key)`.
+- `integration_sync_runs`: `id`, `tenant_id`, `connection_id`, `trigger`, `triggered_by`, `status`
+  (`queued`/`running`/`succeeded`/`failed`/`abandoned`), times, heartbeat, watermarks, counts,
+  `issue_codes text[]` (fixed vocabulary + R4 IssueType), `http_status`. Updatable only while
+  `queued`/`running` (trigger).
+- `integration_sync_issues` (append-only): `tenant_id`, `run_id`, `code`, `patient_id` (nullable).
+- Routes: `/.well-known/jwks/<connection-uuid>.json`, `/.well-known/jwks.json` (pre-production
+  shared key). Pages under `/settings/integrations/**`; operator approval on the operator practice
+  page. No patient identifiers in any URL.
+- Environment: `INTEGRATION_SIGNING_KEY`/`_KEY_ID` (pre-production only, functions-only secret);
+  `INTEGRATION_JOB_SECRET` (Key Vault in production); `INTEGRATION_ALLOWED_PORTS` (default `443`).
 
-**Classification (REQUIREMENTS §9.1):** synced patient columns — Restricted PHI (unchanged);
-`external_id`, `coverage_payor_key` — Restricted PHI (identifiers in a patient row; never logged or
-audited); connections, payer mappings — Confidential configuration; sync runs and issues — Internal
-(counts, codes, DenialDesk IDs); JWKS — Public.
+**Classification (§9.1):** synced demographics, member ID, `external_id`, `coverage_payor_key` —
+Restricted PHI (identifiers never logged or audited); `source_restricted`/`source_sensitivity` —
+Restricted-Sensitive PHI; connections, registry, mappings — Confidential configuration; runs and
+issues — Internal; JWKS — Public; private signing keys and the job secret — **Secret** (credentials;
+outside the §9.1 data classes, R-7.3.5).
 
-**Audit events (IDs, counts, enum codes only; never MRNs, names, external ids, URLs, tokens):**
-`integration.connection_created|updated|tested|activated|paused|resumed|errored`,
-`integration.payer_mapping_changed`, `integration.sync_started|completed|failed` (run ID, counts),
+**Audit events** (never MRNs, names, external ids, tokens, query strings):
+`integration.connection_created|updated|submitted|tested|activated|paused|resumed|errored|revoked`
+with old/new base URL, token endpoint host + path, and client ID (configuration, not PHI);
+`integration.registry_conflict`, `integration.payer_mapping_changed`,
+`operator.integration_approved|rejected`, `integration.sync_started|completed|failed` (counts; the
+run-level `sync_completed` is the record of receipt for unchanged and skipped resources),
 `patient.synced_created|synced_updated|linked_to_source|source_inactivated|source_merged|source_gone`
-(patient ID, connection ID, run ID, changed field names). Sync writes use `actorUserId` = the
-administrator who pressed "Sync now" or null for scheduled runs, with metadata
-`actor: "integration"`, `connectionId`, `runId`; user agent `denialdesk-sync`.
+(patient, connection, run IDs; changed field names).
 
 ## Legal rules used
-None. No legal clock. U.S. residency (§ 408.051(3)) is enforced by attestation and environment rules,
-not a computed value.
+None (no legal clock). Residency is enforced by attestation and environment rules.
 
 ## Out of scope
-Writing anything back to the EHR; clinical resources; HL7 v2 ADT, CSV, or other connectors; other
-tables (owner to evaluate); fuzzy/probabilistic patient matching and merge tooling; secondary
-coverage and dependents (patients P2); SMART user launch; per-connection signing keys; real vendor
-endpoints in pre-production.
+Writing to the EHR; clinical resources; other connectors (HL7 v2, CSV); other tables; fuzzy
+matching and merge tooling; dependents and secondary coverage (patients P2); SMART user launch;
+real vendor endpoints in pre-production.
 
 ## Open questions (docs/owner/OWNER_ACTION_ITEMS.xlsx)
-- **OA-045** U.S. residency: is the administrator's attestation enough, or must DenialDesk obtain
-  written confirmation from the EHR vendor? Does the customer BAA need to cover DenialDesk pulling
-  from the practice's EHR (counsel)?
-- **OA-046** Retire manual registration once the first practice is connected? What happens to
-  legacy manual patients that never match a synced record (read-only today)?
-- **OA-047** Confirm phone and email are not synced (billing minimum); the `phone` column stays
-  null for synced patients.
-- **OA-048** Disconnecting or switching EHRs: do synced patients stay read-only, convert back to
-  manual, or link to the new connection?
-- **OA-049** Allow-list vendor sandboxes (Epic on FHIR, Oracle Health, athenahealth) in
-  pre-production; their test identifiers lack `SYN`: prefix on ingest in non-production?
-- **OA-050** Build Bulk Data (PI4) before the first real practice, since US Core does not require
-  the population search PI2 uses?
-- **OA-051** Population scope: the EHR's client registration must be limited to the practice's own
-  patients (minimum necessary). Who confirms this at onboarding?
-- **OA-052** Patients labelled `R`/`V` in the EHR: until sensitivity enforcement (patients P4),
-  import and show "Restricted in source", or hold them back?
-- **OA-053** MRN conflicts: fixed in the EHR only, or an admin tool in DenialDesk?
-- **OA-054** Assign a requirement ID for EHR/PM interoperability (§8.8).
-- **OA-055** Dependents (subscriber ≠ patient) get no coverage until patients P2 — acceptable?
-- **OA-056** Is a 15-minute scheduled sync right?
+- **OA-045** Residency: attestation enough, or vendor confirmation? BAA coverage for pulling from
+  the EHR (counsel)? Also vendor screening for foreign-country-of-concern ties (R-3.3.6) and
+  offshore access to the EHR's data (R-3.3.3).
+- **OA-046** Retire manual registration; unmatched legacy manual patients stay read-only?
+- **OA-047** Phone and e-mail not synced.
+- **OA-048** Disconnect or switch EHR (a new endpoint is a new connection): synced patients stay
+  read-only, revert to manual, or re-link to the new connection?
+- **OA-049** Vendor sandboxes: their identifiers lack `SYN`, and there is no prefixing on ingest, so
+  they stay unusable until the owner decides how their synthetic origin is proven.
+- **OA-050** Bulk Data (PI4) before the first real practice.
+- **OA-051** Who at the practice confirms the population scope at approval.
+- **OA-052** Restricted-in-source patients until patients P4 masking; whether any practice is a
+  42 CFR Part 2 program (human decision).
+- **OA-053** MRN conflicts: EHR-only fix or an admin tool.
+- **OA-054** Requirement ID for §8.8. **OA-055** Dependents' coverage. **OA-056** Sync interval.
+- **OA-057** Confirm the 2026-09-28 coordinator decisions above.
 
 ## Implementation plan
-
-All parts are built by **builder** unless noted. No legal deadlines, rates, or thresholds →
-`florida-rules-engine` not involved. No X12 → `edi-x12-specialist` only **reviews** the mapping table
-for 837P alignment (DMG03 sex, subscriber N3/N4 address, NM109 member ID) before PI2 merges.
-Keep PRs under ~400 lines: PI1 splits into PI1a (migration, trigger, domain refusals, tests) and
-PI1b (Settings › Integrations pages, drop-down).
+**builder** builds everything; **edi-x12-specialist** reviews the mapping for 837P fit (DMG03,
+N3/N4, NM109) and the C3 snapshot dependency; **florida-rules-engine** not involved (no legal
+values). PRs (< ~400 lines each): PI1a data layer → PI1b Settings UI + drop-down → PI1c operator
+approval → PI2a transport, guard, discovery, keys, JWKS, test → PI2b sync, jobs, sandbox, history,
+payer mapping → PI3 → PI4. Runbooks with PI2a: key rotation and **integration key compromise**
+(revoke at each EHR, customer notice within 72 h per R-3.4.2, FIPA 30-day clock per R-3.4.1); with
+PI1b: offboarding a connection.
 
 ### Files
-- `drizzle/00NN_patient_source_provenance.sql`, `drizzle/00NN_integration_connections.sql` (+
-  `netlify/database/migrations/` mirror, `src/db/schema.ts`).
-- `src/domain/integrations/connections.ts` (validation, status transitions, audit),
-  `payer-mappings.ts`, `sync-runs.ts`, `sync.ts` (orchestrator: run lease, pages, watermark).
-- `src/integrations/fhir/`: `transport.ts` (interface, `HttpsTransport` with the address guard),
-  `discovery.ts`, `auth.ts` (client assertion, token), `search.ts` (paging, limits, retries),
-  `map-patient.ts`, `map-coverage.ts` (pure, zod-validated input; unit-tested per rule), `types.ts`
-  (minimal hand-written R4 types; no `@types/fhir`).
-- `src/integrations/fhir/sandbox/` (resources generator, token verifier, `SandboxTransport`;
-  imported only behind `!isProduction()`; a unit test asserts production refuses the sandbox).
-- `src/platform/netlify/jobs.ts` (background-function invoke, scheduled function) and
-  `src/platform/azure/README.md` note (worker + Key Vault signer at cutover).
-- `src/lib/crypto/jwt-sign.ts` (ES384/RS384 via node:crypto, `ieee-p1363` for ES).
-- `src/app/.well-known/jwks.json/route.ts`; `src/app/(app)/settings/integrations/**`;
-  `src/components/shell/DataSourceMenu.tsx`; `navigation.ts` (`dataSource` on `NavItem`);
-  `AppShell.tsx` loads the data-source summary; patients pages (read-only notice, hidden actions).
-- `src/auth/permissions.ts` (`canManageIntegrations`); `src/lib/audit.ts` (actions);
-  `src/i18n/messages/{en,es,pt}/integrations.ts` + shell/patients keys.
+- `drizzle/00NN_*.sql` (+ Netlify mirror, `src/db/schema.ts`); `src/db/tenant.ts`
+  (`withTenantAsSystem`).
+- `src/domain/integrations/`: `connections.ts` (lifecycle, zod allow-list, audit), `registry.ts`,
+  `approval.ts` (operator), `payer-mappings.ts`, `sync-runs.ts`, `sync.ts`, `principal.ts`.
+- `src/integrations/fhir/`: `transport.ts`, `address-guard.ts`, `url-rules.ts`, `discovery.ts`,
+  `auth.ts`, `search.ts`, `map-patient.ts`, `map-coverage.ts`, `identifier-rules.ts`,
+  `security-labels.ts`, `types.ts`, `vendor-sandboxes.ts`, `sandbox/`.
+- `src/lib/crypto/jwt-sign.ts`; `src/platform/netlify/jobs.ts`, `src/platform/azure/` (Key Vault
+  signer, worker; at cutover).
+- `src/app/.well-known/jwks/**`; `src/app/(app)/settings/integrations/**`; operator practice page;
+  `src/components/shell/DataSourceMenu.tsx`; `navigation.ts`; `AppShell.tsx`; patients pages.
+- `src/auth/permissions.ts`, step-up helper; `src/lib/audit.ts`; i18n (en/es/pt).
 
 ### Tests
-- Unit: mapper rules (each skip code, gender map, address rules, primary coverage selection, SYN
-  guard), JWT claims and signature round trip, address guard (IPv4/IPv6 private, mapped, CGNAT,
-  loopback, link-local, DNS answer with one private IP), URL validation, `next` link origin check,
-  Retry-After cap, page/size limits, watermark overlap arithmetic.
-- Integration (`pnpm test:integration`): RLS isolation for all four tables; trigger refusals
-  (manual edit of synced column, forged insert, `fhir → manual`, wrong connection setting); upsert
-  idempotency and no-regression; MRN+DOB link vs. `mrn_conflict`; run lease uniqueness and
-  abandonment; payer mapping update; sync-run freeze trigger; audit rows contain no MRN, name,
-  external id, or URL (string search over `audit_events`).
-- E2E (Playwright, sandbox): admin creates sandbox connection, tests, activates, syncs; list shows
-  synced patients; chart read-only; specialist sees status only; drop-down at 1024px.
-- Log test: a full sandbox sync emits no resource content, token, or query string (capture logger).
+- Unit: every address range and embedded-IPv4 form; URL/host rules; identifier-system refusals and
+  SSN/MBI shapes; security labels; mapper skip codes; JWT claims, alg allow-list, `jti`; token
+  response checks; limits and `paging_loop`; timestamp clamping; zod `.strict()`; environment
+  matrix incl. `APP_ENV=production` on Netlify; production refuses an env signing key.
+- Integration: isolation for every table; composite FKs; both triggers; registry uniqueness across
+  practices and definer-only access; claim/enqueue functions (grants, forged run, non-queued run);
+  `withTenantAsSystem`; upsert/link/conflict; issuer mismatch; audit rows free of MRN, name,
+  external id, URL query.
+- E2E (sandbox): admin creates, tests, submits (sandbox skips approval), syncs; chart read-only;
+  specialist sees status only; operator approval flow on a real-type connection with a stubbed
+  transport; drop-down at 1024px.
+- Log capture over a full sandbox sync: no resource content, tokens, paths with ids, or ZodErrors.
 
 ### Risks
-- Vendor variance (search support, token lifetimes, paging) — CapabilityStatement checks and
-  ⚠️ VERIFY per vendor; Bulk Data in PI4.
-- Netlify function time limits (⚠️ VERIFY: ~15 min background, ~30 s scheduled): per-page commits
-  and idempotent upserts make an interrupted run safe to repeat from the old watermark.
-- Initial load writes one audit event per patient (volume accepted; batched inserts).
-- The trigger's session setting can be set by any code running as the app role: it stops mistakes,
-  not a compromised app (separate DB roles remain an open project decision).
-- One environment signing key for all practices: a key compromise affects every connection until
-  rotated (JWKS carries current + next; rotation runbook before production).
+- Vendor variance (search, scopes, key registration) — ⚠️ VERIFY per vendor; Bulk Data in PI4.
+- Netlify limits (⚠️ VERIFY ~15 min background, ~30 s scheduled): 12-min run budget, idempotent
+  re-runs.
+- One audit event per patient on initial load (batched).
+- `app.sync_*` settings and the owner-role connection remain settable by a compromised app
+  (separate DB roles: open project decision).
+- Operator approval is manual and single-person (single-administrator risk already open).

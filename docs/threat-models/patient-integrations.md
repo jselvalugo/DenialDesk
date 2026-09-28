@@ -1,56 +1,68 @@
 # Threat model: patient integrations (FHIR R4 sync into the Patient Register)
 
-Scope: `integration_connections`, `integration_payer_mappings`, `integration_sync_runs`,
-`integration_sync_issues`, provenance columns and trigger on `patients`; `src/integrations/fhir/`
-(transport, discovery, SMART Backend Services auth, search, mappers, synthetic sandbox);
-`src/domain/integrations/`; the JWKS route; Settings › Integrations; the tab-bar data-source
-drop-down; platform job adapters. Spec: `docs/specs/patient-integrations.md`. Design: ADR 0010.
-Data: synced patient columns are **Restricted PHI**; FHIR logical ids and payor keys in patient rows
-are treated as identifiers (Restricted PHI); connections and mappings are Confidential
-configuration; runs and issues are Internal (counts, codes, DenialDesk IDs).
+Scope: provenance columns and trigger on `patients`; `integration_connections`,
+`integration_endpoint_registry`, `integration_payer_mappings`, `integration_sync_runs`,
+`integration_sync_issues`; SECURITY DEFINER functions (registry, run claim, due-run enqueue);
+`src/integrations/fhir/` (transport, address guard, discovery, SMART Backend Services auth, search,
+mappers, sandbox); `src/domain/integrations/`; JWKS routes; Settings › Integrations; operator
+approval; the tab-bar drop-down; platform job adapters; Bulk Data (PI4).
+Spec: `docs/specs/patient-integrations.md`. Design: ADR 0010. Revised 2026-09-28 after the
+security and compliance reviews (decisions pending owner confirmation, OA-057).
+Data: synced demographics and member ID — Restricted PHI; source sensitivity labels —
+Restricted-Sensitive PHI; FHIR logical ids and payor keys — identifiers (Restricted PHI);
+connections, registry, mappings — Confidential configuration; runs and issues — Internal; signing
+keys and job secret — Secret.
 
 ## Data flow
-Admin saves connection (server action, origin-checked; URL validated; residency attested) → test:
-discovery (`.well-known/smart-configuration`, `metadata`) → signed client assertion → token →
-activate. Run (manual or scheduled, via platform job adapter, IDs only) → lease row → token →
-`Patient?_lastUpdated=ge…` pages over TLS → zod-validated resources → mapper keeps billing minimum
-→ `withTenant(connection.tenant_id)` + `app.sync_connection_id` → upsert/link (member ID encrypted)
-→ per-patient audit (IDs) → page commit → run counts → watermark on success. Nothing but counts and
-codes leaves the run; resources and tokens live only in memory.
+Admin saves a draft (strict allow-list; URL, host, and identifier-system rules) → per-connection
+key created (Key Vault in production) → test (discovery + token, no patient data) → Submit (step-up
+MFA, residency attestation, registry claim) → operator verifies out of band and approves → active.
+Run: Sync now or scheduler → `queued` run → signed job `{runId}` → `integration_claim_run` →
+`withTenantAsSystem(tenant, run)` as `denialdesk_app` → issuer check → token → pages over TLS
+through the address guard → synthetic guard (non-production) → zod → mapper (billing minimum) →
+upsert/link under the sync trigger → per-patient audit (IDs) → page commit → counts → watermark.
+Resources and tokens exist only in memory.
 
 ## STRIDE
 
 | # | Threat | Control | Residual risk / owner |
 |---|---|---|---|
-| S1 | Spoofing: non-admin creates, tests, activates, pauses, syncs, or maps payers | `canManageIntegrations` (admin) re-checked in every server action and page; other roles see status only | Low |
-| S2 | Spoofing: attacker obtains DenialDesk's signing key and calls the EHR as a practice | Key never in the DB or repo; pre-prod key in a hosting secret, production key non-exportable in Key Vault (sign operation only); `kid` rotation with current + next in JWKS; assertions live ≤ 5 min with unique `jti` | **One key per environment**: compromise affects every connection until rotated. Rotation runbook + Key Vault before real data |
-| S3 | Spoofing: malicious or look-alike FHIR server (typo, DNS hijack) | `https` only, TLS ≥ 1.2 with certificate validation, no redirects; token endpoint pinned at test time and a change moves the connection to `error`; admin sees host names before activating | A compromised real EHR endpoint is out of our control |
-| S4 | Spoofing: forged cross-site post to "Sync now" or activate | Server actions only (Next.js origin check); no GET mutations | Low |
-| T1 | Tampering: cross-tenant write through a colliding external id or MRN | Every write inside `withTenant(connection.tenant_id)` under FORCE RLS; unique key includes `tenant_id` and `source_connection_id`; composite FK `(tenant_id, source_connection_id)`; linking searches the connection's own tenant only | Low |
-| T2 | Tampering: staff or buggy code edits synced demographics, or a manual row is forged as synced | Domain refusal + trigger requiring `app.sync_connection_id` = row's connection; `fhir → manual` refused; tested | The setting is settable by any app-role code: stops mistakes, not a compromised app (separate DB roles: open decision) |
-| T3 | Tampering: sync overwrites practice-owned data (sync loop) | Sync writes only the mapped column list; tags and custom field values are never in its UPDATE; synced columns are not editable in DenialDesk, so there is nothing to overwrite | Low |
-| T4 | Tampering: replayed or out-of-order responses regress a record | No-regression on `meta.lastUpdated`; same `versionId` = unchanged; TLS; each token request has a new `jti` | Low |
-| T5 | Tampering: wrong-patient link (MRN reused, DenialDesk-generated MRN coincides with an EHR MRN) | Link only on MRN **and** birth date equal; mismatch → `mrn_conflict` for the admin, nothing merged; no fuzzy/name matching; link audited and visible on the chart | Two patients sharing MRN and DOB in one practice: very low; conflicts need a resolution path (OA-053) |
-| T6 | Tampering: payor guessed onto the wrong payer → wrong deadlines or 837P | Payor mapped only by explicit admin mapping per `Organization/<id>`; unmapped → no payer, no deadline (payer catalog rule); ambiguous or dependent coverage → `needs_review` | Low |
-| R1 | Repudiation: who connected, attested residency, synced, or linked | `integration.*` events with admin ID and attestation flag; per-patient `patient.synced_*`/`linked_to_source` with run and connection IDs; runs record `triggered_by` | Low |
-| I1 | Disclosure: PHI, tokens, or query strings in logs, errors, audit, run rows | Transport and client log only host-free event names, status codes, counts; errors carry codes, never bodies or URLs; audit metadata IDs/counts/codes; `issue_codes` from a fixed vocabulary + `OperationOutcome.issue.code` (enum) only; `diagnostics` text never stored; log-capture test over a full sandbox sync; DB errors sanitized (ADR 0006) | Low |
-| I2 | Disclosure: over-collection beyond the billing minimum | Mapper whitelists columns (telecom, race, ethnicity, contacts, clinical data dropped in memory); `_elements` requested when supported; scopes limited to Patient, Coverage, Organization read/search | The EHR may authorize the client for more patients than the practice's own (OA-051) |
-| I3 | Disclosure: sensitive patients (EHR `R`/`V` labels) shown unmasked | `source_confidentiality` stored and shown as "Restricted in source" | **Blocking before real data** with patients P4 masking (R-3.5.1, R-4.5.1; OA-052) |
-| I4 | Disclosure: PHI stored or processed outside the U.S. (§ 408.051(3)) via a non-U.S. EHR endpoint | Admin attestation (audited) on every real connection; DenialDesk's own processing stays in U.S. Azure (ADR 0002) | DenialDesk cannot verify the EHR's hosting: **attestation-level** (OA-045) |
-| I5 | Disclosure: identifiers in URLs | No MRN, external id, or name in any DenialDesk URL; connection pages use connection UUIDs; outbound search URLs carry only `_lastUpdated`, `_count`, and FHIR logical ids to the EHR itself | Low |
-| I6 | Disclosure: SSRF — base URL, token endpoint, or `next` link aimed at internal services (cloud metadata, DB, localhost) | `https` hostname only (no IP literals, userinfo, query); `lookup` hook rejects loopback, private, link-local (169.254/16, fe80::/10), CGNAT, unique-local, multicast, IPv4-mapped for **every** resolved address at connect time (defeats DNS rebinding); no redirects; `next` must be same origin as the base URL | Low |
-| I7 | Disclosure: sandbox or vendor-sandbox data mistaken for real, or real data in pre-production | Pre-prod accepts only the in-process sandbox (`.invalid` host) or allow-listed sandbox hosts; production refuses the sandbox; synthetic-only environments skip non-`SYN` MRNs/member IDs and fail the run after the first; sandbox resources carry a synthetic `meta.tag`; preview banner (ADR 0003) | Vendor sandbox identifiers lack `SYN` (OA-049) |
-| I8 | Disclosure: private key or token exposed through JWKS route or client bundle | JWKS route serializes public JWK fields only (unit test asserts no `d`/`p`/`q`); signing code is server-only | Low |
-| D1 | DoS: huge or endless bundles, slow responses, decompression bombs | 10 MB response cap (counted after decompression), 500 pages per run, 20 s timeout, `_count=100`, streaming JSON size check before parse | Low |
-| D2 | DoS: retries hammer the EHR or our functions; overlapping runs | 3 retries, exponential backoff, `Retry-After` capped at 60 s; one run per connection (lease index); "Sync now" once a minute; 3 failed runs → `error` | Low |
-| D3 | DoS: EHR outage stops billing | Local copy (ADR 0010); claims/denials read DenialDesk rows only | Stale data during outages: accepted by the owner (read-only copy) |
-| D4 | DoS: platform time limits kill a run midway | Per-page commits; idempotent upserts; watermark unchanged until success; stale lease → `abandoned` | Re-fetches on retry (cost only) |
-| E1 | Elevation: malicious FHIR content (script in names, oversized strings, invalid dates) reaches the UI or DB | zod validation and existing `patients` CHECKs; React escaping; strings length-capped; invalid resources skipped with a code | Low |
-| E2 | Elevation: a user edits the connection to point an active sync at another server | Base URL, client id, MRN system editable only in `draft` or after pausing; any change drops the connection back to `draft` and requires a new test; audited | Low |
-| E3 | Deletion to hide history (R-9.2.1) | Source deletes/merges set `source_status`; no DELETE grants on the new tables; runs frozen once finished | Owner DB role (open decision) |
+| S1 | Non-admin configures, submits, syncs, maps payers | `canManageIntegrations` re-checked in every action and page; others see status only | Low |
+| S2 | **Confused deputy**: a practice registers another practice's (or organization's) EHR base URL and client ID and DenialDesk pulls that population into the wrong tenant | (a) Every real connection needs **operator approval** after out-of-band verification of base URL, token endpoint, and client ID with the practice's EHR administrator; the app role cannot approve (column grants + trigger). (b) Global **registry** unique on (normalized endpoint, client ID) across practices, definer-only. (c) **Per-connection keys** with a per-connection JWKS URL, so a client registered at the EHR trusts only that connection's key | Shared key only as a documented per-vendor exception (weakens c; a and b still hold). Operator verification is a manual, single-person control |
+| S3 | Signing key stolen; attacker calls EHRs as DenialDesk | Production keys non-exportable in Key Vault (sign only), one per connection; production refuses an env key; pre-production key distinct, functions-only secret, synthetic sandboxes only; `iat`/`exp` ≤ 5 min, unique `jti`, alg allow-list; annual rotation (R-7.3.4); compromise runbook: revoke at each EHR, notify customers within 72 h (R-3.4.2), FIPA 30-day clock (R-3.4.1) | Blast radius of a shared-key exception is every connection using it |
+| S4 | Malicious or look-alike FHIR server (typo, DNS hijack, endpoint swap) | TLS ≥ 1.2 with validation, explicit TLS options, no redirects; token endpoint pinned; issuer recorded and checked before any upsert; base URL, token endpoint, issuer, MRN system immutable once data is synced; operator verification | A compromised real EHR is outside our control |
+| S5 | Forged or replayed job invocation; forged `runId` | HMAC-signed payload with timestamp window; payload is `runId` only; claim function accepts only a `queued` run and returns its tenant; tests for unsigned, stale, forged, and already-claimed calls | Low |
+| S6 | Cross-site post to Sync now / Submit / Revoke | Server actions only (origin check); no GET mutations; step-up MFA on Submit, resume, attestation, payer mapping | Low |
+| T1 | Cross-tenant write via external id or MRN collision | Writes only in `withTenantAsSystem` as `denialdesk_app` under FORCE RLS; `tenant_id` on every table, tenant in every unique key, composite `(tenant_id, x)` FKs everywhere; linking searches the run's tenant only | Low |
+| T2 | Staff or buggy code edits synced demographics, or forges a synced row | Domain refusal + trigger requiring `app.sync_run_id` to be a `running` run of the row's connection in the current tenant; `fhir → manual` refused | App-role code could still open a run and set the settings (separate DB roles: open decision) |
+| T3 | Sync overwrites practice-owned data; sync alters claims | Sync writes only mapped columns; never tags, custom fields, claims, or claim versions; 837P snapshots patient data into the claim version (R-3.10.3) | Low |
+| T4 | Replayed or out-of-order responses; skewed server clocks | No regression on `meta.lastUpdated`; same `versionId` = unchanged; server timestamps clamped to our clock + 5 min; watermark never ahead of our clock | Low |
+| T5 | Wrong-patient link | Link only on MRN **and** birth date; mismatch → `mrn_conflict`, nothing merged; no fuzzy matching; audited | Resolution path open (OA-053) |
+| T6 | Payor guessed → wrong deadlines or 837P | Organization payor only; explicit admin mapping (step-up); otherwise no payer and no deadline | Low |
+| T7 | Tampered sync-run history | Rows frozen once finished; issues append-only; no DELETE grants | Owner DB role (open decision) |
+| R1 | Who connected, attested, approved, synced, linked, revoked | `integration.*` with old/new base URL, token endpoint host + path, client ID; `operator.integration_approved|rejected` with verification method; sync audits by a fixed service-principal UUID with `triggeredBy`, reason `ehr_sync`, runtime "where"; per-patient events; run-level `sync_completed` records receipt of unchanged/skipped resources | Low |
+| I1 | PHI, tokens, URLs in logs, errors, audit, run rows | Codes only; URL paths redacted from errors; ZodErrors mapped to codes, never logged; `diagnostics` never stored; IssueType codes validated; log-capture test; DB errors sanitized (ADR 0006) | Low |
+| I2 | Over-collection: fields beyond the billing minimum | Mapper allow-list; `_elements` when supported; scopes Patient/Coverage/Organization read-search only; granted-scope check | Low |
+| I3 | Over-collection: patients outside the practice (minimum necessary, R-5.1.2) | Production accepts only a practice-scoped population (Group export or operator-verified filter), recorded at approval | **Blocking before real data** (OA-050, OA-051) |
+| I4 | Sensitive patients shown unmasked (HIV, SUD/Part 2, behavioral, minors) | `R`/`V`, ActCode sensitivity codes, and any unrecognized label mark the patient restricted; minors suggested for the tag | **Blocking before real data** with patients P4 masking (R-3.5.1, R-4.5.1; OA-052) |
+| I5 | Identifier misuse: SSN, MBI, DL as MRN | Identifier systems for SSN/MBI/Medicare/DL/passport refused; SSN- and MBI-shaped values skipped (9 digits allowed only if operator-verified) | Lists ⚠️ VERIFY |
+| I6 | PHI processed outside the U.S. (§ 408.051(3)) | Audited admin attestation (U.S. only; stricter than the statute's continental U.S., territories, Canada); DenialDesk runs in U.S. Azure (ADR 0002) | Attestation-level; vendor screening R-3.3.6 and offshore access R-3.3.3 (OA-045) |
+| I7 | Identifiers in URLs | None in DenialDesk URLs; POST `_search` for Coverage where supported, else GET to the practice's own EHR (documented) | ⚠️ VERIFY POST support per vendor |
+| I8 | **SSRF** via base URL, token endpoint, `next`, Bulk status/output URLs | Deny by default: `BlockList` from IANA special-purpose registries (IPv4 + IPv6) and `168.63.129.16`; embedded IPv4 decoded (mapped, compatible, NAT64, 6to4, Teredo); checked on every resolved address at connect (no rebinding); WHATWG host normalization; `localhost`, `.local`, `.internal`, `.home.arpa`, single-label, trailing dot refused; ports from config; env proxies ignored; no redirects; same-origin `next` | Egress NSG allow-listing at the Azure cutover |
+| I9 | Sandbox data taken as real, or real data in pre-production | Sandbox only when `syntheticDataOnly()`; real endpoints only when `!syntheticDataOnly() && !onNetlify()`; vendor sandboxes only from reviewed code; `_count=1` first page; raw `SYN` guard before any transform, failure rolls back the page and fails the run; no prefixing | Vendor sandboxes blocked in practice (OA-049) |
+| I10 | Private key via JWKS or bundle | JWKS public-field allow-list (test asserts no `d`, `p`, `q`, `dp`, `dq`, `qi`); server-only signing | Low |
+| I11 | Bulk Data token leak to storage hosts (PI4) | Bearer token only to the FHIR origin; `requiresAccessToken=true` files must be on it; other output hosts per vendor in reviewed code, guard applied; export deleted after download | Low |
+| D1 | Huge or endless responses, slowloris, decompression bombs | 5 s DNS, 30 s total per request, 10 MB after decompression, 1,000 entries per Bundle; run budgets 12 min / 5,000 requests / 500 MB; repeated `next` → `paging_loop` | Low |
+| D2 | Retry storms, overlapping runs, test-connection abuse (port scan / oracle) | 3 retries, backoff, `Retry-After` ≤ 60 s; one run per connection; Sync now once a minute; test and JWKS rate-limit buckets; test outcomes collapsed to a few codes | Low |
+| D3 | EHR outage stops billing | Local copy (ADR 0010) | Stale data during outages: accepted |
+| D4 | Platform time limits kill a run | Page commits, idempotent upserts, watermark only on success, `abandoned` leases | Re-fetch cost only |
+| E1 | Malicious content reaches UI or DB | zod `.strict()`, length caps, CHECKs, React escaping; bad records skipped | Low |
+| E2 | Client-settable status, tenant, key, or approval fields | Strict allow-list of five fields; lifecycle trigger; approval columns not granted to the app role | Low |
+| E3 | Deletion to hide history | `source_status` instead of deletes; `revoked` terminal; no DELETE grants; retention per §9.2 | Owner DB role (open decision) |
 
 ## Blocking before real data
-- Key Vault signing key, rotation runbook, and JWKS rotation test (S2).
-- Sensitivity masking for `R`/`V` source labels with patients P4 (I3).
-- Owner answers on residency attestation (I4) and population scope (I2).
-- Bulk Data path or confirmed `_lastUpdated` support at the practice's vendor (spec PI4).
+- Practice-scoped population (I3): Bulk Data Group export or operator-verified filter.
+- Sensitivity masking for restricted-in-source patients (I4), and the Part 2 program question.
+- Key Vault per-connection keys, rotation and compromise runbooks, JWKS rotation test (S3).
+- Owner answers: residency and vendor screening (I6), OA-057 decisions.
+- Egress NSG and SIEM alerts (R-7.5.3) at the Azure cutover.

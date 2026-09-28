@@ -18,10 +18,18 @@ _Last updated: 2026-09-27_
   tables can opt in later; other tables are the owner's to evaluate). Synced demographics are
   refused for manual edit (domain + DB trigger); sensitivity tags and custom fields stay
   practice-owned. Linking to an existing manual patient needs MRN **and** birth date equal.
-  Pre-production uses an in-process synthetic FHIR sandbox only. Phases: PI0 docs (done), PI1a data
-  layer, PI1b Settings › Integrations + drop-down, PI2 FHIR client + sandbox + Sync now, PI3
-  scheduled sync + reconciliation, PI4 Bulk Data before the first real practice. Owner questions
-  OA-045–OA-056; data source DS-12 in `docs/data-sources.xlsx`.
+  Pre-production uses an in-process synthetic FHIR sandbox only. Revised 2026-09-28 after security
+  and compliance review of the design (1 Critical, 5 High, 4 blocking): a real connection goes live
+  only after **platform-operator approval** (`pending_approval`), a global registry stops two
+  practices using the same EHR registration, per-connection signing keys by default (OA-057);
+  signed `{runId}`-only jobs running under `withTenantAsSystem` with a fixed integration service
+  principal as audit actor; deny-by-default SSRF guard; real endpoints refused on Netlify whatever
+  `APP_ENV` says; endpoints immutable once data is synced; SSN/MBI identifier systems refused as MRN;
+  practice-scoped population only in production; EHR sensitivity labels mark a patient restricted.
+  Phases: PI0 docs (done), PI1a data layer, PI1b Settings › Integrations + drop-down, PI1c operator
+  approval, PI2a transport/discovery/keys/test connection, PI2b sync engine + sandbox + jobs + history
+  + payer mapping, PI3 scheduled sync + source-state hardening, PI4 Bulk Data before the first real
+  practice. Owner questions OA-045–OA-057; data source DS-12 in `docs/data-sources.xlsx`.
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
   (`RecordHeader`, `RecordLayout`, `FieldList`, `FormShell`) and `src/components/ui/`
@@ -296,7 +304,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
    P2 coverage now comes from the EHR sync once a practice is connected (`specs/patient-integrations.md`).
-11. Patient integrations PI1a → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
+11. Patient integrations PI1a → PI1c → PI2a → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
 12. Record pattern (`specs/record-pages.md`): P3 forms onto `FormShell` in progress; P2 Claims and
    Denials record headers after custom fields PR 3 merges; then P4 sortable `DataTable`.
