@@ -7,7 +7,7 @@ _Last updated: 2026-09-27_
 
 ## Where we are
 - Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
-  of practice denial totals (`queueSummary`, aggregates only, no audit), the two step flows as a
+  of practice denial totals (`queueSummary`, aggregates only, no audit; owner to confirm, OA-045), the two step flows as a
   connected pipeline (`src/components/home/FlowSteps.tsx`), and "Your modules" as a card grid with
   page links. Within DESIGN.md §3 (no gradients, hairline panels, hover-only motion ≤ 150ms).
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
@@ -46,7 +46,13 @@ _Last updated: 2026-09-27_
   (a unit test rejects statutory numbers typed in prose), CARC meanings come from
   `src/domain/carc.ts`. Per-user completions in `university_progress` (migration 0033; RLS; app role
   SELECT/INSERT only, append-only; member FK; migration 0034 adds the table to the demo purge)
-  audited as `university.lesson_completed`. Rules a lesson lists but the product does not compute
+  audited as `university.lesson_completed`. Access is sold per practice (owner decision 2026-09-27):
+  courses are locked until the platform operator records the purchase on the practice page
+  (`university_access`, migration 0037; `withTenantAsPlatform` for operator writes, owner privileges with the tenant policy as defense in depth only; migration 0038 hides operator-only columns from practice sessions). While locked,
+  every visit to the catalog opens the access prompt (program length from the catalog, "Access
+  starts at $299.00", `src/domain/university/offer.ts`); "Request access" is recorded on the
+  practice row and shown to the operator. The Wiki is not gated. Pricing terms and a payment
+  channel are still OA-044. Rules a lesson lists but the product does not compute
   yet (acknowledgment, secondary filing, Medicare levels 2–5) are tagged "Reference only". Next: U2
   knowledge checks, U3 practice training record/export (OA-035), U4 more courses.
 - University — Wiki (`specs/university-wiki.md`, 2026-09-27): a second University page at

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { requireAuth } from "@/auth/session";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
+import { getUniversityAccess, hasUniversityAccess } from "@/domain/university/access";
 import { findLesson } from "@/domain/university/catalog";
 import { lessonKey } from "@/domain/university/content";
 import { completedLessons } from "@/domain/university/queries";
@@ -30,7 +31,11 @@ export default async function LessonPage({ params }: { params: Params }) {
   const { course, lesson, previous, next } = found;
   const auth = await requireAuth();
   const t = await getT("university");
-  const completed = await withTenant(auth, (tx) => completedLessons(tx, auth.userId));
+  const { completed, access } = await withTenant(auth, async (tx) => ({
+    completed: await completedLessons(tx, auth.userId),
+    access: await getUniversityAccess(tx, auth.tenantId),
+  }));
+  if (!hasUniversityAccess(access)) redirect("/university");
   const completedAt = completed.get(lessonKey(course.id, lesson.id)) ?? null;
   const position = course.lessons.findIndex((item) => item.id === lesson.id) + 1;
 

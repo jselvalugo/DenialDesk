@@ -123,4 +123,25 @@ export const university = {
   "search.emptyDescription":
     "Try a shorter word or a code type such as CARC, or browse the categories below.",
   "search.roleDenied": "Your role cannot read the wiki.",
+
+  // AccessPrompt.tsx (the offer shown on every visit to the catalog)
+  "access.title": "Get access to DenialDesk University",
+  "access.body":
+    "A self-paced training program for practice staff: how DenialDesk works, how to read a denial, the Florida prompt-pay and appeal clocks the product enforces, and how patient data is protected, plus the reference Wiki.",
+  "access.coursesLabel": "Courses",
+  "access.lengthLabel": "Length",
+  "access.lengthMinutes": "about {count, plural, one {# minute} other {# minutes}}",
+  "access.wikiLabel": "Wiki articles",
+  "access.price": "Access starts at {price}",
+  "access.unlocks":
+    "Once your practice has access, the courses unlock for everyone on your team. The Wiki stays open to everyone.",
+  "access.request": "Request access",
+  "access.requested":
+    "Request recorded for your practice. The courses unlock once DenialDesk confirms access.",
+  "access.requestedOn": "Access requested on {date}. The courses unlock once DenialDesk confirms access.",
+  "access.failed": "The request could not be recorded. Try again.",
+  "access.locked": "The courses are locked until your practice has access to DenialDesk University.",
+  "access.lockedBadge": "Locked",
+  "access.lockedDescription": "Locked until your practice has access to DenialDesk University.",
+  "access.continue": "Browse the catalog",
 } as const;

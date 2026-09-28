@@ -260,6 +260,20 @@
       "when": 1790519044938,
       "tag": "0036_custom_field_show_in_list",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790532399719,
+      "tag": "0037_university_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790532400719,
+      "tag": "0038_university_access_columns",
+      "breakpoints": true
     }
   ]
 }

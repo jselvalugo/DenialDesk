@@ -138,4 +138,30 @@ export const operator = {
   "errors.agreementNotFound":
     "That agreement isn't on file for this practice, or is already marked as recorded in error.",
   "errors.emailExists": "An account with that email already exists.",
+
+  // University access panel (practice page; specs/denialdesk-university.md "Access")
+  "university.title": "DenialDesk University",
+  "university.description":
+    "Access to the University courses is recorded here once the practice has bought it. The courses stay locked until then; the Wiki is always open.",
+  "university.status.none": "Not requested",
+  "university.status.requested": "Requested",
+  "university.status.granted": "Access granted",
+  "university.status.revoked": "Revoked",
+  "university.requestedOn": "Requested by the practice on {date}",
+  "university.grantedOn": "Granted on {date}",
+  "university.revokedOn": "Revoked on {date}: {reason}",
+  "university.noteLabel": "Order or invoice reference",
+  "university.noteHint": "Optional. No patient information.",
+  "university.grant": "Grant access",
+  "university.granting": "Granting…",
+  "university.granted": "Access granted. The practice's courses are unlocked.",
+  "university.revokeReasonLabel": "Why access is revoked",
+  "university.revokeReasonHint": "Kept with the record and in the audit trail.",
+  "university.revoke": "Revoke access",
+  "university.revoking": "Revoking…",
+  "university.revoked": "Access revoked. The practice's courses are locked again.",
+  "errors.universityFormInvalid": "Check the form and try again.",
+  "errors.universityRevokeReasonTooShort": "Give a reason of at least five characters.",
+  "errors.universityNotGranted": "This practice has no access to revoke.",
+  "errors.universityAlreadyGranted": "This practice already has access. Reload the page to see it.",
 } as const;

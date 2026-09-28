@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Lock } from "lucide-react";
 import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
+import { getUniversityAccess, hasUniversityAccess, pendingRequestAt } from "@/domain/university/access";
 import { COURSES } from "@/domain/university/catalog";
 import { courseProgress, progressLabel, readingMinutes } from "@/domain/university/content";
+import { programSummary, UNIVERSITY_ACCESS_FROM_CENTS } from "@/domain/university/offer";
 import { completedLessons } from "@/domain/university/queries";
 import { getT } from "@/i18n/server";
+import { AccessPrompt } from "./AccessPrompt";
 import { UniversityHeader } from "./UniversityHeader";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -20,13 +23,24 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function UniversityPage() {
   const auth = await requireAuth();
   const t = await getT("university");
-  const completed = await withTenant(auth, (tx) => completedLessons(tx, auth.userId));
+  const { completed, access } = await withTenant(auth, async (tx) => ({
+    completed: await completedLessons(tx, auth.userId),
+    access: await getUniversityAccess(tx, auth.tenantId),
+  }));
+  const unlocked = hasUniversityAccess(access);
   const keys = new Set(completed.keys());
   const totalLessons = COURSES.reduce((n, course) => n + course.lessons.length, 0);
   const totalDone = COURSES.reduce((n, course) => n + courseProgress(course, keys).completed, 0);
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
+      {!unlocked && (
+        <AccessPrompt
+          summary={programSummary()}
+          priceFromCents={UNIVERSITY_ACCESS_FROM_CENTS}
+          requestedAt={pendingRequestAt(access)?.toISOString() ?? null}
+        />
+      )}
       <UniversityHeader
         eyebrow={t("eyebrow")}
         title={t("catalog.title")}
@@ -43,7 +57,19 @@ export default async function UniversityPage() {
 
       <Panel
         title={t("catalog.title")}
-        description={t("catalog.lessonsCompleted", { done: totalDone, total: totalLessons })}
+        description={
+          unlocked
+            ? t("catalog.lessonsCompleted", { done: totalDone, total: totalLessons })
+            : t("access.lockedDescription")
+        }
+        actions={
+          unlocked ? undefined : (
+            <Badge tone="warning" dot={false}>
+              <Lock aria-hidden="true" className="size-3" strokeWidth={2} />
+              {t("access.lockedBadge")}
+            </Badge>
+          )
+        }
         flush
       >
         <ol className="divide-y divide-border">
@@ -56,9 +82,13 @@ export default async function UniversityPage() {
                 </span>
                 <div className="min-w-0 flex-1 basis-80">
                   <h3 className="text-heading font-semibold text-text">
-                    <Link href={`/university/${course.id}`} className="text-link hover:underline">
-                      {course.title}
-                    </Link>
+                    {unlocked ? (
+                      <Link href={`/university/${course.id}`} className="text-link hover:underline">
+                        {course.title}
+                      </Link>
+                    ) : (
+                      course.title
+                    )}
                   </h3>
                   <p className="text-body text-muted">{course.description}</p>
                   <p className="mt-1 text-label text-subtle">
@@ -91,14 +121,21 @@ export default async function UniversityPage() {
                     </dd>
                   </div>
                 </dl>
-                <Link
-                  href={`/university/${course.id}`}
-                  aria-label={t("catalog.openCourseAria", { title: course.title })}
-                  className="inline-flex shrink-0 items-center gap-1 text-body font-medium text-link hover:underline"
-                >
-                  {t("catalog.openCourse")}
-                  <ArrowRight aria-hidden="true" className="size-3.5" strokeWidth={2} />
-                </Link>
+                {unlocked ? (
+                  <Link
+                    href={`/university/${course.id}`}
+                    aria-label={t("catalog.openCourseAria", { title: course.title })}
+                    className="inline-flex shrink-0 items-center gap-1 text-body font-medium text-link hover:underline"
+                  >
+                    {t("catalog.openCourse")}
+                    <ArrowRight aria-hidden="true" className="size-3.5" strokeWidth={2} />
+                  </Link>
+                ) : (
+                  <span className="inline-flex shrink-0 items-center gap-1 text-body font-medium text-subtle">
+                    <Lock aria-hidden="true" className="size-3.5" strokeWidth={2} />
+                    {t("access.lockedBadge")}
+                  </span>
+                )}
               </li>
             );
           })}

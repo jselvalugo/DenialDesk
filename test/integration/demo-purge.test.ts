@@ -9,6 +9,7 @@ import {
   claimVersions,
   memberships,
   tenants,
+  universityAccess,
   universityProgress,
   users,
 } from "@/db/schema";
@@ -73,6 +74,10 @@ describe("purge_demo_practices", () => {
       userId: demo.userIds[0]!,
       lessonId: "getting-started/finding-your-way",
     });
+    // Nor must a University access row (0037); 0038 adds it to the purge.
+    await systemDb()
+      .insert(universityAccess)
+      .values({ tenantId: demo.tenantId, requestedAt: new Date(), requestedBy: demo.userIds[0]! });
     await systemDb()
       .update(tenants)
       .set({ kind: "demo", suspendedAt: new Date() })

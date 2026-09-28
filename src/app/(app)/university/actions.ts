@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
+import { requestUniversityAccess as requestAccess } from "@/domain/university/access";
 import { findLesson } from "@/domain/university/catalog";
-import { recordLessonCompleted } from "@/domain/university/queries";
+import { completeLessonIfUnlocked } from "@/domain/university/queries";
 import { getT } from "@/i18n/server";
+import { log } from "@/lib/log";
 
 export interface CompleteLessonState {
   error?: string;
@@ -29,16 +31,48 @@ export async function completeLesson(
     return { error: t("complete.lessonGone") };
   }
 
-  const { completedAt } = await withTenant(auth, (tx) =>
-    recordLessonCompleted(tx, {
+  const result = await withTenant(auth, (tx) =>
+    completeLessonIfUnlocked(tx, {
       tenantId: auth.tenantId,
       userId: auth.userId,
       courseId: found.course.id,
       lessonId: found.lesson.id,
     }),
   );
+  if (!result) {
+    const t = await getT("university");
+    return { error: t("access.locked") };
+  }
+  const { completedAt } = result;
   revalidatePath("/university");
   revalidatePath(`/university/${found.course.id}`);
   revalidatePath(`/university/${found.course.id}/${found.lesson.id}`);
   return { completedAt: completedAt.toISOString() };
+}
+
+export interface RequestAccessState {
+  requested?: boolean;
+  error?: string;
+}
+
+/**
+ * "Request access" on the University access prompt (spec: denialdesk-university.md, "Access").
+ * Records the request on the practice's access row (one per practice; the operator sees it in the
+ * console) and audits it. Every role.
+ */
+// Called by useActionState with (state, formData); neither is needed, so none is declared.
+export async function requestUniversityAccess(): Promise<RequestAccessState> {
+  const auth = await requireAuth();
+  const t = await getT("university");
+  try {
+    await withTenant(auth, (tx) => requestAccess(tx, { tenantId: auth.tenantId, userId: auth.userId }));
+  } catch (error) {
+    log.error("university.access_request_failed", {
+      tenantId: auth.tenantId,
+      errorName: error instanceof Error ? error.name : "Unknown",
+    });
+    return { error: t("access.failed") };
+  }
+  revalidatePath("/university");
+  return { requested: true };
 }

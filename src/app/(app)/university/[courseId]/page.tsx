@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowRight, CircleCheck } from "lucide-react";
 import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Panel } from "@/components/ui/Panel";
 import { primaryLinkButtonClass } from "@/components/ui/linkButton";
 import { withTenant } from "@/db/tenant";
+import { getUniversityAccess, hasUniversityAccess } from "@/domain/university/access";
 import { findCourse } from "@/domain/university/catalog";
 import { courseProgress, lessonKey, progressLabel, readingMinutes } from "@/domain/university/content";
 import { completedLessons } from "@/domain/university/queries";
@@ -29,7 +30,12 @@ export default async function CoursePage({ params }: { params: Params }) {
   const auth = await requireAuth();
   const t = await getT("university");
   const f = await getFormat();
-  const completed = await withTenant(auth, (tx) => completedLessons(tx, auth.userId));
+  const { completed, access } = await withTenant(auth, async (tx) => ({
+    completed: await completedLessons(tx, auth.userId),
+    access: await getUniversityAccess(tx, auth.tenantId),
+  }));
+  // Courses are locked until the practice has access; the catalog shows the prompt (spec: "Access").
+  if (!hasUniversityAccess(access)) redirect("/university");
   const progress = courseProgress(course, new Set(completed.keys()));
   const nextLesson = course.lessons.find((lesson) => !completed.has(lessonKey(course.id, lesson.id)));
 

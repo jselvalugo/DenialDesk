@@ -81,6 +81,51 @@ lesson completions are kept per practice so the practice has a training record (
       (completion is idempotent, tenant-scoped, audited, and append-only), e2e (header and user
       menu links open the University; a lesson can be completed and the course list reflects it).
 
+### Access (owner request 2026-09-27: prompt on every visit; courses locked until purchased)
+- [x] A practice's University access is a platform record, `university_access` (migration 0037,
+      one row per practice; RLS + FORCE with the shared tenant policy; the app role has SELECT and
+      INSERT/UPDATE on the `requested_*` columns only, so a practice session can never grant
+      itself access; grant/revoke run as the owner role under the same policy through
+      `withTenantAsPlatform` in `src/domain/platform/university-access.ts`, which practice code
+      never imports). Access = granted and not revoked. Practice sessions read only the state
+      columns (migration 0038 narrows SELECT; the operator's note, revoke reason, and grantor are
+      hidden). Tests in `test/integration/university-access.test.ts`, including an unfiltered
+      cross-practice read that the policy alone must hide.
+- [x] While the practice has no access, every visit to `/university` opens a modal dialog "Get
+      access to DenialDesk University" (`AccessPrompt.tsx`, a native `<dialog>` like the module
+      switcher): what the program is, how long it is (courses, lessons, reading minutes computed
+      from the catalog by `programSummary()`, Wiki article count), "Access starts at $299.00"
+      (`UNIVERSITY_ACCESS_FROM_CENTS`, owner-set business content formatted by the platform money
+      rule, never a legal value), that the courses unlock for the whole practice once access is
+      confirmed, and the courses disclaimer. Close, Escape, backdrop, and "Browse the catalog" dismiss it; nothing is remembered, so it opens again next visit. Once access is
+      granted the prompt is not rendered.
+- [x] "Request access" records the request on the practice's row (latest request wins) and audits
+      `university.access_requested` (entity `university_access`, the row id, metadata
+      `{ priceFromCents }`); the dialog confirms inline and, on later visits, shows "Access requested
+      on <date>" while the request is pending. A repeat within a minute, or a request from a
+      practice that already has access, writes nothing. After a revoke the practice can request
+      again; that shows as a new pending request (state "Requested") for the operator. No promise of
+      contact is made: the operator sees the request on the practice page.
+- [x] Locked catalog: course titles are not links, "Open course" is replaced by a "Locked" mark,
+      and the course and lesson routes redirect to `/university`; the completion action refuses
+      with "The courses are locked…" through `completeLessonIfUnlocked` (integration-tested for
+      locked, granted, and revoked practices). The Wiki is not gated.
+- [x] Operator console, practice page: a "DenialDesk University" panel shows the state (Not
+      requested / Requested on <date> / Access granted on <date> [+ note] / Revoked on <date>:
+      reason) with "Grant access" (optional order/invoice note, audited
+      `operator.university_access_granted`) and, once granted, "Revoke access" (reason of at least
+      five characters, audited `operator.university_access_revoked`). Only one grant can be active
+      (a repeat is refused so a stale tab can't erase the reference) and a row is revoked once; a
+      revoked practice can be granted again. Customer practices only, checked in the domain. The
+      panel shows only the latest outcome.
+- [x] Copy in the `university` (`access.*`) and `operator` (`university.*`) namespaces in all three
+      languages; the modal is `aria-labelledby`/`aria-describedby` (the body paragraph), focus is
+      contained by the native dialog and moves to "Browse the catalog" after a request.
+- [x] E2E: the e2e practice has access (seeded in `global-setup.ts`; no prompt, courses open); the
+      manager practice is locked (prompt with price and length, three dismiss paths, reload
+      re-opens, locked marks, course/lesson redirects, Wiki open, request recorded and remembered);
+      the operator grants and revokes on a fresh practice (`operator.spec.ts`).
+
 ### U2 — knowledge checks (planned)
 - [ ] Optional short "Check your understanding" per course (3–5 questions, answers in the
       repository, no free text). A pass is recorded like a completion. Never a gate on using the
@@ -104,6 +149,17 @@ lesson completions are kept per practice so the practice has a training record (
   validates the slugs against the catalog, inserts `ON CONFLICT DO NOTHING`, audits when a row
   was inserted, revalidates the lesson, course, and catalog pages.
 - Audit action `university.lesson_completed`; entity type `university_lesson`.
+- New table `university_access` (migration 0037): `tenant_id` (unique), `requested_at/by`,
+  `granted_at/by`, `note`, `revoked_at/by`, `revoke_reason`, timestamps; CHECKs keep each pair
+  together and revocation after a grant. RLS + FORCE with the tenant policy; app role: SELECT,
+  INSERT (request columns), UPDATE (request columns, `updated_at`). Internal data, no PHI.
+- `src/db/tenant.ts` `withTenantAsPlatform(ctx, fn)`: owner role with `app.tenant_id` set (no role
+  switch), for the operator's writes to a practice's records; reads also filter by tenant in code
+  because a superuser connection (local, CI) bypasses the policy.
+- Server actions: `requestUniversityAccess()` (practice; `src/app/(app)/university/actions.ts`),
+  `grantUniversity` / `revokeUniversity` (operator; `src/app/operator/(console)/actions.ts`).
+- Audit actions `university.access_requested`, `operator.university_access_granted`,
+  `operator.university_access_revoked`; entity type `university_access`.
 - Data classification: Internal. No PHI anywhere in the feature. Logs: none beyond the audit row.
 
 ## Legal rules used
@@ -126,7 +182,8 @@ counterparts), `fl.timely_filing.{initial,secondary}` and the HMO counterparts,
 
 ## Out of scope
 Videos, external LMS integration, certificates, SCORM/xAPI, per-user reminders (U3), marketing
-content, role-gated courses, anything that writes to a claim, denial, or code.
+content beyond the owner-requested access prompt (OA-044), role-gated courses, online payment,
+anything that writes to a claim, denial, or code.
 
 ## Open questions
 - Retention of completions after a user leaves the practice, and whether a content version should
@@ -137,5 +194,10 @@ content, role-gated courses, anything that writes to a claim, denial, or code.
   `rules/` (florida-rules-engine; see the TODO in `rules/catalog.ts`).
 - U3: does the practice's HIPAA training program want DenialDesk completions as evidence, and in
   what form (owner / practice compliance officer)? Tracked as `OA-035`.
+- Access (OA-044): the owner decided on 2026-09-27 to lock the courses until access is purchased
+  (done: operator grants it). Still open: what "starting at $299" covers (term, renewals, what a
+  higher tier adds), how a practice pays (today the operator records the purchase by hand after a
+  request), and who at DenialDesk watches for requests (they appear on the practice page only).
+- The "University" name itself (OA-038, counsel).
 - Should "Getting started" be suggested on a user's first sign-in (a one-time banner on `/`)?
   Not built; the welcome page already links to the University.

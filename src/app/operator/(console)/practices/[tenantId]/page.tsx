@@ -10,12 +10,15 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { agreementStatus, listAgreements, type AgreementStatus } from "@/domain/platform/agreements";
 import { getPractice } from "@/domain/platform/practices";
+import { getUniversityAccessForOperator } from "@/domain/platform/university-access";
+import { hasUniversityAccess, universityAccessState } from "@/domain/university/access";
 import { getFormat, getT } from "@/i18n/server";
 import type { MessageKey } from "@/i18n/messages/types";
 import { auditSystem } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
 import { AgreementStatusBadge } from "../../AgreementStatusBadge";
 import { RecordAgreementForm } from "./RecordAgreementForm";
+import { UniversityAccessForm } from "./UniversityAccessForm";
 import { VoidAgreementForm } from "./VoidAgreementForm";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -62,6 +65,14 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
   const agreements = customer ? await listAgreements(tenantId) : [];
   const active = agreements.find((a) => a.status === "active") ?? null;
   const status: AgreementStatus = agreementStatus(agreements, todayIn());
+  const access = customer ? await getUniversityAccessForOperator(tenantId, operator) : null;
+  const accessState = universityAccessState(access);
+  const accessTone = {
+    none: "neutral",
+    requested: "warning",
+    granted: "success",
+    revoked: "danger",
+  } as const;
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
@@ -174,6 +185,37 @@ export default async function PracticePage({ params }: { params: Promise<{ tenan
                 hasActive={active !== null}
                 syntheticOnly={syntheticDataOnly()}
               />
+            </div>
+          </Panel>
+
+          <Panel
+            title={t("university.title")}
+            description={t("university.description")}
+            actions={<Badge tone={accessTone[accessState]}>{t(`university.status.${accessState}`)}</Badge>}
+          >
+            <div className="flex max-w-3xl flex-col gap-4">
+              <ul className="flex flex-col gap-1 text-body">
+                {access?.requestedAt && (
+                  <li className="text-muted">
+                    {t("university.requestedOn", { date: f.dateOf(access.requestedAt) })}
+                  </li>
+                )}
+                {access?.grantedAt && (
+                  <li className="text-muted">
+                    {t("university.grantedOn", { date: f.dateOf(access.grantedAt) })}
+                    {access.note && <span className="ml-2 text-label">{access.note}</span>}
+                  </li>
+                )}
+                {access?.revokedAt && access.revokeReason && (
+                  <li className="text-danger-fg">
+                    {t("university.revokedOn", {
+                      date: f.dateOf(access.revokedAt),
+                      reason: access.revokeReason,
+                    })}
+                  </li>
+                )}
+              </ul>
+              <UniversityAccessForm tenantId={tenantId} granted={hasUniversityAccess(access)} />
             </div>
           </Panel>
 
