@@ -360,22 +360,22 @@ describe("createGuardedLookup", () => {
   });
 });
 
-describe("createGuardedLookup — test-only options are refused in production", () => {
+describe("createGuardedLookup — test-only options are refused outside a test run", () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it.each([
     ["allowAddress", { allowAddress: () => true }],
     ["timeoutMs", { timeoutMs: 1 }],
     ["resolve", { resolve: (() => undefined) as unknown as DnsLookupFn }],
-  ])("throws for %s when APP_ENV=production outside Netlify", (name, options) => {
-    vi.stubEnv("APP_ENV", "production");
-    for (const variable of ["NETLIFY", "NETLIFY_DB_URL", "DEPLOY_ID", "SITE_ID"]) vi.stubEnv(variable, "");
+  ])("throws for %s outside a test run", (name, options) => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "production");
     expect(() => createGuardedLookup(options)).toThrow(new RegExp(`"${name}" option is test-only`));
   });
 
-  it("builds a default lookup in production", () => {
-    vi.stubEnv("APP_ENV", "production");
-    for (const variable of ["NETLIFY", "NETLIFY_DB_URL", "DEPLOY_ID", "SITE_ID"]) vi.stubEnv(variable, "");
+  it("builds a default lookup outside a test run", () => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "production");
     expect(() => createGuardedLookup()).not.toThrow();
   });
 });

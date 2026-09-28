@@ -302,7 +302,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       prematurely closed response — compressed or not — rejects immediately (`stream.pipeline`),
       and the total-timeout signal rejects directly, whatever the streams are doing. The
       test-only options (`ca`, `allowAddress`, `resolve`, timeout/size overrides) throw outside a
-      test or synthetic environment (`syntheticDataOnly()`). `NODE_TLS_REJECT_UNAUTHORIZED=0`
+      test run (`VITEST=true` or `NODE_ENV=test`; not `syntheticDataOnly()`, which fails open here). `NODE_TLS_REJECT_UNAUTHORIZED=0`
       fails at `HttpsTransport` construction (`assertTlsVerificationEnabled`). Test fixture: the
       self-signed certificate is generated with `openssl` at test time (`test/support/https-fixture.ts`);
       no key material is committed. Discovery, auth (token), and search (PI2a part 2 / PI2b) are not

@@ -37,9 +37,10 @@ function fhirGet(transport: HttpsTransport, url: URL, headers?: Record<string, s
 }
 
 /** Simulates production: APP_ENV=production and none of the Netlify variables. */
-function stubProduction(): void {
-  vi.stubEnv("APP_ENV", "production");
-  for (const name of ["NETLIFY", "NETLIFY_DB_URL", "DEPLOY_ID", "SITE_ID"]) vi.stubEnv(name, "");
+/** Looks like a non-test process: no Vitest marker, NODE_ENV=production. */
+function stubOutsideTestRun(): void {
+  vi.stubEnv("VITEST", "");
+  vi.stubEnv("NODE_ENV", "production");
 }
 
 describe("assertTlsVerificationEnabled", () => {
@@ -66,21 +67,40 @@ describe("assertTlsVerificationEnabled", () => {
   });
 });
 
-describe("HttpsTransport — test-only options are refused in production", () => {
+describe("HttpsTransport — test-only options are refused outside a test run", () => {
   it.each([
     ["ca", { ca: "pem" }],
     ["allowAddress", { allowAddress: () => true }],
     ["totalTimeoutMs", { totalTimeoutMs: 10 }],
     ["maxResponseBytes", { maxResponseBytes: 10 }],
     ["resolve", { resolve: (() => undefined) as never }],
-  ])("throws for %s when APP_ENV=production outside Netlify", (name, options) => {
-    stubProduction();
+  ])("throws for %s outside a test run", (name, options) => {
+    stubOutsideTestRun();
     expect(() => new HttpsTransport(options)).toThrow(new RegExp(`"${name}" option is test-only`));
   });
 
-  it("constructs with no options in production", () => {
-    stubProduction();
+  it("constructs with no options outside a test run", () => {
+    stubOutsideTestRun();
     expect(() => new HttpsTransport()).not.toThrow();
+  });
+
+  it.each([
+    ["pre-production on Netlify", { APP_ENV: "preview", NETLIFY: "true", DEPLOY_ID: "d1", SITE_ID: "s1" }],
+    ["APP_ENV unset", { APP_ENV: "" }],
+    ["APP_ENV=Production", { APP_ENV: "Production" }],
+    ["APP_ENV=production with Netlify-looking variables", { APP_ENV: "production", DEPLOY_ID: "build-42" }],
+  ])("refuses a test-only option on %s (security re-review L1)", (_label, env) => {
+    stubOutsideTestRun();
+    for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+    expect(() => new HttpsTransport({ allowAddress: () => true })).toThrow(
+      /"allowAddress" option is test-only/,
+    );
+  });
+
+  it("allows a test-only option when NODE_ENV=test without the Vitest marker", () => {
+    vi.stubEnv("VITEST", "");
+    vi.stubEnv("NODE_ENV", "test");
+    expect(() => new HttpsTransport({ allowAddress: () => true })).not.toThrow();
   });
 
   it("allows the options in a test environment", () => {
