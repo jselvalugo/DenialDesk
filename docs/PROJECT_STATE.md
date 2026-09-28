@@ -53,6 +53,11 @@ _Last updated: 2026-09-28_
   PI2b sync engine + sandbox + jobs + history + payer mapping (includes `withTenantAsSystem`,
   `denialdesk_jobs`, the integration service principal — deferred from PI1a per the spec's own phase
   split), PI3 scheduled sync + source-state hardening, PI4 Bulk Data before the first real practice.
+  **PI2a part 1 done** (`src/integrations/fhir/transport.ts`, `address-guard.ts`, `limits.ts`):
+  `HttpsTransport` (explicit TLS ≥ 1.2, no env proxies, no redirects, content-type allow-list,
+  10 MB/30 s caps), the deny-by-default SSRF address guard (IANA special-purpose ranges + embedded
+  IPv4 decode, checked on every resolved address at connect), and the run/bundle/paging limits —
+  discovery, keys, JWKS, and test connection (PI2a part 2) still open (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded). Review fixes on PR #83: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b).
   Owner questions OA-045–OA-057; data source DS-12 in `docs/data-sources.xlsx`.
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
