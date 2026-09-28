@@ -260,6 +260,14 @@ get their own tests in PI2a.
       review #5, #10). The connection page and the new page are admin-only (404 otherwise; e2e);
       every action re-checks the role on the server.
 - Moved to PI2a (see there): Submit, the residency attestation, the MFA step-up, pause/resume.
+- PI1b follow-ups (compliance review of PI1b-2, not yet scheduled): an audited "offboarding
+  confirmed by/at" record for the EHR-side deregistration (SOC 2 CC6.2/CC6.3 evidence); notify the
+  practice's other administrators on revoke (CC7.3), alongside the activation notice (PI1c).
+  The new page offers only the built-in sandbox where only synthetic data is allowed, so a reviewed
+  vendor sandbox (`VENDOR_SANDBOX_HOSTS`, empty, OA-049) has no UI path yet: add one with the first
+  host. Residual risk accepted for now: the connection name is free text shown to every role (the list
+  and the drop-down); its only guard against patient information is the "no patient information"
+  hint plus the length and invisible-character checks.
 
 ### PI1c — operator approval
 - [ ] The operator practice page (`/operator/practices/<id>`, pattern of BAA recording and

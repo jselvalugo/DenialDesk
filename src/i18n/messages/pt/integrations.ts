@@ -75,7 +75,7 @@ export const integrations: Messages["integrations"] = {
     "Remova ou desative o registro de cliente do DenialDesk (ID de cliente {clientId}) no EHR/PM.",
   "offboarding.step2": "Remova qualquer chave pública do DenialDesk registrada no EHR/PM.",
   "offboarding.step3":
-    "Os pacientes já sincronizados permanecem no DenialDesk como registros somente leitura. Corrija os dados demográficos no EHR/PM.",
+    "Os pacientes já sincronizados permanecem no DenialDesk como registros somente leitura e deixam de ser atualizados: as correções feitas no EHR/PM não chegarão ao DenialDesk.",
   "offboarding.step4": "Anote quem no consultório confirmou que o registro foi removido, e quando.",
   "offboarding.revokedNotice":
     "Revogada em {date}. Conclua as etapas de desconexão abaixo, se ainda não o fez.",

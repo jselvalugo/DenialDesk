@@ -74,7 +74,7 @@ export const integrations = {
     "Remove or disable the DenialDesk client registration (client ID {clientId}) in the EHR/PM.",
   "offboarding.step2": "Remove any DenialDesk public key registered with the EHR/PM.",
   "offboarding.step3":
-    "Patients already synced stay in DenialDesk as read-only records. Correct their demographics in the EHR/PM.",
+    "Patients already synced stay in DenialDesk as read-only records and are no longer updated: corrections made in the EHR/PM won't reach DenialDesk.",
   "offboarding.step4": "Note who at the practice confirmed the registration was removed, and when.",
   "offboarding.revokedNotice": "Revoked {date}. Finish the offboarding steps below if you haven't yet.",
   "error.saveFailed": "The connection couldn't be saved. Reload the page and try again.",

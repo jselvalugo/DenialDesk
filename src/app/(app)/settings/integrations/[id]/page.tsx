@@ -41,9 +41,9 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
   const revoked = connection.status === "revoked";
   const updatedAt = connection.updatedAt.toISOString();
 
-  const offboarding = !connection.isSandbox && (
+  const offboardingSteps = (withHeading: boolean) => (
     <div className="flex flex-col gap-2">
-      <h3 className="text-body font-semibold text-text">{t("offboarding.title")}</h3>
+      {withHeading && <h3 className="text-body font-semibold text-text">{t("offboarding.title")}</h3>}
       <p className="text-body text-muted">{t("offboarding.description")}</p>
       <ol className="ml-5 list-decimal space-y-1 text-body text-text">
         <li>{t("offboarding.step1", { clientId: connection.clientId })}</li>
@@ -53,6 +53,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
       </ol>
     </div>
   );
+  const offboarding = !connection.isSandbox;
 
   return (
     <div className="flex flex-col gap-6">
@@ -127,10 +128,10 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
         offboarding && (
           <Panel title={t("offboarding.title")}>
             <div className="flex flex-col gap-4">
-              <p role="status" className="text-body text-text">
+              <p className="text-body text-text">
                 {t("offboarding.revokedNotice", { date: format.dateTime(connection.revokedAt!) })}
               </p>
-              {offboarding}
+              {offboardingSteps(false)}
             </div>
           </Panel>
         )
@@ -152,7 +153,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
           </Panel>
           <Panel title={t("revoke.title")} description={t("revoke.description")}>
             <div className="flex flex-col gap-5">
-              {offboarding}
+              {offboarding && offboardingSteps(true)}
               <RevokeConnectionForm id={connection.id} updatedAt={updatedAt} />
             </div>
           </Panel>

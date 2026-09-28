@@ -74,6 +74,8 @@ export async function updateConnectionAction(
     await withTenant(auth, async (tx) => {
       const current = await getConnection(tx, id.data);
       // The sandbox takes a name only; sending anything else would be refused by the allow-list.
+      // Read before the domain locks the row: safe because `is_sandbox` can never change (trigger
+      // integration_connections_lifecycle), and updateConnection re-reads it FOR UPDATE anyway.
       const input = current?.isSandbox
         ? { displayName: text(formData, "displayName", 400) }
         : sentEndpointFields(formData);

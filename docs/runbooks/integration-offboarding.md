@@ -15,8 +15,9 @@ practice's EHR/PM administrator; DenialDesk staff never act on a practice's EHR/
 2. What the app does on revoke (same transaction):
    - status → `revoked` with who and when (`revoked_by`, `revoked_at`), terminal (database trigger);
    - any queued or running sync run → `abandoned` (database trigger);
-   - its entry in the cross-practice endpoint registry is released, so the practice (or, after
-     verification, another one) can register that endpoint and client ID again;
+   - its entry in the cross-practice endpoint registry is released, so that endpoint and client ID
+     can be submitted again (by this practice or another; any new connection still needs its own
+     Submit and, for a real endpoint, operator approval, PI1c);
    - audit event `integration.connection_revoked` with the previous status, the endpoint, client ID,
      MRN identifier system, and whether a registry entry was released (configuration only, no PHI).
 3. From PI2a: the connection's signing key is destroyed as part of revoke. Until then no key exists.
@@ -24,16 +25,26 @@ practice's EHR/PM administrator; DenialDesk staff never act on a practice's EHR/
 ## At the EHR/PM (the practice's EHR/PM administrator)
 1. Remove or disable the DenialDesk client registration (the client ID shown on the connection page).
 2. Remove any DenialDesk public key (JWKS URL) registered with the EHR/PM.
-3. Record who at the practice confirmed the registration was removed, and when (keep it with the
-   practice's own records; DenialDesk doesn't store it yet).
+3. Record who at the practice confirmed the registration was removed, and when. DenialDesk doesn't
+   store this confirmation yet (planned: an audited "offboarding confirmed by/at" record, spec
+   PI1b follow-ups); keep it with the practice's own records meanwhile.
 
 ## What happens to synced patients
-Patients already synced stay in DenialDesk as read-only records (`source = 'fhir'`): claims and
-denials keep working, and demographics are corrected in the EHR/PM. Whether they later revert to
-manual records or re-link to a new connection is an open owner decision (OA-048); until it is made,
-nothing changes them automatically.
+Patients already synced stay in DenialDesk as read-only records (`source = 'fhir'`) and are **no
+longer updated**: claims and denials keep working, but a correction made in the EHR/PM no longer
+reaches DenialDesk, and DenialDesk refuses manual edits to a synced patient. Whether they later
+revert to manual records or re-link to a new connection — and how an amendment request is honored
+for them meanwhile (45 CFR 164.504(e)(2)(ii)(F), the business associate's duty to make PHI available
+for amendment) — is an open owner and counsel decision (OA-048). Until it is made, nothing changes
+them automatically; escalate any amendment request for such a patient to the owner.
 
 ## Suspected compromise
-Revoke first, then follow the integration key compromise runbook (added with PI2a): revoke at every
-EHR that trusted the key, customer notice within 72 hours (R-3.4.2), and the FIPA 30-day clock
-(R-3.4.1).
+1. Revoke first (above).
+2. Open an incident under the incident response plan (R-3.4.1, R-3.4.2); the notification duties and
+   their clocks are the ones those requirements and counsel set, not restated here.
+3. Preserve evidence: nothing is deleted (connections, sync runs, and audit events are never
+   deleted); export the `integration.*` audit events and the connection's sync runs for the window.
+4. If the practice administrator's own account is suspected, suspend it; from PI1c the platform
+   operator can revoke the connection instead.
+5. Follow the integration key compromise runbook once it exists (PI2a): revoke at every EHR that
+   trusted the key.

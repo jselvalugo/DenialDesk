@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { startTransition, useActionState } from "react";
 import { FormActions, FormNotices, FormSection } from "@/components/records/FormShell";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { linkButtonReset } from "@/components/ui/linkButton";
-import { SubmitButton } from "@/components/ui/SubmitButton";
+import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/TextField";
 import { useT } from "@/i18n/client";
 import { createConnectionAction, updateConnectionAction } from "./actions";
@@ -38,14 +38,24 @@ export function ConnectionForm({
   const t = useT("integrations");
   const tc = useT("common");
   const editing = Boolean(connection);
-  const [state, action] = useActionState<ConnectionFormState, FormData>(
+  const [state, action, pending] = useActionState<ConnectionFormState, FormData>(
     editing ? updateConnectionAction : createConnectionAction,
     {},
   );
   const errorFor = (name: string) => (state.field === name ? state.error : undefined);
 
   return (
-    <form action={action} className="flex flex-col" noValidate>
+    // Submitted via onSubmit (not the action prop) so React keeps the typed values when the server
+    // refuses them (same as PatientForm).
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        const formData = new FormData(event.currentTarget);
+        startTransition(() => action(formData));
+      }}
+      className="flex flex-col"
+      noValidate
+    >
       {connection && (
         <>
           <input type="hidden" name="id" value={connection.id} />
@@ -81,7 +91,7 @@ export function ConnectionForm({
               required
               disabled={endpointLocked}
               className="font-mono"
-              hint={t("form.baseUrlHint")}
+              hint={endpointLocked ? t("form.endpointLockedHint") : t("form.baseUrlHint")}
               error={errorFor("baseUrl")}
             />
             <TextField
@@ -92,7 +102,7 @@ export function ConnectionForm({
               required
               disabled={endpointLocked}
               className="font-mono"
-              hint={t("form.clientIdHint")}
+              hint={endpointLocked ? t("form.endpointLockedHint") : t("form.clientIdHint")}
               error={errorFor("clientId")}
             />
             <TextField
@@ -103,17 +113,22 @@ export function ConnectionForm({
               required
               disabled={endpointLocked}
               className="font-mono"
-              hint={t("form.mrnSystemHint")}
+              hint={endpointLocked ? t("form.endpointLockedHint") : t("form.mrnSystemHint")}
               error={errorFor("mrnIdentifierSystem")}
             />
-            {endpointLocked && <p className="text-label text-muted">{t("form.endpointLockedHint")}</p>}
           </>
         )}
       </FormSection>
       <FormActions>
-        <SubmitButton variant="primary" pendingLabel={editing ? t("form.saving") : t("new.creating")}>
-          {editing ? t("form.save") : t("new.create")}
-        </SubmitButton>
+        <Button type="submit" variant="primary" disabled={pending} aria-disabled={pending}>
+          {pending
+            ? editing
+              ? t("form.saving")
+              : t("new.creating")
+            : editing
+              ? t("form.save")
+              : t("new.create")}
+        </Button>
         <Link
           href={connection ? `/settings/integrations/${connection.id}` : "/settings/integrations"}
           className={linkButtonReset}
