@@ -429,7 +429,23 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   before the first real connection; (g) **OA-072** accept single-person approval and confirm exactly one person
   uses the operator account (unique user identification, 45 CFR 164.312(a)(2)(i)), else plan per-person
   operator accounts before production; (h) **OA-073** an operator-realm step-up gating Approve before the Azure
-  cutover (`step_up_verified_at` in the approve audit); not built by decision.
+  cutover (`step_up_verified_at` in the approve audit); not built, pending this owner decision.
+- **CI runs the integration suite as a PostgreSQL superuser, so FORCE ROW LEVEL SECURITY on the owner and
+  platform paths is never exercised (raised 2026-09-28 after PR #89; owner action item to be added, needs
+  a CI change, not made here).** A superuser (and any BYPASSRLS role) ignores every policy, even on FORCE
+  tables, so tests that pass in CI cannot show that `withTenantAsPlatform` (the connection owner with
+  `app.tenant_id` set: operator approval, BAAs, University access) and the owner-role reads in tests
+  (`systemDb()`) behave under the policy a non-superuser owner is subject to in Netlify and Azure. The
+  practice path (`withTenant`, `set local role denialdesk_app`) is exercised under RLS regardless. A
+  policy or an omitted `app.tenant_id` on an owner path would pass CI and fail (or show no rows) at the
+  first real deploy; the same blind spot is behind the data-backfill lesson below. **Proposal (owner
+  decision, then a CI/`docker-compose` change):** create the migration owner as a plain non-superuser,
+  non-BYPASSRLS role that owns the schema (`CREATE ROLE denialdesk_owner LOGIN NOBYPASSRLS` with
+  `CREATE`/ownership on the database), migrate and run `pnpm test:integration` as that role, keeping one
+  superuser connection only for test setup that must bypass policies (`createTestTenant`, fixtures);
+  assert in a test that the connection's role is neither `rolsuper` nor `rolbypassrls`. Expect some
+  owner-path tests to need `app.tenant_id` set, which is the point. See spec `patient-integrations.md`,
+  "Test infrastructure gap".
 - **TLS 1.3 minimum for the FHIR transport?** (2026-09-28, pending, `OA-062`.) R-7.3.1 is TLS 1.2+ (prefer 1.3); the transport enforces 1.2 with ECDHE + AEAD suites only and negotiates 1.3 when offered. A 1.3 minimum would refuse EHR vendors that only support 1.2. Must be decided before the first real endpoint is enabled.
 - Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter
   and BAA scope (OA-045); retire manual registration once connected (OA-046); phone/email not synced

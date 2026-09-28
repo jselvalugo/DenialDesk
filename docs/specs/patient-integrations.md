@@ -304,7 +304,8 @@ or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `ap
       approval), the practice's BAA status, the submission time and the residency confirmation time —
       configuration only, no PHI, no key reference. `getPendingApproval` finds a connection only under
       its own practice. Viewing the queue and a review page is audited `operator.integration_viewed`
-      (operator, and for a review the practice and connection IDs; configuration only, not PHI).
+      (operator, the operator's `session_id`, and for the queue the count, for a review the practice
+      and connection IDs; configuration only, not PHI; `auditIntegrationViewed`).
 - [x] Approve (`approveConnection`) records how it was verified with the practice's EHR administrator:
       a **method code** (`phone_callback`, `video_call`, `written_confirmation`, `vendor_portal`), the
       **date**, and the **contact's role at the practice** (`ehr_administrator`,
@@ -318,16 +319,24 @@ or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `ap
       recorded in the audit event (there is no column for them; a column would need a migration, no
       privilege change; retention of that evidence is OA-070). One UPDATE moves
       `pending_approval → active` with `approved_by` and a fresh `approved_at` on the database clock
-      (0040), `status_reason` cleared. Refusals, in order: not the operator; not a real environment
-      (**the environment rule**: where `syntheticDataOnly()` a real connection is never made live,
-      as on the practice-side transitions); a code outside the fixed vocabularies; **a scope other
-      than `group_export`** (below); a date that is malformed, in the future (by the Florida date), or
-      **before the Florida date of the submission** (`submitted_at`; the form's `min`/`max` say the same);
-      no ownership confirmation; unknown or suspended practice (the row is read `FOR SHARE`, so a
-      suspension can't race the check); a sandbox or a connection missing, not awaiting approval, or
-      changed since the page loaded (`updated_at`); **no Business Associate Agreement in force for the
-      practice** (`agreementStatus` active or expiring; the review page shows the status and the reason);
-      a registry entry that doesn't match this connection's endpoint, token endpoint, and client ID.
+      (0040), `status_reason` cleared. Refusals, in order (this is the order of the code, and the
+      first that applies wins): **before the transaction**, on the request alone: not the operator
+      (**also refused when `users.disabled_at` is set**); not a real environment (**the environment
+      rule**: where `syntheticDataOnly()` a real connection is never made live, as on the
+      practice-side transitions); a code outside the fixed vocabularies; **a scope other than
+      `group_export`** (below); a date that is malformed or in the future (by the Florida date); no
+      ownership confirmation. **Then, in the one platform transaction:** an unknown practice or a
+      suspended one (the row is read `FOR SHARE`, so a suspension can't race the check); a sandbox or
+      a connection missing, not awaiting approval, or changed since the page loaded (`updated_at`),
+      found under that practice with the row locked `FOR UPDATE`; **a date before the Florida date of
+      the submission** (`submitted_at`, which needs the locked row, so **this check comes after the
+      lock**; the form's `min`/`max` say the same); **no Business Associate Agreement in force for the
+      practice** (`agreementStatus` active or expiring, over the practice's `kind = 'baa'` agreements
+      read through this transaction `FOR SHARE`, so a concurrent void is waited for and can't be
+      missed; the review page shows the status and the reason); a registry entry that doesn't match
+      this connection's endpoint, token endpoint, and client ID. The audit write is in the same
+      transaction: if it fails, the decision rolls back whole (the row stays pending with its stamps
+      unchanged and the registry claim kept; a regression test for approve and for reject).
       Audited `operator.integration_approved` (reason = the method code; metadata: previous status,
       method, `verified_on`, `contact_role`, `population_scope`, `mrn_nine_digits_verified`,
       `client_id_ownership_verified`, `registry_verified`, `session_id` (the operator's session), and the
@@ -363,7 +372,10 @@ or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `ap
 - [ ] **Population scope: capture a `verified_filter` as a structured value** (security review M2).
       `population_scope` is a code with nowhere to record the filter itself, so approving
       `verified_filter` would record a claim and no filter: **Approve refuses it now** (`errors.approvalScopeUnsupported`;
-      the form labels the option "not available yet") and only `group_export` can be approved.
+      the form labels the option with one whole message, "Verified search filter (not available
+      yet)", `integrations.scope.verified_filter_unavailable`) and only `group_export` can be
+      approved. **Until the filter can be recorded, only a group export is approvable** (threat model
+      I3), and the sync must apply exactly the recorded scope.
       Needed: a structured filter value (for example the Patient search parameters the sync will use,
       validated against an allow-list, and shown in the review page and the audit event) in a future
       migration that adds a column with **no grant** to `denialdesk_app`, and the sync (PI2b/PI4)
@@ -373,7 +385,7 @@ or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `ap
       (the practice-side Submit and Resume need a step-up within 5 minutes). Needed: an operator-realm
       step-up (the operator session's `mfa_verified_at` within the window, separate from the practice
       realm) gating Approve, with `step_up_verified_at` recorded in `operator.integration_approved`.
-      Reject stays ungated (the safe direction). Not built now, by decision.
+      Reject stays ungated (the safe direction). Not built: pending owner decision OA-073.
 - [ ] **Operator-side revoke** (compliance review; OA-071; before the first real connection). The
       lifecycle says any state → `revoked` by "admin or operator", but only a practice administrator can
       revoke today (`revokeConnection` is admin-only). The operator needs a revoke action for a live
@@ -1051,3 +1063,16 @@ PI1b: offboarding a connection.
 - `app.sync_*` settings and the owner-role connection remain settable by a compromised app
   (separate DB roles: open project decision).
 - Operator approval is manual and single-person (single-administrator risk already open).
+- **Test infrastructure gap (open; needs a CI change and the owner's decision; raised 2026-09-28,
+  after PR #89).** CI connects to PostgreSQL as a superuser, which ignores row-level security even
+  on `FORCE` tables, so the integration suite never exercises FORCE RLS on the **owner and platform
+  paths** (`withTenantAsPlatform`, which the operator's Approve and Reject, BAAs, and University
+  access use, and the owner-role `systemDb()` reads in tests). Only the practice path
+  (`set local role denialdesk_app`) runs under the policy. A missing `app.tenant_id` or a policy
+  that hides rows from the owner would pass CI and surface at the first non-superuser deploy
+  (Netlify preview, Azure). **Proposed:** run migrations and `pnpm test:integration` as a
+  non-superuser, `NOBYPASSRLS` schema-owner role (setup that must bypass policies, such as
+  `createTestTenant`, keeps a separate superuser connection), and add a test asserting the test
+  connection's role has neither `rolsuper` nor `rolbypassrls`. Not changed here: it touches the CI
+  workflow and `docker-compose.yml`. Owner action item to be raised with the number the
+  coordinator assigns; recorded in `docs/PROJECT_STATE.md` (open questions).

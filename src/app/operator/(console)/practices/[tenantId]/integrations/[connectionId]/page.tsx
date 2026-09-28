@@ -7,10 +7,9 @@ import { requireOperator } from "@/auth/operator";
 import { Field, FieldList } from "@/components/records/FieldList";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
-import { getPendingApproval } from "@/domain/integrations/approval";
+import { auditIntegrationViewed, getPendingApproval } from "@/domain/integrations/approval";
 import { agreementStatus, listAgreements } from "@/domain/platform/agreements";
 import { getFormat, getT } from "@/i18n/server";
-import { auditSystem } from "@/lib/audit";
 import { AgreementStatusBadge } from "../../../../AgreementStatusBadge";
 import { ApproveConnectionForm } from "./ApproveConnectionForm";
 import { RejectConnectionForm } from "./RejectConnectionForm";
@@ -44,13 +43,7 @@ export default async function ReviewConnectionPage({
   const tc = await getT("common");
   const f = await getFormat();
   const item = await getPendingApproval(ids.data.tenantId, ids.data.connectionId, operator);
-  await auditSystem({
-    action: "operator.integration_viewed",
-    actorUserId: operator.userId,
-    tenantId: ids.data.tenantId,
-    entityType: "integration_connection",
-    entityId: ids.data.connectionId,
-  });
+  await auditIntegrationViewed(operator, ids.data);
 
   const back = (
     <Link href="/operator/integrations" className="text-body font-medium text-link hover:underline">

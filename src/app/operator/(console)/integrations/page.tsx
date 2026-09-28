@@ -4,9 +4,8 @@ import { requireOperator } from "@/auth/operator";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
-import { listPendingApprovals } from "@/domain/integrations/approval";
+import { auditIntegrationViewed, listPendingApprovals } from "@/domain/integrations/approval";
 import { getFormat, getT } from "@/i18n/server";
-import { auditSystem } from "@/lib/audit";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT("operator");
@@ -24,11 +23,7 @@ export default async function IntegrationApprovalsPage({
 }) {
   const operator = await requireOperator();
   const pending = await listPendingApprovals(operator);
-  await auditSystem({
-    action: "operator.integration_viewed",
-    actorUserId: operator.userId,
-    metadata: { count: pending.length },
-  });
+  await auditIntegrationViewed(operator, { count: pending.length });
   const { decided } = await searchParams;
   const t = await getT("operator");
   const tc = await getT("common");
