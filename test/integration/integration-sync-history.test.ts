@@ -316,14 +316,14 @@ describe("the sync history page", () => {
     await issueRow(ctx, run, "hiv_positive_flag", patientId);
     await issueRow(ctx, run, "needs_review", patientId);
     await finishRun(ctx, run, {
-      issueCodes: ["zz_unlisted_code", "part2_program_patient", "throttled"],
+      issueCodes: ["zz_unlisted_code", "part_two_program_patient", "throttled"],
     });
     auth = { ...ctx, role: "admin" };
     const shown = { text: [] as string[], hrefs: [] as string[] };
     collect(await SyncHistoryPage(params(connectionId, { run })), shown);
     const text = shown.text.join(" | ");
 
-    expect(text).not.toMatch(/hiv_positive_flag|zz_unlisted_code|part2_program_patient/);
+    expect(text).not.toMatch(/hiv_positive_flag|zz_unlisted_code|part_two_program_patient/);
     // The unlisted issue code, and the unlisted run codes (once), read "Other"; listed codes keep their label.
     expect(shown.text.filter((entry) => entry === "Other")).toHaveLength(2);
     expect(text).toContain("The EHR/PM limited the request rate");

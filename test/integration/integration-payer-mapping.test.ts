@@ -144,8 +144,24 @@ describe("listing the insurers of a connection", () => {
     const list = await withTenant(ctx, (tx) => listPayerMappings(tx, connectionId));
     expect(list.truncated).toBe(false);
     expect(list.rows).toEqual([
-      { payorKey: KEY_A, payorName: null, payerId: null, mappingId: null, version: "", patientCount: 2 },
-      { payorKey: KEY_B, payorName: null, payerId: null, mappingId: null, version: "", patientCount: 1 },
+      {
+        payorKey: KEY_A,
+        payorName: null,
+        payerId: null,
+        mappingId: null,
+        version: "",
+        patientCount: 2,
+        savable: true,
+      },
+      {
+        payorKey: KEY_B,
+        payorName: null,
+        payerId: null,
+        mappingId: null,
+        version: "",
+        patientCount: 1,
+        savable: true,
+      },
     ]);
     const payers = await withTenant(ctx, (tx) => listMappablePayers(tx));
     expect(payers.map((payer) => payer.name)).toEqual(["Synthetic Alpha Health", "Synthetic Beta Plan"]);
