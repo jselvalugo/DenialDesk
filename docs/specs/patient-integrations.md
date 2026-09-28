@@ -248,7 +248,12 @@ when the run succeeds, so a failed first run still locks the endpoint.
 - [x] Every string in en/es/pt (R-11.1).
 - [x] Sandbox activation (draft → active, no operator approval) in a synthetic-data environment,
       satisfying 0039/0040's CHECK/trigger pair because `is_sandbox` is true (not spec-required,
-      but load-bearing for PI1b's own e2e coverage and worth recording here).
+      but load-bearing for PI1b's own e2e coverage and worth recording here). It skips the
+      connection test and residency attestation that a real connection's Submit would require —
+      the built-in sandbox is synthetic, not a real endpoint outside the U.S., so there is nothing
+      to test or attest to — but still requires a fresh step-up (R-7.2.2) and refuses while
+      another connection is already live, the same as any other lifecycle transition (security
+      review PR #81, item 6).
 
 ### PI1c — operator approval
 - [ ] The operator practice page (`/operator/practices/<id>`, pattern of BAA recording and
