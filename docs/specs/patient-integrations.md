@@ -318,17 +318,85 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
 - [ ] Database CHECKs `endpoint_key = lower(base_url)` and `token_endpoint_key =
       lower(token_endpoint)`, so the registry key can't be written apart from the URL (security
       review L-3; `url-rules.ts` already guarantees the equality).
-- [ ] `HttpsTransport` (node:https): TLS options explicit (`minVersion: 'TLSv1.2'`,
-      `rejectUnauthorized: true`, `servername` = host, system CAs only); environment proxies ignored;
-      no redirects; `application/fhir+json` only.
-- [ ] Address guard, deny by default: a `node:net` `BlockList` built from the IANA IPv4 and IPv6
-      special-purpose registries plus explicit `168.63.129.16`; only global unicast passes; embedded
-      IPv4 decoded and re-checked (IPv4-mapped, IPv4-compatible, NAT64 `64:ff9b::/96`, 6to4
-      `2002::/16`, Teredo `2001::/32`); applied in the `lookup` hook to **every** resolved address at
-      connect time; host WHATWG-normalized before checks. Unit test per range.
-- [ ] Limits (M1): 5 s DNS timeout; 30 s total per request (DNS through body); 10 MB per response
-      after decompression; ≤ 1,000 entries per Bundle; per run: 12 min wall clock, 5,000 requests,
-      500 MB; a repeated `next` URL stops the run (`paging_loop`); `next` must be same origin.
+- [x] `HttpsTransport` (node:https, PI2a part 1, `src/integrations/fhir/transport.ts`): TLS options
+      explicit (`minVersion: 'TLSv1.2'`, a TLS 1.2 cipher list of ECDHE with AES-GCM/ChaCha20-Poly1305
+      only — TLS 1.3 suites at their defaults, and TLS 1.3 is negotiated when the server offers it —
+      `rejectUnauthorized: true`, `servername` = host for hostnames, Node's bundled CA store plus
+      `NODE_EXTRA_CA_CERTS`, which the deployment must not set); a private `https.Agent` per
+      instance, never the module-level default. Environment proxies are ignored: on Node 22.21+/24
+      `node:https` honors `HTTPS_PROXY` only for the global agent with `NODE_USE_ENV_PROXY=1` at
+      process start, or for an `Agent` built with `proxyEnv`; ours is private and has neither
+      (tested against a fake proxy, with a control showing an agent built with `proxyEnv` does use
+      it). A 3xx response is refused (`redirect_refused`), not followed. URLs that carry a username
+      or password are refused; callers cannot set `Host`, `Content-Length`, `Transfer-Encoding`,
+      `Connection` (or `Accept`/`Content-Type`, which the transport sets). A `Content-Encoding`
+      other than identity/gzip/deflate/br is refused (`content_type_refused`). A truncated or
+      prematurely closed response — compressed or not — rejects immediately (`stream.pipeline`),
+      and the total-timeout signal rejects directly, whatever the streams are doing. The
+      test-only options (`ca`, `allowAddress`, `resolve`, timeout/size overrides) throw outside a
+      test run (`VITEST=true` or `NODE_ENV=test`; not `syntheticDataOnly()`, which fails open here). `NODE_TLS_REJECT_UNAUTHORIZED=0`
+      fails at `HttpsTransport` construction (`assertTlsVerificationEnabled`). Test fixture: the
+      self-signed certificate is generated with `openssl` at test time (`test/support/https-fixture.ts`);
+      no key material is committed. Discovery, auth (token), and search (PI2a part 2 / PI2b) are not
+      built yet; the `Transport` interface exists so PI2b's in-process `SandboxTransport` can stand
+      in for `HttpsTransport` in non-production.
+- [x] Content-type allow-list: the response `Content-Type` must be one of a **caller-supplied**
+      `accept` list. FHIR resource calls pass `application/fhir+json` only. Documented deviation
+      from a fixed FHIR-only rule: the token endpoint and `smart-configuration` (PI2a part 2) will
+      also pass `application/json`, per SMART Backend Services / RFC 6749 §5.1. ⚠️ VERIFY per
+      vendor that no EHR answers those with another type (e.g. `application/jwk-set+json` for JWKS).
+- [x] Address guard, deny by default (PI2a part 1, `src/integrations/fhir/address-guard.ts`): a
+      `node:net` `BlockList` built from the IANA IPv4 and IPv6 special-purpose registries (⚠️ VERIFY
+      the exact range list against the live registries — they could not be fetched from the build
+      environment; cited range-by-range in the file) plus explicit `168.63.129.16` (Azure
+      WireServer, not IMDS; IMDS `169.254.169.254` is inside the link-local block). **IPv6 must be
+      inside the global-unicast allocation `2000::/3`; everything else is denied**, then the
+      non-globally-reachable ranges inside it: `2001::/23` (RFC 6890; covers Teredo, benchmarking
+      `2001:2::/48`, ORCHID `2001:10::/28`, ORCHIDv2 `2001:20::/28`, DETs `2001:30::/28`, and the
+      protocol-anycast sub-assignments), `2001:db8::/32`, `2002::/16` (**6to4 is denied outright**,
+      deprecated by RFC 7526, rather than decoded and allowed), `2620:4f:8000::/48`, and
+      `3fff::/20`; `5f00::/16` (SRv6) and the rest are outside `2000::/3` and listed as well. IPv4-mapped,
+      IPv4-compatible, IPv4-translated and NAT64 (`64:ff9b::/96`, `64:ff9b:1::/48`) are therefore
+      refused even when they carry a public IPv4 — **a deployment behind DNS64/NAT64 would need a
+      deliberate, signed-off exception**. The embedded-IPv4 decode is still run as defense in depth.
+      Applied to **every** DNS-resolved address in the `lookup` hook at connect time (5 s DNS timeout;
+      the underlying `dns.lookup` cannot be cancelled, so a timeout stops waiting for it rather than
+      stopping it), refusing the whole resolution if any candidate address is blocked so a
+      DNS-rebinding attempt can't slip one blocked address past a checked one; and to **IP-literal
+      hosts**, for which Node never calls `lookup`: `request()` re-parses the URL with WHATWG `URL`
+      (so `2130706433` and `0x7f.1` normalize to `127.0.0.1`) and applies the same check before
+      connecting. Tests: `127.0.0.1`, `2130706433`, `0x7f.1`, `169.254.169.254`, `168.63.129.16`,
+      `[::1]`, `[::ffff:127.0.0.1]` are refused with a live server listening. ⚠️ One documented
+      Node quirk (verified on v22.22.2; CI and Docker use Node 24 — re-verify there): adding
+      `::ffff:0:0/96` (IPv4-mapped) as a `BlockList` IPv6 subnet also blocks every plain IPv4
+      check, so that range is not added directly; the `2000::/3` requirement refuses it instead.
+      Host WHATWG-normalization (`url-rules.ts`, PI1b) happens before a connection is ever saved;
+      this guard runs on whatever host reaches it. One unit test per listed range (first and last
+      address of every IPv4 range; a sample of every IPv6 range checked against the list itself,
+      so a range that the `/3` rule would also refuse still needs its own entry to pass).
+- [x] Limits (M1), what the transport enforces today (`address-guard.ts` + `transport.ts`): 5 s DNS
+      timeout; 30 s total per request, DNS through body — the `AbortSignal.timeout` signal both
+      aborts the request and rejects the call directly, separate from any socket idle timeout
+      (which a slow trickle would reset forever); 10 MB per response **after** decompression
+      (gzip/deflate/br, tested for each), streamed and aborted over the cap rather than buffered;
+      truncated compressed responses reject rather than hang. Test-only overrides for these are
+      refused outside tests.
+- [ ] Limits (M1), run-level, **PI2b** wires these into the sync loop: `MAX_BUNDLE_ENTRIES`
+      (`assertBundleEntryLimit`, Bundle ≤ 1,000 entries), `RunBudget` (12 min / 5,000 requests /
+      500 MB per run) and `PagingLoopGuard` (same `next` URL twice) exist in `limits.ts` with unit
+      tests, and `assertNextIsSameOrigin` refuses a cross-origin `next`, but none of them is called
+      from a sync loop yet.
+- [ ] Callers of the transport (PI2a part 2 discovery/token, PI2b search) must **never log or store
+      a non-2xx response body**, and must emit `address_refused`, `tls_failed` and
+      `redirect_refused` as security events (audit/alert, IDs only, no URL or host). Not built in
+      part 1; carried into those PRs' acceptance criteria.
+- [ ] Decide before PI2a part 2 (reviewer N3, PR #83): the transport checks `Content-Type` before
+      status, so a 401/403/5xx with `text/html` surfaces as `content_type_refused` and the caller
+      can't tell `auth_refused` apart. Part 2 either resolves non-2xx with the status (body
+      discarded) regardless of type, or rejects carrying the status. Also still open from #83's
+      reviews: an exact-cap boundary test, isolated tests for each timeout path, refusing a set
+      `NODE_EXTRA_CA_CERTS` in production, and the IPv4 AS112/AMT ranges (⚠️ VERIFY with the
+      registry pass).
 - [ ] Discovery: `.well-known/smart-configuration` and `metadata`; require `fhirVersion` 4.0.1,
       `private_key_jwt`, an allowed alg (ES384 or RS384), a token endpoint passing the URL rules,
       Patient `_lastUpdated` search, Coverage `patient` search. Scope style from `capabilities`:
