@@ -180,4 +180,5 @@ export const settings = {
   "payers.fieldsBreadcrumb": "Custom fields",
 
   "error.notPayerEditor": "Only administrators and managers can change a payer's custom fields.",
+  "error.recordNotFound": "Record not found.",
 } as const;

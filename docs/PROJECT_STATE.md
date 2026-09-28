@@ -6,6 +6,34 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-28_
 
 ## Where we are
+- Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
+  of practice denial totals (`queueSummary`, aggregates only, no audit; owner to confirm, OA-058), the two step flows as a
+  connected pipeline (`src/components/home/FlowSteps.tsx`), and "Your modules" as a card grid with
+  page links. Within DESIGN.md §3 (no gradients, hairline panels, hover-only motion ≤ 150ms).
+- **Patient integrations — Patient Register synced from the EHR/PM** (`specs/patient-integrations.md`,
+  ADR 0010 Proposed, `threat-models/patient-integrations.md`; owner request 2026-09-27: "sync data,
+  not hold any of the data … a drop-down in the nav bar beside the table … connect to this table
+  only … follow medical integration practices"). Owner chose a **synced read-only copy**: the
+  practice's EHR/PM is the system of record; DenialDesk keeps an encrypted, read-only copy of the
+  billing minimum (MRN, name, birth date, sex, address, primary coverage), refreshed by sync. First
+  and only connector: **HL7 FHIR R4 / US Core 6.1.0** over **SMART Backend Services**
+  (`private_key_jwt`, system scopes; signing key in the platform key store, never the DB). A
+  data-source drop-down sits beside the Patients tab (a `dataSource` slot on the nav item so other
+  tables can opt in later; other tables are the owner's to evaluate). Synced demographics are
+  refused for manual edit (domain + DB trigger); sensitivity tags and custom fields stay
+  practice-owned. Linking to an existing manual patient needs MRN **and** birth date equal.
+  Pre-production uses an in-process synthetic FHIR sandbox only. Revised 2026-09-28 after security
+  and compliance review of the design (1 Critical, 5 High, 4 blocking): a real connection goes live
+  only after **platform-operator approval** (`pending_approval`), a global registry stops two
+  practices using the same EHR registration, per-connection signing keys by default (OA-057);
+  signed `{runId}`-only jobs running under `withTenantAsSystem` with a fixed integration service
+  principal as audit actor; deny-by-default SSRF guard; real endpoints refused on Netlify whatever
+  `APP_ENV` says; endpoints immutable once data is synced; SSN/MBI identifier systems refused as MRN;
+  practice-scoped population only in production; EHR sensitivity labels mark a patient restricted.
+  Phases: PI0 docs (done), PI1a data layer, PI1b Settings › Integrations + drop-down, PI1c operator
+  approval, PI2a transport/discovery/keys/test connection, PI2b sync engine + sandbox + jobs + history
+  + payer mapping, PI3 scheduled sync + source-state hardening, PI4 Bulk Data before the first real
+  practice. Owner questions OA-045–OA-057; data source DS-12 in `docs/data-sources.xlsx`.
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
   (`RecordHeader`, `RecordLayout`, `FieldList`, `FormShell`) and `src/components/ui/`
@@ -13,8 +41,9 @@ _Last updated: 2026-09-28_
   all four Patient screens (list with toolbar/count/age/location/coverage, chart with header meta
   strip and Record panel, sectioned register/edit forms). `ageOn()` pure helper with boundary tests;
   `PageEyebrow` takes a `page` override and no longer prints "Patients · Patients" on form pages.
-  Next: P2 move Claims and Denials record headers onto `RecordHeader`; P3 the other forms onto
-  `FormShell`; P4 sortable `DataTable`. Open (owner): which column replaces Sex on the list.
+  P3 done 2026-09-28 (Appeals, Remittances, Prompt pay, Settings › Custom fields, Operator ›
+  Practices forms on `FormShell`). Next: P2 Claims and Denials record headers onto `RecordHeader`;
+  P4 sortable `DataTable`. Open (owner): which column replaces Sex on the list.
 - Internationalization (`specs/internationalization.md`, ADR 0009, R-11.1): the whole product (practice
   app, sign-in, operator console, Insight .xlsx export) reads in English, Spanish, or Portuguese. Own
   module in `src/i18n/` (no dependency): typed dictionaries per namespace in
@@ -271,6 +300,7 @@ _Last updated: 2026-09-28_
 | 2026-09-26 | Owner answers on the billing-structure review's open questions (§8) — **pending counsel confirmation; not yet implemented in rule logic**: (1) timely filing counts from the submission date, evidenced by the clearinghouse acknowledgement (not the payer's receipt date); (2) a deadline landing on a weekend or Florida/federal holiday rolls to the next business day; (4) Medicare Advantage is not under Florida prompt pay per the owner — MA payment timing follows the plan contract (⚠️ VERIFY: 42 CFR § 422.520 sets a 30-day clean-claim rule for non-contracted providers; counsel to confirm this doesn't reintroduce a statutory clock); (5) late-payment interest starts accruing the first calendar day after the prompt-pay deadline passes. Item (3), month-end clamping of the 6-/12-month timely-filing windows, is still open and being researched separately. | `docs/reviews/2026-09-26-billing-structure-review.md` §8 |
 | 2026-09-27 | University Wiki: articles are code (PR-reviewed, no per-tenant or user-edited content), legal values only through rule tokens, search by POST; sits beside the U1 courses under the same header, not in the switcher; further structure waits for the owner (OA-036) | `specs/university-wiki.md` |
 | 2026-09-27 | Roll-forward pending counsel (OA-034), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-034 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
+| 2026-09-27 | Patient Register is a synced, read-only copy of the practice EHR/PM (billing minimum only) over FHIR R4 / US Core + SMART Backend Services; data-source drop-down beside the Patients tab, Patients table only for now; manual entry kept only while no connection is active (OA-046) | ADR 0010, `specs/patient-integrations.md` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -281,16 +311,16 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    B4 aging/deposits/reconciliation, and B5 statements and RCM dashboard (denial tie-ins by
    payer-class regime) done; the module's planned phases are complete. Follow-ups: coded reasons
    for deposit reversals, credit-balance refund tracking (roadmap), multi-account deposits.
-1. Deploy the Netlify preview (human: create site, database, env vars — runbook).
+1. Netlify pre-production is live (https://denialdesk.netlify.app); keep it re-seeded after data
+   migrations (item 8).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
 4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
-6. Custom field values on records, settings S2 (MVP): ADR 0007 and threat model accepted; PR 1
-   (encrypted storage, value history, role-gated reveal) merged as #53; PR 2 (patients UI), PR 3
-   (claims and denials UI, own "edit custom fields" pages), and PR 4 (a new, minimal read-only
-   payer record under Settings, own "edit custom fields" page) done. Next: S3 (Users and roles tab).
+6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
+   PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›
+   Payers with its own "edit custom fields" page) done. Next: S3 (Users and roles tab).
 7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
    payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
    timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.
@@ -301,8 +331,19 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 10. Patient records P2–P4 (`specs/patients.md`): secondary coverage and eligibility, accounting of
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
+   P2 coverage now comes from the EHR sync once a practice is connected (`specs/patient-integrations.md`).
+11. Patient integrations PI1a → PI1c → PI2a → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
+   reviews the 837P fit of the mapping).
+12. Record pattern (`specs/record-pages.md`): P3 forms onto `FormShell` in progress; P2 Claims and
+   Denials record headers after custom fields PR 3 merges; then P4 sortable `DataTable`.
 
 ## Open questions for humans
+- Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter
+  and BAA scope (OA-045); retire manual registration once connected (OA-046); phone/email not synced
+  (OA-047); disconnect/switch EHR (OA-048); vendor sandboxes (OA-049); Bulk Data before first real
+  practice (OA-050); who confirms EHR app scope (OA-051); EHR-restricted (R/V) patients (OA-052);
+  MRN conflicts (OA-053); interoperability requirement ID (OA-054); dependents' coverage (OA-055);
+  sync interval (OA-056).
 - Custom field list columns (PR 2): tagged patients show no custom values in the patient list
   (excluded at the query); confirm this over showing "Locked" cells. Threat model I5 (a member ID
   typed into a non-sensitive text field) now also covers list columns; owner to re-confirm.

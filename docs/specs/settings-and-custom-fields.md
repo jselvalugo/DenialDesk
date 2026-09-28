@@ -93,13 +93,13 @@ None.
   `custom_field_value_versions` table (ADR 0007 addendum) — reversing the earlier "no history yet"
   plan below. Also resolved: revealing a locked value uses the exact same roles as the member ID
   reveal (`canWorkDenials`).
-- Open (PR 4, builder default, owner to confirm — **OA-045**): who may change a payer's own custom
+- Open (PR 4, builder default, owner to confirm — **OA-059**): who may change a payer's own custom
   field values. Payers have no natural "the people who bill" owner the way claims and patients do,
   so PR 4 used a new, narrower permission (`canEditPayerFields`: admin, manager) rather than reusing
   `canCorrectClaims`/`canEditPatients` (which also include specialists) — payers are practice
   configuration, closer to the custom field definitions themselves (administrators only) than to a
   record a front-line biller corrects. The owner may want specialists included, or may want this to
-  match `canConfigureSettings` (administrators only) instead. OA-045 also asks the owner to confirm
+  match `canConfigureSettings` (administrators only) instead. OA-059 also asks the owner to confirm
   that a specialist may still *reveal* a locked payer value even though they can't edit it (reveal
   keeps the one shared `canWorkDenials` rule, ADR 0007, rather than following `canEditPayerFields`);
   whether payer custom field values are Confidential business data or PHI (free text on a payer
@@ -175,8 +175,13 @@ every other entity).
   value and audits.
 
 ### Audit events (IDs and enum keys only, never values)
-- Existing `patient.created|updated` metadata gains custom field keys in `changedFields` as `cf:<key>`
-  (same for claim/denial/payer updates).
+- `custom_field.values_updated` (entityType `custom_field_value`, metadata: entity, recordId, the
+  changed field keys, and `patientId` when the record has one — the patient itself, or a claim's or
+  denial's patient) is the record of a custom-field save, for every entity. It is a separate event
+  from the record's own update audit (`patient.updated`, and for claims/denials — which get their
+  own "edit custom fields" page rather than folding into the record's own edit, S2 PR 3 — no
+  `claim.updated`/`denial.updated` event at all, since that save never touches the `claims`/
+  `denials` row); those events list only that record's own fields, never `cf:<key>` entries.
 - `custom_field.value_revealed` (entityType `custom_field_value`, metadata: fieldId, entity,
   recordId, reason).
 - `custom_field.value_integrity_failed` (fieldId, recordId).

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { canPostRemittances } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { getT } from "@/i18n/server";
@@ -18,15 +19,16 @@ export default async function NewRemittancePage() {
   const t = await getT("remittances");
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
-        <Link href="/remittances" className="font-medium text-link hover:underline">
-          {t("new.breadcrumbRemittances")}
-        </Link>{" "}
-        <span aria-hidden>/</span> {t("new.breadcrumbNew")}
-      </nav>
+      <Breadcrumbs
+        label={t("nav.breadcrumb")}
+        items={[
+          { label: t("new.breadcrumbRemittances"), href: "/remittances" },
+          { label: t("new.breadcrumbNew") },
+        ]}
+      />
       <PageHeader title={t("new.title")} description={t("new.description")} />
       {canPostRemittances(auth.role) ? (
-        <Panel>
+        <Panel flush>
           <UploadRemittanceForm syntheticOnly={syntheticDataOnly()} />
         </Panel>
       ) : (

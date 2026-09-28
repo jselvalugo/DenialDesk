@@ -180,4 +180,5 @@ export const settings: Messages["settings"] = {
 
   "error.notPayerEditor":
     "Somente administradores e gerentes podem alterar os campos personalizados de um pagador.",
+  "error.recordNotFound": "Registro não encontrado.",
 };

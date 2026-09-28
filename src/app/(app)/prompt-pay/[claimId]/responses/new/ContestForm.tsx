@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+import { FormActions, FormNotices, FormSection } from "@/components/records/FormShell";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { linkButtonReset } from "@/components/ui/linkButton";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { TextareaField } from "@/components/ui/TextareaField";
 import { TextField } from "@/components/ui/TextField";
 import { useT } from "@/i18n/client";
 import { recordContestAction, type PromptPayActionState } from "../../../actions";
@@ -22,38 +24,39 @@ export function ContestForm({
   const t = useT("promptPay");
   const tc = useT("common");
   return (
-    <form action={action} className="flex max-w-[720px] flex-col gap-4" aria-label={t("newContest.title")}>
-      <FormAlert message={state.error} />
+    <form action={action} className="flex flex-col" aria-label={t("newContest.title")}>
       <input type="hidden" name="claimId" value={claimId} />
-      <TextField
-        label={t("contestForm.dateLabel")}
-        name="responseDate"
-        type="date"
-        min={minDate}
-        max={today}
-        required
-        className="w-48"
-        hint={t("contestForm.dateHint")}
-      />
-      <label className="flex flex-col gap-1.5 text-label font-medium text-text">
-        {t("contestForm.noteLabel")}
-        <textarea
+      <FormNotices>
+        <FormAlert message={state.error} />
+      </FormNotices>
+      <FormSection title={t("newContest.sectionTitle")}>
+        <TextField
+          label={t("contestForm.dateLabel")}
+          name="responseDate"
+          type="date"
+          min={minDate}
+          max={today}
+          required
+          className="w-48"
+          hint={t("contestForm.dateHint")}
+        />
+        <TextareaField
+          label={t("contestForm.noteLabel")}
           name="note"
           required
           minLength={5}
           maxLength={500}
           rows={4}
-          className="rounded-control border border-border-strong bg-surface px-3 py-2 text-body text-text focus:border-focus focus:outline-2 focus:outline-focus"
         />
-      </label>
-      <div className="flex gap-2">
+      </FormSection>
+      <FormActions>
         <SubmitButton variant="primary" pendingLabel={t("contestForm.saving")}>
           {t("contestForm.submit")}
         </SubmitButton>
         <Link href={`/prompt-pay/${claimId}`} className={linkButtonReset}>
           {tc("action.cancel")}
         </Link>
-      </div>
+      </FormActions>
     </form>
   );
 }
