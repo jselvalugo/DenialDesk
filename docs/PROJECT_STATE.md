@@ -468,6 +468,15 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   branches pick the same number: branch databases start from the main preview database, so a
   base migration 0025 blocks a PR's own 0025. Before pushing a migration, merge the base branch
   and take the next free number (custom field values hit this on 2026-09-26: #49, then #52).
+  Hit again on patient-integrations PR #77 (2026-09-28): a first push landed migration 0039;
+  three later review-fix rounds hand-edited that same file in place across several commits before
+  anyone pushed, and the third push (commit 1efe153) broke Netlify's preview build with exactly
+  this error, because the preview database had already applied 0039 as it stood after the first
+  push. Fix was to restore 0039 byte-for-byte to what was first pushed and move every later delta
+  into a new migration 0040 (`pnpm drizzle-kit generate --custom --name=<name>`, then hand-write the
+  DROP/ADD CONSTRAINT and CREATE OR REPLACE FUNCTION statements — a plain ALTER FUNCTION can't
+  change a function body). The rule holds even mid-PR, across commits on the same branch, not only
+  after merge: the moment a migration is pushed once, it is immutable for that branch's preview.
 - Killing dev servers: use `pkill -f "[n]ext-server"` so the pattern doesn't match its own shell.
 - Root layout calls `connection()` so APP_ENV is read at request time (never baked into a build).
 - Data backfills in migrations must run tenant by tenant (`set_config('app.tenant_id', …, true)`):

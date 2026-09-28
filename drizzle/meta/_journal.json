@@ -281,6 +281,13 @@
       "when": 1790568279027,
       "tag": "0039_patient_integrations_data_layer",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1790573150932,
+      "tag": "0040_patient_integrations_review_polish",
+      "breakpoints": true
     }
   ]
 }

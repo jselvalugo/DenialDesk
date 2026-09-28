@@ -257,6 +257,10 @@ describe("migrations raise only listed, value-free trigger messages", () => {
       old_run_status: "integrationSyncRunStatus",
       new_run_status: "integrationSyncRunStatus",
     },
+    "0040_patient_integrations_review_polish.sql": {
+      "OLD.status": "integrationConnectionStatus",
+      "NEW.status": "integrationConnectionStatus",
+    },
   };
 
   it("parses every RAISE strictly (no E'', quoted '' or USING forms slip past the checks)", () => {
