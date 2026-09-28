@@ -261,6 +261,10 @@ describe("migrations raise only listed, value-free trigger messages", () => {
       "OLD.status": "integrationConnectionStatus",
       "NEW.status": "integrationConnectionStatus",
     },
+    "0042_submit_requires_fresh_attestation.sql": {
+      "OLD.status": "integrationConnectionStatus",
+      "NEW.status": "integrationConnectionStatus",
+    },
   };
 
   it("parses every RAISE strictly (no E'', quoted '' or USING forms slip past the checks)", () => {

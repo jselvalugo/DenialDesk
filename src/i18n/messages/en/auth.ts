@@ -76,4 +76,12 @@ export const auth = {
     "For the platform operator only. Practice users sign in at <a>the practice sign-in page</a>.",
   "operatorMfaVerify.pageTitle": "Verify operator sign-in",
   "operatorMfaSetup.pageTitle": "Set up operator two-step verification",
+  // Step-up re-verification (R-7.2.2; app/(app)/step-up/**): a sensitive action (Submit, resume)
+  // needs MFA confirmed again within the last 5 minutes.
+  "stepUp.pageTitle": "Verify your identity",
+  "stepUp.title": "Verify your identity",
+  "stepUp.subtitle": "This action needs a fresh code from your authenticator app.",
+  "stepUp.cancel": "Cancel",
+  "error.tooManyAttempts":
+    "Too many attempts. This account is locked for up to {minutes} minutes; try again after that.",
 } as const;

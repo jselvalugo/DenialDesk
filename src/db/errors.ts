@@ -150,6 +150,11 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
     args: ["uuid"],
   },
   { format: "integration_connections %: activation requires a fresh approval", args: ["uuid"] },
+  {
+    format:
+      "integration_connections %: submitting requires a fresh residency attestation and submission stamp",
+    args: ["uuid"],
+  },
   { format: "integration_connections %: activation requires a registry entry", args: ["uuid"] },
   {
     format: "integration_connections %: only the display name can change while pending approval",

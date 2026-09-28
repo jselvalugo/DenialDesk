@@ -10,10 +10,18 @@ import {
   createConnection,
   createSandboxConnection,
   getConnection,
+  pauseConnection,
+  resumeConnection,
   revokeConnection,
   updateConnection,
+  withdrawConnection,
+  type IntegrationActor,
 } from "@/domain/integrations/connections";
 import { testConnection } from "@/domain/integrations/test-connection";
+import type { TenantTx } from "@/db/tenant";
+import type { Messages } from "@/i18n/messages/types";
+import type { Translator } from "@/i18n/translate";
+import { isRevokeReasonCode } from "@/domain/integrations/revoke-reasons";
 import { getT } from "@/i18n/server";
 import {
   connectionFormFailure,
@@ -138,15 +146,70 @@ export async function revokeConnectionAction(
   if (!canManageIntegrations(auth.role)) return { error: t("error.notAdmin") };
   const id = uuid.safeParse(text(formData, "id", 40));
   if (!id.success) return { error: t("error.notFound") };
+  // The reason is a code from a fixed vocabulary (the domain refuses anything else), checked before
+  // the acknowledgement so the first thing missing is the first thing reported.
+  const reason = text(formData, "reason", 64);
+  if (!isRevokeReasonCode(reason)) return { error: t("error.revokeReasonRequired"), field: "reason" };
   // Inline confirmation (DESIGN.md §3), checked on the server too.
   if (formData.get("confirm") !== "on") return { error: t("error.confirmRevoke"), field: "confirm" };
   const actor = integrationActor(auth);
   try {
-    await withTenant(auth, (tx) => revokeConnection(tx, actor, id.data, text(formData, "updatedAt", 40), t));
+    await withTenant(auth, (tx) =>
+      revokeConnection(tx, actor, id.data, text(formData, "updatedAt", 40), reason, t),
+    );
   } catch (error) {
     return connectionFormFailure(error, t);
   }
   // The whole signed-in layout: the tab-bar data-source drop-down reads the connection too.
   revalidatePath("/", "layout");
   redirect(`/settings/integrations/${id.data}`);
+}
+
+type Transition = (
+  tx: TenantTx,
+  actor: IntegrationActor,
+  id: string,
+  expectedUpdatedAt: string,
+  t: Translator<Messages["integrations"]>,
+) => Promise<void>;
+
+/** Pause, resume, and withdraw share everything but the domain call: admin, id, actor, refusals. */
+async function transitionAction(formData: FormData, run: Transition): Promise<ConnectionFormState> {
+  const auth = await requireAuth();
+  const t = await getT("integrations");
+  if (!canManageIntegrations(auth.role)) return { error: t("error.notAdmin") };
+  const id = uuid.safeParse(text(formData, "id", 40));
+  if (!id.success) return { error: t("error.notFound") };
+  const actor = integrationActor(auth);
+  try {
+    await withTenant(auth, (tx) => run(tx, actor, id.data, text(formData, "updatedAt", 40), t));
+  } catch (error) {
+    return connectionFormFailure(error, t);
+  }
+  revalidatePath("/", "layout");
+  redirect(`/settings/integrations/${id.data}`);
+}
+
+/** Pause an active connection (PI2a). */
+export async function pauseConnectionAction(
+  _: ConnectionFormState,
+  formData: FormData,
+): Promise<ConnectionFormState> {
+  return transitionAction(formData, pauseConnection);
+}
+
+/** Resume a paused or errored connection; refused without a step-up in the last five minutes (R-7.2.2). */
+export async function resumeConnectionAction(
+  _: ConnectionFormState,
+  formData: FormData,
+): Promise<ConnectionFormState> {
+  return transitionAction(formData, resumeConnection);
+}
+
+/** Withdraw a connection awaiting approval, back to a draft (PI2a). */
+export async function withdrawConnectionAction(
+  _: ConnectionFormState,
+  formData: FormData,
+): Promise<ConnectionFormState> {
+  return transitionAction(formData, withdrawConnection);
 }

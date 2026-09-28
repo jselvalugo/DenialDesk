@@ -67,11 +67,19 @@ _Last updated: 2026-09-28_
   `INTEGRATION_SIGNING_KEY`, OA-064; a **pre-production exception, production control deferred** relative to R-7.3.4/R-7.3.5; production refuses it at use and at boot; register it only with synthetic-data vendor sandboxes, never a live practice EHR; Key Vault stub fails closed), the public
   `/.well-known/jwks.json` route (allow-list, `jwks` bucket), and Test connection (domain service,
   admin action, button on the connection page; result from the audit log via `hasRecentPassingTest`,
-  a pass within 24 h counts even if a later test fails). **Open for the Azure cutover (R-15.9
+  Submit's gate: the newest test for the connection must be a pass within 24 h, bound to the current base URL, client ID, token endpoint, issuer, and signing `kid`; coordinator decision pending owner confirmation). **Open for the Azure cutover (R-15.9
   sign-off):** per-connection Key Vault keys, the grant on `key_mode`/`key_ref`, SECURITY DEFINER
   `integration_jwks_lookup`, `/.well-known/jwks/<uuid>.json`, key rotation and compromise runbooks.
-  Still open in PI2a: Submit, attestation, step-up, pause/resume, withdraw, revoke reason, endpoint-key
-  CHECKs. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  Still open in PI2a: Submit, the residency attestation, and the Submit registry claim. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  **PI2a lifecycle + step-up slice done** (PR #86, ported from closed #81 onto the
+  #82/#84/#85 domain layer; Submit, the residency attestation, and the Submit registry claim wait on
+  Test connection, PI2a-2): step-up MFA (R-7.2.2) — migration 0041 `sessions.mfa_verified_at`,
+  `hasRecentMfa` (5 min, `src/auth/step-up.ts`), `/step-up` via `stepUpTarget`, token rotation,
+  `auth.step_up_verified|failed`, and the shared `requireStepUp` gate Submit will call; admin-only,
+  audited, tenant-scoped, environment-checked Pause, Resume (step-up), and Withdraw (releases the
+  registry claim) wired into the connection page; Revoke takes a reason code (audit "why"); the
+  `endpoint_key`/`token_endpoint_key` CHECKs (0041). Compliance follow-up: Withdraw clears the residency attestation, and migration 0042 makes Submit (`draft → pending_approval`) require fresh attestation and submission stamps. No GRANT or privilege change (`sessions` is
+  owner-only; the CHECKs add no privilege). Owner decisions and the TOTP-vs-WebAuthn gap: `OA-063`.
   Owner questions OA-045 onward; data source DS-12 in `docs/data-sources.xlsx`.
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
@@ -425,6 +433,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   (`public/brand/README.md`); it is owner-supplied and described as a synthetic render.
 - Claims list: are patient names read only to order the unsubmitted queue by patient (never shown
   beyond the displayed page) covered by the `claim.list_viewed` audit event? `OA-060`.
+- Integrations step-up (PI2a): confirm the step-up window, lockout interplay, which actions need it
+  (Resume yes; Pause and Revoke no, on purpose), and whether TOTP is enough until WebAuthn ships
+  (R-7.2.2 asks for phishing-resistant MFA; close before the first real EHR connection). `OA-063`.
 - Integrations: the free-text connection name is now shown to every role on every page (the Patients
   data-source drop-down); accept the residual risk or ask for a stronger guard? `OA-061`.
 - The repo has no `main` branch; the default branch is `claude/quirky-feynman-ufql5a`. Rename it
@@ -489,6 +500,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
     (including `detail` row values). Decide how production migrations run and where their output goes.
 
 ## Lessons / conventions learned
+- A CHECK like `key = lower(url)` evaluates to NULL, which PostgreSQL treats as passing, whenever
+  either side is NULL, so it doesn't stop a key written with no URL; spell the NULL cases out
+  (`key IS NULL OR (url IS NOT NULL AND key = lower(url))`), as 0041 does for the token endpoint.
+- A step-up check that shares the sign-in attempt counter must give back its own successful attempt,
+  or a handful of legitimate step-ups in one session lock the account (`releaseAttempt`).
 - Components that take a function prop (e.g. `Pagination`'s `hrefFor`) must stay server components;
   a `"use client"` directive there breaks every page with "Functions cannot be passed directly to
   Client Components". Client components get translations from `useT`, server ones from `getT`.

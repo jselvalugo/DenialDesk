@@ -66,9 +66,34 @@ export const integrations: Messages["integrations"] = {
   "revoke.title": "Revogar conexão",
   "revoke.description":
     "Revogar é permanente: o DenialDesk deixa de usar esta conexão, e ela não pode ser reativada. Para conectar de novo, crie uma nova conexão.",
+  "revoke.reason": "Motivo",
+  "revoke.reasonHint":
+    "Fica registrado no log de auditoria. Não inclua informações de pacientes em nenhum campo.",
+  "revoke.reasonPlaceholder": "Escolha um motivo",
+  "revoke.reason.no_longer_used": "Não usamos mais esta conexão",
+  "revoke.reason.switching_systems": "Estamos trocando de sistema EHR/PM",
+  "revoke.reason.configured_in_error": "Foi configurada por engano",
+  "revoke.reason.security_concern": "Preocupação de segurança",
+  "revoke.reason.other": "Outro",
   "revoke.confirm": "Entendo que revogar esta conexão é permanente.",
   "revoke.submit": "Revogar conexão",
   "revoke.pending": "Revogando…",
+  "lifecycle.title": "Sincronização",
+  "lifecycle.active":
+    "Pausar interrompe a sincronização de pacientes desta conexão. Nada é excluído, e você pode retomar depois.",
+  "lifecycle.paused":
+    "A sincronização está pausada. Retomá-la a reinicia e exige que você verifique sua identidade com o aplicativo autenticador antes.",
+  "lifecycle.error":
+    "O DenialDesk parou de sincronizar por causa de um erro. Depois que o administrador do seu EHR/PM resolver, retome. Retomar exige que você verifique sua identidade com o aplicativo autenticador antes.",
+  "lifecycle.pending_approval":
+    "Esta conexão está aguardando aprovação. Retirá-la a devolve a um rascunho que você pode editar e enviar de novo.",
+  "pause.submit": "Pausar sincronização",
+  "pause.pending": "Pausando…",
+  "resume.submit": "Retomar sincronização",
+  "resume.pending": "Retomando…",
+  "withdraw.submit": "Retirar envio",
+  "withdraw.pending": "Retirando…",
+  "stepUp.link": "Verificar minha identidade",
   "offboarding.title": "Etapas de desconexão",
   "offboarding.description": "Conclua estas etapas com o administrador do seu EHR/PM depois de revogar:",
   "offboarding.step1":
@@ -81,6 +106,10 @@ export const integrations: Messages["integrations"] = {
     "Revogada em {date}. Conclua as etapas de desconexão abaixo, se ainda não o fez.",
   "error.saveFailed": "Não foi possível salvar a conexão. Recarregue a página e tente novamente.",
   "error.confirmRevoke": "Marque a caixa para confirmar que entende que revogar é permanente.",
+  "error.revokeReasonRequired": "Escolha por que você está revogando esta conexão.",
+  "error.stepUpRequired":
+    "Isso exige uma verificação em duas etapas recente. Verifique sua identidade e tente novamente.",
+  "error.invalidTransition": "Esta conexão não está em um estado que permita isso. Recarregue a página.",
   "error.notAdmin": "Somente um administrador pode gerenciar integrações.",
   "error.notFound": "Integração não encontrada.",
   "error.stale": "Esta conexão mudou desde que você a abriu. Recarregue a página e tente novamente.",

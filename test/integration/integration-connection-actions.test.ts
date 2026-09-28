@@ -12,7 +12,7 @@ import { createTestTenant } from "./helpers";
 // environment rule comes from the server.
 
 type Role = "admin" | "manager" | "specialist" | "compliance";
-let auth: { tenantId: string; userId: string; role: Role };
+let auth: { tenantId: string; userId: string; role: Role; mfaVerifiedAt?: Date | null };
 
 vi.mock("@/auth/session", () => ({ requireAuth: async () => auth }));
 vi.mock("next/headers", () => ({
@@ -31,8 +31,14 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-const { createConnectionAction, revokeConnectionAction, updateConnectionAction } =
-  await import("@/app/(app)/settings/integrations/actions");
+const {
+  createConnectionAction,
+  pauseConnectionAction,
+  resumeConnectionAction,
+  revokeConnectionAction,
+  updateConnectionAction,
+  withdrawConnectionAction,
+} = await import("@/app/(app)/settings/integrations/actions");
 
 let practice: { tenantId: string; userId: string };
 const savedEnv = { ...process.env };
@@ -86,7 +92,10 @@ describe("Settings › Integrations actions (PI1b-2)", () => {
       for (const [action, data] of [
         [createConnectionAction, form({ displayName: "Not allowed" })],
         [updateConnectionAction, form({ id, updatedAt: stamp, displayName: "Not allowed" })],
-        [revokeConnectionAction, form({ id, updatedAt: stamp, confirm: "on" })],
+        [revokeConnectionAction, form({ id, updatedAt: stamp, reason: "other", confirm: "on" })],
+        [pauseConnectionAction, form({ id, updatedAt: stamp })],
+        [resumeConnectionAction, form({ id, updatedAt: stamp })],
+        [withdrawConnectionAction, form({ id, updatedAt: stamp })],
       ] as const) {
         const result = await run(action, data);
         expect(result.state?.error).toMatch(/Only an administrator/);
@@ -184,10 +193,16 @@ describe("Settings › Integrations actions (PI1b-2)", () => {
     const created = await run(createConnectionAction, form({ displayName: "To revoke" }));
     const id = created.redirectedTo!.replace("/settings/integrations/", "");
     const stamp = (await row(id)).updatedAt.toISOString();
-    const unconfirmed = await run(revokeConnectionAction, form({ id, updatedAt: stamp }));
+    const unconfirmed = await run(
+      revokeConnectionAction,
+      form({ id, updatedAt: stamp, reason: "no_longer_used" }),
+    );
     expect(unconfirmed.state?.error).toMatch(/Check the box/);
     expect((await row(id)).status).toBe("draft");
-    const confirmed = await run(revokeConnectionAction, form({ id, updatedAt: stamp, confirm: "on" }));
+    const confirmed = await run(
+      revokeConnectionAction,
+      form({ id, updatedAt: stamp, reason: "no_longer_used", confirm: "on" }),
+    );
     expect(confirmed.redirectedTo).toBe(`/settings/integrations/${id}`);
     expect((await row(id)).status).toBe("revoked");
   });
@@ -200,9 +215,119 @@ describe("Settings › Integrations actions (PI1b-2)", () => {
     const stamp = (await row(id)).updatedAt.toISOString();
     auth = { ...practice, role: "admin" };
     for (const target of [id, "not-a-uuid"]) {
-      const result = await run(revokeConnectionAction, form({ id: target, updatedAt: stamp, confirm: "on" }));
+      const result = await run(
+        revokeConnectionAction,
+        form({ id: target, updatedAt: stamp, reason: "no_longer_used", confirm: "on" }),
+      );
       expect(result.state?.error).toMatch(/not found/);
     }
     expect((await row(id)).status).toBe("draft");
+  });
+});
+
+describe("Pause, resume, withdraw, and the revoke reason (PI2a)", () => {
+  const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+
+  /** A fresh practice with a built-in sandbox connection (where only synthetic data is allowed), moved to `status`. */
+  async function sandboxIn(status: "active" | "paused") {
+    const ctx = await createTestTenant("Lifecycle actions");
+    auth = { ...ctx, role: "admin" };
+    const created = await run(createConnectionAction, form({ displayName: "Lifecycle sandbox" }));
+    const id = created.redirectedTo!.replace("/settings/integrations/", "");
+    // The owner stands in for sandbox Submit (PI2b): the lifecycle trigger allows draft -> active.
+    await systemDb()
+      .update(integrationConnections)
+      .set({ status: "active" })
+      .where(eq(integrationConnections.id, id));
+    if (status === "paused") {
+      await systemDb()
+        .update(integrationConnections)
+        .set({ status: "paused" })
+        .where(eq(integrationConnections.id, id));
+    }
+    return { ctx, id };
+  }
+
+  const stampOf = async (id: string) => (await row(id)).updatedAt.toISOString();
+
+  it("resume asks for a step-up when the last verification is stale or missing, and works after a fresh one", async () => {
+    const { ctx, id } = await sandboxIn("paused");
+    for (const mfaVerifiedAt of [minutesAgo(6), null, undefined]) {
+      auth = { ...ctx, role: "admin", mfaVerifiedAt };
+      const refused = await run(resumeConnectionAction, form({ id, updatedAt: await stampOf(id) }));
+      expect(refused.state).toMatchObject({ stepUpRequired: true });
+      expect((refused.state as { error?: string }).error).toMatch(/two-step verification/);
+      expect((await row(id)).status).toBe("paused");
+    }
+    // Comfortably inside the window (4:54) and just after a step-up (now).
+    for (const fresh of [minutesAgo(4.9), new Date()]) {
+      await systemDb()
+        .update(integrationConnections)
+        .set({ status: "paused" })
+        .where(eq(integrationConnections.id, id));
+      auth = { ...ctx, role: "admin", mfaVerifiedAt: fresh };
+      const resumed = await run(resumeConnectionAction, form({ id, updatedAt: await stampOf(id) }));
+      expect(resumed.redirectedTo).toBe(`/settings/integrations/${id}`);
+      expect((await row(id)).status).toBe("active");
+    }
+  });
+
+  it("resume can't be pushed through with a step-up value from the form", async () => {
+    const { ctx, id } = await sandboxIn("paused");
+    auth = { ...ctx, role: "admin", mfaVerifiedAt: minutesAgo(30) };
+    const refused = await run(
+      resumeConnectionAction,
+      form({ id, updatedAt: await stampOf(id), recentMfa: "true", mfaVerifiedAt: new Date().toISOString() }),
+    );
+    expect(refused.state).toMatchObject({ stepUpRequired: true });
+    expect((await row(id)).status).toBe("paused");
+  });
+
+  it("pause needs no step-up", async () => {
+    const { ctx, id } = await sandboxIn("active");
+    auth = { ...ctx, role: "admin", mfaVerifiedAt: null };
+    const paused = await run(pauseConnectionAction, form({ id, updatedAt: await stampOf(id) }));
+    expect(paused.redirectedTo).toBe(`/settings/integrations/${id}`);
+    expect((await row(id)).status).toBe("paused");
+  });
+
+  it("pause, resume, and withdraw answer 'not found' for another practice's connection or a malformed id", async () => {
+    const { id } = await sandboxIn("paused");
+    const stamp = await stampOf(id);
+    const other = await createTestTenant("Lifecycle actions other");
+    auth = { ...other, role: "admin", mfaVerifiedAt: new Date() };
+    for (const action of [pauseConnectionAction, resumeConnectionAction, withdrawConnectionAction]) {
+      for (const target of [id, "not-a-uuid"]) {
+        const result = await run(action, form({ id: target, updatedAt: stamp }));
+        expect(result.state?.error).toMatch(/not found/);
+      }
+    }
+    expect((await row(id)).status).toBe("paused");
+  });
+
+  it("revoke without a reason (or with one outside the list) is refused on the reason field, writing nothing", async () => {
+    const ctx = await createTestTenant("Revoke reason");
+    auth = { ...ctx, role: "admin" };
+    const created = await run(createConnectionAction, form({ displayName: "To revoke, no reason" }));
+    const id = created.redirectedTo!.replace("/settings/integrations/", "");
+    const stamp = await stampOf(id);
+    for (const fields of [{}, { reason: "" }, { reason: "because Jane Doe left" }] as Record<
+      string,
+      string
+    >[]) {
+      const result = await run(
+        revokeConnectionAction,
+        form({ id, updatedAt: stamp, confirm: "on", ...fields }),
+      );
+      expect(result.state).toMatchObject({ field: "reason" });
+      expect((result.state as { error?: string }).error).toMatch(/Choose why/);
+    }
+    expect((await row(id)).status).toBe("draft");
+    const revoked = await run(
+      revokeConnectionAction,
+      form({ id, updatedAt: stamp, confirm: "on", reason: "switching_systems" }),
+    );
+    expect(revoked.redirectedTo).toBe(`/settings/integrations/${id}`);
+    expect(await row(id)).toMatchObject({ status: "revoked", statusReason: "switching_systems" });
   });
 });

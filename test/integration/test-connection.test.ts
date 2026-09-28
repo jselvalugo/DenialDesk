@@ -721,7 +721,9 @@ describe("testConnection — refusals before any network call", () => {
   it("a revoked connection is refused", async () => {
     const { id } = await draft();
     const current = (await withTenant(a, (tx) => getConnection(tx, id)))!;
-    await withTenant(a, (tx) => revokeConnection(tx, admin(a), id, current.updatedAt.toISOString()));
+    await withTenant(a, (tx) =>
+      revokeConnection(tx, admin(a), id, current.updatedAt.toISOString(), "no_longer_used"),
+    );
     const transport = FakeFhirTransport.healthy();
     const error = await refusal(testConnection(runner(a), admin(a), id, deps(transport)));
     expect(error.message).toMatch(/revoked/);
