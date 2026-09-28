@@ -1833,7 +1833,7 @@ describe("custom field values on payers (PR4)", () => {
       "Only administrators and managers can change a payer's custom fields.",
     );
     // The role check runs before the payer row is looked up, so a bad id gets the same role error
-    // (not "Record not found.") and no lock is taken.
+    // (not "Record not found."): the lookup that takes the lock never runs.
     await expect(
       withTenant(specialist, (tx) =>
         saveValuesForRecord(

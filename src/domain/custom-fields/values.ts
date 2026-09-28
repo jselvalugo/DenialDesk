@@ -330,8 +330,8 @@ export async function customFieldValuesToken(
 /**
  * Locks the record's own row (`patients`/`claims`/`denials`/`payers`) before `saveValuesForRecord`
  * reads or writes anything else (only the payer role check, which touches no data, runs first),
- * and confirms it exists in this tenant. This is what makes a concurrency
- * token computed over `custom_field_values` safe: without a lock on some row that both
+ * and confirms it exists in this tenant. This is what makes a concurrency token computed over
+ * `custom_field_values` safe: without a lock on some row that both
  * transactions must touch, `SELECT ... FOR UPDATE` over a record with zero (or few) existing
  * `custom_field_values` rows locks nothing, so two concurrent "first saves" on the very same
  * record can both read an identical token (e.g. "0:") and both pass the check — the second
