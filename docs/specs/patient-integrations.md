@@ -418,39 +418,59 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       Token in memory only, re-requested on expiry or one 401 (`AccessTokenCache`; the sync loop that
       uses it is PI2b). `exp` is `iat + 4 min` (skew margin under the 5-minute cap); `AccessToken`
       redacts itself under JSON, string, template, and `util.inspect`.
-- [ ] Keys (R-7.3.4, R-7.3.5) — **partly built, blocked on a migration (PI2a part 2 report):** the
-      adapter (`keys.ts`: `SigningKeyStore`, `LocalEncryptedKeyStore` for `syntheticDataOnly()` —
-      ES384 per connection, PKCS#8 encrypted with the field-encryption helpers and bound by AAD to its
-      connection, the ciphertext being `key_ref` — and an `AzureKeyVaultKeyStore` stub that fails
-      closed) exists and is tested; what's missing is writing `key_mode`/`key_ref` (no app-role
-      grant, drizzle/0039) at connection creation and clearing them on revoke.
-      **Per-connection key by default** — production creates a
-      non-exportable Azure Key Vault key per connection at creation, published at
-      `/.well-known/jwks/<connection-uuid>.json`; a shared key only as a documented per-vendor
-      exception (`key_mode = shared_vendor_exception` + reason code; e.g. a vendor with one client
-      per app, ⚠️ VERIFY), set only by the operator at approval (never client-settable) and audited.
-      Connection creation is rate-limited per practice (each one creates a Key Vault key).
-      Pre-production uses one shared key from a functions-only hosting secret,
-      distinct from production. Production refuses to start integrations if an env signing key is
-      present (Key Vault only). Annual rotation with current + next `kid`.
-- [ ] JWKS routes — **allow-list built (`pickPublicJwkFields`, tested that `d`, `p`, `q`, `dp`, `dq`,
-      `qi`, `k` never appear); the route is blocked on a migration**: it is unauthenticated, so it has
-      no tenant to set, and `integration_connections` is `FORCE ROW LEVEL SECURITY`, so it needs a
-      SECURITY DEFINER lookup returning only `(status, key_ref)` for one connection id. Public-field allow-list (`kty`, `crv`, `x`, `y`, `n`, `e`, `kid`, `alg`, `use`),
-      own rate-limit bucket, `Cache-Control: public, max-age=300`; 404 for unknown or revoked.
-- [ ] Test connection — **domain service built** (`src/domain/integrations/test-connection.ts`; unit
-      tests for discovery/token, integration tests in `test/integration/test-connection.test.ts`;
-      the Settings action and button wait for key provisioning): discovery + one token request, no patient data; its own rate-limit bucket
-      (per connection and per practice); outcomes collapsed to `ok`, `unreachable`, `tls_failed`,
-      `not_fhir_r4`, `smart_config_invalid`, `auth_refused`, `capability_missing`; audited
-      (`integration.connection_tested`, configuration and codes only; `integration.transport_refused`
-      with `{ code }` for `address_refused`, `tls_failed`, `redirect_refused`; `security.rate_limited`).
-      Buckets `integration_test_connection` (5 per 10 min) and `integration_test_practice` (20 per
-      10 min). The network calls run with no database transaction open. **Record of the result:** no
-      column exists, so "a passing test in the last 24 h" is derived from the audit log
-      (`hasRecentPassingTest`: newest `ok` event in the window whose base URL, client ID, and token
-      endpoint still match the connection; a later failing test doesn't cancel it); Submit will call it.
-      Messages in en/es/pt (`integrations.test.*`).
+- [x] Keys, pre-production (R-7.3.4, R-7.3.5; decided 2026-09-28: follow the spec, no migration, no
+      grant): **one shared key from a functions-only hosting secret**, `INTEGRATION_SIGNING_KEY` (a
+      PKCS#8 ES384 PEM; RS384 also accepted; literal `\n` accepted for hosts that flatten
+      multi-line secrets), owner action OA-063. `EnvSharedKeyStore` (`keys.ts`) is constructed only
+      when `syntheticDataOnly()`, parses the key on first use (a missing or unreadable one is
+      `not_configured`/`key_unreadable` at use, so the app and the JWKS route start without it), holds it in
+      memory only, and never writes `key_mode`/`key_ref` or any other column. **Production refuses to
+      start integrations if the variable is present** (`assertNoEnvSigningKeyInProduction`, run by
+      `getSigningKeyStore`; Key Vault only). The `AzureKeyVaultKeyStore` stub fails closed. Tests
+      generate their keys at test time; no PEM is committed. `.env.example` carries an empty
+      `INTEGRATION_SIGNING_KEY=`. Rotation (current + next `kid`) is still open.
+- [ ] Keys, production, **per connection — for the Azure cutover; needs human sign-off (R-15.9)**:
+      **per-connection key by default** — production creates a non-exportable Azure Key Vault key per
+      connection at creation, published at `/.well-known/jwks/<connection-uuid>.json`; a shared key
+      only as a documented per-vendor exception (`key_mode = shared_vendor_exception` + reason code;
+      e.g. a vendor with one client per app, ⚠️ VERIFY), set only by the operator at approval (never
+      client-settable) and audited. Connection creation is rate-limited per practice (each one creates
+      a Key Vault key). Annual rotation with current + next `kid`. It needs a migration: `GRANT UPDATE
+      (key_mode, key_ref)` to `denialdesk_app` (the app role has no grant on either today,
+      `drizzle/0039`; a privilege change, R-15.9) and a SECURITY DEFINER `integration_jwks_lookup(uuid)`
+      returning only `(status, key_ref)` (the JWKS route is unauthenticated and the table is FORCE
+      RLS, so it has no tenant to set). The Key Vault SDK arrives then, under R-15.7. Also: clearing
+      the key on revoke, and the key rotation and compromise runbooks.
+- [x] JWKS route, pre-production (`src/app/.well-known/jwks.json/route.ts`, `jwks-route.ts`):
+      `GET /.well-known/jwks.json` publishes the shared key's public half — public-field allow-list
+      (`kty`, `crv`, `x`, `y`, `n`, `e`, `kid`, `alg`, `use`; applied twice, in the adapter and again in
+      the handler; tests assert `d`, `p`, `q`, `dp`, `dq`, `qi`, `k` never appear, even from a leaky
+      adapter), its own `jwks` rate-limit bucket (120 per minute per client network; 429 with
+      `Retry-After`), `Cache-Control: public, max-age=300`, `application/jwk-set+json`. **404**
+      (uncached, empty) when the key isn't configured or unreadable, and always where real data is
+      allowed. No database read.
+- [ ] JWKS route, production, per connection (`/.well-known/jwks/<connection-uuid>.json`; 404 for
+      unknown or revoked) — with the Azure-cutover item above.
+- [x] Test connection (`src/domain/integrations/test-connection.ts`; action `testConnectionAction`
+      and the button on `/settings/integrations/[id]`, real connections only, admin only; unit tests
+      for discovery/token/keys, integration tests in `test/integration/test-connection.test.ts`, run
+      by CI's PostgreSQL job): discovery + one token request, no patient data; its own rate-limit
+      buckets (per connection and per practice); outcomes collapsed to `ok`, `unreachable`,
+      `tls_failed`, `not_fhir_r4`, `smart_config_invalid`, `auth_refused`, `capability_missing`;
+      audited (`integration.connection_tested`, configuration and codes only;
+      `integration.transport_refused` with `{ code }` for `address_refused`, `tls_failed`,
+      `redirect_refused`; `security.rate_limited`). Buckets `integration_test_connection` (5 per 10
+      min) and `integration_test_practice` (20 per 10 min). The network calls run with no database
+      transaction open. Without `INTEGRATION_SIGNING_KEY` (or with an unreadable one, or in a
+      production process holding one) the result is a translated "signing key isn't configured/usable"
+      refusal, before any request and without spending the rate limit — never a crash. The built-in
+      sandbox has no transport until PI2b, so its page shows no button and the service refuses it.
+      **The record of the result (decided 2026-09-28): no column, the audit log.** "A passing test in
+      the last 24 h" is `hasRecentPassingTest`: the newest `ok` `integration.connection_tested` event in
+      the window whose base URL, client ID, and pinned token endpoint still match the connection (so
+      editing any of them invalidates it). **A pass within 24 h counts even if a later test fails**, per
+      the spec's wording; Submit (later PI2a work) calls it. Messages in en/es/pt
+      (`integrations.test.*`).
 
 ### PI2b — sync engine, sandbox, jobs, history, payer mapping
 - [ ] The transport is chosen from `is_sandbox` only (never the host), and a sandbox run is refused
@@ -479,6 +499,9 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       trust.
 - [ ] Every run first checks the connection's issuer against discovery; a mismatch fails the run
       before any upsert (`issuer_mismatch`); a changed token endpoint sets `error`.
+      Issuer format (PI2a, `discovery.ts`): the normalized base URL, or `<base URL> <implementation.url>`
+      (space-separated, the second only when the CapabilityStatement carried one that passes the URL
+      rules); compare the whole string.
 - [ ] Search: `Patient?_lastUpdated=ge<watermark>&_count=100`; Coverage for a page's patients by POST
       `Coverage/_search` (`patient=<id>`) where supported so FHIR ids stay out of request URLs
       (⚠️ VERIFY support), else GET (documented: the URL goes only to the practice's own EHR);

@@ -60,19 +60,18 @@ _Last updated: 2026-09-28_
   `HttpsTransport` (explicit TLS ≥ 1.2, no env proxies, no redirects, content-type allow-list,
   10 MB/30 s caps), the deny-by-default SSRF address guard (IANA special-purpose ranges + embedded
   IPv4 decode, checked on every resolved address at connect), and the run/bundle/paging limit helpers (wired into the sync loop in PI2b).
-  **PI2a part 2, first commit set (branch `pi2a-discovery`, no migration):** transport N3 resolved
-  (a non-2xx resolves with its status and the body is discarded unread, whatever the Content-Type),
-  discovery (`discovery.ts`), the SMART token request (`auth.ts`, `src/lib/crypto/jwt-sign.ts`,
-  redacting `AccessToken`, in-memory cache), signing-key adapter (`keys.ts`: encrypted local store for
-  `syntheticDataOnly()`, Azure Key Vault stub that fails closed, public-JWK allow-list) and the Test
-  connection domain service (`src/domain/integrations/test-connection.ts`: own rate-limit buckets,
-  audit, ID-only security events, pin of the token endpoint on a draft, and `hasRecentPassingTest`
-  derived from the audit log). **Blocked on a migration (human decision, R-15.9):** the app role has
-  no grant on `key_mode`/`key_ref`, so keys can't be provisioned; the unauthenticated JWKS route needs a
-  SECURITY DEFINER lookup because RLS is FORCEd; so the JWKS route, key provisioning at creation and
-  destruction on revoke, and the Test connection action/button wait for it. Integration tests
-  (`test/integration/test-connection.test.ts`) were written but not run where this was built (no
-  PostgreSQL could be started). (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes on PR #83: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  **PI2a part 2 done for pre-production** (branch `pi2a-discovery`, no migration, no grant; coordinator
+  decisions 2026-09-28): transport N3 resolved (a non-2xx resolves with its status and the body is
+  discarded unread), discovery, the SMART token request (`auth.ts`, `src/lib/crypto/jwt-sign.ts`,
+  redacting `AccessToken`), keys from one shared pre-production secret (`EnvSharedKeyStore`,
+  `INTEGRATION_SIGNING_KEY`, OA-063; production refuses it; Key Vault stub fails closed), the public
+  `/.well-known/jwks.json` route (allow-list, `jwks` bucket), and Test connection (domain service,
+  admin action, button on the connection page; result from the audit log via `hasRecentPassingTest`,
+  a pass within 24 h counts even if a later test fails). **Open for the Azure cutover (R-15.9
+  sign-off):** per-connection Key Vault keys, the grant on `key_mode`/`key_ref`, SECURITY DEFINER
+  `integration_jwks_lookup`, `/.well-known/jwks/<uuid>.json`, key rotation and compromise runbooks.
+  Still open in PI2a: Submit, attestation, step-up, pause/resume, withdraw, revoke reason, endpoint-key
+  CHECKs. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
   Owner questions OA-045 onward; data source DS-12 in `docs/data-sources.xlsx`.
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
