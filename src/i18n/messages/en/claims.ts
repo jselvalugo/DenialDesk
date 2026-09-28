@@ -45,6 +45,9 @@ export const claims = {
 
   // Claim detail (app/(app)/claims/[id]/page.tsx)
   "detail.pageTitle": "Claim",
+  "detail.eyebrow": "Claim record",
+  "detail.details.title": "Claim details",
+  "detail.lines.title": "Claim lines",
   "detail.filing.rolledNote":
     "(pending counsel: {date}; weekend/holiday extension not yet confirmed, so file by the date above)",
   "detail.breadcrumbClaims": "Claims",

@@ -48,8 +48,17 @@ a masked identifier (member ID, SSN) — those stay in the aside behind `MaskedV
 - [x] Existing behaviour unchanged: POST search, audited reveal, reason on edit, synthetic
       attestation, role gating; the patients e2e suite passes without edits.
 - [x] Every new string is a key in English, Spanish, and Portuguese.
-- [ ] P2 — Claims and Denials record pages move to `RecordHeader` / `RecordLayout` (their headers
-      are hand-built today).
+- [x] P2 — Claims and Denials record pages move to `RecordHeader` / `RecordLayout`: claim number
+      (mono) / denial category + CARC-RARC code as the title, status tag (plus, for denials, an
+      unverified-category tag) as badges, patient/claim links, payer, service date, denied amount,
+      and appeal deadline in the meta strip; `FieldList`/`Field` in place of hand-rolled `dl`s for
+      every fact panel; the single primary action ("Correct claim", "Start appeal"/"View appeal")
+      in the header. The claim correction form now opens from the header action while living in the
+      claim-lines panel (`CorrectionProvider` shares its open state and save result across the two);
+      the denial's assign/status controls move into the "Denial" panel in the main column, next to
+      the codes they act on. Unchanged: data loading, `claim.viewed`/`denial.viewed` audits, the
+      member ID reveal, the custom-field reveal, role gates, server actions, and the timely-filing
+      and appeal-deadline values (read as-is, never recomputed).
 - [x] P3 — Appeals, Remittances, Prompt pay, Settings › Custom fields, Operator › Practices forms
       move to `FormShell`: the "new" create-flow pages (appeal, remittance, prompt-pay contest,
       custom field, practice) now use `Breadcrumbs` + `FormSection`/`FormRow`/`FormActions`/

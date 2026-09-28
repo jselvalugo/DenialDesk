@@ -42,8 +42,10 @@ _Last updated: 2026-09-27_
   strip and Record panel, sectioned register/edit forms). `ageOn()` pure helper with boundary tests;
   `PageEyebrow` takes a `page` override and no longer prints "Patients · Patients" on form pages.
   P3 done 2026-09-28 (Appeals, Remittances, Prompt pay, Settings › Custom fields, Operator ›
-  Practices forms on `FormShell`). Next: P2 Claims and Denials record headers onto `RecordHeader`;
-  P4 sortable `DataTable`. Open (owner): which column replaces Sex on the list.
+  Practices forms on `FormShell`). P2 done 2026-09-28 (Claims and Denials record pages onto
+  `RecordHeader`/`RecordLayout`/`FieldList`; claim correction and denial assign/status controls
+  moved to the header action and main-column panels respectively). Next: P4 sortable `DataTable`.
+  Open (owner): which column replaces Sex on the list.
 - Internationalization (`specs/internationalization.md`, ADR 0009, R-11.1): the whole product (practice
   app, sign-in, operator console, Insight .xlsx export) reads in English, Spanish, or Portuguese. Own
   module in `src/i18n/` (no dependency): typed dictionaries per namespace in
@@ -324,8 +326,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    P2 coverage now comes from the EHR sync once a practice is connected (`specs/patient-integrations.md`).
 11. Patient integrations PI1a → PI1c → PI2a → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
-12. Record pattern (`specs/record-pages.md`): P3 forms onto `FormShell` in progress; P2 Claims and
-   Denials record headers after custom fields PR 3 merges; then P4 sortable `DataTable`.
+12. Record pattern (`specs/record-pages.md`): P3 (`FormShell`) and P2 (Claims/Denials on
+   `RecordHeader`/`RecordLayout`) done; next P4 sortable `DataTable`.
 
 ## Open questions for humans
 - Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter

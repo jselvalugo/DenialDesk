@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useState } from "react";
+import { createContext, startTransition, useActionState, useContext, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { useT } from "@/i18n/client";
@@ -17,9 +17,62 @@ export interface CorrectionLine {
   chargeCents: number;
 }
 
+interface CorrectionContextValue {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  state: CorrectionState;
+  pending: boolean;
+  dispatch: (formData: FormData) => void;
+}
+
+const CorrectionContext = createContext<CorrectionContextValue | null>(null);
+
+/**
+ * Shares the correction form's open/closed state and save result between the record header's
+ * primary action (`CorrectionAction`) and the claim-lines panel that holds the form itself
+ * (`CorrectionForm`), so the two can live in different parts of the page (DESIGN.md record pattern).
+ */
+export function CorrectionProvider({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [state, action, pending] = useActionState<CorrectionState, FormData>(submitCorrection, {});
+  const dispatch = (formData: FormData) => startTransition(() => action(formData));
+  return (
+    <CorrectionContext.Provider value={{ open, setOpen, state, pending, dispatch }}>
+      {children}
+    </CorrectionContext.Provider>
+  );
+}
+
+function useCorrection(): CorrectionContextValue {
+  const ctx = useContext(CorrectionContext);
+  if (!ctx)
+    throw new Error("CorrectionAction and CorrectionForm must be rendered inside a CorrectionProvider");
+  return ctx;
+}
+
+/** Record header primary action for a draft/rejected claim: opens the correction form below. */
+export function CorrectionAction() {
+  const { open, setOpen, state } = useCorrection();
+  const t = useT("claims");
+  if (open) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
+        {t("correction.button")}
+      </Button>
+      {state.savedVersion && (
+        <p role="status" className="text-label font-medium text-success-fg">
+          {t("correction.savedAs", { version: state.savedVersion })}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Correct a draft or rejected claim. Every change is saved as a new claim version with the reason
- * given here (R-3.10.3); nothing is changed automatically (R-3.10.1).
+ * given here (R-3.10.3); nothing is changed automatically (R-3.10.1). Opened from `CorrectionAction`
+ * in the record header.
  */
 export function CorrectionForm({
   claimId,
@@ -34,25 +87,11 @@ export function CorrectionForm({
   diagnosisCodes: string[];
   lines: CorrectionLine[];
 }) {
-  const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState<CorrectionState, FormData>(submitCorrection, {});
+  const { open, setOpen, state, pending, dispatch } = useCorrection();
   const t = useT("claims");
   const tc = useT("common");
 
-  if (!open) {
-    return (
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="secondary" onClick={() => setOpen(true)}>
-          {t("correction.button")}
-        </Button>
-        {state.savedVersion && (
-          <p role="status" className="text-label font-medium text-success-fg">
-            {t("correction.savedAs", { version: state.savedVersion })}
-          </p>
-        )}
-      </div>
-    );
-  }
+  if (!open) return null;
 
   return (
     // Submitted via onSubmit (not the action prop) so React keeps the typed values when the server
@@ -61,8 +100,7 @@ export function CorrectionForm({
       key={version}
       onSubmit={(event) => {
         event.preventDefault();
-        const formData = new FormData(event.currentTarget);
-        startTransition(() => action(formData));
+        dispatch(new FormData(event.currentTarget));
       }}
       className="flex flex-col gap-4"
       aria-label={t("correction.button")}
