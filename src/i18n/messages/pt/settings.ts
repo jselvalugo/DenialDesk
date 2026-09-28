@@ -181,4 +181,140 @@ export const settings: Messages["settings"] = {
   "error.notPayerEditor":
     "Somente administradores e gerentes podem alterar os campos personalizados de um pagador.",
   "error.recordNotFound": "Registro não encontrado.",
+
+  "integrations.metaTitle": "Integrações",
+  "integrations.listTitle": "Integrações",
+  "integrations.listDescription":
+    "Conecte o EHR/PM da sua clínica para que o Registro de pacientes seja uma cópia sincronizada e somente leitura, em vez de registros digitados à mão.",
+  "integrations.newConnection": "Nova conexão",
+  "integrations.tableCaption": "Integrações",
+  "integrations.field.name": "Nome",
+  "integrations.field.table": "Tabela",
+  "integrations.field.status": "Status",
+  "integrations.field.lastSync": "Última sincronização",
+  "integrations.table.patients": "Pacientes",
+  "integrations.neverSynced": "Nunca sincronizado",
+  "integrations.emptyTitle": "Ainda não há integrações",
+  "integrations.emptyDescriptionCanManage":
+    "Conecte o EHR/PM da sua clínica para que os pacientes sejam sincronizados automaticamente em vez de digitados à mão.",
+  "integrations.emptyDescriptionReadOnly": "Um administrador pode conectar o EHR/PM da sua clínica aqui.",
+
+  "integrations.status.draft": "Rascunho",
+  "integrations.status.pending_approval": "Aguardando aprovação",
+  "integrations.status.active": "Ativa",
+  "integrations.status.paused": "Pausada",
+  "integrations.status.error": "Precisa de atenção",
+  "integrations.status.revoked": "Revogada",
+
+  "integrations.new.metaTitle": "Nova conexão",
+  "integrations.new.title": "Conectar uma integração",
+  "integrations.new.description":
+    "Conecte o EHR/PM da sua clínica via HL7 FHIR R4. Um administrador testa e envia; o operador da plataforma verifica com o administrador do seu EHR antes que a sincronização comece.",
+  "integrations.new.sandboxOption": "Usar o ambiente de teste sintético",
+  "integrations.new.sandboxHint":
+    "Preenche o endereço do ambiente de teste integrado para você experimentar o ciclo de vida da conexão apenas com dados sintéticos, sem um EHR real.",
+  "integrations.new.sandboxNotice":
+    "Este formulário foi preenchido com o endereço do ambiente de teste sintético integrado.",
+  "integrations.new.save": "Criar conexão",
+  "integrations.new.saving": "Criando…",
+
+  "integrations.form.displayName": "Nome da conexão",
+  "integrations.form.displayNameHint":
+    "Visto pela sua equipe, ex.: “Athenahealth”. Nunca inclua informações de pacientes aqui.",
+  "integrations.form.baseUrl": "URL base",
+  "integrations.form.baseUrlHint":
+    "O endereço base FHIR R4 fornecido pelo seu EHR/PM, ex.: https://ehr.example.com/r4.",
+  "integrations.form.clientId": "ID do cliente",
+  "integrations.form.clientIdHint": "O ID de cliente OAuth que seu EHR/PM registrou para o DenialDesk.",
+  "integrations.form.mrnIdentifierSystem": "Sistema de identificador de MRN",
+  "integrations.form.mrnIdentifierSystemHint":
+    "O sistema de identificador FHIR que seu EHR/PM usa para o número de prontuário (não um número de Seguro Social, Medicare, carteira de motorista ou passaporte).",
+  "integrations.form.usResidencyAttested":
+    "Este endpoint de EHR/PM armazena e processa dados somente nos Estados Unidos.",
+  "integrations.form.endpointLocked":
+    "O endpoint não pode ser alterado depois que a conexão deixa de ser um rascunho.",
+
+  "integrations.detailMetaTitle": "Integração",
+  "integrations.detailEyebrow": "Integração",
+  "integrations.breadcrumbList": "Integrações",
+  "integrations.field.kind": "Conector",
+  "integrations.field.kindFhir": "HL7 FHIR R4",
+  "integrations.field.isSandbox": "Ambiente",
+  "integrations.field.isSandboxValue": "Ambiente de teste sintético",
+  "integrations.field.isRealValue": "EHR/PM real",
+  "integrations.field.attestation": "Declaração de residência nos EUA",
+  "integrations.field.attestedBy": "Declarado em {date}",
+  "integrations.field.notAttested": "Ainda não declarado",
+  "integrations.field.created": "Criada",
+  "integrations.field.submitted": "Enviada",
+  "integrations.field.approved": "Aprovada",
+  "integrations.field.revoked": "Revogada",
+  "integrations.field.lastSuccess": "Última sincronização bem-sucedida",
+  "integrations.section.configuration": "Configuração",
+  "integrations.section.lifecycle": "Ciclo de vida",
+
+  "integrations.action.edit": "Editar",
+  "integrations.action.withdraw": "Retirar",
+  "integrations.action.pause": "Pausar",
+  "integrations.action.resume": "Retomar",
+  "integrations.action.revoke": "Revogar",
+  "integrations.action.submit": "Enviar",
+  "integrations.action.submitDisabledHint": "Teste a conexão primeiro.",
+  "integrations.action.activateSandbox": "Ativar conexão de teste sintética",
+  "integrations.action.syncHistory": "Histórico de sincronização",
+  "integrations.action.verifyIdentity": "Verifique sua identidade",
+
+  "integrations.revoke.confirmTitle": "Revogar esta conexão?",
+  "integrations.revoke.confirmDescription":
+    "Esta ação não pode ser desfeita. Os pacientes param de sincronizar e o Registro de pacientes volta a ser editável manualmente. Depois, remova o registro do DenialDesk como cliente no seu EHR/PM.",
+  "integrations.revoke.reasonLabel": "Motivo",
+  "integrations.revoke.reasonNoLongerUsed": "Não é mais usada",
+  "integrations.revoke.reasonSwitchingSystems": "Troca de sistema EHR/PM",
+  "integrations.revoke.reasonConfiguredInError": "Configurada por engano",
+  "integrations.revoke.reasonSecurityConcern": "Preocupação de segurança",
+  "integrations.revoke.reasonOther": "Outro",
+  "integrations.revoke.confirm": "Revogar conexão",
+  "integrations.revoke.offboardingTitle": "A seguir: remova o registro do DenialDesk no seu EHR/PM",
+  "integrations.revoke.offboardingBody":
+    "O DenialDesk não tem mais uma chave de assinatura para esta conexão, mas o registro do cliente ainda está no seu EHR/PM. Peça ao administrador do seu EHR para remover ou desativar o cliente do DenialDesk para que não possa ser reutilizado.",
+
+  "integrations.runs.metaTitle": "Histórico de sincronização",
+  "integrations.runs.title": "Histórico de sincronização",
+  "integrations.runs.description": "Somente contagens e resultados, nunca dados de pacientes.",
+  "integrations.runs.emptyTitle": "Ainda não há sincronizações",
+  "integrations.runs.emptyDescription":
+    "As sincronizações aparecerão aqui quando esta conexão começar a sincronizar.",
+
+  "integrations.error.notAdmin": "Somente administradores podem gerenciar integrações.",
+  "integrations.error.notFound": "Conexão não encontrada.",
+  "integrations.error.invalidField": "Verifique o campo destacado.",
+  "integrations.error.displayNameInvalid": "Digite um nome de conexão de 1 a 80 caracteres.",
+  "integrations.error.baseUrlRequired": "Digite a URL base.",
+  "integrations.error.clientIdInvalid": "Digite um ID de cliente de 1 a 255 caracteres.",
+  "integrations.error.mrnSystemRequired": "Digite o sistema de identificador de MRN.",
+  "integrations.error.sandboxRefused":
+    "Somente o ambiente de teste sintético pode ser criado neste ambiente.",
+  "integrations.error.realEndpointRefused":
+    "Endpoints reais de EHR/PM não estão disponíveis neste ambiente. Use o ambiente de teste sintético.",
+  "integrations.error.mrnSystemRefused":
+    "Este sistema de identificador não pode ser usado como MRN: ele nomeia um número de Seguro Social, Medicare, carteira de motorista ou passaporte, não um número de prontuário.",
+  "integrations.error.attestationRequired":
+    "Declare que este endpoint armazena e processa dados somente nos Estados Unidos para conectar um endpoint real.",
+  "integrations.error.stepUpRequired": "Verifique sua identidade novamente para continuar.",
+  "integrations.error.editLockedNotDraft": "Esta conexão só pode ser editada enquanto for um rascunho.",
+  "integrations.error.cannotChangeConnectionType":
+    "O endpoint de uma conexão não pode alternar entre o ambiente de teste e um EHR/PM real. Crie uma nova conexão.",
+  "integrations.error.invalidTransition": "Esta ação não está disponível para o status atual da conexão.",
+  "integrations.error.chooseReason": "Escolha um motivo.",
+
+  "integrations.error.urlInvalid": "Digite uma URL válida.",
+  "integrations.error.urlNotHttps": "A URL base deve usar https.",
+  "integrations.error.urlHasUserinfo": "A URL base não pode incluir usuário nem senha.",
+  "integrations.error.urlHasQuery": "A URL base não pode incluir uma query string.",
+  "integrations.error.urlHasFragment": "A URL base não pode incluir um fragmento.",
+  "integrations.error.urlIpLiteral": "A URL base deve usar um nome de host, não um endereço IP.",
+  "integrations.error.urlBlockedHost": "Este host não é um endereço real de EHR/PM.",
+  "integrations.error.urlSingleLabel": "Digite um nome de host completo (ex.: ehr.example.com).",
+  "integrations.error.urlTrailingDot": "Remova o ponto final do nome de host.",
+  "integrations.error.urlPortNotAllowed": "Esta porta não é permitida para uma conexão de EHR/PM.",
 };

@@ -288,6 +288,13 @@
       "when": 1790573150932,
       "tag": "0040_patient_integrations_review_polish",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790610921176,
+      "tag": "0041_session_step_up_mfa",
+      "breakpoints": true
     }
   ]
 }

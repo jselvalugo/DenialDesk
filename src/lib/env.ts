@@ -25,6 +25,12 @@ const schema = z.object({
    * console is being set up). Ignored in production: two-step is always required there (R-7.2.2).
    */
   PLATFORM_OPERATOR_MFA: z.enum(["on", "off"]).optional(),
+  /**
+   * Extra ports a real EHR/PM base URL may use, comma-separated (docs/specs/patient-integrations.md
+   * "PI1b"). Port 443 is always allowed regardless of this value. Parsed defensively in
+   * `src/integrations/fhir/url-rules.ts`, never trusted as-is.
+   */
+  INTEGRATION_ALLOWED_PORTS: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

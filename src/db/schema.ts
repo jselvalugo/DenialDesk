@@ -113,6 +113,12 @@ export const sessions = pgTable(
     tenantId: uuid("tenant_id").references(() => tenants.id),
     mfaVerified: boolean("mfa_verified").notNull().default(false),
     /**
+     * When MFA was last completed on this session (initial sign-in or a step-up re-verification).
+     * Step-up actions (docs/specs/patient-integrations.md "PI1b"; R-7.2.2) require this within the
+     * last few minutes; null on a session that has never completed MFA.
+     */
+    mfaVerifiedAt: timestamp("mfa_verified_at", { withTimezone: true }),
+    /**
      * How the session was established. "demo" is legacy (the demo was removed; such sessions are
      * ended on sight); "operator" sessions are the platform console's own (no practice, separate cookie).
      */

@@ -12,6 +12,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { loadListValues } from "@/domain/custom-fields/list-values";
+import { blocksPatientsRegister, getPatientsConnectionSummary } from "@/domain/integrations/connections";
 import { listPatients, PATIENT_LIST_FIELDS, PATIENTS_PAGE_SIZE } from "@/domain/patients/queries";
 import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
@@ -39,8 +40,9 @@ export default async function PatientsPage({
     .catch(1)
     .parse((await searchParams).page);
 
-  const { rows, total, listColumns, listValues } = await withTenant(auth, async (tx) => {
+  const { rows, total, listColumns, listValues, connectionSummary } = await withTenant(auth, async (tx) => {
     const list = await listPatients(tx, page);
+    const connectionSummary = await getPatientsConnectionSummary(tx);
     await audit(tx, {
       action: "patient.list_viewed",
       actorUserId: auth.userId,
@@ -58,12 +60,15 @@ export default async function PatientsPage({
       "patient",
       list.rows.map((r) => r.id),
     );
-    return { ...list, listColumns: columns, listValues: valuesByRecord };
+    return { ...list, listColumns: columns, listValues: valuesByRecord, connectionSummary };
   });
 
   const pages = Math.max(1, Math.ceil(total / PATIENTS_PAGE_SIZE));
   if (total > 0 && page > pages) redirect(`/patients?page=${pages}`);
-  const canEdit = canEditPatients(auth.role);
+  // A connected EHR/PM makes the Patient Register read-only (docs/specs/patient-integrations.md
+  // "PI1a"): the Register button and empty-state action are hidden and a notice explains why.
+  const registerBlocked = blocksPatientsRegister(connectionSummary);
+  const canEdit = canEditPatients(auth.role) && !registerBlocked;
   const today = todayIn();
 
   return (
@@ -79,6 +84,15 @@ export default async function PatientsPage({
           )
         }
       />
+
+      {registerBlocked && connectionSummary && (
+        <p
+          role="note"
+          className="rounded-control border border-info-border bg-info-bg px-3 py-2 text-label text-info-fg"
+        >
+          {t("notice.syncedFromConnection", { name: connectionSummary.displayName })}
+        </p>
+      )}
 
       <Panel flush>
         <PatientSearch summary={t("list.count", { count: total })} today={today} />

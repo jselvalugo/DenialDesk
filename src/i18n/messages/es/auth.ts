@@ -77,4 +77,11 @@ export const auth: Messages["auth"] = {
     "Solo para el operador de la plataforma. Los usuarios del consultorio inician sesión en <a>la página de inicio de sesión del consultorio</a>.",
   "operatorMfaVerify.pageTitle": "Verificar inicio de sesión del operador",
   "operatorMfaSetup.pageTitle": "Configurar la verificación en dos pasos del operador",
+
+  "stepUp.pageTitle": "Verifique su identidad",
+  "stepUp.title": "Verifique su identidad",
+  "stepUp.subtitle": "Esta acción necesita un código nuevo de su aplicación autenticadora.",
+  "stepUp.submit": "Verificar",
+  "stepUp.cancel": "Cancelar",
+  "error.tooManyAttempts": "Demasiados intentos. Vuelva a intentarlo en {minutes} minutos.",
 };

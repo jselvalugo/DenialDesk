@@ -1,4 +1,4 @@
-import { canViewRevenueCycle } from "@/auth/permissions";
+import { canManageIntegrations, canViewRevenueCycle } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { AppShell } from "@/components/shell/AppShell";
 
@@ -12,6 +12,9 @@ export default async function SignedInLayout({ children }: { children: React.Rea
         tenantName: auth.tenantName,
         role: auth.role,
       }}
+      tenantId={auth.tenantId}
+      userId={auth.userId}
+      canManageIntegrations={canManageIntegrations(auth.role)}
       showRevenueCycle={canViewRevenueCycle(auth.role)}
     >
       {children}

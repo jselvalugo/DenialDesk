@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { withTenant } from "@/db/tenant";
+import { getPatientsConnectionSummary } from "@/domain/integrations/connections";
 import { getT } from "@/i18n/server";
 import { GlobalHeader, type ShellUser } from "./GlobalHeader";
 import { SessionTimeout } from "./SessionTimeout";
@@ -6,16 +8,36 @@ import { ShellProvider } from "./ShellContext";
 
 export async function AppShell({
   user,
+  tenantId,
+  userId,
+  canManageIntegrations = false,
   showRevenueCycle = false,
   children,
 }: {
   user: ShellUser | null;
+  /** Present for a signed-in practice user: loads the Patients data-source summary (one query). */
+  tenantId?: string;
+  userId?: string;
+  canManageIntegrations?: boolean;
   showRevenueCycle?: boolean;
   children: ReactNode;
 }) {
   const t = await getT("shell");
+  // One cheap, tenant-scoped, indexed read (spec: erp-shell.md "Data-source drop-down"); no PHI,
+  // no patient counts, nothing placed in a URL or client storage (R-7.4.8).
+  const patientsDataSource =
+    tenantId && userId
+      ? await withTenant({ tenantId, userId }, (tx) => getPatientsConnectionSummary(tx))
+      : null;
   return (
-    <ShellProvider visibility={{ showRevenueCycle, showSettings: user !== null }}>
+    <ShellProvider
+      data={{
+        showRevenueCycle,
+        showSettings: user !== null,
+        canManageIntegrations,
+        patientsDataSource,
+      }}
+    >
       <div className="flex min-h-0 flex-1 flex-col">
         <a
           href="#main"

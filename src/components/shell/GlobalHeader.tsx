@@ -8,8 +8,9 @@ import { ChevronDown, Search } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "./BrandMark";
+import { DataSourceMenu } from "./DataSourceMenu";
 import { ModuleSwitcher } from "./ModuleSwitcher";
-import { useShellLocation } from "./ShellContext";
+import { useShellData, useShellLocation } from "./ShellContext";
 import { UserMenu, type ShellUser } from "./UserMenu";
 
 export type { ShellUser };
@@ -22,6 +23,7 @@ export type { ShellUser };
  */
 export function GlobalHeader({ user }: { user: ShellUser | null }) {
   const location = useShellLocation();
+  const shellData = useShellData();
   const t = useT("shell");
   const pathname = usePathname();
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -129,7 +131,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
           <BrandMark className="size-6" />
           <ChevronDown aria-hidden="true" className="size-3.5 text-sidebar-muted" strokeWidth={2} />
         </button>
-        <nav aria-label={t("nav.primary")} className="flex min-w-0 flex-1 overflow-x-auto">
+        <nav aria-label={t("nav.primary")} className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
           <ul className="flex items-stretch">
             {tabs.map((item) => {
               const Icon = item.icon;
@@ -153,6 +155,12 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
               );
             })}
           </ul>
+          {app.items.find((item) => item.available && item.dataSource) && (
+            <DataSourceMenu
+              summary={shellData?.patientsDataSource ?? null}
+              canManage={shellData?.canManageIntegrations ?? false}
+            />
+          )}
         </nav>
       </div>
 

@@ -9,6 +9,7 @@ import { memberships, sessions, tenants, users } from "@/db/schema";
 import { auditSystem } from "@/lib/audit";
 import { requestContext } from "@/lib/request-context";
 import {
+  MFA_STEP_UP_WINDOW_MS,
   OPERATOR_SESSION_COOKIE,
   SESSION_ABSOLUTE_MS,
   SESSION_COOKIE,
@@ -32,6 +33,8 @@ export interface SessionInfo {
   userId: string;
   tenantId: string | null;
   mfaVerified: boolean;
+  /** When MFA last completed (sign-in or step-up); null if never. Drives `hasRecentMfa`. */
+  mfaVerifiedAt: Date | null;
   displayName: string;
   email: string;
   mfaEnrolled: boolean;
@@ -49,6 +52,8 @@ export interface AuthContext {
   tenantKind: "customer" | "demo";
   authMethod: Exclude<AuthMethod, "operator">;
   email: string;
+  /** For `hasRecentMfa`: step-up gated actions (R-7.2.2) check this against the 5-minute window. */
+  mfaVerifiedAt: Date | null;
 }
 
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -100,6 +105,7 @@ export async function createSession(
       // Only operator sign-in may start verified, and only with two-step switched off by
       // configuration outside production (operator-actions.ts). No pre-MFA token exists to rotate.
       mfaVerified: options.mfaVerified === true && operator,
+      mfaVerifiedAt: options.mfaVerified === true && operator ? new Date() : null,
       authMethod: options.authMethod ?? "password_mfa",
       expiresAt: new Date(Date.now() + SESSION_ABSOLUTE_MS),
     });
@@ -111,9 +117,28 @@ export async function completeMfa(sessionId: string, realm: Realm = "practice"):
   const token = randomBytes(32).toString("base64url");
   await systemDb()
     .update(sessions)
-    .set({ mfaVerified: true, tokenHash: hashToken(token), lastSeenAt: new Date() })
+    .set({
+      mfaVerified: true,
+      mfaVerifiedAt: new Date(),
+      tokenHash: hashToken(token),
+      lastSeenAt: new Date(),
+    })
     .where(eq(sessions.id, sessionId));
   await setCookie(token, realm);
+}
+
+/**
+ * Records a step-up re-verification (R-7.2.2) on an already fully-signed-in session: same TOTP
+ * check as sign-in, but no token rotation (the session is already trusted) and no redirect to "/".
+ */
+export async function completeStepUpMfa(sessionId: string): Promise<void> {
+  await systemDb().update(sessions).set({ mfaVerifiedAt: new Date() }).where(eq(sessions.id, sessionId));
+}
+
+/** True when MFA was completed within the step-up window (R-7.2.2): sign-in or a recent step-up. */
+export function hasRecentMfa(mfaVerifiedAt: Date | null, now: Date = new Date()): boolean {
+  if (!mfaVerifiedAt) return false;
+  return now.getTime() - mfaVerifiedAt.getTime() <= MFA_STEP_UP_WINDOW_MS;
 }
 
 /** Revokes a session without touching the cookie (for when a new session replaces it). */
@@ -142,6 +167,7 @@ async function readSession(realm: Realm): Promise<SessionInfo | null> {
       userId: sessions.userId,
       tenantId: sessions.tenantId,
       mfaVerified: sessions.mfaVerified,
+      mfaVerifiedAt: sessions.mfaVerifiedAt,
       authMethod: sessions.authMethod,
       lastSeenAt: sessions.lastSeenAt,
       expiresAt: sessions.expiresAt,
@@ -187,6 +213,7 @@ async function readSession(realm: Realm): Promise<SessionInfo | null> {
     userId: row.userId,
     tenantId: row.tenantId,
     mfaVerified: row.mfaVerified,
+    mfaVerifiedAt: row.mfaVerifiedAt,
     displayName: row.displayName,
     email: row.email,
     mfaEnrolled: row.mfaEnrolledAt !== null,
@@ -249,6 +276,7 @@ export const requireAuth = cache(async (): Promise<AuthContext> => {
     tenantKind: membership.tenantKind,
     authMethod: session.authMethod,
     email: session.email,
+    mfaVerifiedAt: session.mfaVerifiedAt,
   };
 });
 

@@ -11,6 +11,9 @@ export const patients: Messages["patients"] = {
     "Cadastre um paciente para iniciar seu prontuário. As reivindicações e negativas se vinculam a ele.",
   "list.emptyDescriptionReadOnly": "Os pacientes aparecerão aqui quando sua equipe os cadastrar.",
 
+  "notice.syncedFromConnection": "Os pacientes são sincronizados a partir de {name}; edite-os no seu EHR/PM.",
+  "detail.syncedFrom": "Sincronizado de {name} · última atualização {date}",
+
   // Tabela de pacientes (lista e resultados de busca) e emblemas
   "badge.restricted": "Restrito",
   "badge.selfPay": "Particular",

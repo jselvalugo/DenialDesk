@@ -4,7 +4,16 @@ import { currentStep, totpAt } from "@/auth/totp";
 import type { E2EUser } from "./global-setup";
 
 export function e2eUser(
-  key: "worker" | "viewer" | "manager" | "newbie" | "locked" | "guesser" | "operator",
+  key:
+    | "worker"
+    | "viewer"
+    | "manager"
+    | "newbie"
+    | "locked"
+    | "guesser"
+    | "operator"
+    | "intAdmin"
+    | "intViewer",
 ): E2EUser {
   return JSON.parse(readFileSync("test/e2e/.auth/users.json", "utf8"))[key];
 }

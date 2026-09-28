@@ -116,6 +116,11 @@ export async function getPatientChart(tx: TenantTx, patientId: string) {
         memberIdLast4: patients.memberIdLast4,
         sensitivityTags: patients.sensitivityTags,
         sourceRestricted: patients.sourceRestricted,
+        // Provenance (docs/specs/patient-integrations.md "PI1b"): drives the "Synced from…" line
+        // and hides the Edit action on a synced patient's chart.
+        source: patients.source,
+        sourceConnectionId: patients.sourceConnectionId,
+        syncedAt: patients.syncedAt,
         createdAt: patients.createdAt,
         updatedAt: patients.updatedAt,
       },

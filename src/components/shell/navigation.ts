@@ -33,6 +33,12 @@ export interface NavItem {
   icon: LucideIcon;
   /** False until the feature ships; listed in the module switcher as "Planned", never a link. */
   available: boolean;
+  /**
+   * Marks a tab with its own data-source menu in the tab bar (docs/specs/erp-shell.md
+   * "Data-source drop-down"; docs/specs/patient-integrations.md). Only Patients sets this today;
+   * other tables opt in later by setting it too, with no shell redesign.
+   */
+  dataSource?: { table: "patients" };
 }
 
 /** A module ("app" in code) groups related pages: switched from the module switcher, its pages are tabs. */
@@ -79,7 +85,15 @@ export function navApps(
       description: t("module.patients.description"),
       icon: Users,
       tone: "slate",
-      items: [{ label: t("page.patients"), href: "/patients", icon: Users, available: true }],
+      items: [
+        {
+          label: t("page.patients"),
+          href: "/patients",
+          icon: Users,
+          available: true,
+          dataSource: { table: "patients" },
+        },
+      ],
     },
     {
       id: "claims",

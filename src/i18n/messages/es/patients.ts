@@ -11,6 +11,9 @@ export const patients: Messages["patients"] = {
     "Registre un paciente para iniciar su expediente. Las reclamaciones y denegaciones se vinculan a él.",
   "list.emptyDescriptionReadOnly": "Los pacientes aparecerán aquí cuando su equipo los registre.",
 
+  "notice.syncedFromConnection": "Los pacientes se sincronizan desde {name}; edítelos en su EHR/PM.",
+  "detail.syncedFrom": "Sincronizado desde {name} · última actualización {date}",
+
   // Tabla de pacientes (lista y resultados de búsqueda) e insignias
   "badge.restricted": "Restringido",
   "badge.selfPay": "Pago particular",

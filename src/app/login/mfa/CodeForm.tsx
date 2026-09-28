@@ -9,8 +9,20 @@ import { TextField } from "@/components/ui/TextField";
 
 type CodeAction = (state: FormState, formData: FormData) => Promise<FormState>;
 
-/** Practice sign-in by default; the operator console passes its own server action. */
-export function CodeForm({ mode, submit }: { mode: "verify" | "enroll"; submit?: CodeAction }) {
+/**
+ * Practice sign-in by default; the operator console and step-up re-verification
+ * (src/app/(app)/step-up) pass their own server action, optionally with extra hidden fields
+ * (e.g. `returnTo`) carried through to that action's FormData.
+ */
+export function CodeForm({
+  mode,
+  submit,
+  hidden,
+}: {
+  mode: "verify" | "enroll";
+  submit?: CodeAction;
+  hidden?: Record<string, string>;
+}) {
   const [state, action] = useActionState<FormState, FormData>(
     submit ?? (mode === "enroll" ? confirmMfaEnrollment : verifyMfa),
     {},
@@ -18,6 +30,10 @@ export function CodeForm({ mode, submit }: { mode: "verify" | "enroll"; submit?:
   const t = useT("auth");
   return (
     <form action={action} className="flex flex-col gap-5" noValidate>
+      {hidden &&
+        Object.entries(hidden).map(([name, value]) => (
+          <input key={name} type="hidden" name={name} value={value} />
+        ))}
       <FormAlert message={state.error} />
       <TextField
         label={t("mfa.codeLabel")}

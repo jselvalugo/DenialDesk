@@ -198,29 +198,43 @@ when the run succeeds, so a failed first run still locks the endpoint.
       even under a plausible-looking key name.
 
 ### PI1b — Settings › Integrations and the tab-bar drop-down
-- [ ] Integrations tab live: list (name, status, last sync); "New connection" →
+- [x] Integrations tab live: list (name, status, last sync); "New connection" →
       `/settings/integrations/new` (own page, DESIGN.md §8); `/settings/integrations/[id]`.
-- [ ] Client-settable fields parsed by a strict zod allow-list (`.strict()`): `displayName` (≤ 80,
+      (`src/app/(app)/settings/integrations/**`)
+- [x] Client-settable fields parsed by a strict zod allow-list (`.strict()`): `displayName` (≤ 80,
       "no patient information" hint), `baseUrl`, `clientId` (≤ 255), `mrnIdentifierSystem`,
       `usResidencyAttested`. Status, token endpoint, issuer, key reference, tenant, and approval
-      fields never come from the client. ZodErrors are mapped to field codes, never logged or returned.
-- [ ] URL rules on save: `https`; hostname only (no IP literal, userinfo, query, fragment); refuse
+      fields never come from the client. ZodErrors are mapped to field codes, never logged or
+      returned. (`connectionInputSchema`/`parseConnectionInput`, `src/domain/integrations/connections.ts`)
+- [x] URL rules on save: `https`; hostname only (no IP literal, userinfo, query, fragment); refuse
       `localhost`, `.local`, `.internal`, `.home.arpa`, `.invalid` (except the sandbox constant),
       single-label names, and a trailing dot; port 443 or one listed in `INTEGRATION_ALLOWED_PORTS`.
-- [ ] MRN identifier system refused when it names SSN, MBI/Medicare, driver's license, or passport
+      (`src/integrations/fhir/url-rules.ts`; PI2a's discovery/address-guard modules are separate)
+- [x] MRN identifier system refused when it names SSN, MBI/Medicare, driver's license, or passport
       (`http://hl7.org/fhir/sid/us-ssn`, `urn:oid:2.16.840.1.113883.4.1`,
       `http://hl7.org/fhir/sid/us-mbi`, `http://hl7.org/fhir/sid/us-medicare`, DL OIDs
       `urn:oid:2.16.840.1.113883.4.3.*`, `http://hl7.org/fhir/sid/passport-*` — list ⚠️ VERIFY).
-- [ ] Residency attestation on Submit of a real connection: "This EHR/PM endpoint stores and
-      processes data only in the United States" — stricter than § 408.051(3), which also allows
-      territories and Canada (DenialDesk defaults to U.S.-only, R-3.3.1). Audited.
+      (`src/integrations/fhir/identifier-rules.ts`)
+- [ ] Residency attestation "on Submit of a real connection": recorded instead when a real
+      connection is **created or edited** with the box checked (its own step-up-gated write,
+      audited as part of `connection_created`/`connection_updated`) — PI1b's Submit itself is
+      shown disabled (below), so nothing yet drives an attestation from an actual Submit click.
+      Text and behavior otherwise match: "This EHR/PM endpoint stores and processes data only in
+      the United States", U.S.-only (R-3.3.1), audited.
 - [ ] Submit, resume, attestation, and payer mapping require an MFA verification within the last
-      5 minutes (step-up; R-7.2.2). Activation notifies every practice administrator (in-app notice
-      now; e-mail once Notifications ships).
-- [ ] Revoke (admin, confirm dialog) → `revoked`; the page shows the offboarding steps (deregister
-      the client at the EHR).
-- [ ] Drop-down per `specs/erp-shell.md`; states include Awaiting approval and Revoked.
-- [ ] Every string in en/es/pt (R-11.1).
+      5 minutes (step-up; R-7.2.2). **Done: resume, revoke, and the attestation** (`hasRecentMfa`,
+      `src/auth/session.ts`; `/step-up` re-verification page/action). **Not done: Submit** (shown
+      disabled — PI2a's test-connection doesn't exist yet, so there is nothing to gate) and
+      **payer mapping** (PI2b). Activation does not yet notify practice administrators (no
+      Notifications feature; sandbox activation has no operator step to notify about either).
+- [x] Revoke (admin, confirm dialog, reason code) → `revoked`; the page shows the offboarding steps
+      (deregister the client at the EHR).
+- [x] Drop-down per `specs/erp-shell.md`; states include Awaiting approval and Revoked. "Sync
+      running" is defined but unreachable (no sync engine exists before PI2b).
+- [x] Every string in en/es/pt (R-11.1).
+- [x] Sandbox activation (draft → active, no operator approval) in a synthetic-data environment,
+      satisfying 0039/0040's CHECK/trigger pair because `is_sandbox` is true (not spec-required,
+      but load-bearing for PI1b's own e2e coverage and worth recording here).
 
 ### PI1c — operator approval
 - [ ] The operator practice page (`/operator/practices/<id>`, pattern of BAA recording and

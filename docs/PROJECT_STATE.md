@@ -43,9 +43,29 @@ _Last updated: 2026-09-28_
   `updatePatientSensitivityTags` now takes `actor.canTag`, and `src/lib/log.ts` drops non-UUID
   `*Id`-shaped fields and denylists raw identifier keys — see `docs/specs/patient-integrations.md`
   PI1a for the full list; R-15.9 human sign-off on the privilege (REVOKE/GRANT/column-grant)
-  statements is still needed before this migration runs anywhere but a local/test database)**, PI1b
-  Settings ›
-  Integrations + drop-down, PI1c operator approval, PI2a transport/discovery/keys/test connection,
+  statements is still needed before this migration runs anywhere but a local/test database)**,
+  **PI1b Settings › Integrations + drop-down (done, `drizzle/0041_session_step_up_mfa.sql`: adds
+  `sessions.mfa_verified_at` for step-up re-verification; `src/domain/integrations/connections.ts`
+  (lifecycle, zod `.strict()` allow-list, environment gating, audit — every write is raw SQL naming
+  only the app role's granted columns, drizzle's query builder otherwise names every
+  `.default(...)` column and gets refused, same as `requestUniversityAccess`),
+  `src/domain/integrations/connection-status.ts` (status labels/tones/revoke reasons, no `@/db/*`
+  import so client components can use it without bundling the DB driver), `src/integrations/fhir/
+  url-rules.ts` + `identifier-rules.ts` (PI1b's own slice; PI2a extends them), Settings ›
+  Integrations list/new/[id]/[id]/edit/[id]/runs pages on `RecordHeader`/`FormShell`, the sandbox
+  "fill from the built-in sandbox" button, `ConnectionActions` (Edit/Withdraw/Pause/Resume/Revoke
+  with a confirm dialog and reason code/Activate sandbox), the `DataSourceMenu` beside the Patients
+  tab (`dataSourceState` in `src/components/shell/data-source.ts`, an `AppShell`-loaded summary
+  query through `ShellContext`), Patients pages reflecting a blocked register and "Synced from …".
+  Step-up MFA (R-7.2.2) gates Submit's attestation, Resume, and Revoke: `hasRecentMfa` (5-minute
+  window) plus a small `/step-up` re-verification page/action reusing the sign-in TOTP flow — the
+  smallest addition that worked, since no "recent verification" timestamp existed before. Sandbox
+  activation (draft → active, no operator approval) satisfies the CHECK/trigger pair from 0039/0040
+  because `is_sandbox` is true, so `integration_connections_approved_when_live` never asks for
+  approval fields and the lifecycle trigger's own `draft → active` branch is gated on `is_sandbox`,
+  not on the caller's role. Real-endpoint creation and Submit are refused/disabled respectively:
+  PI2a's test-connection and discovery don't exist yet, so a real connection stays `draft` forever
+  in this PR by design.)**, PI1c operator approval, PI2a transport/discovery/keys/test connection,
   PI2b sync engine + sandbox + jobs + history + payer mapping (includes `withTenantAsSystem`,
   `denialdesk_jobs`, the integration service principal — deferred from PI1a per the spec's own phase
   split), PI3 scheduled sync + source-state hardening, PI4 Bulk Data before the first real practice.
@@ -352,7 +372,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    disclosures export (R-5.1.1), sensitivity-tag enforcement. After P1 deploys, re-seed or create a practice so
    seeded patients carry addresses and coverage (existing rows get coverage from the migration).
    P2 coverage now comes from the EHR sync once a practice is connected (`specs/patient-integrations.md`).
-11. Patient integrations PI1a → PI1c → PI2a → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
+11. Patient integrations PI1a → PI1b (done) → PI1c → PI2a → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
 12. Record pattern (`specs/record-pages.md`): P3 (`FormShell`) and P2 (Claims/Denials on
    `RecordHeader`/`RecordLayout`) done; next P4 sortable `DataTable`.

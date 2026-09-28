@@ -9,6 +9,10 @@ export const patients = {
   "list.emptyDescriptionCanEdit": "Register a patient to start their record. Claims and denials link to it.",
   "list.emptyDescriptionReadOnly": "Patients appear here once your team registers them.",
 
+  // Synced from an EHR/PM connection (docs/specs/patient-integrations.md "PI1b")
+  "notice.syncedFromConnection": "Patients are synced from {name}; edit them in your EHR/PM.",
+  "detail.syncedFrom": "Synced from {name} · last updated {date}",
+
   // Patient table (list and search results) and badges
   "badge.restricted": "Restricted",
   "badge.selfPay": "Self-pay",

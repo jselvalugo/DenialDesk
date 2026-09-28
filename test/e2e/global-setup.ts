@@ -72,6 +72,26 @@ export default async function globalSetup() {
     .set({ totpSecretEnc: encryptField(managerSecret), mfaEnrolledAt: new Date() })
     .where(eq(users.id, manager.userIds[0]!));
   enrolled.manager = { email: make("manager"), password, totpSecret: managerSecret };
+
+  // A third, dedicated practice for patient-integrations e2e coverage (docs/specs/
+  // patient-integrations.md "PI1b"): isolated from the first practice so activating a connection
+  // there (which blocks hand-registering patients) can never affect patients.spec.ts.
+  const integrations = await seedPractice({
+    practiceName: `E2E integrations practice ${run} (synthetic)`,
+    asOf: todayIn(),
+    users: [
+      { email: make("intAdmin"), displayName: "Avery Admin", role: "admin", password },
+      { email: make("intViewer"), displayName: "Riley Reader", role: "specialist", password },
+    ],
+  });
+  for (const [index, key] of ["intAdmin", "intViewer"].entries()) {
+    const secret = generateTotpSecret();
+    await systemDb()
+      .update(users)
+      .set({ totpSecretEnc: encryptField(secret), mfaEnrolledAt: new Date() })
+      .where(eq(users.id, integrations.userIds[index]!));
+    enrolled[key] = { email: make(key), password, totpSecret: secret };
+  }
   // The platform operator: one fixed account, reused across runs with fresh credentials. Its row is
   // written directly, so the server adopts it as the one active credential: clear earlier records
   // (test database only).

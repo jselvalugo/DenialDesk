@@ -36,6 +36,8 @@ export type AuditAction =
   | "system.demo_seeded"
   | "system.admin_repaired"
   | "auth.password_changed"
+  | "auth.step_up_verified"
+  | "auth.step_up_failed"
   | "security.rate_limited"
   | "operator.console_viewed"
   | "operator.login_succeeded"
@@ -100,7 +102,13 @@ export type AuditAction =
   | "university.lesson_completed"
   | "university.access_requested"
   | "operator.university_access_granted"
-  | "operator.university_access_revoked";
+  | "operator.university_access_revoked"
+  | "integration.connection_created"
+  | "integration.connection_updated"
+  | "integration.connection_activated"
+  | "integration.connection_paused"
+  | "integration.connection_resumed"
+  | "integration.connection_revoked";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
@@ -134,7 +142,8 @@ export interface AuditEvent {
     | "remittance"
     | "prompt_pay_response"
     | "university_lesson"
-    | "university_access";
+    | "university_access"
+    | "integration_connection";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;

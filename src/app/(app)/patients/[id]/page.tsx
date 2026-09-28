@@ -22,6 +22,11 @@ import { withTenant } from "@/db/tenant";
 import { CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { CLAIM_STATUSES } from "@/domain/claims/status";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
+import {
+  blocksPatientsRegister,
+  getConnection,
+  getPatientsConnectionSummary,
+} from "@/domain/integrations/connections";
 import { getPatientChart } from "@/domain/patients/queries";
 import {
   ageOn,
@@ -53,9 +58,9 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
   const tcf = await getT("customFields");
   const f = await getFormat();
 
-  const chart = await withTenant(auth, async (tx) => {
+  const { chart, syncedFromName, registerBlocked } = await withTenant(auth, async (tx) => {
     const chart = await getPatientChart(tx, id);
-    if (!chart) return null;
+    if (!chart) return { chart: null, syncedFromName: null, registerBlocked: false };
     await audit(tx, {
       action: "patient.viewed",
       actorUserId: auth.userId,
@@ -64,7 +69,12 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
       entityId: id,
       metadata: { claims: chart.claims.length, denials: chart.denials.length },
     });
-    return chart;
+    const syncedFromName =
+      chart.patient.source === "fhir" && chart.patient.sourceConnectionId
+        ? ((await getConnection(tx, chart.patient.sourceConnectionId))?.displayName ?? null)
+        : null;
+    const registerBlocked = blocksPatientsRegister(await getPatientsConnectionSummary(tx));
+    return { chart, syncedFromName, registerBlocked };
   });
   if (!chart) notFound();
   const customValues = await withTenant(auth, (tx) =>
@@ -80,7 +90,8 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
   ]
     .filter(Boolean)
     .join(", ");
-  const canEdit = canEditPatients(auth.role);
+  const synced = chart.patient.source === "fhir";
+  const canEdit = canEditPatients(auth.role) && !synced && !registerBlocked;
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
@@ -201,6 +212,14 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
                   {f.dateOf(patient.updatedAt)}
                 </Field>
               </FieldList>
+              {synced && syncedFromName && (
+                <p className="mt-3 text-label text-muted">
+                  {t("detail.syncedFrom", {
+                    name: syncedFromName,
+                    date: patient.syncedAt ? f.dateTime(patient.syncedAt) : tc("word.notSet"),
+                  })}
+                </p>
+              )}
             </Panel>
           </>
         }

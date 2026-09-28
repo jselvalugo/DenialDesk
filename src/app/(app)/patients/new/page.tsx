@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { payerOptions } from "@/domain/denials/queries";
+import { blocksPatientsRegister, getPatientsConnectionSummary } from "@/domain/integrations/connections";
 import { activeCustomFields } from "@/domain/settings/queries";
 import { getT } from "@/i18n/server";
 import { toCustomFieldOptions } from "@/components/custom-fields/options";
@@ -22,12 +23,21 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function NewPatientPage() {
   const auth = await requireAuth();
   const t = await getT("patients");
-  if (!canEditPatients(auth.role)) {
+  const { payers, customFields, connectionSummary } = await withTenant(auth, async (tx) => ({
+    payers: await payerOptions(tx),
+    customFields: await activeCustomFields(tx, "patient"),
+    connectionSummary: await getPatientsConnectionSummary(tx),
+  }));
+  const registerBlocked = blocksPatientsRegister(connectionSummary);
+
+  if (!canEditPatients(auth.role) || registerBlocked) {
     return (
       <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
         <PageHeader title={t("new.title")} />
         <p role="note" className="text-body text-muted">
-          {t("new.readOnlyNotice")}{" "}
+          {registerBlocked && connectionSummary
+            ? t("notice.syncedFromConnection", { name: connectionSummary.displayName })
+            : t("new.readOnlyNotice")}{" "}
           <Link href="/patients" className="font-medium text-link hover:underline">
             {t("new.backToPatients")}
           </Link>
@@ -35,10 +45,6 @@ export default async function NewPatientPage() {
       </div>
     );
   }
-  const { payers, customFields } = await withTenant(auth, async (tx) => ({
-    payers: await payerOptions(tx),
-    customFields: await activeCustomFields(tx, "patient"),
-  }));
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
