@@ -8,6 +8,10 @@ export const welcome: Messages["welcome"] = {
   openQueue: "Abrir a fila de negativas",
   universityPrompt: "Novo por aqui? Comece pela Universidade DenialDesk",
 
+  "today.ariaLabel": "Negativas em aberto hoje",
+  "today.openDetail": "De todos os pagadores e motivos",
+  "flow.available": "{shipped} de {total} etapas disponíveis",
+
   "howItWorks.title": "Como o DenialDesk funciona",
   "howItWorks.description": "O caminho que uma reivindicação percorre na plataforma",
 
@@ -51,6 +55,7 @@ export const welcome: Messages["welcome"] = {
 
   "modules.title": "Seus módulos",
   "modules.description": "Também disponíveis no seletor de módulos (Ctrl K)",
+  "modules.pages": "{count, plural, one {# página} other {# páginas}}",
 
   "safeguards.title": "Salvaguardas",
   "safeguards.description": "Controles de segurança e conformidade em vigor hoje",

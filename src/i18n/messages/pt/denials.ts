@@ -142,4 +142,13 @@ export const denials: Messages["denials"] = {
   "error.invalidNote": "Escreva uma nota de até 4.000 caracteres.",
   "error.invalidRevealReason": "Escolha um motivo.",
   "error.revealNotFound": "Não encontrado.",
+  "error.fieldsReload": "Recarregue a página e tente novamente.",
+
+  "action.editCustomFields": "Editar campos personalizados",
+
+  // Página de edição de campos personalizados (app/(app)/denials/[id]/fields/page.tsx)
+  "fields.pageTitle": "Campos personalizados",
+  "fields.breadcrumb": "Campos personalizados",
+  "fields.description":
+    "Campos definidos pela clínica nesta negativa. Não fazem parte do registro do pagador e nunca alteram a negativa em si.",
 };

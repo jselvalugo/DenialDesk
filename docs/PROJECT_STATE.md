@@ -6,6 +6,10 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-27_
 
 ## Where we are
+- Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
+  of practice denial totals (`queueSummary`, aggregates only, no audit; owner to confirm, OA-058), the two step flows as a
+  connected pipeline (`src/components/home/FlowSteps.tsx`), and "Your modules" as a card grid with
+  page links. Within DESIGN.md §3 (no gradients, hairline panels, hover-only motion ≤ 150ms).
 - **Patient integrations — Patient Register synced from the EHR/PM** (`specs/patient-integrations.md`,
   ADR 0010 Proposed, `threat-models/patient-integrations.md`; owner request 2026-09-27: "sync data,
   not hold any of the data … a drop-down in the nav bar beside the table … connect to this table
@@ -42,8 +46,9 @@ _Last updated: 2026-09-27_
   all four Patient screens (list with toolbar/count/age/location/coverage, chart with header meta
   strip and Record panel, sectioned register/edit forms). `ageOn()` pure helper with boundary tests;
   `PageEyebrow` takes a `page` override and no longer prints "Patients · Patients" on form pages.
-  Next: P2 move Claims and Denials record headers onto `RecordHeader`; P3 the other forms onto
-  `FormShell`; P4 sortable `DataTable`. Open (owner): which column replaces Sex on the list.
+  P3 done 2026-09-28 (Appeals, Remittances, Prompt pay, Settings › Custom fields, Operator ›
+  Practices forms on `FormShell`). Next: P2 Claims and Denials record headers onto `RecordHeader`;
+  P4 sortable `DataTable`. Open (owner): which column replaces Sex on the list.
 - Internationalization (`specs/internationalization.md`, ADR 0009, R-11.1): the whole product (practice
   app, sign-in, operator console, Insight .xlsx export) reads in English, Spanish, or Portuguese. Own
   module in `src/i18n/` (no dependency): typed dictionaries per namespace in
@@ -134,10 +139,22 @@ _Last updated: 2026-09-27_
   add a non-sensitive field as a list column (capped at 5, `MAX_LIST_COLUMNS`), loaded by its own
   module `src/domain/custom-fields/list-values.ts` (never sensitive/hidden fields, one query per
   page) and rendered by `PatientTable`. Shared UI in `src/components/custom-fields/` for reuse by
-  claims/denials/payers. `test:integration` not run this session (no `DATABASE_URL`/docker
-  available) — needs a run before merge. Next: PR 3 claims and denials, PR 4 payers; an e2e admin
-  user fixture doesn't exist yet (`test/e2e/global-setup.ts` seeds specialist/compliance/manager
-  only), so the spec's "admin adds a field" E2E case is still open.
+  claims/denials/payers. PR 3 (claims and denials) done: `recordIsSensitive` and the list-values
+  masking join now also follow claim -> patient and denial -> claim -> patient, so a claim or denial
+  belonging to a sensitivity-tagged patient is masked and excluded from list columns the same as a
+  patient itself (I7); `/claims/[id]` and `/denials/[id]` show a "Custom fields" panel
+  (`CustomFieldValues`, masked reveal via `revealClaimCustomField`/`revealDenialCustomField`, same
+  roles as the member ID reveal); `/claims/[id]/fields` and `/denials/[id]/fields` are their own
+  edit pages (`FormShell` + `CustomFieldInputs` via the shared `CustomFieldsEditForm`), roles
+  `canCorrectClaims`/`canWorkDenials`; saving there only ever writes `custom_field_values` (no
+  `claims`/`denials` column change, no `claim_versions` row — confirmed by an integration test), so
+  its stale-edit check is a new values-table concurrency token (`customFieldValuesToken` /
+  `saveValuesForRecord`'s `expectedValuesToken`) instead of the record's own `updatedAt`; `/claims`
+  and `/denials` gained list columns via the same `loadListValues` module. `pnpm test`,
+  `test:integration` (371/371), `lint`, `typecheck`, `format:check` all green. Next: PR 4 payers; an
+  e2e admin user fixture doesn't exist yet (`test/e2e/global-setup.ts` seeds
+  specialist/compliance/manager only), so the spec's "admin adds a field" E2E case is still open for
+  every PR.
 - Phase 0 engineering done: skeleton, design system, tenancy + RLS, audit log, sign-in with MFA,
   rules engine, synthetic data, Netlify config (not yet deployed — see `docs/runbooks/netlify.md`).
 - Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
@@ -297,7 +314,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    stub with the timely-filing block; 999/277CA capture.
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53) and PR 2 patients (#68)
-   merged; PR 3 claims/denials in progress; PR 4 payers (Settings › Payers list/detail) next.
+   merged; PR 3 claims/denials (#73, own "edit custom fields" pages) done; PR 4 payers (Settings ›
+   Payers list/detail) next.
 7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
    payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
    timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.

@@ -12,6 +12,7 @@ export const settings: Messages["settings"] = {
   "tabs.notifications": "Notificações",
   "tabs.integrations": "Integrações",
   "tabs.sectionsLabel": "Seções de configurações",
+  "nav.breadcrumb": "Trilha de navegação",
 
   // Página de configurações gerais
   "general.profileTitle": "Perfil da clínica",
@@ -137,4 +138,6 @@ export const settings: Messages["settings"] = {
   "error.notLocked": "Este valor não está bloqueado.",
   "error.noValueOnFile": "Nenhum valor registrado.",
   "error.valueUnavailable": "Valor indisponível.",
+  "error.staleValues": "Esses campos mudaram desde que você os abriu. Recarregue e tente novamente.",
+  "error.recordNotFound": "Registro não encontrado.",
 };

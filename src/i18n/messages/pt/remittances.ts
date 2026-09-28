@@ -53,6 +53,7 @@ export const remittances: Messages["remittances"] = {
   "new.backToRemittances": "Voltar para remessas",
 
   // Formulário de upload (app/(app)/remittances/new/UploadRemittanceForm.tsx)
+  "upload.sectionTitle": "Arquivo de remessa",
   "upload.fileLabel": "Arquivo de remessa 835 (um pagamento, até 5 MB)",
   "upload.fileHint":
     "O pagador deve estar configurado com seu ID de pagador EDI, e toda reivindicação do arquivo já deve existir no DenialDesk. Nada muda em uma reivindicação até que a remessa seja lançada.",

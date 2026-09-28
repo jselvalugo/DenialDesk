@@ -1,6 +1,14 @@
 import { and, eq, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { customFields, customFieldValues, customFieldValueVersions, patients } from "@/db/schema";
+import {
+  claims,
+  customFields,
+  customFieldValues,
+  customFieldValueVersions,
+  denials,
+  patients,
+  payers,
+} from "@/db/schema";
 import type { CustomFieldRow } from "@/domain/settings/queries";
 import type { TenantTx } from "@/db/tenant";
 import { decryptField, encryptField } from "@/lib/crypto/field";
@@ -50,6 +58,15 @@ const RECORD_COLUMN = {
   claim: customFieldValues.claimId,
   denial: customFieldValues.denialId,
   payer: customFieldValues.payerId,
+} as const;
+
+/** The record's own table, keyed by entity — used only to lock its row (`lockRecordRow`), never to
+ * read or change its columns. */
+const PARENT_TABLE = {
+  patient: patients,
+  claim: claims,
+  denial: denials,
+  payer: payers,
 } as const;
 
 /**
@@ -209,21 +226,136 @@ export interface LoadedCustomFieldValue {
 /**
  * Whether the record itself carries record-level sensitivity (patient sensitivity tags, R-3.5.1):
  * every value on such a record is masked, even one on a field that isn't itself sensitive (threat
- * model I7). Only patients carry these tags today; other entities are never record-sensitive.
- * Looked up here, inside the module, rather than trusted from the caller.
+ * model I7). A claim or denial belongs to a patient (claim -> patient, denial -> claim -> patient),
+ * so their values are masked too when that patient carries any tag; payers have no linked patient
+ * and are never record-sensitive. Looked up here, inside the module, rather than trusted from the
+ * caller.
  */
 async function recordIsSensitive(
   tx: TenantTx,
   entity: CustomFieldEntity,
   recordId: string,
 ): Promise<boolean> {
-  if (entity !== "patient") return false;
+  if (entity === "patient") {
+    const [row] = await tx
+      .select({ sensitivityTags: patients.sensitivityTags })
+      .from(patients)
+      .where(eq(patients.id, recordId))
+      .limit(1);
+    return Boolean(row?.sensitivityTags.length);
+  }
+  if (entity === "claim") {
+    const [row] = await tx
+      .select({ sensitivityTags: patients.sensitivityTags })
+      .from(claims)
+      .innerJoin(patients, eq(patients.id, claims.patientId))
+      .where(eq(claims.id, recordId))
+      .limit(1);
+    return Boolean(row?.sensitivityTags.length);
+  }
+  if (entity === "denial") {
+    const [row] = await tx
+      .select({ sensitivityTags: patients.sensitivityTags })
+      .from(denials)
+      .innerJoin(claims, eq(claims.id, denials.claimId))
+      .innerJoin(patients, eq(patients.id, claims.patientId))
+      .where(eq(denials.id, recordId))
+      .limit(1);
+    return Boolean(row?.sensitivityTags.length);
+  }
+  return false; // payer: no linked patient.
+}
+
+/**
+ * The patient a record belongs to (itself for `patient`, via claim/denial otherwise; `null` for
+ * `payer`, which has none) — enriches the `custom_field.values_updated` audit event (threat model
+ * R1) so a claim or denial save records whose chart it belongs to, the same as `claim.viewed` /
+ * `denial.viewed` already do (IDs only, never values).
+ */
+async function patientIdFor(
+  tx: TenantTx,
+  entity: CustomFieldEntity,
+  recordId: string,
+): Promise<string | null> {
+  if (entity === "patient") return recordId;
+  if (entity === "claim") {
+    const [row] = await tx
+      .select({ patientId: claims.patientId })
+      .from(claims)
+      .where(eq(claims.id, recordId))
+      .limit(1);
+    return row?.patientId ?? null;
+  }
+  if (entity === "denial") {
+    const [row] = await tx
+      .select({ patientId: claims.patientId })
+      .from(denials)
+      .innerJoin(claims, eq(claims.id, denials.claimId))
+      .where(eq(denials.id, recordId))
+      .limit(1);
+    return row?.patientId ?? null;
+  }
+  return null; // payer: no linked patient.
+}
+
+/**
+ * A concurrency token for the standalone "edit custom fields" page (claims, denials): a count and
+ * latest `updatedAt` over this record's `custom_field_values` rows. That page never updates the
+ * claim/denial row itself (custom fields are practice-internal, never billed content — no
+ * `claim_versions` row, no `claims`/`denials` column changes), so the record's own `updatedAt`
+ * isn't available as a stale-edit check there the way it is for patients (whose form saves the
+ * patient and its values in one transaction). Read on page load; re-derived (after `lockRecordRow`
+ * has locked the parent record, see below) inside `saveValuesForRecord` when `expectedValuesToken`
+ * is passed, so the compare and the write happen atomically in one transaction.
+ */
+function valuesToken(rows: { updatedAt: Date }[]): string {
+  const latest = rows.reduce<Date | null>((max, r) => (!max || r.updatedAt > max ? r.updatedAt : max), null);
+  return `${rows.length}:${latest ? latest.toISOString() : ""}`;
+}
+
+export async function customFieldValuesToken(
+  tx: TenantTx,
+  entity: CustomFieldEntity,
+  recordId: string,
+): Promise<string> {
+  const column = RECORD_COLUMN[entity];
+  const rows = await tx
+    .select({ updatedAt: customFieldValues.updatedAt })
+    .from(customFieldValues)
+    .where(eq(column, recordId));
+  return valuesToken(rows);
+}
+
+/**
+ * Locks the record's own row (`patients`/`claims`/`denials`/`payers`) before `saveValuesForRecord`
+ * does anything else, and confirms it exists in this tenant. This is what makes a concurrency
+ * token computed over `custom_field_values` safe: without a lock on some row that both
+ * transactions must touch, `SELECT ... FOR UPDATE` over a record with zero (or few) existing
+ * `custom_field_values` rows locks nothing, so two concurrent "first saves" on the very same
+ * record can both read an identical token (e.g. "0:") and both pass the check — the second
+ * transaction's write (an insert racing `onConflictDoNothing`, or a plain update) then silently
+ * overwrites or clears the first's value with no stale-edit refusal at all. Locking the parent row
+ * first forces the second transaction to block here until the first commits or rolls back, so by
+ * the time it reads and compares the token afterward, it is reading the first transaction's fully
+ * committed effect. `FOR NO KEY UPDATE` is a `SELECT`, never an `UPDATE` statement, so it never
+ * fires `claims_require_version` (BEFORE UPDATE) or any other row trigger. A record that doesn't
+ * exist in this tenant (a bad id, or one belonging to another tenant and hidden by RLS) is refused
+ * here with a translated error instead of surfacing later as a raw database trigger error from the
+ * `custom_field_values_guard` trigger on the first write.
+ */
+async function lockRecordRow(
+  tx: TenantTx,
+  entity: CustomFieldEntity,
+  recordId: string,
+  t: SettingsT,
+): Promise<void> {
+  const table = PARENT_TABLE[entity];
   const [row] = await tx
-    .select({ sensitivityTags: patients.sensitivityTags })
-    .from(patients)
-    .where(eq(patients.id, recordId))
-    .limit(1);
-  return Boolean(row?.sensitivityTags.length);
+    .select({ id: table.id })
+    .from(table)
+    .where(eq(table.id, recordId))
+    .for("no key update");
+  if (!row) throw new CustomFieldValueError(t("error.recordNotFound"));
 }
 
 /**
@@ -304,6 +436,14 @@ export async function loadValuesForRecord(
  * `custom_field_value_versions` (owner decision 2026-09-26). Meant to run inside the same
  * transaction as the record's own create/update, so the record's `expectedUpdatedAt` check covers
  * these writes too. Returns the keys of the fields that changed (never their values).
+ *
+ * `expectedValuesToken`, when passed, is the record's own stale-edit check for a caller that has
+ * no record-row `expectedUpdatedAt` of its own to reuse (the claim/denial "edit custom fields"
+ * page, which never touches the claim/denial row): the record's row is locked first
+ * (`lockRecordRow`, always — see there for why), then a read of this record's current
+ * `custom_field_values` rows (now guaranteed to reflect any transaction that has already
+ * committed) must match the token computed when the form was opened (`customFieldValuesToken`),
+ * or the save is refused before any write, with the same reload message as a stale record edit.
  */
 export async function saveValuesForRecord(
   tx: TenantTx,
@@ -312,9 +452,17 @@ export async function saveValuesForRecord(
   recordId: string,
   inputs: Map<string, unknown>,
   t: SettingsT = englishSettingsT,
+  expectedValuesToken?: string,
 ): Promise<string[]> {
+  await lockRecordRow(tx, entity, recordId, t);
   const fields = await activeCustomFields(tx, entity);
   const column = RECORD_COLUMN[entity];
+  if (expectedValuesToken !== undefined) {
+    const current = await customFieldValuesToken(tx, entity, recordId);
+    if (current !== expectedValuesToken) {
+      throw new CustomFieldValueError(t("error.staleValues"));
+    }
+  }
   const recordSensitive = await recordIsSensitive(tx, entity, recordId);
   const changed: string[] = [];
 
@@ -387,18 +535,30 @@ export async function saveValuesForRecord(
     }
   }
   if (changed.length > 0) {
+    const patientId = await patientIdFor(tx, entity, recordId);
     await audit(tx, {
       action: "custom_field.values_updated",
       actorUserId: actor.userId,
       tenantId: actor.tenantId,
       entityType: "custom_field_value",
-      metadata: { entity, recordId, changed: changed.join(",") },
+      metadata: {
+        entity,
+        recordId,
+        changed: changed.join(","),
+        ...(patientId ? { patientId } : {}),
+      },
     });
   }
   return changed;
 }
 
-/** Appends the row's current ciphertext to `custom_field_value_versions`, then overwrites it. */
+/** Appends the row's current ciphertext to `custom_field_value_versions`, then overwrites it.
+ * `updatedAt` is stamped from the database's own wall clock (`clock_timestamp()`), not the app's
+ * `new Date()`: since `lockRecordRow` serializes concurrent saves of the same record through a
+ * single row lock, using the one clock every save's `UPDATE` actually executes against (rather
+ * than each app server's own clock, which can skew, or `now()`, which freezes at this
+ * transaction's start rather than the moment it actually got to run after waiting on that lock)
+ * keeps the values-table concurrency token's "latest `updatedAt`" comparison meaningful. */
 async function versionThenUpdate(
   tx: TenantTx,
   actor: Actor,
@@ -418,7 +578,7 @@ async function versionThenUpdate(
   });
   await tx
     .update(customFieldValues)
-    .set({ valueEnc: nextEnc, updatedBy: actor.userId, updatedAt: new Date() })
+    .set({ valueEnc: nextEnc, updatedBy: actor.userId, updatedAt: sql`clock_timestamp()` })
     .where(eq(customFieldValues.id, current.id));
 }
 

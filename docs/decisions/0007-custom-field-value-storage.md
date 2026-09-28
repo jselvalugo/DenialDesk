@@ -53,8 +53,10 @@ Options considered:
   nothing to reveal on an ordinary value.
 - **Record-level sensitivity is looked up, not trusted from the caller.** `loadValuesForRecord`,
   `saveValuesForRecord`, and `revealCustomFieldValue` each resolve whether the target record itself
-  carries sensitivity tags (today: patients only) inside the domain module, rather than accepting a
-  `recordSensitive` flag from the caller.
+  carries sensitivity tags inside the domain module, rather than accepting a `recordSensitive` flag
+  from the caller: for a patient, its own tags; for a claim or denial (S2 PR 3), its patient's tags,
+  followed claim -> patient or denial -> claim -> patient; a payer has no linked patient and is
+  never record-sensitive.
 - **Writing a masked value needs reveal permission.** `saveValuesForRecord` refuses to write a field
   that is masked (sensitive, or on a sensitivity-tagged record) unless the actor may reveal it —
   otherwise masking would be cosmetic, since anyone editing the record could silently overwrite a
@@ -70,3 +72,31 @@ Options considered:
   (tenant_id, field_id, <record column>) WHERE <record column> IS NOT NULL DO UPDATE`, so two
   concurrent first saves of the same field/record can't both race a plain INSERT into the partial
   unique index and fail.
+
+## Addendum (S2 PR 3, claims and denials get their own "edit custom fields" page)
+
+- **Why a separate page, not folded into the claim/denial's own edit flow.** Claim correction
+  (`correctClaim`) only works draft/rejected claims and, on any billed-content change, writes a new
+  `claim_versions` row (R-3.10.3) — the wrong shape for custom fields, which are practice-internal,
+  never billed content, apply to a claim or denial in any status, and must never create billing
+  history. So `/claims/[id]/fields` and `/denials/[id]/fields` are their own pages
+  (`CustomFieldsEditForm`), and their save (`saveClaimCustomFields` / `saveDenialCustomFields`)
+  writes only `custom_field_values` — no `claims`/`denials` column, no `claim_versions` row.
+- **A values-table concurrency token, not the record's `expectedUpdatedAt`.** Because that save
+  never touches the claim/denial row, there is no record `updatedAt` for it to reuse as a
+  stale-edit check the way patient saves do (in the same transaction as `updatePatient`). Instead,
+  `customFieldValuesToken` summarizes the record's own `custom_field_values` rows (count + latest
+  `updatedAt`), and `saveValuesForRecord` takes an optional `expectedValuesToken` to compare
+  against. Making that safe under concurrency needed one more step: `saveValuesForRecord` first
+  locks the record's own row (`lockRecordRow`, `patients`/`claims`/`denials`/`payers`, `SELECT ...
+  FOR NO KEY UPDATE` — a `SELECT`, so no `claims_require_version` or other row trigger fires) before
+  reading the token in a later statement. Without that lock, a `FOR UPDATE` read of a record with
+  zero (or few) existing `custom_field_values` rows locks nothing, so two concurrent first saves of
+  the same record could both read an identical token and both pass — a real race, caught only by an
+  integration test using two genuine database connections. The same lock also turns a bad or
+  cross-tenant record id into a clean, translated refusal instead of a raw trigger error from
+  `custom_field_values_guard` on the first write. The update path (`versionThenUpdate`) stamps
+  `updated_at` from the database's own `clock_timestamp()`, not the app's `new Date()` or the
+  transaction-frozen `now()`, so the token's "latest `updatedAt`" reflects the real order saves
+  actually committed in, not each app server's own clock or when a blocked transaction happened to
+  begin.

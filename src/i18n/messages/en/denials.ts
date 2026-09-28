@@ -139,4 +139,13 @@ export const denials = {
   "error.invalidNote": "Write a note of up to 4,000 characters.",
   "error.invalidRevealReason": "Choose a reason.",
   "error.revealNotFound": "Not found.",
+  "error.fieldsReload": "Reload the page and try again.",
+
+  "action.editCustomFields": "Edit custom fields",
+
+  // Custom fields edit page (app/(app)/denials/[id]/fields/page.tsx)
+  "fields.pageTitle": "Custom fields",
+  "fields.breadcrumb": "Custom fields",
+  "fields.description":
+    "Practice-defined fields on this denial. They aren't part of the payer's record and never change the denial itself.",
 } as const;

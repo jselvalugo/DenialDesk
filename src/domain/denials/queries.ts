@@ -254,3 +254,23 @@ export async function getDenial(tx: TenantTx, denialId: string) {
 }
 
 export type DenialDetail = NonNullable<Awaited<ReturnType<typeof getDenial>>>;
+
+/**
+ * Just enough to render and audit the "edit custom fields" page (breadcrumb back to the claim, and
+ * the patient id for the view audit) — never the patient's demographics, payer, provider, or lines,
+ * which that page doesn't show (minimum necessary, R-5.1.2).
+ */
+export async function getDenialForCustomFields(tx: TenantTx, denialId: string) {
+  const [row] = await tx
+    .select({
+      id: denials.id,
+      claimId: claims.id,
+      claimNumber: claims.claimNumber,
+      patientId: claims.patientId,
+    })
+    .from(denials)
+    .innerJoin(claims, eq(claims.id, denials.claimId))
+    .where(eq(denials.id, denialId))
+    .limit(1);
+  return row ?? null;
+}

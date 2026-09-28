@@ -100,6 +100,13 @@ export const claims: Messages["claims"] = {
   "detail.denials.title": "Denegaciones",
   "detail.denials.none": "Esta reclamación no tiene denegaciones.",
   "detail.denials.notice": "aviso {date}",
+  "detail.editCustomFields": "Editar campos personalizados",
+
+  // Página de edición de campos personalizados (app/(app)/claims/[id]/fields/page.tsx)
+  "fields.pageTitle": "Campos personalizados",
+  "fields.breadcrumb": "Campos personalizados",
+  "fields.description":
+    "Campos definidos por el consultorio en esta reclamación. No forman parte de la reclamación facturada y guardarlos nunca crea una nueva versión.",
 
   // Formulario de corrección (app/(app)/claims/[id]/CorrectionForm.tsx)
   "correction.button": "Corregir reclamación",

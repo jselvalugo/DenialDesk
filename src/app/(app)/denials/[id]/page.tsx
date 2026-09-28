@@ -23,11 +23,13 @@ import { CARC, CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { ACTION_STATUSES, DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { DUE_SOON_DAYS, getDenial, teamMembers } from "@/domain/denials/queries";
 import { openAppealsForDenial } from "@/domain/appeals/queries";
+import { loadValuesForRecord } from "@/domain/custom-fields/values";
 import { getFormat, getT } from "@/i18n/server";
 import type { MessageKey } from "@/i18n/messages/types";
 import { audit } from "@/lib/audit";
 import { MaskedMemberId } from "@/components/patients/MaskedMemberId";
-import { revealMemberId } from "./actions";
+import { CustomFieldValues } from "@/components/custom-fields/CustomFieldValues";
+import { revealDenialCustomField, revealMemberId } from "./actions";
 import { AssignControl, NoteForm, StatusControl } from "./controls";
 
 // The title never includes patient data (DESIGN.md §12).
@@ -58,6 +60,7 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
   const today = todayIn();
   const t = await getT("denials");
   const tc = await getT("common");
+  const tcf = await getT("customFields");
   const f = await getFormat();
 
   const data = await withTenant(auth, async (tx) => {
@@ -72,11 +75,17 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
       entityType: "denial",
       entityId: id,
     });
-    return { detail, team, openAppeals };
+    const customValues = await loadValuesForRecord(
+      tx,
+      { tenantId: auth.tenantId, userId: auth.userId, role: auth.role },
+      "denial",
+      id,
+    );
+    return { detail, team, openAppeals, customValues };
   });
   if (!data) notFound();
 
-  const { detail, team, openAppeals } = data;
+  const { detail, team, openAppeals, customValues } = data;
   const { denial, claim, patient, payer } = detail;
   const status = DENIAL_STATUSES[denial.status];
   const carc = CARC[denial.carc];
@@ -471,6 +480,27 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
               </ol>
             )}
           </Panel>
+
+          {customValues.length > 0 && (
+            <Panel
+              title={tcf("section.title")}
+              actions={
+                canWork && (
+                  <Link
+                    href={`/denials/${denial.id}/fields`}
+                    className="text-label font-medium text-link hover:underline"
+                  >
+                    {t("action.editCustomFields")}
+                  </Link>
+                )
+              }
+            >
+              <CustomFieldValues
+                values={customValues}
+                reveal={revealDenialCustomField.bind(null, denial.id)}
+              />
+            </Panel>
+          )}
         </div>
       </div>
     </div>

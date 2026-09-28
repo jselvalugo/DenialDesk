@@ -203,3 +203,17 @@ export async function getClaim(tx: TenantTx, claimId: string) {
 }
 
 export type ClaimDetail = NonNullable<Awaited<ReturnType<typeof getClaim>>>;
+
+/**
+ * Just enough to render and audit the "edit custom fields" page (breadcrumb, and the patient id
+ * for the view audit) — never the patient's demographics, payer, provider, or lines, which that
+ * page doesn't show (minimum necessary, R-5.1.2).
+ */
+export async function getClaimForCustomFields(tx: TenantTx, claimId: string) {
+  const [row] = await tx
+    .select({ id: claims.id, claimNumber: claims.claimNumber, patientId: claims.patientId })
+    .from(claims)
+    .where(eq(claims.id, claimId))
+    .limit(1);
+  return row ?? null;
+}

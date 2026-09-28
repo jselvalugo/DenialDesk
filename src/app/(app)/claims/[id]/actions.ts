@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { todayIn } from "@rules/calendar";
-import { canCorrectClaims } from "@/auth/permissions";
+import { canCorrectClaims, canWorkDenials } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { withTenant } from "@/db/tenant";
 import {
@@ -13,6 +13,7 @@ import {
   splitCodes,
 } from "@/domain/claims/correction";
 import { ClaimCorrectionError, correctClaim } from "@/domain/claims/versions";
+import { revealCustomFieldValue } from "@/domain/custom-fields/values";
 import { getT } from "@/i18n/server";
 
 export interface CorrectionState {
@@ -76,4 +77,40 @@ export async function submitCorrection(_: CorrectionState, formData: FormData): 
     if (error instanceof ClaimCorrectionError) return { error: t(error.key, error.params) };
     throw error;
   }
+}
+
+/** Reveals one custom field's value on a claim and records who looked and why (R-7.5.1). Same
+ * minimum-necessary roles as revealing a patient's member ID (`canWorkDenials`). */
+export async function revealClaimCustomField(
+  claimId: string,
+  fieldId: string,
+  reason: string,
+): Promise<{ value?: string; error?: string }> {
+  const auth = await requireAuth();
+  const t = await getT("settings");
+  const tc = await getT("customFields");
+  if (!canWorkDenials(auth.role)) return { error: tc("error.cantView") };
+  const parsed = z
+    .object({
+      claimId: z.uuid(),
+      fieldId: z.uuid(),
+      reason: z.enum(["appeal", "eligibility", "payer_call", "other"]),
+    })
+    .safeParse({ claimId, fieldId, reason });
+  if (!parsed.success) return { error: tc("error.chooseReason") };
+  const result = await withTenant(auth, (tx) =>
+    revealCustomFieldValue(
+      tx,
+      { tenantId: auth.tenantId, userId: auth.userId, role: auth.role },
+      {
+        fieldId: parsed.data.fieldId,
+        entity: "claim",
+        recordId: parsed.data.claimId,
+        reason: parsed.data.reason,
+      },
+      t,
+    ),
+  );
+  if (result.error) return { error: result.error };
+  return { value: String(result.value) };
 }
