@@ -1,5 +1,5 @@
 import { createPublicKey, generateKeyPairSync, randomUUID, verify as cryptoVerify } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, asc, eq } from "drizzle-orm";
 import { closeDatabase, systemDb } from "@/db/client";
 import { auditEvents, integrationConnections } from "@/db/schema";
@@ -64,7 +64,9 @@ function deps(transport: FakeFhirTransport | null, store: EnvSharedKeyStore = ke
   return { transportFor: () => transport, keyStore: () => store, now: () => CLOCK };
 }
 
-beforeAll(async () => {
+// Fresh practices per test: "Test connection" is rate-limited per practice (20 per window), and the
+// pinned CLOCK puts every test in the file into one window, so a shared practice would run out.
+beforeEach(async () => {
   a = await createTestTenant("Test connection A");
   b = await createTestTenant("Test connection B");
 });
