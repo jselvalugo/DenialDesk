@@ -69,8 +69,8 @@ evidence.
   (use opaque UUIDs); page titles; analytics, session replay, or error trackers; crash reports;
   browser `localStorage`, `sessionStorage`, IndexedDB, or service-worker caches; cookies other than
   an opaque session ID; email or SMS bodies and subjects; push notifications; file names we
-  generate; GitHub issues, PRs, commits, or Actions logs; agent sessions and prompts; screenshots,
-  test snapshots, or CI artifacts; chat tools; support tickets without a BAA.
+  generate; GitHub issues, PRs, commits, or Actions logs; development and coding-agent sessions and
+  prompts; screenshots, test snapshots, or CI artifacts; chat tools; support tickets without a BAA.
 - **HC-2.3 MUST** Responses that carry PHI send `Cache-Control: no-store`. No CDN or shared cache
   stores a PHI response.
 - **HC-2.4 MUST** Every export, download, or print of PHI (CSV, XLSX, PDF, X12) is audited with
@@ -116,7 +116,8 @@ evidence.
   as the change it records, so no change exists without its audit record and a failed audit write
   rolls the change back. Copying events to WORM storage happens afterward from that committed
   record (a transactional outbox; the design is an architect decision at the Azure cutover).
-- **HC-5.3 MUST** Audit events record identifiers, not PHI values. The audit log is append-only in
+- **HC-5.3 MUST** Audit events record identifiers, not PHI values (the only exception is the AI-record
+  store in HC-8.2). The audit log is append-only in
   the database (no code path updates or deletes audit rows) and immutable (WORM) in production
   storage (R-7.5.1). Anomalous access (mass export, after-hours, VIP or employee records) alerts in
   the SIEM (R-7.5.3), and the activity is reviewed regularly (45 CFR 164.308(a)(1)(ii)(D)).
@@ -156,8 +157,11 @@ evidence.
   5. the service is on the vendor's HIPAA-eligible list;
   6. minimum-necessary data only (HC-3.3).
 - **HC-8.2 MUST** AI/LLM services additionally require zero data retention, no training on customer
-  data, and human approval before anything reaches a payer (R-7.11). Prompts, outputs, and
-  approvals are recorded in the audit store (R-7.11.3), never in application logs (HC-2.2).
+  data, and human approval before anything reaches a payer (R-7.11). Approvals are ordinary audit
+  events. Prompts and outputs contain PHI, so they are the one exception to HC-5.3: they go to a
+  separate AI-record store linked to the audit event by ID — encrypted, U.S.-only, access-
+  controlled and audited like other PHI, with the audit log's retention (R-7.11.3) — and never to
+  application logs (HC-2.2).
 - **HC-8.3 MUST NOT** No offshore workforce, contractor, or support staff has access to PHI or to
   systems that hold it.
 - **HC-8.4 MUST** A new vendor or SDK is also a third-party dependency: `docs/SECURE_CODING.md`
@@ -183,7 +187,7 @@ evidence.
 - **HC-9.4 MUST** A secret or PHI committed to git is treated as an incident: rotate the secret or
   assess the exposure first; history rewriting is a human decision.
 
-## 10. Retention and disposal (45 CFR 164.316(b)(2); R-9.2)
+## 10. Retention and disposal (45 CFR 164.310(d)(2)(i)-(ii); R-9.2)
 
 - **HC-10.1 MUST** Retention follows REQUIREMENTS §9.2; legal hold overrides deletion (R-9.2.1).
 - **HC-10.2 MUST** Disposal follows NIST SP 800-88 and FIPA (R-9.2.3); deletion runs through the
@@ -234,5 +238,7 @@ These MUST rules are not yet met as of 2026-09-28. Pre-production holds syntheti
 | HC-4.6 | No just-in-time workforce access, session recording, or break-glass accounts yet. |
 | HC-5.3 | No WORM audit storage or SIEM alerting yet (Azure cutover, ADR 0003). |
 | HC-7.1 | No mTLS between internal services yet (Azure cutover). |
+| HC-10.1 | No legal-hold capability yet; hard deletes of practice data are refused until it exists (`drizzle/0004_tenant_identity_rls.sql`). |
+| HC-11.1 | Disclosures are recorded as audit events, but there is no per-patient accounting-of-disclosures export yet (R-5.1.1). |
 | HC-7.4 | Pre-production keys come from platform environment variables, not Key Vault (ADR 0003, OA-064). |
 | HC-12.2–12.5 | Risk analysis, sanction policy, training, contingency plan, and media controls are not written yet (REQUIREMENTS §6.4 policy set). |
