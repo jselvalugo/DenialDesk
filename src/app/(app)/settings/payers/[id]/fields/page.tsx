@@ -53,7 +53,7 @@ export default async function PayerCustomFieldsPage({ params }: { params: Promis
   return (
     <div className="mx-auto flex max-w-[900px] flex-col gap-6">
       <Breadcrumbs
-        label={t("tabs.sectionsLabel")}
+        label={t("nav.breadcrumb")}
         items={[
           { label: t("payers.breadcrumbList"), href: "/settings/payers" },
           { label: data.name, href: `/settings/payers/${id}` },

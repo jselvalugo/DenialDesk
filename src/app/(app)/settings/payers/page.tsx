@@ -10,6 +10,7 @@ import { withTenant } from "@/db/tenant";
 import { regimeLabel } from "@/domain/denial-status";
 import { loadListValues } from "@/domain/custom-fields/list-values";
 import { listPayers } from "@/domain/payers/queries";
+import { payerSourceLabel } from "@/domain/payers/source-label";
 import { getT } from "@/i18n/server";
 
 // Read-only payer list under Settings (docs/specs/settings-and-custom-fields.md S2 PR4;
@@ -78,7 +79,7 @@ export default async function PayersPage() {
                     )}
                   </Td>
                   <Td>{regimeLabel(payer.regime, tc)}</Td>
-                  <Td className="text-muted">{payer.source ?? t("payers.sourcePractice")}</Td>
+                  <Td className="text-muted">{payerSourceLabel(payer.source, t)}</Td>
                   {listColumns.map((col) => (
                     <Td key={col.fieldId}>
                       <ListCell type={col.type} value={listValues.get(payer.id)?.get(col.key)} />

@@ -9,6 +9,7 @@ import { withTenant } from "@/db/tenant";
 import { activeCustomFields } from "@/domain/settings/queries";
 import { parseCustomFieldInputs } from "@/domain/custom-fields/form-inputs";
 import { CustomFieldValueError, saveValuesForRecord } from "@/domain/custom-fields/values";
+import { getPayer } from "@/domain/payers/queries";
 import { getT } from "@/i18n/server";
 import type { CustomFieldsSaveState } from "@/components/custom-fields/CustomFieldsEditForm";
 
@@ -33,8 +34,18 @@ export async function savePayerCustomFields(
   });
   if (!ids.success) return { error: t("error.reload") };
 
+  let found = true;
   try {
     await withTenant(auth, async (tx) => {
+      // Confirms the id names a payer of this tenant before writing anything — a bad id, or
+      // another tenant's payer id, must not reach `saveValuesForRecord` (which has no record of
+      // its own to check against for an entity with no version history) and must never surface a
+      // 500 to the browser.
+      const payer = await getPayer(tx, ids.data.payerId);
+      if (!payer) {
+        found = false;
+        return;
+      }
       const fields = await activeCustomFields(tx, "payer");
       const inputs = parseCustomFieldInputs(fields, formData);
       await saveValuesForRecord(
@@ -53,6 +64,8 @@ export async function savePayerCustomFields(
     }
     throw error;
   }
+  if (!found) return { error: t("error.reload") };
   revalidatePath(`/settings/payers/${ids.data.payerId}`);
+  revalidatePath("/settings/payers");
   redirect(`/settings/payers/${ids.data.payerId}`);
 }

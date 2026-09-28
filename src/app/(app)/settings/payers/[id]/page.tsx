@@ -15,14 +15,17 @@ import { withTenant } from "@/db/tenant";
 import { regimeLabel } from "@/domain/denial-status";
 import { loadValuesForRecord } from "@/domain/custom-fields/values";
 import { getPayer } from "@/domain/payers/queries";
+import { payerSourceLabel } from "@/domain/payers/source-label";
 import { getFormat, getT } from "@/i18n/server";
 import { revealPayerCustomField } from "./actions";
 
 // Read-only payer record under Settings (docs/specs/settings-and-custom-fields.md S2 PR4;
 // docs/specs/payer-catalog.md). Payer name, EDI payer ID, and regime are not editable here (that's
 // payer-catalog P2); only the payer's own custom field values can change, via the "fields" page.
-// Every practice role may view (same as the rest of Settings); no view-audit event, since payers
-// carry no PHI (only patient, claim, and denial records do).
+// Every practice role may view (same as the rest of Settings); the payer row itself is never
+// PHI, so viewing it emits no audit event — but `loadValuesForRecord` below still audits
+// `custom_field.values_read` once it decrypts at least one unmasked custom field value (R-7.5.1),
+// the same as it does for every other entity.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT("settings");
   return { title: t("payers.detailMetaTitle") };
@@ -55,7 +58,7 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
       <Breadcrumbs
-        label={t("tabs.sectionsLabel")}
+        label={t("nav.breadcrumb")}
         items={[{ label: t("payers.breadcrumbList"), href: "/settings/payers" }, { label: payer.name }]}
       />
 
@@ -81,8 +84,8 @@ export default async function PayerPage({ params }: { params: Promise<{ id: stri
                 {payer.ediPayerId}
               </Field>
               <Field label={t("payers.field.regime")}>{regimeLabel(payer.regime, tc)}</Field>
-              <Field label={t("payers.field.source")} span empty={t("payers.sourcePractice")}>
-                {payer.source}
+              <Field label={t("payers.field.source")} span>
+                {payerSourceLabel(payer.source, t)}
               </Field>
               <Field label={t("payers.field.added")} tabular>
                 {f.dateOf(payer.createdAt)}

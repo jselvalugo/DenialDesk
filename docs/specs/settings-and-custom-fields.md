@@ -93,13 +93,20 @@ None.
   `custom_field_value_versions` table (ADR 0007 addendum) — reversing the earlier "no history yet"
   plan below. Also resolved: revealing a locked value uses the exact same roles as the member ID
   reveal (`canWorkDenials`).
-- Open (PR 4, builder default, owner to confirm): who may change a payer's own custom field values.
-  Payers have no natural "the people who bill" owner the way claims and patients do, so PR 4 used a
-  new, narrower permission (`canEditPayerFields`: admin, manager) rather than reusing
+- Open (PR 4, builder default, owner to confirm — **OA-045**): who may change a payer's own custom
+  field values. Payers have no natural "the people who bill" owner the way claims and patients do,
+  so PR 4 used a new, narrower permission (`canEditPayerFields`: admin, manager) rather than reusing
   `canCorrectClaims`/`canEditPatients` (which also include specialists) — payers are practice
   configuration, closer to the custom field definitions themselves (administrators only) than to a
   record a front-line biller corrects. The owner may want specialists included, or may want this to
-  match `canConfigureSettings` (administrators only) instead.
+  match `canConfigureSettings` (administrators only) instead. OA-045 also asks the owner to confirm
+  that a specialist may still *reveal* a locked payer value even though they can't edit it (reveal
+  keeps the one shared `canWorkDenials` rule, ADR 0007, rather than following `canEditPayerFields`);
+  whether payer custom field values are Confidential business data or PHI (free text on a payer
+  field could still hold patient details); and whether the six patient-oriented sensitivity
+  categories (HIV, mental health, SUD, genetic, minor, reproductive health) are the right lock for a
+  payer field at all, or whether a generic "confidential" category should be added for payers (and
+  other non-patient entities) instead.
 
 ## Implementation plan (S2)
 

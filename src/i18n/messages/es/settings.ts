@@ -13,6 +13,7 @@ export const settings: Messages["settings"] = {
   "tabs.notifications": "Notificaciones",
   "tabs.integrations": "Integraciones",
   "tabs.sectionsLabel": "Secciones de configuración",
+  "nav.breadcrumb": "Ruta de navegación",
 
   // Página de configuración general
   "general.profileTitle": "Perfil del consultorio",
@@ -144,17 +145,19 @@ export const settings: Messages["settings"] = {
   // solo lectura; payer-catalog P2 agregará verificación y edición).
   "payers.metaTitle": "Pagadores",
   "payers.listTitle": "Pagadores",
-  "payers.listDescription":
-    "Los pagadores que factura su consultorio, del catálogo inicial de Florida y los que se agregan en la cobertura de un paciente.",
+  "payers.listDescription": "Los pagadores de su consultorio, cargados desde el catálogo inicial de Florida.",
   "payers.count": "{count, plural, one {# pagador} other {# pagadores}}",
   "payers.tableCaption": "Pagadores",
   "payers.ediPayerId": "ID de pagador EDI",
   "payers.notVerified": "No verificado",
   "payers.source": "Fuente",
-  "payers.sourcePractice": "Ingresado por el consultorio",
+  "payers.sourceNotRecorded": "No registrado",
+  "payers.sourceOir": "Lista de aseguradoras autorizadas de la OIR de Florida",
+  "payers.sourceSmmc": "Lista de planes de atención administrada de Medicaid (AHCA)",
+  "payers.sourceCms": "CMS",
+  "payers.sourceReference": "Lista de referencia (aún no verificada)",
   "payers.emptyTitle": "Todavía no hay pagadores",
-  "payers.emptyDescription":
-    "Los pagadores aparecen cuando se carga el catálogo inicial de su consultorio, o al agregar uno en la cobertura principal de un paciente.",
+  "payers.emptyDescription": "Los pagadores aparecen cuando se carga el catálogo inicial de su consultorio.",
 
   "payers.detailMetaTitle": "Pagador",
   "payers.detailEyebrow": "Registro de pagador",

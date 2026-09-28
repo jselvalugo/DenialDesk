@@ -18,9 +18,13 @@ export interface CatalogPayer {
   source: string;
 }
 
-const OIR_SOURCE = "FL OIR licensee list — ⚠️ VERIFY";
-const SMMC_SOURCE = "AHCA SMMC plan list — ⚠️ VERIFY";
-const CMS_SOURCE = "CMS — ⚠️ VERIFY";
+// Exported so other modules (the Settings payer list/detail pages) can recognize a known catalog
+// source without duplicating these literal strings (single source of truth) — see
+// `src/domain/payers/source-label.ts`, which maps a source to a translated "kind" label rather
+// than ever showing this ⚠️ VERIFY text to practice staff.
+export const OIR_SOURCE = "FL OIR licensee list — ⚠️ VERIFY";
+export const SMMC_SOURCE = "AHCA SMMC plan list — ⚠️ VERIFY";
+export const CMS_SOURCE = "CMS — ⚠️ VERIFY";
 
 /**
  * Starter list of well-known insurers and plans doing business in Florida. Not exhaustive; a

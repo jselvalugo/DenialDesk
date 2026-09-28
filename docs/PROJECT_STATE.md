@@ -3,7 +3,7 @@
 Read this at the start of every session, after `CLAUDE.md`. Update it at the end of every session
 that changes decisions, status, or open questions. Keep it short: facts and links, not narrative.
 
-_Last updated: 2026-09-27_
+_Last updated: 2026-09-28_
 
 ## Where we are
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient

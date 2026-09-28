@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
@@ -7,6 +8,7 @@ import {
   auditEvents,
   claims,
   claimVersions,
+  customFields,
   customFieldValues,
   customFieldValueVersions,
   denials,
@@ -1197,17 +1199,30 @@ describe("custom field values on claims and denials (PR3)", () => {
 // they have no record-level sensitivity (unlike claims and denials, which mask through their
 // patient) — only a field's own `sensitivity` category can mask a payer's value.
 describe("custom field values on payers (PR4)", () => {
-  it("never masks a payer's plain values by record-level sensitivity (payers have none)", async () => {
+  it("never masks a payer's plain values by record-level sensitivity (payers have none), even when the claim using it belongs to a sensitivity-tagged patient", async () => {
     const fieldId = await withTenant(a.ctx, (tx) =>
       createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_plain_pr4" })),
     );
     await withTenant(a.ctx, (tx) =>
       saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[fieldId, "network tier A"]])),
     );
-    const loaded = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "payer", a.payerId));
-    const found = loaded.find((v) => v.fieldId === fieldId)!;
-    expect(found.masked).toBe(false);
-    expect(found.value).toBe("network tier A");
+    // a.patientId's claim uses a.payerId (see seededPractice): tag that patient and confirm the
+    // payer's own values are still unmasked. Unlike a claim or denial (which mask through their
+    // patient, PR3), a payer is never "that patient's" record — many patients and claims across
+    // many payers share one payer row — so it has no record-level sensitivity at all (spec: S2
+    // PR4 acceptance criterion 5; `recordIsSensitive` returns `false` for `payer` unconditionally).
+    await systemDb()
+      .update(patients)
+      .set({ sensitivityTags: ["hiv"] })
+      .where(eq(patients.id, a.patientId));
+    try {
+      const loaded = await withTenant(a.ctx, (tx) => loadValuesForRecord(tx, a.ctx, "payer", a.payerId));
+      const found = loaded.find((v) => v.fieldId === fieldId)!;
+      expect(found.masked).toBe(false);
+      expect(found.value).toBe("network tier A");
+    } finally {
+      await systemDb().update(patients).set({ sensitivityTags: [] }).where(eq(patients.id, a.patientId));
+    }
   });
 
   it("still masks a payer field marked sensitive, reveals it with an audit event carrying no value, and refuses a role outside canWorkDenials", async () => {
@@ -1215,7 +1230,7 @@ describe("custom field values on payers (PR4)", () => {
       createCustomField(
         tx,
         a.ctx,
-        field({ entity: "payer", key: "payer_sensitive_pr4", sensitivity: "reproductive_health" }),
+        field({ entity: "payer", key: "payer_sensitive_pr4", sensitivity: "genetic" }),
       ),
     );
     await withTenant(a.ctx, (tx) =>
@@ -1227,6 +1242,10 @@ describe("custom field values on payers (PR4)", () => {
     expect(found.value).toBeUndefined();
 
     const compliance = await addUser(a.ctx.tenantId, "compliance", "payer-reveal-refused");
+    const beforeRefusal = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.value_revealed"));
     const refused = await withTenant(compliance, (tx) =>
       revealCustomFieldValue(tx, compliance, {
         fieldId,
@@ -1236,6 +1255,12 @@ describe("custom field values on payers (PR4)", () => {
       }),
     );
     expect(refused.error).toBe("Your role can't reveal custom field values.");
+    // The refusal happens before any decrypt is attempted, so it writes no audit row at all.
+    const afterRefusal = await systemDb()
+      .select()
+      .from(auditEvents)
+      .where(eq(auditEvents.action, "custom_field.value_revealed"));
+    expect(afterRefusal.length).toBe(beforeRefusal.length);
 
     const revealed = await withTenant(a.ctx, (tx) =>
       revealCustomFieldValue(tx, a.ctx, {
@@ -1304,31 +1329,95 @@ describe("custom field values on payers (PR4)", () => {
     expect(bLoaded).toEqual([]);
   });
 
+  it("refuses to write a value against a payer id that isn't this tenant's (a random id, or another tenant's payer), writing no row", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_bad_id_pr4" })),
+    );
+    // Neither the field's guard trigger nor `saveValuesForRecord` treats a bad payer id as "the
+    // record just doesn't exist yet, so create it" — a payer row is never something this call
+    // creates, only refers to (spec review, S2 PR4 item 3: the fields-edit action's own `getPayer`
+    // pre-check exists precisely to turn this into a friendly "reload" message before it ever
+    // reaches here; this asserts the deeper guarantee holds regardless).
+    await expectDbError(
+      withTenant(a.ctx, (tx) =>
+        saveValuesForRecord(tx, a.ctx, "payer", randomUUID(), new Map([[fieldId, "should not persist"]])),
+      ),
+      /does not belong to this tenant/,
+    );
+    await expectDbError(
+      withTenant(a.ctx, (tx) =>
+        saveValuesForRecord(tx, a.ctx, "payer", b.payerId, new Map([[fieldId, "should not persist"]])),
+      ),
+      /does not belong to this tenant/,
+    );
+    const rows = await systemDb()
+      .select()
+      .from(customFieldValues)
+      .where(eq(customFieldValues.fieldId, fieldId));
+    expect(rows).toHaveLength(0);
+  });
+
   it("loadListValues for payers never returns a sensitive field, only non-sensitive show_in_list ones", async () => {
     const shownId = await withTenant(a.ctx, (tx) =>
       createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_list_shown_pr4", showInList: true })),
     );
-    const sensitiveId = await withTenant(a.ctx, (tx) =>
-      createCustomField(
-        tx,
-        a.ctx,
-        field({ entity: "payer", key: "payer_list_sensitive_pr4", sensitivity: "reproductive_health" }),
-      ),
-    );
     await withTenant(a.ctx, (tx) =>
       saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[shownId, "Tier 2"]])),
     );
-    // A sensitive field can't be saved with showInList in the app layer at all (S1 DB check), so
-    // this only ever exercises the query-time filter for a value that does exist on the field.
-    void sensitiveId;
 
     const { columns, valuesByRecord } = await withTenant(a.ctx, (tx) =>
       loadListValues(tx, a.ctx, "payer", [a.payerId]),
     );
     expect(columns.map((c) => c.key)).toContain("payer_list_shown_pr4");
-    expect(columns.some((c) => c.key === "payer_list_sensitive_pr4")).toBe(false);
     expect(valuesByRecord.get(a.payerId)?.get("payer_list_shown_pr4")).toBe("Tier 2");
+  });
 
+  it("stops returning a payer field's value once it is marked sensitive, even though it was previously show_in_list with a stored value", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(
+        tx,
+        a.ctx,
+        field({ entity: "payer", key: "payer_flip_sensitive_pr4", showInList: true }),
+      ),
+    );
+    await withTenant(a.ctx, (tx) =>
+      saveValuesForRecord(tx, a.ctx, "payer", a.payerId, new Map([[fieldId, "Tier 9"]])),
+    );
+    const before = await withTenant(a.ctx, (tx) => loadListValues(tx, a.ctx, "payer", [a.payerId]));
+    expect(before.columns.map((c) => c.key)).toContain("payer_flip_sensitive_pr4");
+    expect(before.valuesByRecord.get(a.payerId)?.get("payer_flip_sensitive_pr4")).toBe("Tier 9");
+
+    // A field can't be both `show_in_list` and sensitive at once (DB check
+    // `custom_fields_show_in_list_not_sensitive`, migration 0036) — proven below — so marking it
+    // sensitive the way an administrator's edit form does (custom-fields.ts: sensitivity turns
+    // show_in_list off) turns both off together, in one statement.
+    await systemDb()
+      .update(customFields)
+      .set({ sensitivity: "genetic", showInList: false })
+      .where(eq(customFields.id, fieldId));
+
+    const after = await withTenant(a.ctx, (tx) => loadListValues(tx, a.ctx, "payer", [a.payerId]));
+    expect(after.columns.some((c) => c.key === "payer_flip_sensitive_pr4")).toBe(false);
+    expect(after.valuesByRecord.get(a.payerId)?.has("payer_flip_sensitive_pr4")).toBeFalsy();
+  });
+
+  it("the DB forbids a field being both show_in_list and sensitive at the same time (migration 0036)", async () => {
+    const fieldId = await withTenant(a.ctx, (tx) =>
+      createCustomField(tx, a.ctx, field({ entity: "payer", key: "payer_check_pr4", showInList: true })),
+    );
+    await expectDbError(
+      systemDb().execute(sql`update custom_fields set sensitivity = 'hiv' where id = ${fieldId}`),
+      /custom_fields_show_in_list_not_sensitive/,
+    );
+  });
+
+  it("isolates tenants at the query itself: tenant B's own show_in_list payer field never surfaces tenant A's payer or value", async () => {
+    await withTenant(b.ctx, (tx) =>
+      createCustomField(tx, b.ctx, field({ entity: "payer", key: "payer_list_iso_pr4", showInList: true })),
+    );
+    // Tenant B now has an active, show_in_list payer field of its own, so `loadListValues` can't
+    // short-circuit on an empty field list — the query itself must run and still find nothing for
+    // tenant A's payer id.
     const bResult = await withTenant(b.ctx, (tx) => loadListValues(tx, b.ctx, "payer", [a.payerId]));
     expect(bResult.valuesByRecord.size).toBe(0);
   });

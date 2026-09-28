@@ -12,6 +12,10 @@ export const settings = {
   "tabs.notifications": "Notifications",
   "tabs.integrations": "Integrations",
   "tabs.sectionsLabel": "Settings sections",
+  // Distinct from `tabs.sectionsLabel` on purpose: a record page's own breadcrumb trail is a
+  // second `nav` landmark, and sharing the tab bar's label breaks an e2e locator that looks up a
+  // `nav` by its accessible name (docs/specs/record-pages.md; matches claims/denials `nav.breadcrumb`).
+  "nav.breadcrumb": "Breadcrumb",
 
   // General settings page
   "general.profileTitle": "Practice profile",
@@ -143,16 +147,19 @@ export const settings = {
   "payers.metaTitle": "Payers",
   "payers.listTitle": "Payers",
   "payers.listDescription":
-    "The insurers your practice bills, from the Florida starter catalog and any added on a patient's coverage.",
+    "The insurers on file for your practice, loaded from the Florida starter catalog.",
   "payers.count": "{count, plural, one {# payer} other {# payers}}",
   "payers.tableCaption": "Payers",
   "payers.ediPayerId": "EDI payer ID",
   "payers.notVerified": "Not verified",
   "payers.source": "Source",
-  "payers.sourcePractice": "Practice-entered",
+  "payers.sourceNotRecorded": "Not recorded",
+  "payers.sourceOir": "Florida OIR licensee list",
+  "payers.sourceSmmc": "AHCA Medicaid managed care plan list",
+  "payers.sourceCms": "CMS",
+  "payers.sourceReference": "Reference list (not yet verified)",
   "payers.emptyTitle": "No payers yet",
-  "payers.emptyDescription":
-    "Payers appear once your practice's starter catalog loads, or when one is added on a patient's primary insurance.",
+  "payers.emptyDescription": "Payers appear once your practice's starter catalog loads.",
 
   "payers.detailMetaTitle": "Payer",
   "payers.detailEyebrow": "Payer record",
