@@ -103,5 +103,8 @@ submission.
 - PIP (Fla. Stat. § 627.736(5)(c)), workers' comp, and Medicaid filing limits are not in `rules/`
   yet; the UI says "no filing rule configured", never that none exists. (florida-rules-engine + counsel)
 - `fl.timely_filing.initial` cites § 627.6131(2) for HMO claims too; confirm § 641.3155. (counsel)
-- Is timely filing met when the claim is sent or when the payer receives it? Submitted claims
-  without a receipt date keep showing the deadline until C4. (counsel)
+- Is timely filing met when the claim is sent or when the payer receives it? Owner answer
+  (2026-09-26, pending counsel): when **submitted**. The claim page judges a sent claim by its
+  recorded submission date (`claims.submitted_at`, Eastern; the clearinghouse acknowledgement
+  replaces it once C4 captures it) as sent on time / sent late, with a "Pending counsel verification" badge; only a
+  sent claim with no recorded submission date still counts the deadline from today. (counsel)

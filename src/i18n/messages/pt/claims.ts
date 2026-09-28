@@ -84,7 +84,12 @@ export const claims: Messages["claims"] = {
   "detail.filing.receivedNoLongerApplies":
     "Recebido pelo pagador em {date}. O prazo de envio não se aplica mais.",
   "detail.filing.acceptedNoLongerApplies": "Aceito pelo pagador. O prazo de envio não se aplica mais.",
-  "detail.filing.awaitingReceipt": "Enviada; o prazo é cumprido assim que o pagador confirmar o recebimento.",
+  "detail.filing.awaitingReceipt":
+    "Enviada, mas sem data de envio registrada; o prazo abaixo é contado a partir de hoje.",
+  "detail.filing.sentOnTime": "Enviada em {date}, até a data-limite de envio ({deadline}).",
+  "detail.filing.sentLate":
+    "Enviada em {date}, após a data-limite de envio ({deadline}). É provável que o pagador negue esta reivindicação por extemporaneidade, salvo se houver uma exceção aplicável.",
+  "detail.filing.bySubmissionDate": "Medido pela data de envio registrada.",
   "detail.filing.pastDeadlineWarning":
     "O prazo de envio foi encerrado. É provável que o pagador negue esta reivindicação por extemporaneidade, salvo se houver uma exceção aplicável.",
   "detail.filing.fromServiceDate": "A partir da data de atendimento ({citation}).",

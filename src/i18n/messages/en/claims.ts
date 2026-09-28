@@ -78,7 +78,12 @@ export const claims = {
   "detail.filing.title": "Timely filing",
   "detail.filing.receivedNoLongerApplies": "Received by the payer {date}. Timely filing no longer applies.",
   "detail.filing.acceptedNoLongerApplies": "Accepted by the payer. Timely filing no longer applies.",
-  "detail.filing.awaitingReceipt": "Sent; the filing window is met once the payer confirms receipt.",
+  "detail.filing.awaitingReceipt":
+    "Sent, but no submission date is recorded, so the deadline below is counted from today.",
+  "detail.filing.sentOnTime": "Sent {date}, on or before the filing deadline of {deadline}.",
+  "detail.filing.sentLate":
+    "Sent {date}, after the filing deadline of {deadline}. The payer is likely to deny this claim as untimely unless an exception applies.",
+  "detail.filing.bySubmissionDate": "Measured by the recorded submission date.",
   "detail.filing.pastDeadlineWarning":
     "The filing window has closed. The payer is likely to deny this claim as untimely unless an exception applies.",
   "detail.filing.fromServiceDate": "From the date of service ({citation}).",

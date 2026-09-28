@@ -1,3 +1,4 @@
+import { todayIn } from "@rules/calendar";
 import { daysUntil, timelyFilingDeadline, type Deadline } from "@rules/deadlines";
 import type { Regime } from "@rules/types";
 import type { Tone } from "@/components/ui/Badge";
@@ -61,4 +62,22 @@ export function filingStatus(regime: Regime | null, serviceDate: string, today: 
   const state: FilingState =
     daysRemaining < 0 ? "past_deadline" : daysRemaining <= FILING_WARNING_DAYS ? "due_soon" : "open";
   return { state, deadline, daysRemaining };
+}
+
+/** Calendar date a claim was sent, on the legal clock's time zone (the `todayIn` default, REQUIREMENTS §11). */
+export function submittedOnDate(submittedAt: Date): string {
+  return todayIn(undefined, submittedAt);
+}
+
+export type SubmittedFilingState = "sent_on_time" | "sent_late";
+
+/**
+ * Whether a sent claim met its timely-filing deadline (R-3.1.5). Owner answer 2026-09-26 (billing
+ * review §8 item 1, pending counsel): timely filing is met by the submission date, evidenced by the
+ * clearinghouse acknowledgement, not by the payer's receipt date. Until acknowledgement capture (C4)
+ * lands, the recorded `claims.submitted_at` stands in for it. Sending on the deadline itself is on
+ * time. `submittedOn` comes from `submittedOnDate`.
+ */
+export function submittedFilingState(deadline: Deadline, submittedOn: string): SubmittedFilingState {
+  return daysUntil(deadline.date, submittedOn) >= 0 ? "sent_on_time" : "sent_late";
 }

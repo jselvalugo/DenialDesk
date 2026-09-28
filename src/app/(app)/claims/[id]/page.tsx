@@ -22,7 +22,14 @@ import { diffSnapshots } from "@/domain/claims/correction";
 import { getClaim } from "@/domain/claims/queries";
 import { claimPayments } from "@/domain/remittances/queries";
 import { REMITTANCE_STATUSES } from "@/domain/remittances/status";
-import { CLAIM_STATUSES, FILING_WARNING_DAYS, filingStatus, isUnsubmitted } from "@/domain/claims/status";
+import {
+  CLAIM_STATUSES,
+  FILING_WARNING_DAYS,
+  filingStatus,
+  isUnsubmitted,
+  submittedFilingState,
+  submittedOnDate,
+} from "@/domain/claims/status";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { loadValuesForRecord } from "@/domain/custom-fields/values";
 import { getFormat, getT } from "@/i18n/server";
@@ -76,6 +83,13 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   const filing = filingStatus(payer.regime, claim.serviceDate, today);
   // Sent but not yet confirmed received (999/277CA capture is phase C4): the window still matters.
   const awaitingReceipt = claim.status === "submitted" && !claim.payerReceivedDate;
+  // Timely if submitted by the deadline (owner answer, pending counsel): judge a sent claim by its
+  // Eastern submission date, never by today (billing review D2).
+  const submittedOn = claim.submittedAt ? submittedOnDate(claim.submittedAt) : null;
+  const sentState =
+    awaitingReceipt && submittedOn && filing.deadline
+      ? submittedFilingState(filing.deadline, submittedOn)
+      : null;
   const showDeadline = unsubmitted || awaitingReceipt;
   const canCorrect = canCorrectClaims(auth.role) && unsubmitted;
   const snapshots = new Map(detail.history.map((v) => [v.version, v.snapshot]));
@@ -149,6 +163,28 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                     ? t("detail.filing.receivedNoLongerApplies", { date: f.date(claim.payerReceivedDate) })
                     : t("detail.filing.acceptedNoLongerApplies")}
                 </p>
+              ) : filing.deadline && sentState && submittedOn ? (
+                <div className="flex flex-col gap-3">
+                  <p
+                    className={sentState === "sent_late" ? "text-body text-danger-fg" : "text-body text-text"}
+                  >
+                    {t(sentState === "sent_late" ? "detail.filing.sentLate" : "detail.filing.sentOnTime", {
+                      date: f.date(submittedOn),
+                      deadline: f.date(filing.deadline.date),
+                    })}
+                  </p>
+                  {filing.deadline.rolledDate && (
+                    <p className="text-label text-muted">
+                      {t("detail.filing.rolledNote", { date: f.date(filing.deadline.rolledDate) })}
+                    </p>
+                  )}
+                  <p className="text-label text-muted">
+                    {t("detail.filing.fromServiceDate", { citation: filing.deadline.citation })}{" "}
+                    {t("detail.filing.bySubmissionDate")}
+                  </p>
+                  {/* Always shown here: the submission-date rule itself is pending counsel, whatever deadline.verify says. */}
+                  <Badge tone="warning">{t("detail.filing.pendingVerification")}</Badge>
+                </div>
               ) : filing.deadline && filing.daysRemaining !== null ? (
                 <div className="flex flex-col gap-3">
                   {awaitingReceipt && (
