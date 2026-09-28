@@ -16,6 +16,27 @@ export interface Formatters {
   decimal: (value: number, digits: number) => string;
   /** Money: always USD in U.S. form ($1,234.56), whatever the language (ADR 0009). */
   cents: (cents: number) => string;
+  /**
+   * How long ago (or until) `at` is from `now`, in whole minutes, hours, or days ("5 minutes ago").
+   * Secondary text only, beside an absolute time (DESIGN.md §10). `now` is passed in so the server
+   * and the browser render the same text.
+   */
+  relative: (at: Date, now: Date) => string;
+}
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+
+function formatRelative(at: Date, now: Date, locale: Locale): string {
+  const rtf = new Intl.RelativeTimeFormat(INTL_TAGS[locale], { numeric: "auto" });
+  // Clamped to the past: a few seconds of clock skew between the database and the app must never
+  // read "in 2 minutes" for something that already happened.
+  const diff = Math.min(0, at.getTime() - now.getTime());
+  const size = Math.abs(diff);
+  if (size < HOUR) return rtf.format(Math.trunc(diff / MINUTE), "minute");
+  if (size < DAY) return rtf.format(Math.trunc(diff / HOUR), "hour");
+  return rtf.format(Math.trunc(diff / DAY), "day");
 }
 
 export function createFormatters(locale: Locale): Formatters {
@@ -31,5 +52,6 @@ export function createFormatters(locale: Locale): Formatters {
         maximumFractionDigits: digits,
       }).format(value),
     cents: formatCents,
+    relative: (at, now) => formatRelative(at, now, locale),
   };
 }

@@ -13,7 +13,8 @@ import { syntheticDataOnly } from "@/lib/env";
 
 export interface ConnectionFormState {
   error?: string;
-  field?: ConnectionField;
+  /** A form field, or "confirm" for the revoke acknowledgement. */
+  field?: ConnectionField | "confirm";
 }
 
 /**

@@ -30,8 +30,9 @@ export function RevokeConnectionForm({ id, updatedAt }: { id: string; updatedAt:
           type="checkbox"
           name="confirm"
           required
-          aria-invalid={state.error ? true : undefined}
-          aria-describedby={state.error ? "revoke-error" : undefined}
+          // Only the missing acknowledgement is this checkbox's error (not a stale page, say).
+          aria-invalid={state.field === "confirm" ? true : undefined}
+          aria-describedby={state.field === "confirm" ? "revoke-error" : undefined}
           className="mt-1 size-4"
         />
         <span>{t("revoke.confirm")}</span>

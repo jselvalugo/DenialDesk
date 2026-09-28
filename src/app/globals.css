@@ -183,6 +183,11 @@
   [data-chrome="dark"] :focus-visible {
     outline-color: var(--dd-sidebar-accent);
   }
+  /* A light surface inside dark chrome (a menu panel opened from the tab bar): back to the blue ring,
+     since light teal is < 3:1 on white. Must come after the dark rule. */
+  [data-chrome="light"] :focus-visible {
+    outline-color: var(--dd-blue);
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

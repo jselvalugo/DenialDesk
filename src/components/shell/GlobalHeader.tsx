@@ -8,6 +8,7 @@ import { ChevronDown, Search } from "lucide-react";
 import { useT } from "@/i18n/client";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "./BrandMark";
+import { DataSourceMenu } from "./DataSourceMenu";
 import { ModuleSwitcher } from "./ModuleSwitcher";
 import { useShellLocation } from "./ShellContext";
 import { UserMenu, type ShellUser } from "./UserMenu";
@@ -149,6 +150,7 @@ export function GlobalHeader({ user }: { user: ShellUser | null }) {
                     <Icon aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.75} />
                     {item.label}
                   </Link>
+                  {item.dataSource && <DataSourceMenu table={item.dataSource.table} />}
                 </li>
               );
             })}

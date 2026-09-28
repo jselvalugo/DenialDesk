@@ -98,9 +98,12 @@ export function UserMenu({ user }: { user: ShellUser }) {
         <ChevronDown aria-hidden="true" className="size-4 text-subtle" />
       </button>
       {open && (
+        // tabIndex -1: a click on the panel's text keeps focus inside, so onBlur doesn't close it
+        // (ADR 0004, 2026-09-28 disclosure amendment).
         <div
           id={panelId}
-          className="absolute top-full right-0 z-40 mt-1 w-72 rounded-panel border border-border bg-surface shadow-sm"
+          tabIndex={-1}
+          className="absolute top-full right-0 z-40 mt-1 w-72 rounded-panel border border-border bg-surface shadow-sm outline-none"
         >
           <div className="border-b border-border px-4 py-3">
             <p className="text-body font-semibold text-text">{user.displayName}</p>

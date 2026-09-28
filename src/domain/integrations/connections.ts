@@ -2,7 +2,11 @@ import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { canManageIntegrations } from "@/auth/permissions";
 import type { Role } from "@/auth/session";
-import { integrationConnectionStatusEnum, integrationConnections } from "@/db/schema";
+import {
+  integrationConnectionStatusEnum,
+  integrationConnections,
+  integrationSyncRunStatusEnum,
+} from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
 import { en } from "@/i18n/messages/en";
 import type { MessageKey, Messages } from "@/i18n/messages/types";
@@ -471,4 +475,59 @@ export async function revokeConnection(
       ...(current.isSandbox ? {} : endpointMetadata("", current)),
     },
   });
+}
+
+export type SyncRunStatus = (typeof integrationSyncRunStatusEnum.enumValues)[number];
+
+/**
+ * What the tab-bar data-source drop-down shows (specs/erp-shell.md "Data-source drop-down"). Dates
+ * are ISO strings: this crosses to the browser. Configuration only — never PHI or patient counts.
+ */
+export interface DataSourceSummary {
+  /** Null when sent to a role that can't open the connection page (the layout strips it). */
+  connectionId: string | null;
+  displayName: string;
+  status: ConnectionStatus;
+  lastSuccessAt: string | null;
+  /** The latest sync run's status, if any run exists. */
+  lastRunStatus: SyncRunStatus | null;
+}
+
+/**
+ * The connection that is (or was) the table's source, in one indexed query: the live one if any
+ * (at most one outside draft/revoked, partial unique index), else the most recently revoked one that
+ * had been submitted or had synced. A draft, or a draft revoked before it was ever submitted, was
+ * never a source, so the table reads "Manual". Null: manual.
+ */
+export async function connectionSummary(tx: TenantTx, table: "patients"): Promise<DataSourceSummary | null> {
+  const result = await tx.execute<{
+    id: string;
+    display_name: string;
+    status: ConnectionStatus;
+    last_success_at: string | Date | null;
+    last_run_status: SyncRunStatus | null;
+  }>(sql`
+    select c.id, c.display_name, c.status, c.last_success_at, run.status as last_run_status
+    from integration_connections c
+    left join lateral (
+      select r.status from integration_sync_runs r
+      where r.tenant_id = c.tenant_id and r.connection_id = c.id
+      order by r.queued_at desc
+      limit 1
+    ) run on true
+    where c.target_table = ${table}
+      and (c.status not in ('draft', 'revoked')
+           or (c.status = 'revoked' and (c.has_synced or c.submitted_at is not null)))
+    order by (c.status = 'revoked'), coalesce(c.revoked_at, c.updated_at) desc, c.id desc
+    limit 1
+  `);
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    connectionId: row.id,
+    displayName: row.display_name,
+    status: row.status,
+    lastSuccessAt: row.last_success_at ? new Date(row.last_success_at).toISOString() : null,
+    lastRunStatus: row.last_run_status,
+  };
 }
