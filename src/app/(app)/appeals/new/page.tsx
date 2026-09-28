@@ -5,6 +5,9 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { canWorkAppeals } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { FormSection } from "@/components/records/FormShell";
+import { Field, FieldList } from "@/components/records/FieldList";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { claims, denials, payers } from "@/db/schema";
@@ -67,12 +70,13 @@ export default async function NewAppealPage({
 
   return (
     <div className="mx-auto flex max-w-[720px] flex-col gap-6">
-      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
-        <Link href={`/denials/${denial.id}`} className="font-medium text-link hover:underline">
-          {claim.claimNumber}
-        </Link>{" "}
-        <span aria-hidden>/</span> {t("new.breadcrumb")}
-      </nav>
+      <Breadcrumbs
+        label={t("nav.breadcrumb")}
+        items={[
+          { label: claim.claimNumber, href: `/denials/${denial.id}`, mono: true },
+          { label: t("new.breadcrumb") },
+        ]}
+      />
       <PageHeader title={t("new.pageTitle")} description={t("new.description")} />
 
       {!canStart ? (
@@ -92,27 +96,16 @@ export default async function NewAppealPage({
           </Link>
         </Panel>
       ) : (
-        <Panel title={t("new.panelTitle")}>
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 pb-4">
-            <div>
-              <dt className="text-label font-medium text-muted">{tc("word.claim")}</dt>
-              <dd className="font-mono text-body text-text">{claim.claimNumber}</dd>
-            </div>
-            <div>
-              <dt className="text-label font-medium text-muted">{tc("word.payer")}</dt>
-              <dd className="text-body text-text">{payer.name}</dd>
-            </div>
-            <div>
-              <dt className="text-label font-medium text-muted">{t("new.denialCategory")}</dt>
-              <dd className="text-body text-text">{tc(CATEGORY_LABEL_KEYS[denial.category])}</dd>
-            </div>
-            <div>
-              <dt className="text-label font-medium text-muted">{t("field.deniedAmount")}</dt>
-              <dd className="text-body text-text">{formatCents(denial.deniedCents)}</dd>
-            </div>
-            <div className="col-span-2">
-              <dt className="text-label font-medium text-muted">{tc("word.deadline")}</dt>
-              <dd className="text-body text-text">
+        <Panel flush>
+          <FormSection title={t("new.panelTitle")}>
+            <FieldList columns={2}>
+              <Field label={tc("word.claim")} mono>
+                {claim.claimNumber}
+              </Field>
+              <Field label={tc("word.payer")}>{payer.name}</Field>
+              <Field label={t("new.denialCategory")}>{tc(CATEGORY_LABEL_KEYS[denial.category])}</Field>
+              <Field label={t("field.deniedAmount")}>{formatCents(denial.deniedCents)}</Field>
+              <Field label={tc("word.deadline")} span>
                 {deadline ? (
                   <>
                     {t("new.deadlineLine", { date: f.date(deadline.date), citation: deadline.citation })}
@@ -123,9 +116,9 @@ export default async function NewAppealPage({
                 ) : (
                   <span className="text-warning-fg">{t("new.notConfigured", { payer: payer.name })}</span>
                 )}
-              </dd>
-            </div>
-          </dl>
+              </Field>
+            </FieldList>
+          </FormSection>
           <NewAppealForm denialId={denial.id} />
         </Panel>
       )}

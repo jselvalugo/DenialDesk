@@ -117,6 +117,7 @@ export const promptPay: Messages["promptPay"] = {
   "newContest.description":
     "El pagador objetó esta reclamación o solicitó más información. Esto cumple solo el hito de pagar u objetar; el reloj de pagar o denegar sigue corriendo.",
   "newContest.breadcrumbRecordContest": "Registrar objeción",
+  "newContest.sectionTitle": "Detalles de la objeción",
   "contestForm.dateLabel": "Fecha del aviso del pagador",
   "contestForm.dateHint": "La fecha en que el pagador objetó la reclamación o solicitó información.",
   "contestForm.noteLabel": "¿Qué solicitó el pagador?",

@@ -16,7 +16,7 @@ Engineering:
 - [x] ADR 0001 tech stack accepted (ADR 0003 Netlify pre-prod accepted; ADR 0002 Azure confirmed at cutover)
 - [x] Project skeleton: app, DB, test runner, lint, CI on every PR [R-7.4.2, R-7.4.4]
 - [x] Design system foundation + app shell (`docs/DESIGN.md`, ADR 0004)
-- [ ] Netlify deploy previews + pre-production site (no demo login since 2026-09-26) with pre-prod guards: synthetic banner, synthetic-only uploads, restricted access (ADR 0003) [R-7.1.3] — config, banner, and sign-in done; synthetic-only upload guard done for revenue cycle files (`SYN-` account numbers + attestation); site not yet created (runbook: docs/runbooks/netlify.md)
+- [x] Netlify deploy previews + pre-production site (https://denialdesk.netlify.app, no demo login since 2026-09-26) with pre-prod guards: synthetic banner, synthetic-only uploads, restricted access (ADR 0003) [R-7.1.3] — runbook: docs/runbooks/netlify.md
 - [x] Synthetic data generator: practices, providers, payers, patients, claims, denials [R-15.1]
 - [x] Tenancy + RBAC skeleton with row-level security and isolation tests [R-7.2.3, R-7.2.4]
 - [x] Auth: OIDC SSO behind an interface (Entra ID at cutover), MFA, session timeouts [R-7.2.1, R-7.2.2, R-7.2.7]
@@ -32,10 +32,13 @@ Engineering:
 Setup:
 - [ ] Practice, location, and provider setup (NPI, taxonomy, FL license) [§8.1]
 - [ ] Payer master with regulatory-regime tags [§8.1, §1.3]
-- [ ] Custom field values on patient, claim, denial, and payer records (sensitive fields masked, opened with a reason, audited) [R-3.5.1, R-7.5.1] — `specs/settings-and-custom-fields.md` S2; added to MVP by owner 2026-09-26
+- [~] Custom field values on patient, claim, denial, and payer records (sensitive fields masked, opened with a reason, audited) [R-3.5.1, R-7.5.1] — `specs/settings-and-custom-fields.md` S2; added to MVP by owner 2026-09-26. Patients done (PR 2); claims/denials (PR 3) and payers (PR 4) in progress
+- [ ] **Patient Register synced from the practice EHR/PM** over HL7 FHIR R4 / US Core with SMART Backend Services — read-only copy of the billing minimum, data-source drop-down beside the Patients tab, Patients table only for now (owner 2026-09-27; `specs/patient-integrations.md`, ADR 0010) [§8.8, R-5.1.2, R-7.3.3, R-7.5.1] — PI0 design done (revised after security/compliance review 2026-09-28, OA-057); PI1a data layer + registry, PI1b Settings › Integrations + drop-down, PI1c operator approval, PI2a transport/SSRF guard/keys/test, PI2b sync engine + jobs + synthetic sandbox, PI3 scheduled sync, PI4 Bulk Data (before the first real practice)
+- [~] Record pages on one reusable pattern (`specs/record-pages.md`) [R-7.1.3, R-11.1] — P1 Patients done; P2 Claims/Denials headers, P3 forms onto FormShell, P4 sortable tables
 - [~] DenialDesk University: in-app courses with per-user completion record, reachable from the header and user menu [R-10.4] — U1 catalog/lessons/completions done (`specs/denialdesk-university.md`); U2 knowledge checks, U3 practice training record planned
 
 Claims:
+- [x] Revenue cycle accounting module: monthly PM file, rules and ledger, journal vouchers, aging, deposits, statements, RCM dashboard (`specs/revenue-cycle-accounting.md`)
 - [x] Claim data model with immutable version history [R-3.10.3] — claims list/detail, corrections with reason, append-only `claim_versions` (`specs/claims.md` C1)
 - [ ] Charge capture via CSV import [§8.2]
 - [ ] Timely-filing guardrail (6 months FL, 12 months Medicare) [R-3.1.5] — warnings done (C1); blocking at submission comes with 837P (C3)

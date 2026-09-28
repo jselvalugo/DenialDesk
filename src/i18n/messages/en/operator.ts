@@ -45,6 +45,7 @@ export const operator = {
   "newPractice.title": "New practice",
   "newPractice.description":
     "Creates the practice and its first administrator, who can then add their team. Record the signed BAA on the practice's page next.",
+  "newPractice.sectionTitle": "Practice details",
   "newPractice.practiceNameLabel": "Practice name",
   "newPractice.adminNameLabel": "Admin's full name",
   "newPractice.adminEmailLabel": "Admin's work email",

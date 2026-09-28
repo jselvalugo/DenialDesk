@@ -46,6 +46,7 @@ export const operator: Messages["operator"] = {
   "newPractice.title": "Nuevo consultorio",
   "newPractice.description":
     "Crea el consultorio y su primer administrador, quien luego podrá añadir a su equipo. A continuación, registre el BAA firmado en la página del consultorio.",
+  "newPractice.sectionTitle": "Datos del consultorio",
   "newPractice.practiceNameLabel": "Nombre del consultorio",
   "newPractice.adminNameLabel": "Nombre completo del administrador",
   "newPractice.adminEmailLabel": "Correo electrónico laboral del administrador",

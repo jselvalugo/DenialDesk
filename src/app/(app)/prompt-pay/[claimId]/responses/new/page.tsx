@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { todayIn } from "@rules/calendar";
 import { canRecordPromptPay } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
+import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
@@ -30,19 +30,17 @@ export default async function NewContestPage({ params }: { params: Promise<{ cla
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
-      <nav aria-label={t("nav.breadcrumb")} className="text-label text-muted">
-        <Link href="/prompt-pay" className="font-medium text-link hover:underline">
-          {t("detail.breadcrumbPromptPay")}
-        </Link>{" "}
-        <span aria-hidden>/</span>{" "}
-        <Link href={`/prompt-pay/${claim.id}`} className="font-mono font-medium text-link hover:underline">
-          {claim.claimNumber}
-        </Link>{" "}
-        <span aria-hidden>/</span> {t("newContest.breadcrumbRecordContest")}
-      </nav>
+      <Breadcrumbs
+        label={t("nav.breadcrumb")}
+        items={[
+          { label: t("detail.breadcrumbPromptPay"), href: "/prompt-pay" },
+          { label: claim.claimNumber, href: `/prompt-pay/${claim.id}`, mono: true },
+          { label: t("newContest.breadcrumbRecordContest") },
+        ]}
+      />
       <PageHeader title={t("newContest.title")} description={t("newContest.description")} />
       {canRecordPromptPay(auth.role) ? (
-        <Panel>
+        <Panel flush>
           <ContestForm claimId={claim.id} minDate={claim.receivedDate!} today={today} />
         </Panel>
       ) : (
