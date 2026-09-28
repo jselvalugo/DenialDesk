@@ -168,10 +168,11 @@ describe("the sign-in attempt counter under a step-up", () => {
 
   it("successful step-ups never add up to a lockout", async () => {
     await freshUser(0);
-    // Three distinct steps are acceptable at once (now - 1, now, now + 1); more than the lockout
-    // limit would need more, so repeat the reserve/claim/release cycle on the counter directly.
-    const steps = [currentStep() - 1, currentStep(), currentStep() + 1];
-    for (const step of steps) {
+    const step = currentStep();
+    // More cycles than the lockout limit (5). The single-use rule is cleared between cycles only so
+    // the same code can be presented again; without releaseAttempt the fifth would lock the account.
+    for (let cycle = 0; cycle < 7; cycle += 1) {
+      await systemDb().update(users).set({ totpLastStep: null }).where(eq(users.id, userId));
       expect(await reserveAttempt(userId)).toBe(true);
       expect(await claimTotp(await claimable(), totpAt(secret, step), false, false)).toBe("ok");
       await releaseAttempt(userId);
