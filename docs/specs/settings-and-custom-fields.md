@@ -47,11 +47,17 @@ tab per section; administrators add their own fields to patients, claims, denial
       Sensitive values are left out of lists, search, exports, and snapshots unless opened.
       Field-level encryption at rest for sensitive values and free-text types.
 - [ ] S2: record forms (patient, claim, denial, payer) render active fields and store values.
-      (PR 2 done for patients: `/patients/new`, `/patients/[id]/edit`, `/patients/[id]`.)
+      (PR 2 done for patients: `/patients/new`, `/patients/[id]/edit`, `/patients/[id]`. PR 3 done
+      for claims and denials, but as their own "edit custom fields" pages rather than folded into
+      the claim/denial's own edit flow — see the PR 3 note below — since custom fields are
+      practice-internal and must never create a claim version: `/claims/[id]/fields`,
+      `/denials/[id]/fields`, and both detail pages show a read-only "Custom fields" panel. Payers
+      (PR 4) still open.)
 - [ ] S2: non-sensitive custom fields marked *Show in list* appear as columns on the record list;
       sensitive fields never appear in lists, search, or exports. At most 5 list columns per record
       type (`MAX_LIST_COLUMNS`, `src/domain/settings/custom-fields.ts`). Done for patients (PR 2,
-      `src/domain/custom-fields/list-values.ts`, `PatientTable`).
+      `src/domain/custom-fields/list-values.ts`, `PatientTable`) and for claims and denials (PR 3,
+      `/claims`, `/denials`, shared `ListCell`). Payers (PR 4) still open.
 - [ ] S3: Users and roles tab (invite, change role, disable), then Security and Notifications.
 
 ## Data / API changes
@@ -91,8 +97,11 @@ None.
 Design: ADR `docs/decisions/0007-custom-field-value-storage.md`. Threat model:
 `docs/threat-models/custom-field-values.md`. All parts built by **builder** (no legal rules, no X12).
 Ship as small PRs in this order: **PR 1** crypto AAD + table + domain (done); **PR 2** patients UI
-(done: form render/store, detail masking/reveal, list columns); **PR 3** claims and denials;
-**PR 4** payers.
+(done: form render/store, detail masking/reveal, list columns); **PR 3** claims and denials (done:
+record-level sensitivity extended to claim -> patient and denial -> claim -> patient; detail-page
+panel and reveal; a standalone "edit custom fields" page per module, since custom fields are
+practice-internal and must never create a `claim_versions` row, with its own values-table
+concurrency token; list columns); **PR 4** payers.
 
 ### Data model: `drizzle/0027_custom_field_values.sql` (values and value history in one migration) (+ `src/db/schema` entry)
 `custom_field_values`: `id uuid pk`, `tenant_id uuid not null -> tenants`, `field_id uuid not null
@@ -141,8 +150,13 @@ Ship as small PRs in this order: **PR 1** crypto AAD + table + domain (done); **
   value and audits.
 
 ### Audit events (IDs and enum keys only, never values)
-- Existing `patient.created|updated` metadata gains custom field keys in `changedFields` as `cf:<key>`
-  (same for claim/denial/payer updates).
+- `custom_field.values_updated` (entityType `custom_field_value`, metadata: entity, recordId, the
+  changed field keys, and `patientId` when the record has one — the patient itself, or a claim's or
+  denial's patient) is the record of a custom-field save, for every entity. It is a separate event
+  from the record's own update audit (`patient.updated`, and for claims/denials — which get their
+  own "edit custom fields" page rather than folding into the record's own edit, S2 PR 3 — no
+  `claim.updated`/`denial.updated` event at all, since that save never touches the `claims`/
+  `denials` row); those events list only that record's own fields, never `cf:<key>` entries.
 - `custom_field.value_revealed` (entityType `custom_field_value`, metadata: fieldId, entity,
   recordId, reason).
 - `custom_field.value_integrity_failed` (fieldId, recordId).

@@ -19,9 +19,12 @@ import { claimPayments } from "@/domain/remittances/queries";
 import { REMITTANCE_STATUSES } from "@/domain/remittances/status";
 import { CLAIM_STATUSES, FILING_WARNING_DAYS, filingStatus, isUnsubmitted } from "@/domain/claims/status";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
+import { loadValuesForRecord } from "@/domain/custom-fields/values";
+import { CustomFieldValues } from "@/components/custom-fields/CustomFieldValues";
 import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { CorrectionForm } from "./CorrectionForm";
+import { revealClaimCustomField } from "./actions";
 
 // The title never includes patient data (DESIGN.md §12).
 export async function generateMetadata(): Promise<Metadata> {
@@ -46,6 +49,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   const t = await getT("claims");
   const tc = await getT("common");
   const tr = await getT("remittances");
+  const tcf = await getT("customFields");
   const f = await getFormat();
 
   const detail = await withTenant(auth, async (tx) => {
@@ -61,11 +65,17 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
       // Whose record was shown, for accounting of disclosures (IDs only).
       metadata: { patientId: detail.patient.id },
     });
-    return { ...detail, payments };
+    const customValues = await loadValuesForRecord(
+      tx,
+      { tenantId: auth.tenantId, userId: auth.userId, role: auth.role },
+      "claim",
+      id,
+    );
+    return { ...detail, payments, customValues };
   });
   if (!detail) notFound();
 
-  const { claim, patient, payer } = detail;
+  const { claim, patient, payer, customValues } = detail;
   const status = CLAIM_STATUSES[claim.status];
   const unsubmitted = isUnsubmitted(claim.status);
   const filing = filingStatus(payer.regime, claim.serviceDate, today);
@@ -351,6 +361,24 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
               </ul>
             )}
           </Panel>
+
+          {customValues.length > 0 && (
+            <Panel
+              title={tcf("section.title")}
+              actions={
+                canCorrectClaims(auth.role) && (
+                  <Link
+                    href={`/claims/${claim.id}/fields`}
+                    className="text-label font-medium text-link hover:underline"
+                  >
+                    {t("detail.editCustomFields")}
+                  </Link>
+                )
+              }
+            >
+              <CustomFieldValues values={customValues} reveal={revealClaimCustomField.bind(null, claim.id)} />
+            </Panel>
+          )}
         </div>
       </div>
     </div>

@@ -19,6 +19,8 @@ import { CLAIMS_PAGE_SIZE, claimsOverview, UNSUBMITTED_LIMIT } from "@/domain/cl
 import { CLAIM_STATUSES, FILING_STATE_LABEL_KEYS, FILING_WARNING_DAYS } from "@/domain/claims/status";
 import { regimeLabel } from "@/domain/denial-status";
 import { payerOptions } from "@/domain/denials/queries";
+import { loadListValues } from "@/domain/custom-fields/list-values";
+import { ListCell } from "@/components/custom-fields/ListCell";
 import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { claimFiltersToQuery, parseClaimFilters } from "./filters";
@@ -40,23 +42,32 @@ export default async function ClaimsPage({
   const tc = await getT("common");
   const f = await getFormat();
 
-  const { rows, total, truncated, summary, payers } = await withTenant(auth, async (tx) => {
-    const list = await claimsOverview(tx, filters, today);
-    const payers = await payerOptions(tx);
-    await audit(tx, {
-      action: "claim.list_viewed",
-      actorUserId: auth.userId,
-      tenantId: auth.tenantId,
-      // IDs only, no PHI.
-      metadata: {
-        claimIds: list.rows.map((row) => row.id).join(","),
-        count: list.rows.length,
-        page: filters.page,
-        filters: claimFiltersToQuery(filters, { page: 1 }) || "default",
-      },
-    });
-    return { ...list, payers };
-  });
+  const { rows, total, truncated, summary, payers, listColumns, listValues } = await withTenant(
+    auth,
+    async (tx) => {
+      const list = await claimsOverview(tx, filters, today);
+      const payers = await payerOptions(tx);
+      await audit(tx, {
+        action: "claim.list_viewed",
+        actorUserId: auth.userId,
+        tenantId: auth.tenantId,
+        // IDs only, no PHI.
+        metadata: {
+          claimIds: list.rows.map((row) => row.id).join(","),
+          count: list.rows.length,
+          page: filters.page,
+          filters: claimFiltersToQuery(filters, { page: 1 }) || "default",
+        },
+      });
+      const { columns, valuesByRecord } = await loadListValues(
+        tx,
+        auth,
+        "claim",
+        list.rows.map((row) => row.id),
+      );
+      return { ...list, payers, listColumns: columns, listValues: valuesByRecord };
+    },
+  );
 
   const pages = Math.max(1, Math.ceil(total / CLAIMS_PAGE_SIZE));
   if (total > 0 && filters.page > pages) redirect(`/claims${claimFiltersToQuery(filters, { page: pages })}`);
@@ -196,6 +207,9 @@ export default async function ClaimsPage({
                   {t("list.table.filingDeadline")}
                 </Th>
                 <Th>{tc("word.status")}</Th>
+                {listColumns.map((col) => (
+                  <Th key={col.fieldId}>{col.label}</Th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -250,6 +264,11 @@ export default async function ClaimsPage({
                     <Td>
                       <Badge tone={status.tone}>{tc(status.labelKey)}</Badge>
                     </Td>
+                    {listColumns.map((col) => (
+                      <Td key={col.fieldId}>
+                        <ListCell type={col.type} value={listValues.get(row.id)?.get(col.key)} />
+                      </Td>
+                    ))}
                   </Tr>
                 );
               })}

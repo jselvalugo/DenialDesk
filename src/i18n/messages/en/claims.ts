@@ -95,6 +95,13 @@ export const claims = {
   "detail.denials.title": "Denials",
   "detail.denials.none": "No denials on this claim.",
   "detail.denials.notice": "notice {date}",
+  "detail.editCustomFields": "Edit custom fields",
+
+  // Custom fields edit page (app/(app)/claims/[id]/fields/page.tsx)
+  "fields.pageTitle": "Custom fields",
+  "fields.breadcrumb": "Custom fields",
+  "fields.description":
+    "Practice-defined fields on this claim. They aren't part of the billed claim and saving them never creates a new claim version.",
 
   // Correction form (app/(app)/claims/[id]/CorrectionForm.tsx)
   "correction.button": "Correct claim",

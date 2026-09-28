@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import { customFields, customFieldValues, patients } from "@/db/schema";
+import { claims, customFields, customFieldValues, denials, patients } from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
 import { audit } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
@@ -84,13 +84,27 @@ export async function loadListValues(
   );
   // Record-level masking mirrors `recordIsSensitive` in `custom-fields/values.ts`: a patient with
   // sensitivity tags has every custom field locked on the chart, so the list must not decrypt
-  // them either. The join keeps only untagged patients; their rows show no value at all.
+  // them either — including a claim or denial belonging to that patient (claim -> patient,
+  // denial -> claim -> patient). The join keeps only untagged patients; their rows show no value
+  // at all. Payers have no linked patient, so their rows are never filtered this way.
+  const untagged = sql`cardinality(${patients.sensitivityTags}) = 0`;
   const rows =
     entity === "patient"
       ? await base
           .innerJoin(patients, eq(patients.id, customFieldValues.patientId))
-          .where(and(fieldFilter, sql`cardinality(${patients.sensitivityTags}) = 0`))
-      : await base.where(fieldFilter);
+          .where(and(fieldFilter, untagged))
+      : entity === "claim"
+        ? await base
+            .innerJoin(claims, eq(claims.id, customFieldValues.claimId))
+            .innerJoin(patients, eq(patients.id, claims.patientId))
+            .where(and(fieldFilter, untagged))
+        : entity === "denial"
+          ? await base
+              .innerJoin(denials, eq(denials.id, customFieldValues.denialId))
+              .innerJoin(claims, eq(claims.id, denials.claimId))
+              .innerJoin(patients, eq(patients.id, claims.patientId))
+              .where(and(fieldFilter, untagged))
+          : await base.where(fieldFilter);
 
   const byField = new Map(listFields.map((f) => [f.id, f]));
   const valuesByRecord = new Map<string, Map<string, CustomFieldTypedValue>>();

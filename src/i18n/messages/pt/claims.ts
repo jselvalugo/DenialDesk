@@ -101,6 +101,13 @@ export const claims: Messages["claims"] = {
   "detail.denials.title": "Negativas",
   "detail.denials.none": "Esta reivindicação não tem negativas.",
   "detail.denials.notice": "aviso {date}",
+  "detail.editCustomFields": "Editar campos personalizados",
+
+  // Página de edição de campos personalizados (app/(app)/claims/[id]/fields/page.tsx)
+  "fields.pageTitle": "Campos personalizados",
+  "fields.breadcrumb": "Campos personalizados",
+  "fields.description":
+    "Campos definidos pela clínica nesta reivindicação. Não fazem parte da reivindicação faturada e salvá-los nunca cria uma nova versão.",
 
   // Formulário de correção (app/(app)/claims/[id]/CorrectionForm.tsx)
   "correction.button": "Corrigir reivindicação",
