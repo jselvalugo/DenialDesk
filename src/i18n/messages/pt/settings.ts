@@ -187,6 +187,7 @@ export const settings: Messages["settings"] = {
   "integrations.listDescription":
     "Conecte o EHR/PM da sua clínica para que o Registro de pacientes seja uma cópia sincronizada e somente leitura, em vez de registros digitados à mão.",
   "integrations.newConnection": "Nova conexão",
+  "integrations.newConnectionBlocked": "Apenas uma conexão por vez: {name} já existe.",
   "integrations.tableCaption": "Integrações",
   "integrations.field.name": "Nome",
   "integrations.field.table": "Tabela",
@@ -215,6 +216,8 @@ export const settings: Messages["settings"] = {
     "Preenche o endereço do ambiente de teste integrado para você experimentar o ciclo de vida da conexão apenas com dados sintéticos, sem um EHR real.",
   "integrations.new.sandboxNotice":
     "Este formulário foi preenchido com o endereço do ambiente de teste sintético integrado.",
+  "integrations.new.stepUpFirstNotice":
+    "A atestação de residência nos EUA de uma conexão real exige uma verificação de identidade recente. Verifique sua identidade primeiro e depois volte para preencher os dados da conexão.",
   "integrations.new.save": "Criar conexão",
   "integrations.new.saving": "Criando…",
 
@@ -255,18 +258,23 @@ export const settings: Messages["settings"] = {
 
   "integrations.action.edit": "Editar",
   "integrations.action.withdraw": "Retirar",
+  "integrations.action.withdrawPending": "Retirando…",
   "integrations.action.pause": "Pausar",
+  "integrations.action.pausePending": "Pausando…",
   "integrations.action.resume": "Retomar",
+  "integrations.action.resumePending": "Retomando…",
   "integrations.action.revoke": "Revogar",
   "integrations.action.submit": "Enviar",
-  "integrations.action.submitDisabledHint": "Teste a conexão primeiro.",
+  "integrations.action.submitDisabledHint":
+    "Testar uma conexão real ainda não está disponível; por enquanto só é possível ativar o ambiente de teste sintético incorporado.",
   "integrations.action.activateSandbox": "Ativar conexão de teste sintética",
+  "integrations.action.activateSandboxPending": "Ativando…",
   "integrations.action.syncHistory": "Histórico de sincronização",
   "integrations.action.verifyIdentity": "Verifique sua identidade",
 
   "integrations.revoke.confirmTitle": "Revogar esta conexão?",
   "integrations.revoke.confirmDescription":
-    "Esta ação não pode ser desfeita. Os pacientes param de sincronizar e o Registro de pacientes volta a ser editável manualmente. Depois, remova o registro do DenialDesk como cliente no seu EHR/PM.",
+    "Esta ação não pode ser desfeita. Você poderá registrar pacientes manualmente de novo; os pacientes já sincronizados permanecem somente leitura. Depois, remova o registro do DenialDesk como cliente no seu EHR/PM.",
   "integrations.revoke.reasonLabel": "Motivo",
   "integrations.revoke.reasonNoLongerUsed": "Não é mais usada",
   "integrations.revoke.reasonSwitchingSystems": "Troca de sistema EHR/PM",
@@ -276,7 +284,13 @@ export const settings: Messages["settings"] = {
   "integrations.revoke.confirm": "Revogar conexão",
   "integrations.revoke.offboardingTitle": "A seguir: remova o registro do DenialDesk no seu EHR/PM",
   "integrations.revoke.offboardingBody":
-    "O DenialDesk não tem mais uma chave de assinatura para esta conexão, mas o registro do cliente ainda está no seu EHR/PM. Peça ao administrador do seu EHR para remover ou desativar o cliente do DenialDesk para que não possa ser reutilizado.",
+    "Peça ao administrador do seu EHR para remover ou desativar o registro do cliente do DenialDesk para que não possa ser reutilizado. Os pacientes já sincronizados por esta conexão permanecem no DenialDesk como registros somente leitura, mantidos conforme a política de retenção (§9.2); revogar não os exclui.",
+  "integrations.revoke.offboardingSecurityConcernNote":
+    "Revogada por uma preocupação de segurança: isso foi encaminhado ao processo de resposta a incidentes. Se você acredita que a conexão foi usada depois de revogada, verifique o log de acesso do seu EHR/PM em busca de atividade do cliente DenialDesk após o horário de revogação indicado acima.",
+  "integrations.revoke.offboardingSwitchingSystemsNote":
+    "Para conectar um EHR/PM diferente, crie uma nova conexão; esta não pode ser reutilizada para outro endpoint.",
+  "integrations.revoke.offboardingRunbookNote":
+    "Passos completos: docs/runbooks/integration-offboarding.md no repositório do DenialDesk.",
 
   "integrations.runs.metaTitle": "Histórico de sincronização",
   "integrations.runs.title": "Histórico de sincronização",
@@ -284,6 +298,11 @@ export const settings: Messages["settings"] = {
   "integrations.runs.emptyTitle": "Ainda não há sincronizações",
   "integrations.runs.emptyDescription":
     "As sincronizações aparecerão aqui quando esta conexão começar a sincronizar.",
+  "integrations.runs.status.queued": "Na fila",
+  "integrations.runs.status.running": "Em execução",
+  "integrations.runs.status.succeeded": "Concluída",
+  "integrations.runs.status.failed": "Falhou",
+  "integrations.runs.status.abandoned": "Abandonada",
 
   "integrations.error.notAdmin": "Somente administradores podem gerenciar integrações.",
   "integrations.error.notFound": "Conexão não encontrada.",
@@ -305,6 +324,10 @@ export const settings: Messages["settings"] = {
   "integrations.error.cannotChangeConnectionType":
     "O endpoint de uma conexão não pode alternar entre o ambiente de teste e um EHR/PM real. Crie uma nova conexão.",
   "integrations.error.invalidTransition": "Esta ação não está disponível para o status atual da conexão.",
+  "integrations.error.anotherConnectionLive":
+    "Já existe outra conexão ativa para Pacientes. Revogue-a primeiro, ou gerencie essa em vez disso.",
+  "integrations.error.unexpected":
+    "Algo deu errado ao salvar esta conexão. Tente novamente e contate o suporte se persistir.",
   "integrations.error.chooseReason": "Escolha um motivo.",
 
   "integrations.error.urlInvalid": "Digite uma URL válida.",

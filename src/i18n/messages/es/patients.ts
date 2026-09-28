@@ -10,9 +10,15 @@ export const patients: Messages["patients"] = {
   "list.emptyDescriptionCanEdit":
     "Registre un paciente para iniciar su expediente. Las reclamaciones y denegaciones se vinculan a él.",
   "list.emptyDescriptionReadOnly": "Los pacientes aparecerán aquí cuando su equipo los registre.",
+  "list.emptyDescriptionSynced": "Aparecerán aquí cuando {name} se sincronice.",
+  "list.emptyDescriptionConnectionSettingUp":
+    "Aparecerán aquí cuando {name} esté configurada y sincronizando.",
 
   "notice.syncedFromConnection": "Los pacientes se sincronizan desde {name}; edítelos en su EHR/PM.",
+  "notice.connectionBeingSetUp":
+    "{name} se está configurando; los pacientes aún no se sincronizan. Mientras tanto, edítelos en su EHR/PM.",
   "detail.syncedFrom": "Sincronizado desde {name} · última actualización {date}",
+  "detail.editHiddenSynced": "Este paciente se sincroniza desde su EHR/PM y no se puede editar aquí.",
 
   // Tabla de pacientes (lista y resultados de búsqueda) e insignias
   "badge.restricted": "Restringido",

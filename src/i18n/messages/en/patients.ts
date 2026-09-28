@@ -8,10 +8,19 @@ export const patients = {
   "list.emptyTitle": "No patients yet",
   "list.emptyDescriptionCanEdit": "Register a patient to start their record. Claims and denials link to it.",
   "list.emptyDescriptionReadOnly": "Patients appear here once your team registers them.",
+  "list.emptyDescriptionSynced": "They'll appear here once {name} syncs.",
+  "list.emptyDescriptionConnectionSettingUp": "They'll appear here once {name} is set up and syncing.",
 
-  // Synced from an EHR/PM connection (docs/specs/patient-integrations.md "PI1b")
+  // Synced from an EHR/PM connection (docs/specs/patient-integrations.md "PI1b"). The "synced"
+  // wording only applies once the connection is actually active; a connection that's awaiting
+  // approval, paused, or erroring isn't syncing anything yet, so hand-registering is still closed
+  // (`blocksPatientsRegister`) but the notice says "being set up" instead of claiming a sync that
+  // isn't happening (security/correctness review PR #81, item 18).
   "notice.syncedFromConnection": "Patients are synced from {name}; edit them in your EHR/PM.",
+  "notice.connectionBeingSetUp":
+    "{name} is being set up; patients aren't syncing yet. Edit them in your EHR/PM in the meantime.",
   "detail.syncedFrom": "Synced from {name} · last updated {date}",
+  "detail.editHiddenSynced": "This patient is synced from your EHR/PM and can't be edited here.",
 
   // Patient table (list and search results) and badges
   "badge.restricted": "Restricted",

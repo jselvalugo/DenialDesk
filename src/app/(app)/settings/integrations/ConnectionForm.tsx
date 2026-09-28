@@ -31,9 +31,18 @@ export interface ConnectionFormValues {
 export function ConnectionForm({
   connection,
   syntheticOnly,
+  requiresFreshMfa = false,
 }: {
   connection?: ConnectionFormValues;
   syntheticOnly: boolean;
+  /**
+   * A real (non-sandbox) connection's attestation needs a step-up MFA verification within the
+   * last 5 minutes (R-7.2.2); checked by the server page before this form ever renders. Shown as
+   * a step-up prompt in place of the form fields, not discovered only after Submit: a stale
+   * verification would otherwise send the admin to `/step-up` and back, losing anything already
+   * typed (security/correctness review PR #81, item 19).
+   */
+  requiresFreshMfa?: boolean;
 }) {
   const editing = Boolean(connection);
   const t = useT("settings");
@@ -53,6 +62,17 @@ export function ConnectionForm({
     setBaseUrl(SANDBOX_BASE_URL);
     setClientId(SANDBOX_CLIENT_ID);
   };
+
+  if (requiresFreshMfa) {
+    return (
+      <div className="flex flex-col gap-3 p-5">
+        <p className="text-body text-text">{t("integrations.new.stepUpFirstNotice")}</p>
+        <p>
+          <StepUpLink label={t("integrations.action.verifyIdentity")} />
+        </p>
+      </div>
+    );
+  }
 
   return (
     <form

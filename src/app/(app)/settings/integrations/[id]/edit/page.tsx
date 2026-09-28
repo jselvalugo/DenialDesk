@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { canManageIntegrations } from "@/auth/permissions";
-import { requireAuth } from "@/auth/session";
+import { hasRecentMfa, requireAuth } from "@/auth/session";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
@@ -28,6 +28,10 @@ export default async function EditConnectionPage({ params }: { params: Promise<{
   const connection = await withTenant(auth, (tx) => getConnection(tx, id));
   if (!connection) notFound();
   if (connection.status !== "draft") notFound();
+  // Same rule as the create form (item 19): a real (non-sandbox) connection's attestation needs a
+  // fresh step-up, checked before the form renders so a stale verification doesn't cost whatever
+  // was already typed.
+  const requiresFreshMfa = !connection.isSandbox && !hasRecentMfa(auth.mfaVerifiedAt);
 
   return (
     <div className="mx-auto flex max-w-[900px] flex-col gap-6">
@@ -52,6 +56,7 @@ export default async function EditConnectionPage({ params }: { params: Promise<{
             usResidencyAttested: connection.usResidencyAttestedAt !== null,
           }}
           syntheticOnly={syntheticDataOnly()}
+          requiresFreshMfa={requiresFreshMfa}
         />
       </Panel>
     </div>

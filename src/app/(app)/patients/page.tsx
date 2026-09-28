@@ -13,7 +13,8 @@ import { Pagination } from "@/components/ui/Pagination";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { loadListValues } from "@/domain/custom-fields/list-values";
-import { blocksPatientsRegister, getPatientsConnectionSummary } from "@/domain/integrations/connections";
+import { blocksPatientsRegister } from "@/domain/integrations/connections";
+import { loadPatientsConnectionSummary } from "@/components/shell/connection-summary";
 import {
   listPatients,
   PATIENT_LIST_FIELDS,
@@ -64,9 +65,13 @@ export default async function PatientsPage({
     };
   }
 
-  const { rows, total, listColumns, listValues, connectionSummary } = await withTenant(auth, async (tx) => {
+  // Request-memoized (React `cache()`): the signed-in layout (`AppShell`) already loads this same
+  // summary for the tab-bar drop-down, so this shares that one query rather than running it again
+  // (security/correctness review PR #81, item 18).
+  const connectionSummary = await loadPatientsConnectionSummary();
+
+  const { rows, total, listColumns, listValues } = await withTenant(auth, async (tx) => {
     const list = await listPatients(tx, page, sort, dir);
-    const connectionSummary = await getPatientsConnectionSummary(tx);
     await audit(tx, {
       action: "patient.list_viewed",
       actorUserId: auth.userId,
@@ -84,7 +89,7 @@ export default async function PatientsPage({
       "patient",
       list.rows.map((r) => r.id),
     );
-    return { ...list, listColumns: columns, listValues: valuesByRecord, connectionSummary };
+    return { ...list, listColumns: columns, listValues: valuesByRecord };
   });
 
   const pages = Math.max(1, Math.ceil(total / PATIENTS_PAGE_SIZE));
@@ -114,7 +119,9 @@ export default async function PatientsPage({
           role="note"
           className="rounded-control border border-info-border bg-info-bg px-3 py-2 text-label text-info-fg"
         >
-          {t("notice.syncedFromConnection", { name: connectionSummary.displayName })}
+          {connectionSummary.status === "active"
+            ? t("notice.syncedFromConnection", { name: connectionSummary.displayName })
+            : t("notice.connectionBeingSetUp", { name: connectionSummary.displayName })}
         </p>
       )}
 
@@ -123,7 +130,15 @@ export default async function PatientsPage({
         {rows.length === 0 ? (
           <EmptyState
             title={t("list.emptyTitle")}
-            description={canEdit ? t("list.emptyDescriptionCanEdit") : t("list.emptyDescriptionReadOnly")}
+            description={
+              registerBlocked && connectionSummary
+                ? connectionSummary.status === "active"
+                  ? t("list.emptyDescriptionSynced", { name: connectionSummary.displayName })
+                  : t("list.emptyDescriptionConnectionSettingUp", { name: connectionSummary.displayName })
+                : canEdit
+                  ? t("list.emptyDescriptionCanEdit")
+                  : t("list.emptyDescriptionReadOnly")
+            }
             action={
               canEdit && (
                 <Link href="/patients/new" className={primaryLinkButtonClass}>

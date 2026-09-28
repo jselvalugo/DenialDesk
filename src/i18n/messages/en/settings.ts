@@ -189,6 +189,7 @@ export const settings = {
   "integrations.listDescription":
     "Connect your practice's EHR/PM so the Patient Register stays a synced, read-only copy instead of hand-typed records.",
   "integrations.newConnection": "New connection",
+  "integrations.newConnectionBlocked": "Only one connection at a time: {name} already exists.",
   "integrations.tableCaption": "Integrations",
   "integrations.field.name": "Name",
   "integrations.field.table": "Table",
@@ -217,6 +218,8 @@ export const settings = {
   "integrations.new.sandboxHint":
     "Fills in the built-in sandbox's address so you can try the connection lifecycle with synthetic data only — no real EHR needed.",
   "integrations.new.sandboxNotice": "This form is filled with the built-in synthetic sandbox's address.",
+  "integrations.new.stepUpFirstNotice":
+    "A real connection's U.S.-residency attestation needs a recent identity check. Verify your identity first, then come back to fill in the connection details.",
   "integrations.new.save": "Create connection",
   "integrations.new.saving": "Creating…",
 
@@ -258,18 +261,23 @@ export const settings = {
 
   "integrations.action.edit": "Edit",
   "integrations.action.withdraw": "Withdraw",
+  "integrations.action.withdrawPending": "Withdrawing…",
   "integrations.action.pause": "Pause",
+  "integrations.action.pausePending": "Pausing…",
   "integrations.action.resume": "Resume",
+  "integrations.action.resumePending": "Resuming…",
   "integrations.action.revoke": "Revoke",
   "integrations.action.submit": "Submit",
-  "integrations.action.submitDisabledHint": "Test the connection first.",
+  "integrations.action.submitDisabledHint":
+    "Testing a real connection isn't available yet; only the built-in sandbox can be activated for now.",
   "integrations.action.activateSandbox": "Activate sandbox connection",
+  "integrations.action.activateSandboxPending": "Activating…",
   "integrations.action.syncHistory": "Sync history",
   "integrations.action.verifyIdentity": "Verify your identity",
 
   "integrations.revoke.confirmTitle": "Revoke this connection?",
   "integrations.revoke.confirmDescription":
-    "This can't be undone. Patients stop syncing and the Patient Register becomes editable by hand again. Deregister DenialDesk as a client in your EHR/PM afterward.",
+    "This can't be undone. You can register patients by hand again; patients already synced stay read-only. Deregister DenialDesk as a client in your EHR/PM afterward.",
   "integrations.revoke.reasonLabel": "Reason",
   "integrations.revoke.reasonNoLongerUsed": "No longer used",
   "integrations.revoke.reasonSwitchingSystems": "Switching EHR/PM systems",
@@ -279,13 +287,24 @@ export const settings = {
   "integrations.revoke.confirm": "Revoke connection",
   "integrations.revoke.offboardingTitle": "Next: deregister DenialDesk at your EHR/PM",
   "integrations.revoke.offboardingBody":
-    "DenialDesk no longer has a signing key for this connection, but the client registration itself lives at your EHR/PM. Ask your EHR administrator to remove or disable the DenialDesk client so it can't be reused.",
+    "Ask your EHR administrator to remove or disable the DenialDesk client registration so it can't be reused. Patients already synced from this connection stay in DenialDesk as read-only records, kept under the retention policy (§9.2) — revoking does not delete them.",
+  "integrations.revoke.offboardingSecurityConcernNote":
+    "Revoked for a security concern: this has been referred to the incident response process. If you believe the connection was used after you revoked it, check your EHR/PM's access log for DenialDesk client activity after the revoked-at time above.",
+  "integrations.revoke.offboardingSwitchingSystemsNote":
+    "To connect a different EHR/PM, create a new connection — this one can't be reused for a different endpoint.",
+  "integrations.revoke.offboardingRunbookNote":
+    "Full steps: docs/runbooks/integration-offboarding.md in the DenialDesk repository.",
 
   "integrations.runs.metaTitle": "Sync history",
   "integrations.runs.title": "Sync history",
   "integrations.runs.description": "Counts and outcomes only — never patient data.",
   "integrations.runs.emptyTitle": "No syncs yet",
   "integrations.runs.emptyDescription": "Sync runs appear here once this connection starts syncing.",
+  "integrations.runs.status.queued": "Queued",
+  "integrations.runs.status.running": "Running",
+  "integrations.runs.status.succeeded": "Succeeded",
+  "integrations.runs.status.failed": "Failed",
+  "integrations.runs.status.abandoned": "Abandoned",
 
   // Errors (domain/integrations/connections.ts)
   "integrations.error.notAdmin": "Only administrators can manage integrations.",
@@ -307,6 +326,10 @@ export const settings = {
   "integrations.error.cannotChangeConnectionType":
     "A connection's endpoint can't switch between the sandbox and a real EHR/PM. Create a new connection instead.",
   "integrations.error.invalidTransition": "This action isn't available for the connection's current status.",
+  "integrations.error.anotherConnectionLive":
+    "Another connection is already active for Patients. Revoke it first, or manage that one instead.",
+  "integrations.error.unexpected":
+    "Something went wrong saving this connection. Try again, and contact support if it keeps happening.",
   "integrations.error.chooseReason": "Choose a reason.",
 
   // URL rules (src/integrations/fhir/url-rules.ts)

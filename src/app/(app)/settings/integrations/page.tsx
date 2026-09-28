@@ -13,6 +13,8 @@ import {
   connectionStatusTone,
   listConnections,
 } from "@/domain/integrations/connections";
+import { canOfferNewConnection } from "@/components/shell/data-source";
+import { loadPatientsConnectionSummary } from "@/components/shell/connection-summary";
 import { getFormat, getT } from "@/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -27,6 +29,13 @@ export default async function IntegrationsPage() {
   const canManage = canManageIntegrations(auth.role);
 
   const rows = await withTenant(auth, (tx) => listConnections(tx));
+  // Request-memoized (React `cache()`), shared with the layout's own load of this summary
+  // (security/correctness review PR #81, item 18). Only one connection may be outside
+  // draft/revoked at a time (drizzle/0039's partial unique index) — offering "New connection"
+  // while one already exists (even a draft, still being filled in) just invites a second one that
+  // can never itself be activated, so it's hidden the same way the drop-down hides it (item 4).
+  const connectionSummary = await loadPatientsConnectionSummary();
+  const canCreate = canManage && canOfferNewConnection(connectionSummary);
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
@@ -34,10 +43,17 @@ export default async function IntegrationsPage() {
         title={t("integrations.listTitle")}
         description={t("integrations.listDescription")}
         actions={
-          canManage && (
+          canCreate ? (
             <Link href="/settings/integrations/new" className={primaryLinkButtonClass}>
               {t("integrations.newConnection")}
             </Link>
+          ) : (
+            canManage &&
+            connectionSummary && (
+              <p className="text-label text-muted">
+                {t("integrations.newConnectionBlocked", { name: connectionSummary.displayName })}
+              </p>
+            )
           )
         }
         flush
@@ -51,7 +67,7 @@ export default async function IntegrationsPage() {
                 : t("integrations.emptyDescriptionReadOnly")
             }
             action={
-              canManage && (
+              canCreate && (
                 <Link href="/settings/integrations/new" className={primaryLinkButtonClass}>
                   {t("integrations.newConnection")}
                 </Link>

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import { withTenant } from "@/db/tenant";
-import { getPatientsConnectionSummary } from "@/domain/integrations/connections";
 import { getT } from "@/i18n/server";
+import { loadPatientsConnectionSummary } from "./connection-summary";
 import { GlobalHeader, type ShellUser } from "./GlobalHeader";
 import { SessionTimeout } from "./SessionTimeout";
 import { ShellProvider } from "./ShellContext";
@@ -25,10 +24,10 @@ export async function AppShell({
   const t = await getT("shell");
   // One cheap, tenant-scoped, indexed read (spec: erp-shell.md "Data-source drop-down"); no PHI,
   // no patient counts, nothing placed in a URL or client storage (R-7.4.8).
-  const patientsDataSource =
-    tenantId && userId
-      ? await withTenant({ tenantId, userId }, (tx) => getPatientsConnectionSummary(tx))
-      : null;
+  // `loadPatientsConnectionSummary` is request-memoized (React `cache()`): the Patients pages
+  // load the same summary again for their own "synced from …" notice, and share this one query
+  // rather than running it twice per request (security/correctness review PR #81, item 18).
+  const patientsDataSource = tenantId && userId ? await loadPatientsConnectionSummary() : null;
   return (
     <ShellProvider
       data={{

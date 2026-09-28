@@ -140,12 +140,21 @@ export function ConnectionActions({
         <ActionForm action={activateSandboxAction} connectionId={connectionId}>
           {(state, pending) => (
             <>
-              <SubmitButton variant="primary" pendingLabel={t("integrations.new.saving")} disabled={pending}>
+              <SubmitButton
+                variant="primary"
+                pendingLabel={t("integrations.action.activateSandboxPending")}
+                disabled={pending}
+              >
                 {t("integrations.action.activateSandbox")}
               </SubmitButton>
               {state.error && (
                 <p role="alert" className="text-label font-medium text-danger-fg">
                   {state.error}
+                </p>
+              )}
+              {state.stepUpRequired && (
+                <p className="text-label">
+                  <StepUpLink label={t("integrations.action.verifyIdentity")} />
                 </p>
               )}
             </>
@@ -154,12 +163,17 @@ export function ConnectionActions({
       )}
 
       {status === "draft" && !isSandbox && (
-        <span
-          title={t("integrations.action.submitDisabledHint")}
-          className="inline-flex h-8 cursor-not-allowed items-center rounded-control border border-border-strong bg-surface-muted px-3 text-body font-medium text-subtle"
-        >
-          {t("integrations.action.submit")}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span
+            title={t("integrations.action.submitDisabledHint")}
+            className="inline-flex h-8 w-fit cursor-not-allowed items-center rounded-control border border-border-strong bg-surface-muted px-3 text-body font-medium text-subtle"
+          >
+            {t("integrations.action.submit")}
+          </span>
+          {/* A `title` attribute alone is not discoverable without a pointer (security/correctness
+              review PR #81, item 20); the same text is always shown here too. */}
+          <p className="text-label text-muted">{t("integrations.action.submitDisabledHint")}</p>
+        </div>
       )}
 
       {status === "pending_approval" && (
@@ -168,7 +182,7 @@ export function ConnectionActions({
             <>
               <SubmitButton
                 variant="secondary"
-                pendingLabel={t("integrations.new.saving")}
+                pendingLabel={t("integrations.action.withdrawPending")}
                 disabled={pending}
               >
                 {t("integrations.action.withdraw")}
@@ -189,7 +203,7 @@ export function ConnectionActions({
             <>
               <SubmitButton
                 variant="secondary"
-                pendingLabel={t("integrations.new.saving")}
+                pendingLabel={t("integrations.action.pausePending")}
                 disabled={pending}
               >
                 {t("integrations.action.pause")}
@@ -208,7 +222,11 @@ export function ConnectionActions({
         <ActionForm action={resumeConnectionAction} connectionId={connectionId}>
           {(state, pending) => (
             <>
-              <SubmitButton variant="primary" pendingLabel={t("integrations.new.saving")} disabled={pending}>
+              <SubmitButton
+                variant="primary"
+                pendingLabel={t("integrations.action.resumePending")}
+                disabled={pending}
+              >
                 {t("integrations.action.resume")}
               </SubmitButton>
               {state.error && (

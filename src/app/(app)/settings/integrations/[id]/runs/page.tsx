@@ -10,7 +10,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { withTenant } from "@/db/tenant";
 import { getConnection } from "@/domain/integrations/connections";
-import { listSyncRuns } from "@/domain/integrations/sync-runs";
+import { listSyncRuns, syncRunStatusLabel } from "@/domain/integrations/sync-runs";
 import { getFormat, getT } from "@/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -63,7 +63,7 @@ export default async function SyncHistoryPage({ params }: { params: Promise<{ id
             <tbody>
               {runs.map((run) => (
                 <Tr key={run.id}>
-                  <Td>{run.status}</Td>
+                  <Td>{syncRunStatusLabel(run.status, t)}</Td>
                   <Td className="tabular">{f.dateTime(run.queuedAt)}</Td>
                 </Tr>
               ))}

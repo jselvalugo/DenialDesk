@@ -8,7 +8,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { payerOptions } from "@/domain/denials/queries";
-import { blocksPatientsRegister, getPatientsConnectionSummary } from "@/domain/integrations/connections";
+import { blocksPatientsRegister } from "@/domain/integrations/connections";
+import { loadPatientsConnectionSummary } from "@/components/shell/connection-summary";
 import { activeCustomFields } from "@/domain/settings/queries";
 import { getT } from "@/i18n/server";
 import { toCustomFieldOptions } from "@/components/custom-fields/options";
@@ -23,20 +24,24 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function NewPatientPage() {
   const auth = await requireAuth();
   const t = await getT("patients");
-  const { payers, customFields, connectionSummary } = await withTenant(auth, async (tx) => ({
-    payers: await payerOptions(tx),
-    customFields: await activeCustomFields(tx, "patient"),
-    connectionSummary: await getPatientsConnectionSummary(tx),
-  }));
+  // Request-memoized (React `cache()`), shared with the layout's own load of this summary
+  // (security/correctness review PR #81, item 18).
+  const connectionSummary = await loadPatientsConnectionSummary();
   const registerBlocked = blocksPatientsRegister(connectionSummary);
+  const canEditRole = canEditPatients(auth.role);
 
-  if (!canEditPatients(auth.role) || registerBlocked) {
+  // A read-only viewer (by role, or because a live connection blocks hand-registering) never
+  // reaches the form below, so don't spend a query loading payer options or custom-field
+  // definitions they'll never see (item 18).
+  if (!canEditRole || registerBlocked) {
     return (
       <div className="mx-auto flex max-w-[1100px] flex-col gap-6">
         <PageHeader title={t("new.title")} />
         <p role="note" className="text-body text-muted">
           {registerBlocked && connectionSummary
-            ? t("notice.syncedFromConnection", { name: connectionSummary.displayName })
+            ? connectionSummary.status === "active"
+              ? t("notice.syncedFromConnection", { name: connectionSummary.displayName })
+              : t("notice.connectionBeingSetUp", { name: connectionSummary.displayName })
             : t("new.readOnlyNotice")}{" "}
           <Link href="/patients" className="font-medium text-link hover:underline">
             {t("new.backToPatients")}
@@ -45,6 +50,11 @@ export default async function NewPatientPage() {
       </div>
     );
   }
+
+  const { payers, customFields } = await withTenant(auth, async (tx) => ({
+    payers: await payerOptions(tx),
+    customFields: await activeCustomFields(tx, "patient"),
+  }));
 
   return (
     <div className="mx-auto flex max-w-[1100px] flex-col gap-6">

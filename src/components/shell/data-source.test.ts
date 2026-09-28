@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { PatientsConnectionSummary } from "@/domain/integrations/connections";
+import { es } from "@/i18n/messages/es";
+import { pt } from "@/i18n/messages/pt";
+import { createTranslator } from "@/i18n/translate";
 import { canOfferNewConnection, dataSourceState } from "./data-source";
 
 const now = new Date("2026-09-28T12:00:00Z");
@@ -66,6 +69,21 @@ describe("dataSourceState", () => {
     );
     expect(dataSourceState(summary({ status: "error" }), now).tone).toBe("danger");
     expect(dataSourceState(summary({ status: "revoked" }), now).label).toBe("Source: Acme EHR · Revoked");
+  });
+});
+
+describe("dataSourceState translates (security review PR #81: the menu was hard-coded to English)", () => {
+  it("reads in Spanish when given the Spanish translator", () => {
+    const t = createTranslator(es.shell, "es");
+    const state = dataSourceState(summary({ status: "paused" }), now, t);
+    expect(state.label).toBe("Origen: Acme EHR · Pausado");
+    expect(state.accessibleName).toBe("Origen de datos de pacientes: Pausado");
+  });
+
+  it("reads in Portuguese when given the Portuguese translator", () => {
+    const t = createTranslator(pt.shell, "pt");
+    const state = dataSourceState(null, now, t);
+    expect(state.label).toBe("Origem: Manual");
   });
 });
 

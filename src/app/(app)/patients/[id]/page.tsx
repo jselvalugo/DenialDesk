@@ -22,11 +22,8 @@ import { withTenant } from "@/db/tenant";
 import { CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { CLAIM_STATUSES } from "@/domain/claims/status";
 import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
-import {
-  blocksPatientsRegister,
-  getConnection,
-  getPatientsConnectionSummary,
-} from "@/domain/integrations/connections";
+import { blocksPatientsRegister, getConnectionDisplayName } from "@/domain/integrations/connections";
+import { loadPatientsConnectionSummary } from "@/components/shell/connection-summary";
 import { getPatientChart } from "@/domain/patients/queries";
 import {
   ageOn,
@@ -58,9 +55,13 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
   const tcf = await getT("customFields");
   const f = await getFormat();
 
-  const { chart, syncedFromName, registerBlocked } = await withTenant(auth, async (tx) => {
+  // Request-memoized (React `cache()`), shared with the layout's own load of this summary
+  // (security/correctness review PR #81, item 18).
+  const registerBlocked = blocksPatientsRegister(await loadPatientsConnectionSummary());
+
+  const { chart, syncedFromName } = await withTenant(auth, async (tx) => {
     const chart = await getPatientChart(tx, id);
-    if (!chart) return { chart: null, syncedFromName: null, registerBlocked: false };
+    if (!chart) return { chart: null, syncedFromName: null };
     await audit(tx, {
       action: "patient.viewed",
       actorUserId: auth.userId,
@@ -71,10 +72,9 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
     });
     const syncedFromName =
       chart.patient.source === "fhir" && chart.patient.sourceConnectionId
-        ? ((await getConnection(tx, chart.patient.sourceConnectionId))?.displayName ?? null)
+        ? await getConnectionDisplayName(tx, chart.patient.sourceConnectionId)
         : null;
-    const registerBlocked = blocksPatientsRegister(await getPatientsConnectionSummary(tx));
-    return { chart, syncedFromName, registerBlocked };
+    return { chart, syncedFromName };
   });
   if (!chart) notFound();
   const customValues = await withTenant(auth, (tx) =>
@@ -131,11 +131,16 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
           { label: t("field.coverage"), value: payer?.name ?? t("badge.selfPay") },
         ]}
         actions={
-          canEdit && (
+          canEdit ? (
             <Link href={`/patients/${patient.id}/edit`} className={secondaryLinkButtonClass}>
               {t("detail.editRecord")}
             </Link>
-          )
+          ) : synced && canEditPatients(auth.role) ? (
+            // Explain why Edit isn't offered, rather than silently omitting it (security/
+            // correctness review PR #81, item 18) — only for a role that could otherwise edit;
+            // a read-only role already sees no Edit action anywhere, and doesn't need this.
+            <p className="text-label text-muted">{t("detail.editHiddenSynced")}</p>
+          ) : undefined
         }
       />
 

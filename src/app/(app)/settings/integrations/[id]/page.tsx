@@ -78,66 +78,90 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
         }
       />
 
-      {connection.status === "revoked" && (
+      {/* Configuration and lifecycle detail are admin-only (security review PR #81, item 9): a
+          non-admin's accessible name and drop-down already show the current state (that's not
+          access control, spec "Menu visibility is not access control"), but the base URL, client
+          ID, MRN identifier system, and attestation/approval history are not shown to a role that
+          can't act on any of it. */}
+      {canManage && connection.status === "revoked" && (
         <Panel title={t("integrations.revoke.offboardingTitle")}>
           <p className="text-body text-text">{t("integrations.revoke.offboardingBody")}</p>
+          {connection.statusReason === "security_concern" && (
+            <p className="mt-2 text-body text-text">
+              {t("integrations.revoke.offboardingSecurityConcernNote")}
+            </p>
+          )}
+          {connection.statusReason === "switching_systems" && (
+            <p className="mt-2 text-body text-text">
+              {t("integrations.revoke.offboardingSwitchingSystemsNote")}
+            </p>
+          )}
+          {/* No in-app docs route exists yet; the full offboarding steps live in the repo runbook
+              (docs/runbooks/integration-offboarding.md), cited by name for an admin who has repo
+              access, same pattern as other operational runbooks (docs/PROJECT_STATE.md). */}
+          <p className="mt-2 text-label text-muted">{t("integrations.revoke.offboardingRunbookNote")}</p>
         </Panel>
       )}
 
-      <RecordLayout
-        aside={
-          <Panel title={t("integrations.section.lifecycle")}>
+      {canManage && (
+        <RecordLayout
+          aside={
+            <Panel title={t("integrations.section.lifecycle")}>
+              <FieldList>
+                <Field label={t("integrations.field.created")} tabular>
+                  {f.dateTime(connection.createdAt)}
+                </Field>
+                <Field
+                  label={t("integrations.field.attestation")}
+                  empty={t("integrations.field.notAttested")}
+                >
+                  {connection.usResidencyAttestedAt
+                    ? t("integrations.field.attestedBy", {
+                        date: f.dateTime(connection.usResidencyAttestedAt),
+                      })
+                    : null}
+                </Field>
+                <Field label={t("integrations.field.submitted")} empty={tc("word.notSet")} tabular>
+                  {connection.submittedAt ? f.dateTime(connection.submittedAt) : null}
+                </Field>
+                <Field label={t("integrations.field.approved")} empty={tc("word.notSet")} tabular>
+                  {connection.approvedAt ? f.dateTime(connection.approvedAt) : null}
+                </Field>
+                <Field
+                  label={t("integrations.field.lastSuccess")}
+                  empty={t("integrations.neverSynced")}
+                  tabular
+                >
+                  {connection.lastSuccessAt ? f.dateTime(connection.lastSuccessAt) : null}
+                </Field>
+                <Field label={t("integrations.field.revoked")} empty={tc("word.notSet")} tabular>
+                  {connection.revokedAt ? f.dateTime(connection.revokedAt) : null}
+                </Field>
+              </FieldList>
+            </Panel>
+          }
+        >
+          <Panel title={t("integrations.section.configuration")}>
             <FieldList>
-              <Field label={t("integrations.field.created")} tabular>
-                {f.dateTime(connection.createdAt)}
+              <Field label={t("integrations.form.baseUrl")} mono>
+                {connection.baseUrl}
               </Field>
-              <Field label={t("integrations.field.attestation")} empty={t("integrations.field.notAttested")}>
-                {connection.usResidencyAttestedAt
-                  ? t("integrations.field.attestedBy", { date: f.dateTime(connection.usResidencyAttestedAt) })
-                  : null}
+              <Field label={t("integrations.form.clientId")} mono>
+                {connection.clientId}
               </Field>
-              <Field label={t("integrations.field.submitted")} empty={tc("word.notSet")} tabular>
-                {connection.submittedAt ? f.dateTime(connection.submittedAt) : null}
-              </Field>
-              <Field label={t("integrations.field.approved")} empty={tc("word.notSet")} tabular>
-                {connection.approvedAt ? f.dateTime(connection.approvedAt) : null}
-              </Field>
-              <Field
-                label={t("integrations.field.lastSuccess")}
-                empty={t("integrations.neverSynced")}
-                tabular
-              >
-                {connection.lastSuccessAt ? f.dateTime(connection.lastSuccessAt) : null}
-              </Field>
-              <Field label={t("integrations.field.revoked")} empty={tc("word.notSet")} tabular>
-                {connection.revokedAt ? f.dateTime(connection.revokedAt) : null}
+              <Field label={t("integrations.form.mrnIdentifierSystem")} mono>
+                {connection.mrnIdentifierSystem}
               </Field>
             </FieldList>
           </Panel>
-        }
-      >
-        <Panel title={t("integrations.section.configuration")}>
-          <FieldList>
-            <Field label={t("integrations.form.baseUrl")} mono>
-              {connection.baseUrl}
-            </Field>
-            <Field label={t("integrations.form.clientId")} mono>
-              {connection.clientId}
-            </Field>
-            <Field label={t("integrations.form.mrnIdentifierSystem")} mono>
-              {connection.mrnIdentifierSystem}
-            </Field>
-          </FieldList>
-        </Panel>
 
-        {canManage && (
           <Panel title={t("integrations.action.syncHistory")}>
             <Link href={`/settings/integrations/${connection.id}/runs`} className={secondaryLinkButtonClass}>
               {t("integrations.action.syncHistory")}
             </Link>
           </Panel>
-        )}
-      </RecordLayout>
+        </RecordLayout>
+      )}
     </div>
   );
 }

@@ -9,6 +9,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { withTenant } from "@/db/tenant";
 import { payerOptions } from "@/domain/denials/queries";
+import { blocksPatientsRegister } from "@/domain/integrations/connections";
+import { loadPatientsConnectionSummary } from "@/components/shell/connection-summary";
 import { getPatientForEdit } from "@/domain/patients/queries";
 import { activeCustomFields } from "@/domain/settings/queries";
 import { loadValuesForRecord } from "@/domain/custom-fields/values";
@@ -30,10 +32,20 @@ export default async function EditPatientPage({ params }: { params: Promise<{ id
   const auth = await requireAuth();
   if (!canEditPatients(auth.role)) redirect(`/patients/${id}`);
   const t = await getT("patients");
+  // Request-memoized (React `cache()`), shared with the layout's own load of this summary
+  // (security/correctness review PR #81, item 18).
+  const registerBlocked = blocksPatientsRegister(await loadPatientsConnectionSummary());
 
   const data = await withTenant(auth, async (tx) => {
     const patient = await getPatientForEdit(tx, id);
     if (!patient) return null;
+    // Gate on "synced" (this patient) or "blocked" (a live connection at all) before pulling
+    // payers/custom fields or auditing a PHI view for an edit that would be refused anyway
+    // (`updatePatient` throws `error.syncedReadOnly`/the register-closed error either way — this
+    // is UX and audit hygiene, not the security boundary, which stays in the domain layer and its
+    // `patients_synced_readonly` DB trigger). Redirect rather than notFound: the record exists,
+    // it's just not editable here (same as the role check above).
+    if (patient.source === "fhir" || registerBlocked) return "blocked" as const;
     const payers = await payerOptions(tx);
     const customFields = await activeCustomFields(tx, "patient");
     await audit(tx, {
@@ -53,6 +65,7 @@ export default async function EditPatientPage({ params }: { params: Promise<{ id
     return { patient, payers, customFields, customValues };
   });
   if (!data) notFound();
+  if (data === "blocked") redirect(`/patients/${id}`);
   const { patient, payers, customFields, customValues } = data;
 
   return (

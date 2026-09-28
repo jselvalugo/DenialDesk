@@ -243,6 +243,10 @@ export async function getPatientForEdit(tx: TenantTx, patientId: string) {
       memberIdLast4: sql<string>`coalesce(${patients.memberIdLast4}, '')`,
       sensitivityTags: patients.sensitivityTags,
       updatedAt: patients.updatedAt,
+      // Not rendered in the form; lets the edit page gate on "synced" before fetching payers,
+      // custom fields, or auditing a PHI view for an edit it's about to refuse anyway (security/
+      // correctness review PR #81, item 18).
+      source: patients.source,
     })
     .from(patients)
     .where(eq(patients.id, patientId))
