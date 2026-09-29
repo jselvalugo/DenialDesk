@@ -18,6 +18,7 @@ export type Bucket =
   | "integration_test_practice"
   | "integration_submit"
   | "integration_sync_now"
+  | "import_charges"
   | "jwks";
 
 const POLICY: Record<Bucket, { limit: number; windowSeconds: number; env?: string }> = {
@@ -34,6 +35,10 @@ const POLICY: Record<Bucket, { limit: number; windowSeconds: number; env?: strin
   // "Sync now once a minute" per connection (spec PI2b): each press dials the practice's EHR and
   // pulls patient data, so it is throttled like Test connection is (threat model D2).
   integration_sync_now: { limit: 1, windowSeconds: 60 },
+  // Charge imports per practice (claims C2): each one parses up to 5,000 rows, reads the practice's patients
+  // and claims, and holds a per-practice advisory lock while it writes, so attempts are bounded so a held
+  // lock or a stream of large files can't be used to stall the practice's imports or the database.
+  import_charges: { limit: 10, windowSeconds: 10 * 60 },
   // Public JWKS reads, per client network; EHRs fetch a key at token time, not per request.
   jwks: { limit: 120, windowSeconds: 60 },
 };
