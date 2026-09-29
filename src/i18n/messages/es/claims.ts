@@ -173,4 +173,162 @@ export const claims: Messages["claims"] = {
   // Errores de la acción del servidor (app/(app)/claims/[id]/actions.ts)
   "action.error.forbiddenCorrect": "Su rol puede ver las reclamaciones, pero no corregirlas.",
   "action.error.reload": "Recargue la página e inténtelo de nuevo.",
+
+  // Importación de cargos (app/(app)/claims/import, docs/specs/claims.md C2)
+  "detail.history.createdByImport": "Creada por la importación de cargos",
+  "import.button": "Importar cargos",
+  "import.title": "Importar cargos",
+  "import.description":
+    "Suba un CSV de cargos y DenialDesk crea reclamaciones en borrador. Si alguna fila necesita corrección, no se importa nada.",
+  "import.breadcrumbClaims": "Reclamaciones",
+  "import.forbidden": "Su rol puede ver las reclamaciones, pero no importar cargos.",
+  "import.backToClaims": "Volver a las reclamaciones",
+  "import.file.title": "Archivo de cargos",
+  "import.file.description":
+    "Un CSV de hasta {size} MB y {rows} filas. Se lee una sola vez y nunca se guarda.",
+  "import.file.label": "Archivo CSV",
+  "import.file.hint": "Una fila por línea de reclamación, con las columnas que se indican abajo.",
+  "import.defaults.title": "Proveedor y ubicación",
+  "import.defaults.description":
+    "Se usan para las reclamaciones cuyas filas no tienen NPI del proveedor ni ubicación. Una fila que indica su propio proveedor o ubicación la conserva.",
+  "import.defaults.provider": "Proveedor predeterminado",
+  "import.defaults.location": "Ubicación predeterminada",
+  "import.defaults.choose": "Elegir",
+  "import.synthetic.title": "Confirmación",
+  "import.synthetic.description": "Este entorno solo acepta datos sintéticos.",
+  "import.synthetic.attestation":
+    "Confirmo que este archivo contiene solo datos sintéticos. Los números de reclamación empiezan con SYN- y los MRN con SYN.",
+  "import.submit": "Importar cargos",
+  "import.submitting": "Importando…",
+  "import.auditNote":
+    "Cada importación y cada reclamación que crea queda registrada en el registro de auditoría.",
+  "import.format.title": "Formato del archivo",
+  "import.format.description":
+    "Las filas con el mismo número de reclamación son las líneas de una sola reclamación; las columnas de la reclamación se repiten en cada línea y deben coincidir. Los códigos se guardan tal como están escritos: la importación nunca cambia, agrega ni corrige un código.",
+  "import.format.column": "Columna",
+  "import.format.rule": "Qué va en ella",
+  "import.format.required": "Obligatoria",
+  "import.format.optional": "Opcional",
+  "import.format.template": "Descargar la plantilla (solo la fila de encabezado)",
+  "import.format.tableCaption": "Columnas del archivo de cargos",
+  "import.column.claimNumber":
+    "El número de reclamación o de cargo propio de su práctica: hasta 30 letras, dígitos, puntos, guiones o guiones bajos. Nunca un ID de miembro.",
+  "import.column.mrn":
+    "Número de historia clínica de un paciente que ya está en DenialDesk. La importación nunca crea ni modifica pacientes.",
+  "import.column.payer": "Nombre del pagador tal como aparece en la lista de pagadores de esta práctica.",
+  "import.column.serviceDate": "AAAA-MM-DD o M/D/AAAA, no en el futuro.",
+  "import.column.diagnosisCodes": "De 1 a 12 códigos ICD-10-CM separados por espacios o comas.",
+  "import.column.procedureCode": "Código CPT o HCPCS: cinco letras o dígitos.",
+  "import.column.modifiers": "Hasta cuatro modificadores de dos caracteres.",
+  "import.column.units": "Número entero de 1 a 999.",
+  "import.column.charge": "Cargo total de la línea en dólares, de $0.01 a $99,999.99.",
+  "import.column.providerNpi":
+    "NPI de diez dígitos de un proveedor de esta práctica. En blanco usa el proveedor predeterminado.",
+  "import.column.location":
+    "Nombre de la ubicación tal como aparece en esta práctica. En blanco usa la ubicación predeterminada.",
+
+  // Verificaciones de la carga y fallos (devueltos por la acción de importación)
+  "import.error.chooseFile": "Elija un archivo CSV para importar.",
+  "import.error.notCsv": "El archivo debe ser un archivo .csv.",
+  "import.error.tooLarge": "El archivo supera los {size} MB.",
+  "import.error.confirmSynthetic": "Confirme que el archivo contiene solo datos sintéticos.",
+  "import.error.notUtf8": "El archivo no es texto UTF-8. Guárdelo como CSV (UTF-8) e inténtelo de nuevo.",
+  "import.error.forbidden": "Su rol puede ver las reclamaciones, pero no importar cargos.",
+  "import.error.defaults": "Elija un proveedor y una ubicación predeterminados de esta práctica.",
+  "import.error.notImported": "No se importó nada. Corrija las filas de abajo y suba el archivo de nuevo.",
+  "import.error.conflict":
+    "Se creó una reclamación con uno de estos números mientras se leía el archivo. No se importó nada; inténtelo de nuevo.",
+
+  // Informe de problemas
+  "import.problems.aria": "Filas por corregir",
+  "import.problems.row": "Fila {row}: {message}",
+  "import.problems.showing": "Se muestran los primeros {shown} de {total} problemas.",
+  "import.problems.download": "Descargar informe (CSV)",
+  "import.problems.truncated":
+    "El informe enumera los primeros {limit} problemas; {more} más no se enumeraron.",
+
+  // Problemas (domain/claims/charge-file.ts PROBLEM_MESSAGE_KEYS); nunca citan el valor de una celda
+  "import.problem.noDataRows": "El archivo tiene encabezado, pero no filas de cargos.",
+  "import.problem.missingColumns": "Al encabezado le faltan columnas obligatorias: {columns}.",
+  "import.problem.ambiguousColumns": "Más de una columna coincide con: {columns}. Deje solo una.",
+  "import.problem.csvTooManyColumns": "Una fila tiene más de {max} columnas.",
+  "import.problem.csvTooManyRows": "El archivo tiene más de {max} filas.",
+  "import.problem.csvTextAfterQuote": "Hay texto después de unas comillas de cierre.",
+  "import.problem.csvQuoteInField": "Hay unas comillas dentro de un campo sin comillas.",
+  "import.problem.csvUnclosedQuote": "Un campo entre comillas nunca se cierra.",
+  "import.problem.alreadyImported":
+    "Todos los números de reclamación de este archivo ya existen, así que este archivo parece haberse importado antes.",
+  "import.problem.tooLong": "{column} tiene más de {max} caracteres.",
+  "import.problem.claimNumberBlank": "El número de reclamación está en blanco.",
+  "import.problem.claimNumberFormat":
+    "El número de reclamación debe tener de 1 a 30 letras, dígitos, puntos, guiones o guiones bajos.",
+  "import.problem.claimNumberNotSynthetic":
+    "En este entorno (solo datos sintéticos) el número de reclamación debe empezar con {prefix}.",
+  "import.problem.mrnBlank": "El MRN está en blanco.",
+  "import.problem.mrnNotSynthetic":
+    "En este entorno (solo datos sintéticos) el MRN debe empezar con {prefix}.",
+  "import.problem.payerBlank": "El pagador está en blanco.",
+  "import.problem.serviceDateInvalid":
+    "La fecha de servicio no es una fecha real. Use AAAA-MM-DD o M/D/AAAA.",
+  "import.problem.serviceDateTooOld": "La fecha de servicio es anterior al 2000-01-01.",
+  "import.problem.serviceDateFuture": "La fecha de servicio está en el futuro.",
+  "import.problem.diagnosisBlank": "Los códigos de diagnóstico están en blanco.",
+  "import.problem.diagnosisFormat":
+    "Un código de diagnóstico no tiene formato ICD-10-CM (por ejemplo, E11.9). La importación nunca cambia los códigos.",
+  "import.problem.diagnosisTooMany": "Más de {max} códigos de diagnóstico.",
+  "import.problem.procedureCodeFormat":
+    "El código de procedimiento debe tener cinco letras o dígitos (CPT/HCPCS). La importación nunca cambia los códigos.",
+  "import.problem.modifierFormat": "Un modificador debe tener dos letras o dígitos.",
+  "import.problem.modifierTooMany": "Más de {max} modificadores.",
+  "import.problem.unitsInvalid": "Las unidades deben ser un número entero de 1 a 999.",
+  "import.problem.chargeInvalid": "El cargo no es un importe en dólares válido.",
+  "import.problem.chargeRange": "El cargo debe ser de $0.01 a $99,999.99 por línea.",
+  "import.problem.providerNpiFormat": "El NPI del proveedor debe tener 10 dígitos.",
+  "import.problem.claimFieldsDiffer":
+    "{column} difiere de la primera línea de esta reclamación. Las columnas de la reclamación deben coincidir en todas las líneas.",
+  "import.problem.tooManyLines": "Una reclamación puede tener como máximo {max} líneas.",
+  "import.problem.patientNotFound":
+    "Ningún paciente de esta práctica tiene este MRN. La importación nunca crea pacientes.",
+  "import.problem.payerNotFound": "Ningún pagador de la lista de esta práctica tiene este nombre.",
+  "import.problem.payerAmbiguous": "Dos pagadores tienen este nombre y no se pueden distinguir.",
+  "import.problem.providerNotFound": "Ningún proveedor de esta práctica tiene este NPI.",
+  "import.problem.locationNotFound": "Ninguna ubicación de esta práctica tiene este nombre.",
+  "import.problem.locationAmbiguous": "Más de una ubicación tiene este nombre.",
+  "import.problem.claimNumberExists":
+    "Ya existe una reclamación con este número. Corrija las reclamaciones existentes desde la página de la reclamación.",
+  "import.problem.matchesExistingClaim":
+    "Una reclamación existente tiene el mismo paciente, pagador, fecha de servicio y un código de procedimiento con los mismos modificadores. Posible duplicado.",
+  "import.problem.matchesClaimInFile":
+    "Otra reclamación de este archivo tiene el mismo paciente, pagador, fecha de servicio y un código de procedimiento con los mismos modificadores. Posible duplicado.",
+
+  "import.problem.duplicateLine":
+    "Esta línea repite una línea anterior de la misma reclamación (mismo código de procedimiento y modificadores). Si el archivo se pegó dos veces, elimine la copia.",
+  "import.problem.claimRowsNotContiguous":
+    "Las líneas de una reclamación deben estar juntas, pero este número de reclamación aparece de nuevo después de otras reclamaciones.",
+  "import.error.rateLimited":
+    "Demasiadas importaciones en poco tiempo para esta práctica. Espere unos minutos e inténtelo de nuevo.",
+  "import.file.claimNumberNotice":
+    "El número de reclamación se guarda sin cifrado a nivel de campo. Nunca escriba en él un ID de miembro, un número de Seguro Social ni ningún otro identificador.",
+
+  // Resultado
+  "import.result.title": "Importación completa",
+  "import.result.summary":
+    "{claims, plural, one {Se creó # reclamación en borrador} other {Se crearon # reclamaciones en borrador}} a partir de {lines, plural, one {# línea} other {# líneas}}, {billed} facturados.",
+  "import.result.warningsTitle": "Conviene revisar",
+  "import.result.noWarnings": "Sin advertencias.",
+  "import.result.pastDeadline":
+    "{count, plural, one {# reclamación superó su plazo de presentación} other {# reclamaciones superaron su plazo de presentación}}.",
+  "import.result.dueSoon":
+    "{count, plural, one {# reclamación vence en {days} días o menos} other {# reclamaciones vencen en {days} días o menos}}.",
+  "import.result.notConfigured":
+    "{count, plural, one {# reclamación no tiene regla de presentación configurada para su pagador} other {# reclamaciones no tienen regla de presentación configurada para su pagador}}.",
+  "import.result.payerUnverified":
+    "{count, plural, one {# reclamación es de un pagador sin verificar, por lo que aún no se puede enviar} other {# reclamaciones son de pagadores sin verificar, por lo que aún no se pueden enviar}}.",
+  "import.result.noCoverage":
+    "{count, plural, one {# reclamación es de un paciente sin cobertura registrada} other {# reclamaciones son de pacientes sin cobertura registrada}}.",
+  "import.result.patientInactive":
+    "{count, plural, one {# reclamación es de un paciente marcado como inactivo o combinado en el registro de origen} other {# reclamaciones son de pacientes marcados como inactivos o combinados en el registro de origen}}.",
+  "import.result.viewClaims": "Ver reclamaciones sin enviar",
+  "import.result.viewPastDeadline": "Ver reclamaciones fuera de plazo",
+  "import.result.another": "Importar otro archivo",
 };

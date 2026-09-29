@@ -1,0 +1,5 @@
+Claim number,MRN,Payer,Service date,Diagnosis codes,Procedure code,Modifiers,Units,Charge,Provider NPI,Location
+SYN-CHG-0001,SYN-901001,Gulf Coast Mutual (synthetic),2026-09-14,E11.9 I10,99214,25,1,210.00,,
+SYN-CHG-0001,SYN-901001,Gulf Coast Mutual (synthetic),2026-09-14,E11.9 I10,36415,,1,18.00,,
+SYN-CHG-0002,SYN-901002,Medicare Part B (synthetic),9/10/2026,Z00.00,99396,,1,$260.00,,
+SYN-CHG-0003,SYN-901003,Sunward HMO (synthetic),2026-03-02,J45.909,99213,,2,"1,145.50",,

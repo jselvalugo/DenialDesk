@@ -263,7 +263,27 @@ _Last updated: 2026-09-29_
 - Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
 - Claims module C1 (`specs/claims.md`): claims list with timely-filing warnings, claim detail,
   corrections of draft/rejected claims with a required reason, and append-only version history
-  enforced by database triggers. Next: C2 CSV charge import, C3 837P + filing block, C4 999/277CA.
+  enforced by database triggers. Next: C3 837P + filing block, C4 999/277CA.
+- **Claims C2 — charge capture via CSV import** (`specs/claims.md` C2, approved by delegated technical
+  authority 2026-09-29; branch `claude/vigilant-tesla-ps41e9-c2-charge-import`, **no migration, no table,
+  no GRANT**): `/claims/import` (admin, manager, specialist; button in the `/claims` header) takes one
+  UTF-8 CSV (2 MB, 5,000 rows, one row per claim line, rows sharing a `Claim number` form one claim) and
+  creates **draft claims all or nothing** through `createDraftClaims` (`src/domain/claims/versions.ts`):
+  claim, lines, and version 1 (reason `charge_import`, shown localized in the history) so the C1 triggers
+  and history apply. Patients are matched by MRN and read only (never created or changed, synced or manual);
+  payers matched against the practice's catalog by name (unverified allowed, warned); CPT/HCPCS, modifier
+  and ICD-10-CM codes are format-checked with the C1 patterns and stored exactly as given (never upper-cased
+  or fixed). Duplicates are refused, not skipped: a claim number that exists, the same patient + payer + date
+  + code with the same modifiers as any existing claim or another claim in the file, and a whole file already
+  imported. Timely filing (C1 `filingStatus`) only warns; counts are shown after the import. Synthetic-only
+  environments need the attestation, `SYN-` claim numbers, and `SYN` MRNs. Audit: `claim.created` per claim,
+  `claim.import_completed` per import (batch ID, counts), `claim.import_rejected` (fixed reason, counts, attempt ID);
+  a per-practice `import_charges` rate limit (10 per 10 minutes); repeated or non-contiguous lines are refused so a
+  file pasted twice can't double a claim; no row value anywhere. Error report: first 20 rows on the page, CSV download (row, column, code, message) built
+  in the browser. Parse and match logic is in `charge-file.ts` (pure) and `charge-import.ts`. **Status:** CI ran the first
+  integration file green; the fix-round tests (`claim-import-actions.test.ts`, the synced-patient and
+  repeated-line cases, shared fixtures now in `test/integration/helpers.ts`) await a CI run. Owner: OA-083 (a `claim_imports` table
+  needs a GRANT, R-15.9), OA-084 (biller roles, duplicate override, encounter split, PM export source).
 - UI shell is ERP-style: global header with a "Go to" field (Ctrl/⌘ K), navy tab bar whose first
   control is the current module's name, and a grouped module switcher (`specs/erp-shell.md`).
   Deliberately not a copy of any vendor's shell: no grid icon, no "app launcher", tinted module
@@ -417,8 +437,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    migrations (item 8).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
-4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
-   stub with the timely-filing block; 999/277CA capture.
+4. Claims C3–C4 (`specs/claims.md`): 837P via clearinghouse stub with the timely-filing block;
+   999/277CA capture. (C2 CSV charge import is built; run its integration tests in CI first.)
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
    PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›
@@ -443,12 +463,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Open questions for humans
 
-- **Field-encryption AAD (SC-B7.1) plan, ADR 0011 Proposed (OA-078 and OA-085 to OA-087, 2026-09-28; OA-078 was raised independently by PR #98's review):**
+- **Field-encryption AAD (SC-B7.1) plan, ADR 0011 Proposed (OA-078 and OA-102 to OA-104, 2026-09-28; OA-078 was raised independently by PR #98's review):**
   approve the `v2` envelope with key ID and header-bound AAD, and choose job vs. re-seed for
   pre-production (security review recommends re-seed), the cut-off owner, and an empty Azure start
-  (OA-078); a separate rate-limit hash key (OA-085); rotation of append-only history, key retirement
-  under backups and legal hold, a rotation drill, and a member-ID blind index (OA-086); whether
-  `rcm_claim_lines.account_number` is field-encrypted (OA-087). PR 3's key-usage sequence needs a
+  (OA-078); a separate rate-limit hash key (OA-102); rotation of append-only history, key retirement
+  under backups and legal hold, a rotation drill, and a member-ID blind index (OA-103); whether
+  `rcm_claim_lines.account_number` is field-encrypted (OA-104). PR 3's key-usage sequence needs a
   `GRANT USAGE`, so that build PR needs R-15.9 sign-off.
 - **Confirm three PI2a coordinator decisions (OA-065, 2026-09-28; due before the first real connection):** (a) Submit's gate is stricter than the spec's plain wording: the newest Test connection must be a pass within 24 h, bound to the tested configuration and signing `kid` (a later failure or transport refusal voids it); (b) pre-production signs every connection with one shared key (`INTEGRATION_SIGNING_KEY`), a residual risk recorded in threat model S3, mitigated by the operator verifying `client_id` ownership at approval (PI1c); (c) a refused Submit ("This endpoint and client ID are already connected") reveals that *some* practice holds that endpoint and client ID pair, with no identity disclosed, bounded by the Test connection and Submit rate limits: accept or reject.
 - **PI1c operator approval, eight owner decisions (OA-066 to OA-073, 2026-09-28; all due before the first real connection unless noted):**
@@ -539,6 +559,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   applies to the app role). Accept the risk or add a guard trigger? Owner decision.
 - Git history still contains the reference prototype's names from before C0. Rewrite history
   (force-push of the default branch), or leave it? Owner decision.
+- Claims C2 charge import: `claim_imports` table for file-identity duplicate detection (needs a GRANT,
+  R-15.9, `OA-083`); biller roles, an override for a legitimate repeat service, one-claim-per-number, and
+  which PM export feeds the file (`OA-084`, `specs/claims.md`).
 - Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must
   honor; Medicare Advantage filing windows assumed to come from payer contracts (`specs/claims.md`).
 - Patients before real data (`specs/patients.md`, P1 reviews): enforce sensitivity tags in access
@@ -579,6 +602,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Member-ID reveal on a denial decrypts the patient's primary-payer member ID even when the claim was
   billed to another payer (R-5.1.2); fix with coverage records (review §6.1), and until then reveal
   only when the claim's payer is the patient's primary payer (2026-09-26 review, security).
+- Claims C2 follow-up: nothing in the database forces a `claim_versions` version-1 row when a claim is
+  INSERTed (the C1 triggers guard updates only). `createDraftClaims` (`src/domain/claims/versions.ts`) is the
+  supported way to create a claim and writes version 1 and the `claim.created` audit event; a deferred
+  constraint trigger requiring version 1 at commit should land with C3 (no other code path inserts claims
+  today except the seed, which writes its own version 1).
 - `claims.status` / `paid_cents` are not covered by the version trigger, and no DB CHECK enforces
   0 ≤ paid ≤ billed, 0 < denied ≤ billed, charges ≥ 0; must land with C3 / 835 posting, before the
   Azure cutover (2026-09-26 review, security; owner decision §8.4).

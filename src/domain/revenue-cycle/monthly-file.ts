@@ -94,7 +94,7 @@ export interface FileProblem {
 
 export type ParseResult = { ok: true; lines: MonthlyLine[] } | { ok: false; problems: FileProblem[] };
 
-const normalize = (header: string) =>
+export const normalizeHeader = (header: string) =>
   header
     .toLowerCase()
     .replace(/[^a-z0-9#]+/g, " ")
@@ -165,7 +165,7 @@ export function parseMonthlyFile(
   if (rows.length < 2) return { ok: false, problems: [{ row: 1, message: t("import.error.noDataRows") }] };
 
   const headerRow = rows[0]!;
-  const header = headerRow.cells.map(normalize);
+  const header = headerRow.cells.map(normalizeHeader);
   const index = {} as Record<ColumnKey, number>;
   const missing: string[] = [];
   const ambiguous: string[] = [];

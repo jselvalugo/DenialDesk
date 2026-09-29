@@ -30,6 +30,14 @@ export function canCorrectClaims(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "specialist";
 }
 
+/**
+ * Importing charges (CSV) into draft claims (docs/specs/claims.md C2): the people who bill, the same set
+ * as `canCorrectClaims`. Compliance reviews only (R-5.1.2).
+ */
+export function canImportCharges(role: Role): boolean {
+  return role === "admin" || role === "manager" || role === "specialist";
+}
+
 /** Registering and updating patient records: the people who bill (compliance reviews, R-5.1.2). */
 export function canEditPatients(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "specialist";
