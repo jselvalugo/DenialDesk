@@ -39,6 +39,8 @@ CREATE TABLE "appeal_letter_versions" (
 --> statement-breakpoint
 ALTER TABLE "appeal_letter_attestations" ADD CONSTRAINT "appeal_letter_attestations_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "appeal_letter_attestations" ADD CONSTRAINT "appeal_letter_attestations_attested_by_users_id_fk" FOREIGN KEY ("attested_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+-- The composite FK below needs this unique key to exist first.
+CREATE UNIQUE INDEX "appeal_letter_versions_key" ON "appeal_letter_versions" USING btree ("tenant_id","appeal_id","version");--> statement-breakpoint
 ALTER TABLE "appeal_letter_attestations" ADD CONSTRAINT "appeal_letter_attestations_version_fk" FOREIGN KEY ("tenant_id","appeal_id","version") REFERENCES "public"."appeal_letter_versions"("tenant_id","appeal_id","version") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "appeal_letter_templates" ADD CONSTRAINT "appeal_letter_templates_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "appeal_letter_templates" ADD CONSTRAINT "appeal_letter_templates_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -48,7 +50,6 @@ ALTER TABLE "appeal_letter_versions" ADD CONSTRAINT "appeal_letter_versions_crea
 ALTER TABLE "appeal_letter_versions" ADD CONSTRAINT "appeal_letter_versions_appeal_fk" FOREIGN KEY ("tenant_id","appeal_id") REFERENCES "public"."appeals"("tenant_id","id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "appeal_letter_attestations_key" ON "appeal_letter_attestations" USING btree ("tenant_id","appeal_id","version");--> statement-breakpoint
 CREATE UNIQUE INDEX "appeal_letter_templates_key" ON "appeal_letter_templates" USING btree ("tenant_id","category","language");--> statement-breakpoint
-CREATE UNIQUE INDEX "appeal_letter_versions_key" ON "appeal_letter_versions" USING btree ("tenant_id","appeal_id","version");
 
 -- Appeal letters (docs/specs/appeals.md A2). Tenant isolation (R-7.2.4, CLAUDE.md #5): the same policy as
 -- drizzle/0002_security.sql and 0029_appeals.sql. Isolation tests: test/integration/tenancy.test.ts.
