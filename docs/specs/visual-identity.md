@@ -12,7 +12,7 @@ product's name, assets, or code is referenced.
 ## Acceptance criteria
 - [x] Navy sidebar with icons, uppercase section labels, active item highlighted with a teal bar;
       the logo stays unaltered on a white header.
-- [x] Navy primary buttons; serif (Playfair Display) page titles; Inter for UI; Space Mono for codes
+- [x] Navy primary buttons; IBM Plex Sans page titles and UI; IBM Plex Mono for codes
       and stat-tile figures; uppercase letter-spaced table headers and stat labels.
 - [x] Status, link, and chart colors, every text/background pair ≥ 4.5:1 and
       UI boundaries ≥ 3:1 (values in `docs/DESIGN.md` §4–5).

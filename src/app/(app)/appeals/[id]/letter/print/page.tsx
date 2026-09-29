@@ -88,7 +88,7 @@ export default async function AppealLetterPrintPage({ params }: { params: Promis
           {t("letter.print.syntheticMarker")}
         </p>
       )}
-      <article className="rounded-panel border border-border bg-white px-10 py-10 font-serif text-[11pt] leading-relaxed whitespace-pre-wrap text-black shadow-xs print:rounded-none print:border-0 print:p-0 print:shadow-none">
+      <article className="rounded-panel border border-border bg-white px-10 py-10 font-sans text-[11pt] leading-relaxed whitespace-pre-wrap text-black shadow-xs print:rounded-none print:border-0 print:p-0 print:shadow-none">
         {result.text}
       </article>
     </div>

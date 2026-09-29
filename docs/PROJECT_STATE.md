@@ -510,6 +510,7 @@ _Last updated: 2026-09-29_
 | 2026-09-26 | Pre-production on Netlify, synthetic data only | ADR 0003 |
 | 2026-09-26 | Enterprise design system; Tailwind v4 + own components + Radix | ADR 0004, `DESIGN.md` |
 | 2026-09-26 | DenialDesk visual identity (navy/teal, Playfair/Inter/Space Mono, lucide icons); logo unchanged | ADR 0004 amendment, `specs/visual-identity.md` |
+| 2026-09-29 | Fonts switched to IBM Plex Sans/Mono for a clinical-software look (owner request); no serif | ADR 0004 amendment, `DESIGN.md` §6 |
 | 2026-09-26 | Revenue cycle accounting module (rules engine, journal vouchers, A/R aging, deposits, statements), tenant-scoped, phases B1–B5 | `specs/revenue-cycle-accounting.md` |
 | 2026-09-26 | DenialDesk is standalone (owner instruction): the owner's earlier prototype was reference only; the revenue cycle module uses DenialDesk's own file layout, rules, accounts, vouchers, aging, and reconciliation (C0) | `specs/revenue-cycle-accounting.md` |
 | 2026-09-26 | Secrets scanning: gitleaks in CI | `specs/project-skeleton.md` |

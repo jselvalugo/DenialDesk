@@ -34,6 +34,8 @@ DenialDesk's brand; the product doesn't reference any other product (owner instr
 - **Fonts:** Inter (UI), Playfair Display (page titles), Space Mono (codes and headline figures),
   replacing IBM Plex. Bundled in `src/app/fonts/` (SIL OFL 1.1) and loaded with `next/font/local`,
   so builds never download fonts (a flaky Google Fonts fetch broke the container build).
+  **Amended 2026-09-29 (owner request):** back to IBM Plex Sans (UI and page titles, no serif) and
+  IBM Plex Mono (codes), still bundled locally, for a more clinical-software look (DESIGN.md §6).
 - **Icons:** `lucide-react` (ISC, actively maintained), 16px, 1.75 stroke, always `aria-hidden`
   next to a text label.
 - The logo is never recolored; it sits on the white global header and on the sign-in page.

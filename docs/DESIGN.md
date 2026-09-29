@@ -40,7 +40,7 @@ Bloomberg-terminal discipline with modern typography, not a consumer app.
 - Inconsistent capitalization. Sentence case everywhere except proper nouns and codes.
 
 ## 4. Brand
-DenialDesk's visual identity is navy chrome, a teal accent, serif page titles, and mono figures,
+DenialDesk's visual identity is navy chrome, a teal accent, bold sans page titles, and mono figures,
 around its own logo (`docs/assets/denialdesk-logo.png`),
 always shown unaltered on a white background (sign-in page, global header). Adopted 2026-09-26,
 ADR 0004 amendment; ERP shell (global header, tab bar, module switcher) 2026-09-26,
@@ -56,7 +56,7 @@ header and on the welcome page, always on a white surface, never recolored, and 
 imagery. One owner-approved exception (owner request 2026-09-29): the "University of DenialDesk"
 banner (`public/brand/university-welcome.webp`, a supplied render that includes its own styling of
 the logo) heads the University access prompt (`AccessPrompt.tsx`) and appears nowhere else; §3's
-no-gradient rule governs our UI, not the owner's artwork. The product line next to the reception image is Inter, not serif: Playfair stays reserved
+no-gradient rule governs our UI, not the owner's artwork. The product line next to the reception image is IBM Plex Sans: page-title styling stays reserved
 for page titles (§6).
 
 | Token | Hex | Use |
@@ -110,10 +110,10 @@ Status (each has `-fg` text, `-bg` tint, `-border`):
 Rules: status is never shown by color alone — always a label or icon too (WCAG 1.4.1).
 
 ## 6. Typography
-- **Page titles:** Playfair Display (600, 700), serif, navy. Page `h1` and the sign-in card title
-  only; never in tables, forms, or body text.
-- **UI:** Inter (400–700). Tabular figures in tables, amounts, and dates.
-- **Codes, identifiers, headline figures:** Space Mono (400, 700) for claim IDs, CARC/RARC,
+- **Page titles:** IBM Plex Sans (600, 700), navy. Page `h1` and the sign-in card title. No serif:
+  a single sober sans reads as clinical software (owner request, 2026-09-29).
+- **UI:** IBM Plex Sans (400–700). Tabular figures in tables, amounts, and dates.
+- **Codes, identifiers, headline figures:** IBM Plex Mono (400, 700) for claim IDs, CARC/RARC,
   CPT/ICD, NPI, control numbers, and stat-tile values.
 - Self-hosted via `next/font` (no runtime requests to Google).
 - Stat tiles and table headers use uppercase, letter-spaced labels (the one exception to sentence
@@ -121,7 +121,7 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
 
 | Style | Size / line | Weight | Use |
 |---|---|---|---|
-| `display` | 28 / 36 | 700 serif | Page title (one per page) |
+| `display` | 28 / 36 | 700 | Page title (one per page) |
 | `title` | 18 / 26 | 600 | Section / panel title |
 | `heading` | 15 / 22 | 600 | Sub-section, dialog title |
 | `body` | 14 / 20 | 400 | Default text |
@@ -167,7 +167,7 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
     left-ruled `surface-muted` aside (no colored callout boxes), tables in the DataTable header
     style, legal values as mono number + unit + caption citation. Never imagery, never emoji.
 - **Page header:** white band (panel style) with the module tile, an uppercase "Module · Page"
-  eyebrow, the serif title, a one-line description, and actions on the right.
+  eyebrow, the page title, a one-line description, and actions on the right.
 - **Record pages and edit forms** follow one pattern (`specs/record-pages.md`,
   `src/components/records/`): breadcrumb (list / identifier / action), a `RecordHeader` band whose
   `h1` is the record's own name or number with its badges, a meta strip of labelled facts, and the
