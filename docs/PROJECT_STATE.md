@@ -263,7 +263,26 @@ _Last updated: 2026-09-29_
 - Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
 - Claims module C1 (`specs/claims.md`): claims list with timely-filing warnings, claim detail,
   corrections of draft/rejected claims with a required reason, and append-only version history
-  enforced by database triggers. Next: C2 CSV charge import, C3 837P + filing block, C4 999/277CA.
+  enforced by database triggers. Next: C3 837P + filing block, C4 999/277CA.
+- **Claims C2 — charge capture via CSV import** (`specs/claims.md` C2, approved by delegated technical
+  authority 2026-09-29; branch `claude/vigilant-tesla-ps41e9-c2-charge-import`, **no migration, no table,
+  no GRANT**): `/claims/import` (admin, manager, specialist; button in the `/claims` header) takes one
+  UTF-8 CSV (2 MB, 5,000 rows, one row per claim line, rows sharing a `Claim number` form one claim) and
+  creates **draft claims all or nothing** through `createDraftClaims` (`src/domain/claims/versions.ts`):
+  claim, lines, and version 1 (reason `charge_import`, shown localized in the history) so the C1 triggers
+  and history apply. Patients are matched by MRN and read only (never created or changed, synced or manual);
+  payers matched against the practice's catalog by name (unverified allowed, warned); CPT/HCPCS, modifier
+  and ICD-10-CM codes are format-checked with the C1 patterns and stored exactly as given (never upper-cased
+  or fixed). Duplicates are refused, not skipped: a claim number that exists, the same patient + payer + date
+  + code with the same modifiers as any existing claim or another claim in the file, and a whole file already
+  imported. Timely filing (C1 `filingStatus`) only warns; counts are shown after the import. Synthetic-only
+  environments need the attestation, `SYN-` claim numbers, and `SYN` MRNs. Audit: `claim.created` per claim,
+  `claim.import_completed` per import (batch ID, counts), `claim.import_rejected` (fixed reason, counts); no
+  row value anywhere. Error report: first 20 rows on the page, CSV download (row, column, code, message) built
+  in the browser. Parse and match logic is in `charge-file.ts` (pure) and `charge-import.ts`. **Status:** unit
+  tests, lint, typecheck, format and build pass; `test/integration/claim-charge-import.test.ts` was written
+  without database access and **has not been run** (needs a CI run). Owner: OA-083 (a `claim_imports` table
+  needs a GRANT, R-15.9), OA-084 (biller roles, duplicate override, encounter split, PM export source).
 - UI shell is ERP-style: global header with a "Go to" field (Ctrl/⌘ K), navy tab bar whose first
   control is the current module's name, and a grouped module switcher (`specs/erp-shell.md`).
   Deliberately not a copy of any vendor's shell: no grid icon, no "app launcher", tinted module
@@ -414,8 +433,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    migrations (item 8).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
-4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
-   stub with the timely-filing block; 999/277CA capture.
+4. Claims C3–C4 (`specs/claims.md`): 837P via clearinghouse stub with the timely-filing block;
+   999/277CA capture. (C2 CSV charge import is built; run its integration tests in CI first.)
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
    PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›
@@ -529,6 +548,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   applies to the app role). Accept the risk or add a guard trigger? Owner decision.
 - Git history still contains the reference prototype's names from before C0. Rewrite history
   (force-push of the default branch), or leave it? Owner decision.
+- Claims C2 charge import: `claim_imports` table for file-identity duplicate detection (needs a GRANT,
+  R-15.9, `OA-083`); biller roles, an override for a legitimate repeat service, one-claim-per-number, and
+  which PM export feeds the file (`OA-084`, `specs/claims.md`).
 - Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must
   honor; Medicare Advantage filing windows assumed to come from payer contracts (`specs/claims.md`).
 - Patients before real data (`specs/patients.md`, P1 reviews): enforce sensitivity tags in access

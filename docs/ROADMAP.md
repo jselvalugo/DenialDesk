@@ -40,7 +40,7 @@ Setup:
 Claims:
 - [x] Revenue cycle accounting module: monthly PM file, rules and ledger, journal vouchers, aging, deposits, statements, RCM dashboard (`specs/revenue-cycle-accounting.md`)
 - [x] Claim data model with immutable version history [R-3.10.3] — claims list/detail, corrections with reason, append-only `claim_versions` (`specs/claims.md` C1)
-- [ ] Charge capture via CSV import [§8.2]
+- [~] Charge capture via CSV import [§8.2] — C2 built: `/claims/import` creates draft claims (all or nothing) through the C1 version history, patients and payers matched never created, row-level error report, duplicate detection, synthetic-only guard (`specs/claims.md` C2); integration tests await a CI run
 - [ ] Timely-filing guardrail (6 months FL, 12 months Medicare) [R-3.1.5] — warnings done (C1); blocking at submission comes with 837P (C3)
 - [ ] 837P generation and clearinghouse submission [§4.1, §8.2]
 - [ ] 999 / 277CA acknowledgment capture [R-3.1.1]

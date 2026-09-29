@@ -20,6 +20,7 @@ import { withTenant } from "@/db/tenant";
 import { CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { diffSnapshots } from "@/domain/claims/correction";
 import { getClaim } from "@/domain/claims/queries";
+import { CHARGE_IMPORT_REASON } from "@/domain/claims/versions";
 import { claimPayments } from "@/domain/remittances/queries";
 import { REMITTANCE_STATUSES } from "@/domain/remittances/status";
 import { CLAIM_STATUSES, FILING_WARNING_DAYS, filingStatus, isUnsubmitted } from "@/domain/claims/status";
@@ -347,7 +348,11 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                         : t("detail.history.system"))}{" "}
                     · {f.dateTime(entry.createdAt)}
                   </p>
-                  <p className="mt-1 text-body whitespace-pre-wrap text-text">{entry.reason}</p>
+                  <p className="mt-1 text-body whitespace-pre-wrap text-text">
+                    {entry.reason === CHARGE_IMPORT_REASON
+                      ? t("detail.history.createdByImport")
+                      : entry.reason}
+                  </p>
                   {changes.length > 0 && (
                     <ul className="mt-2 flex flex-col gap-1 text-label">
                       {changes.map((change) => (

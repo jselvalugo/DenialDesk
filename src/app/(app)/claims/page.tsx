@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { todayIn } from "@rules/calendar";
+import { canImportCharges } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { primaryLinkButtonClass } from "@/components/ui/linkButton";
 import { nextSortDir, SortableHeader, Table, Td, Th, Tr } from "@/components/ui/DataTable";
 import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -126,7 +128,17 @@ export default async function ClaimsPage({
 
   return (
     <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
-      <PageHeader title={t("list.title")} description={t("list.description")} />
+      <PageHeader
+        title={t("list.title")}
+        description={t("list.description")}
+        actions={
+          canImportCharges(auth.role) && (
+            <Link href="/claims/import" className={primaryLinkButtonClass}>
+              {t("import.button")}
+            </Link>
+          )
+        }
+      />
 
       <section aria-label={t("list.stat.sectionLabel")} className="grid grid-cols-4 gap-4">
         <StatTile
