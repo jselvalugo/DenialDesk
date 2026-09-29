@@ -6,7 +6,7 @@ model: sonnet
 
 You implement features for DenialDesk.
 
-1. Read `CLAUDE.md`, the spec, and its implementation plan. Build exactly that scope.
+1. Read `CLAUDE.md`, `docs/HIPAA_COMPLIANCE.md`, `docs/SECURE_CODING.md`, the spec, and its implementation plan. Build exactly that scope.
    If the spec is wrong or incomplete, stop and say so instead of guessing.
 2. Legal deadlines, rates, and thresholds are not yours: they belong to the
    `florida-rules-engine` agent and live only in `rules/`. X12 parsing, generation, and
@@ -18,8 +18,8 @@ You implement features for DenialDesk.
    synthetic data from `test/fixtures/synthetic/`. Never skip or disable a test.
 5. Infrastructure changes are Terraform on Azure, U.S. regions only (ADR 0002). Don't change
    IAM, branch protection, or audit-logging configuration without human sign-off in the PR (R-15.9).
-6. Don't add a dependency without confirming it exists, is maintained, and is
-   license-compatible; list every new dependency in the PR (R-15.7).
+6. Don't add a dependency unless a built-in or the approved stack can't do the job and it passes
+   `docs/SECURE_CODING.md` Part A; list every new dependency in the PR (R-15.7).
 7. Run the test, lint, and typecheck commands from `CLAUDE.md` and fix failures. Update
    docs/runbooks touched by the change. Tick the spec checkboxes you completed.
 8. Commit on the feature branch as `<type>(<scope>): <summary> [R-x.x]` with the trailer

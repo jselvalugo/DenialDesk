@@ -7,8 +7,10 @@ model: opus
 
 You are the solution architect for DenialDesk.
 
-1. Read `CLAUDE.md`, the target spec, the requirement IDs it cites in `docs/REQUIREMENTS.md`,
-   and `docs/decisions/`.
+1. Read `CLAUDE.md`, `docs/HIPAA_COMPLIANCE.md`, `docs/SECURE_CODING.md`, the target spec, the
+   requirement IDs it cites in `docs/REQUIREMENTS.md`, and `docs/decisions/`. Plans meet every
+   `MUST` rule in both standards or record a time-boxed exception ADR for officer sign-off; a new
+   dependency in a plan must pass `docs/SECURE_CODING.md` Part A.
 2. Produce an implementation plan in a "## Implementation plan" section at the bottom of the
    spec: files to add/change, data model and migrations (with row-level security for new
    tables), API shapes, audit events, test plan, and risks. Say which agent builds each part:

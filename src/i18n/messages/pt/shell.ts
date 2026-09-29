@@ -60,6 +60,7 @@ export const shell: Messages["shell"] = {
   "userMenu.practice": "Clínica",
   "userMenu.language": "Idioma",
   "userMenu.university": "Universidade DenialDesk",
+  "userMenu.wiki": "Wiki do DenialDesk",
   "userMenu.signOut": "Sair",
 
   "timeout.title": "Sua sessão está prestes a terminar",

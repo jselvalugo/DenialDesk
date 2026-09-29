@@ -6,6 +6,10 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-29_
 
 ## Where we are
+- University access prompt now opens with the owner's banner (`public/brand/university-welcome.webp`,
+  DESIGN.md §4 exception) and the user menu has a "DenialDesk Wiki" item beneath the University
+  (owner request 2026-09-29). Open: owner to confirm the banner's "Expert Support" / "On-Demand
+  Training" claims match the paid offer, and its license (OA-037).
 - Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
   of practice denial totals (`queueSummary`, aggregates only, no audit; owner to confirm, OA-058), the two step flows as a
   connected pipeline (`src/components/home/FlowSteps.tsx`), and "Your modules" as a card grid with
@@ -112,11 +116,60 @@ _Last updated: 2026-09-29_
   **re-derive pass that applies a saved payer mapping to patients whose payer mapping is newer than their
   `synced_at`** even at an unchanged `versionId`. Codes are a fixed allow-list (`sync-codes.ts`, documented
   in the spec; a minor is the neutral `review_required`). "Sync now" is an admin action that runs in the
-  request (jobs are the next slice). **Fails closed on real connections (PR #98 review):** any connection that is not
+  request (jobs are PI2c, below). **Fails closed on real connections (PR #98 review):** any connection that is not
   the synthetic sandbox is refused, in the run and in Sync now, with the code `population_scope_unenforced`, until PI4
-  can apply `population_scope` (see "PI4 blocker" under Deferred review findings). **Not built:** background jobs and
-  `integration_claim_run` (HMAC-signed `{runId}`), Coverage-only search and `_elements`, PI3, PI4. Owner: OA-077 to
-  OA-082 (OA-076 is resolved).
+  can apply `population_scope` (see "PI4 blocker" under Deferred review findings). **Not built:** Coverage-only
+  search and `_elements`, PI4 (background jobs, the scheduler and the three-failure rule are PI2c, below). Owner:
+  OA-077 to OA-082 (OA-076 is resolved).
+  **PI2c done: signed background jobs and the 15-minute scheduled sync** (PR #100, branch `claude/vigilant-tesla-ps41e9-pi2c-jobs`,
+  from `claude/quirky-feynman-ufql5a`; migrations `drizzle/0044_patient_integrations_jobs.sql` and, after the review round,
+  `0045_patient_integrations_jobs_review.sql` (0044 had already run on the PR's Netlify preview database branch, so it
+  is not edited); ADR 0012 Proposed; **R-15.9 owner sign-off required for 0044 and 0045 together before they run anywhere
+  but a local or test database, OA-085**). Spec items ticked: PI2b "Jobs", PI3 "Scheduled every 15 minutes", PI3 "Three
+  consecutive failed runs -> error" (SIEM alerts stay deferred to the Azure cutover). What it is: a job is a signed POST
+  of `{ runId }` (HMAC-SHA256 over timestamp + body, 5-minute window, constant-time compare, body read with a 1,024-byte
+  cap while streaming, `INTEGRATION_JOB_SECRET` of at least 32 bytes, refused when missing or short) handled by a
+  platform-neutral worker (`src/integrations/jobs/`) that claims the run through `integration_claim_run(run_id)`
+  (read-only: a `queued` run of an `active` connection, returns tenant and connection) and runs the existing
+  `executeSyncRun` under `withTenantAsSystem`; `integration_enqueue_due_runs(p_sandbox_only)` queues a `scheduled` run per
+  due active connection (sandbox connections only until PI4, `SCHEDULED_SANDBOX_ONLY`) and returns `(tenant_id, run_id,
+  outcome)` so the scheduler can audit runs the database abandoned (`integration.sync_abandoned`, `lease_expired`),
+  abandon and audit a run whose job can't be posted (`job_not_sent`) or that it ran out of time for (`deadline`);
+  Sync now (`requestSync`) audits `integration.sync_queued` in the run's own transaction and posts the same signed job
+  when `INTEGRATION_JOB_SECRET` and a worker URL are set, refuses before queueing when the secret is too short, and
+  otherwise runs in the request only where `syntheticDataOnly()` (where real data is allowed it refuses, logged once at
+  boot); Netlify adapter = `src/platform/netlify/` plus `netlify/functions/integration-sync-background.ts` (Background
+  Function) and `integration-sync-scheduler.ts` (Scheduled Function, `*/15 * * * *`, published deploy only); three finished
+  runs in a row failed move the connection to `error` with the allow-listed reason `repeated_failures` (audited with the
+  last failure code; the connection page shows a translated notice). L3 and O8: 0044 and 0045 begin by verifying the
+  service-principal row seeded by 0043 (exists, disabled, password_hash '!', no membership; 0045 also no second-factor
+  secret and the reserved `.invalid` address) and raise otherwise; 0043 is not edited. The real-connection guard is kept.
+  **Privilege statements in 0044 + 0045 (R-15.9), final list, verbatim** (function bodies are in the migration files):
+  - 0044: `CREATE ROLE denialdesk_jobs NOLOGIN;` (inside `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'denialdesk_jobs') THEN ... END IF; END $$;`)
+  - 0044: `GRANT denialdesk_jobs TO CURRENT_USER;`
+  - 0044: `GRANT USAGE ON SCHEMA public TO denialdesk_jobs;`
+  - 0044: `CREATE FUNCTION integration_claim_run(p_run_id uuid) RETURNS TABLE (tenant_id uuid, connection_id uuid) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$ ... $$;`
+  - 0044: `REVOKE ALL ON FUNCTION integration_claim_run(uuid) FROM PUBLIC;`
+  - 0044: `GRANT EXECUTE ON FUNCTION integration_claim_run(uuid) TO denialdesk_jobs;`
+  - 0044: `CREATE FUNCTION integration_enqueue_due_runs() RETURNS SETOF uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$ ... $$;` (replaced by 0045)
+  - 0044: `REVOKE ALL ON FUNCTION integration_enqueue_due_runs() FROM PUBLIC;` (function dropped by 0045)
+  - 0044: `GRANT EXECUTE ON FUNCTION integration_enqueue_due_runs() TO denialdesk_jobs;` (function dropped by 0045)
+  - 0045: `DROP FUNCTION integration_enqueue_due_runs();`
+  - 0045: `CREATE FUNCTION integration_enqueue_due_runs(p_sandbox_only boolean) RETURNS TABLE (tenant_id uuid, run_id uuid, outcome text) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$ ... $$;`
+  - 0045: `REVOKE ALL ON FUNCTION integration_enqueue_due_runs(boolean) FROM PUBLIC;`
+  - 0045: `GRANT EXECUTE ON FUNCTION integration_enqueue_due_runs(boolean) TO denialdesk_jobs;`
+  No table, column, policy or trigger changes; `denialdesk_app` gains nothing. Both functions walk the practices
+  (`app.tenant_id` set per practice and restored) because every integration table is FORCE ROW LEVEL SECURITY; a probe
+  owner test proves it for an owner that doesn't bypass it. **No new database credential:** `withJobsRole` uses
+  `SET LOCAL ROLE denialdesk_jobs` from the same login, which `GRANT denialdesk_jobs TO CURRENT_USER` makes a member,
+  as 0002 does for `denialdesk_app`. **Owner actions:** OA-085 (this sign-off, and confirm that preview database branches
+  count as test databases for R-15.9; ⚠️ VERIFY that roles created on a Netlify Database preview branch don't reach the
+  shared pre-production database), OA-086 (set `INTEGRATION_JOB_SECRET` per deploy context as a functions-only Netlify
+  secret, confirm the plan supports Background Functions, and that site password protection doesn't block the worker's
+  function URL; until it is set Sync now keeps running in the request and the worker and scheduler refuse), OA-087
+  (confirm the Netlify functions and Netlify Database regions are U.S.; the scheduler now processes data unattended there).
+  Not verifiable outside Netlify: the function bundle was checked with esbuild and smoke-run against a stub, not
+  deployed; whether `DEPLOY_URL`/`URL` exist at runtime is on the runbook's verify list.
   **Local development databases:** a database created before 0043 that holds a sandbox connection with
   `issuer = 'sandbox-client'` (0040's pin) cannot take 0043, whose replacement sandbox CHECK does not validate that
   row. Reset it: `docker compose down -v` (drops the `db-data` volume), `docker compose up -d db`, `pnpm db:migrate`,
@@ -284,6 +337,29 @@ _Last updated: 2026-09-29_
   integration file green; the fix-round tests (`claim-import-actions.test.ts`, the synced-patient and
   repeated-line cases, shared fixtures now in `test/integration/helpers.ts`) await a CI run. Owner: OA-083 (a `claim_imports` table
   needs a GRANT, R-15.9), OA-084 (biller roles, duplicate override, encounter split, PM export source).
+- **Claims C3a — 837P generation** (`specs/claims.md` C3a, approved by delegated technical authority 2026-09-29;
+  branch `claude/vigilant-tesla-ps41e9-c3-837p`; migration `0046_claim_837p_billing_data.sql`, **no new table, no
+  GRANT**; C3 is split, C3b is the clearinghouse stub and the filing-deadline block). A panel on `/claims/[id]`
+  (admin, manager, specialist; draft or rejected claims) generates one 837P (005010X222A1), shows a preview with the
+  member ID and TIN masked, and downloads the file (built in the browser, stored nowhere). Pure builder and validator:
+  `src/edi/x12/837p.ts` (golden file `test/fixtures/synthetic/x12/837p-golden.x12`, SE01/HL round trip, one test per refusal
+  code); service `src/domain/claims/edi-837p.ts` (loads the claim, guards coverage: member ID present and decrypted in memory
+  only, synced patient `mapped`, the patient's primary payer is the claim's payer; takes the next control number; audits
+  `claim.837p_generated` or `claim.837p_refused` with IDs, counts, and codes only); server action `edi-actions.ts` (role,
+  `generate_837p` rate limit 30 per practice per 10 minutes, pointer choice read from the form). Every refusal lists all
+  problems by fixed code, none with a value. Codes are copied exactly; the ICD-10 decimal is removed only as the X12
+  representation (`restoreIcd10Decimal` proves it reversible). Diagnosis pointers are a person's choice, derived only when the
+  claim has one diagnosis. **Control numbers** (ISA13, GS06, ST02, BHT03 share one value) come from the `practice_settings` row
+  `x12_control_number` (existing table and grant, one atomic upsert), because a dedicated table would need a GRANT (OA-090).
+  **Migration 0046** adds nullable `providers.first_name/last_name/address_line1/city/state/postal_code/tin_type/tin_enc`
+  (TIN field-encrypted, AAD-bound) and `locations.place_of_service`; the schema held none of these. **Synthetic-only:** ISA15
+  is `T` and the submitter and receiver identifiers are fixed synthetic constants, so production refuses
+  (`not_synthetic_environment`) until C3b. **Not built:** a settings page to enter a provider's billing details and a
+  location's place of service (until then: the synthetic seed, or the platform operator in the database), so a real practice
+  cannot yet generate; **blockers before C3b and any real claim** (spec C3a, OA-091): sensitive diagnoses (sensitivity tags, Part 2 consent) on outgoing claims, persisting and auditing the diagnosis-pointer choice, the hard-coded CLM06 to CLM09 attestations, and clearinghouse status / real downloads; group billing (type 2 NPI) with a rendering provider, dependents, secondary payers, several claims per
+  file, frequency 7/8. Regimes `medicare_advantage`, `erisa_self_funded`, `smmc`, `pip` are refused (no confirmed SBR09).
+  Mapping is from the specialist's knowledge of the guide, not the licensed guide: every ⚠️ VERIFY row in the spec must be
+  cleared before a `P` file (OA-089). Integration tests (`claim-837p.test.ts`, `claim-837p-action.test.ts`) pass in CI (PR #102).
 - UI shell is ERP-style: global header with a "Go to" field (Ctrl/⌘ K), navy tab bar whose first
   control is the current module's name, and a grouped module switcher (`specs/erp-shell.md`).
   Deliberately not a copy of any vendor's shell: no grid icon, no "app launcher", tinted module
@@ -419,7 +495,9 @@ _Last updated: 2026-09-29_
 | 2026-09-27 | University Wiki: articles are code (PR-reviewed, no per-tenant or user-edited content), legal values only through rule tokens, search by POST; sits beside the U1 courses under the same header, not in the switcher; further structure waits for the owner (OA-036) | `specs/university-wiki.md` |
 | 2026-09-27 | Roll-forward pending counsel (OA-034), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-034 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
 | 2026-09-27 | Patient Register is a synced, read-only copy of the practice EHR/PM (billing minimum only) over FHIR R4 / US Core + SMART Backend Services; data-source drop-down beside the Patients tab, Patients table only for now; manual entry kept only while no connection is active (OA-046) | ADR 0010, `specs/patient-integrations.md` |
+| 2026-09-29 | Background execution: signed `{ runId }` jobs, a read-only definer claim for a new `denialdesk_jobs` role (no table privilege), a 15-minute definer-queued schedule, platform-neutral core with a thin Netlify adapter, Sync now queues a job where a secret is configured; **Proposed, R-15.9 sign-off pending (OA-085)** | ADR 0012, PI2c |
 | 2026-09-28 | Record pattern P4: `DataTable` sorting is server-side via allow-listed `?sort=<key>&dir=asc\|desc` links, not TanStack Table (still deferred until a list needs client-side interactivity — column chooser, virtualized rows) | ADR 0004 addendum, `specs/record-pages.md` |
+| 2026-09-28 | Binding HIPAA and secure-coding standards; strictest reading wins; new third-party packages default to no (owner request) | `HIPAA_COMPLIANCE.md`, `SECURE_CODING.md` (OA-088) |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -437,8 +515,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    migrations (item 8).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
-4. Claims C3–C4 (`specs/claims.md`): 837P via clearinghouse stub with the timely-filing block;
-   999/277CA capture. (C2 CSV charge import is built; run its integration tests in CI first.)
+4. Claims C3b–C4 (`specs/claims.md`): clearinghouse stub submission (R-7.9.5) with the timely-filing block and the
+   provider billing-details settings page; 999/277CA capture. (C2 and C3a are built; run their integration tests in CI first.)
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
    PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›
@@ -460,6 +538,18 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    "Register patient" and give the drop-down panel a sentence per state while a connection is outside
    draft/revoked; PI2b: refresh the drop-down's summary during a session) → PI2a → PI1c → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
+12. Close the known gaps in `docs/SECURE_CODING.md` and `docs/HIPAA_COMPLIANCE.md` (tracked, not
+   waived; they gate the first real practice): AAD on member-ID and TOTP encryption, Node.js
+   version/hash pins in CI and Netlify, a CI check on lockfile entries a PR adds, strict Zod objects,
+   upload malware scanning, missing threat models, CI license check, SAST/DAST/SBOM, signed commits;
+   WebAuthn, JIT and break-glass access, WORM audit + SIEM, mTLS, Key Vault, legal hold,
+   disclosure-accounting export, and the written HIPAA policy set.
+   Closed: SC-B10.1 (strict CSP, `base-uri 'none'`, no `'unsafe-eval'` even in development);
+   SC-A4.1 (every dependency pinned exactly; enforced by a unit test); SC-B12.3 and most of SC-A4.2
+   (images by digest, pnpm by sha512 via corepack in the image and CI, no package managers or
+   source maps in the runtime image); most of SC-A4.3 (7-day hold in pnpm `minimumReleaseAge` and
+   Dependabot `cooldown`); most of SC-A2.6 (Next.js telemetry off in CI and `.env.example`, pnpm
+   update notifier off; still open: `next dev`'s version check and the dev launcher's shutdown event).
 
 ## Open questions for humans
 

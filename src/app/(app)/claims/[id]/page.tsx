@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { todayIn } from "@rules/calendar";
-import { canCorrectClaims } from "@/auth/permissions";
+import { canCorrectClaims, canGenerateClaimFile } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { CustomFieldValues } from "@/components/custom-fields/CustomFieldValues";
 import { Field, FieldList } from "@/components/records/FieldList";
@@ -28,6 +28,7 @@ import { DENIAL_STATUSES, regimeLabel } from "@/domain/denial-status";
 import { loadValuesForRecord } from "@/domain/custom-fields/values";
 import { getFormat, getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
+import { Claim837Form } from "./Claim837Form";
 import { CorrectionAction, CorrectionForm, CorrectionProvider } from "./CorrectionForm";
 import { revealClaimCustomField } from "./actions";
 
@@ -79,6 +80,8 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   const awaitingReceipt = claim.status === "submitted" && !claim.payerReceivedDate;
   const showDeadline = unsubmitted || awaitingReceipt;
   const canCorrect = canCorrectClaims(auth.role) && unsubmitted;
+  // The 837P carries the member ID, so it is offered to the people who bill, for a claim not yet accepted.
+  const canGenerateFile = canGenerateClaimFile(auth.role) && unsubmitted;
   const snapshots = new Map(detail.history.map((v) => [v.version, v.snapshot]));
 
   const body = (
@@ -290,6 +293,16 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
             </p>
           )}
         </Panel>
+
+        {canGenerateFile && (
+          <Panel title={t("edi.title")} description={t("edi.description")} flush>
+            <Claim837Form
+              claimId={claim.id}
+              diagnosisCodes={claim.diagnosisCodes}
+              lines={detail.lines.map((l) => ({ lineNumber: l.lineNumber, procedureCode: l.procedureCode }))}
+            />
+          </Panel>
+        )}
 
         <Panel title={t("detail.payments.title")}>
           {detail.payments.length === 0 ? (

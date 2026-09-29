@@ -12,6 +12,7 @@ import { importDeposits } from "@/domain/revenue-cycle/receivables";
 import { generateDeposits, generateMonthlyFiles } from "@/domain/revenue-cycle/synthetic-file";
 import { prepareVoucher } from "@/domain/revenue-cycle/vouchers";
 import { encryptField } from "@/lib/crypto/field";
+import { encryptProviderTin } from "@/lib/crypto/provider-tin";
 import { systemDb } from "./client";
 import {
   claimLines,
@@ -220,9 +221,15 @@ export async function seedPractice(options: {
   }
 
   await withTenant({ tenantId, userId: userIds[0]! }, async (tx) => {
-    await tx
-      .insert(locations)
-      .values(dataset.locations.map((l) => ({ id: idFor(l.key), tenantId, name: l.name, city: l.city })));
+    await tx.insert(locations).values(
+      dataset.locations.map((l) => ({
+        id: idFor(l.key),
+        tenantId,
+        name: l.name,
+        city: l.city,
+        placeOfService: l.placeOfService,
+      })),
+    );
     await tx.insert(providers).values(
       dataset.providers.map((p) => ({
         id: idFor(p.key),
@@ -231,6 +238,14 @@ export async function seedPractice(options: {
         npi: p.npi,
         taxonomy: p.taxonomy,
         flLicense: p.flLicense,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        addressLine1: p.addressLine1,
+        city: p.city,
+        state: p.state,
+        postalCode: p.postalCode,
+        tinType: p.tinType,
+        tinEnc: encryptProviderTin(p.tin, tenantId, idFor(p.key)),
       })),
     );
     await tx.insert(payers).values(

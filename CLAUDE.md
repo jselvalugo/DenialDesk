@@ -15,6 +15,8 @@ track outcomes. Product brief: `docs/PRODUCT_BRIEF.md`. Requirements baseline: `
 - What to build: `docs/PRODUCT_BRIEF.md`, then one spec per feature in `docs/specs/`.
 - Order of work: `docs/ROADMAP.md`.
 - Architecture decisions: `docs/decisions/` (one short ADR per decision). Threat models: `docs/threat-models/`.
+- HIPAA and secure coding (binding, strictest reading wins): `docs/HIPAA_COMPLIANCE.md` (`HC-x.y`) and
+  `docs/SECURE_CODING.md` (`SC-x.y`, including the third-party dependency policy). Read both before any code change.
 - Legal rules: `rules/` (versioned, effective-dated). **Never hard-code a statutory deadline, rate, or threshold anywhere else.**
 - How agents collaborate: `docs/AGENT_WORKFLOW.md`.
 - UI and visual design: `docs/DESIGN.md` (read before any UI work).
@@ -39,7 +41,9 @@ If a task is not backed by a spec, write or update the spec first.
 7. **Audit everything.** Every PHI read or write emits an audit event (who, what, when, where, why).
 8. **No code inflation.** Nothing may auto-change CPT/ICD/HCPCS codes without a recorded human approval (R-3.10.1, R-3.10.2).
 9. **Don't invent payer rules or code meanings.** Cite the source in the spec or rule, or leave a TODO / ⚠️ VERIFY.
-10. **Dependencies.** Don't add packages without checking they exist, are maintained, and are license-compatible. Note every new dependency in the PR.
+10. **Dependencies.** Default is no new package. Built-ins and the approved stack first; a new package must pass
+    `docs/SECURE_CODING.md` Part A (registry-verified, permissive license, maintained, no install scripts, no
+    phone-home, exact pin) and be listed in the PR. No third-party browser scripts or CDN assets.
 11. **Never skip, disable, or delete a failing test** to get green.
 12. **Merging.** The owner has authorized agents to merge their own PRs once CI is green and `reviewer`/`security-reviewer`/`compliance-checker` have no blocking findings open (2026-09-26). Never merge a red PR or bypass a check. Production (Azure) deploys still need a human.
 

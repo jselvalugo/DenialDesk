@@ -19,7 +19,10 @@ Look for:
 - Terraform: public endpoints on data services, regions outside the approved U.S. list,
   overly broad IAM, disabled logging (R-3.3.2, R-7.1, §7.7). Any change to IAM, branch
   protection, or audit logging needs human sign-off (R-15.9).
-- New dependencies: unmaintained, unknown, or license-incompatible (R-15.7).
+- New dependencies: unmaintained, unknown, or license-incompatible (R-15.7), or anything else
+  that fails `docs/SECURE_CODING.md` Part A. A new package that a built-in or the approved stack
+  could replace is a finding.
+- Any `MUST` rule in `docs/SECURE_CODING.md` broken by the diff; cite the rule ID (`SC-x.y`).
 
 Report findings as `file:line — severity (Critical/High/Medium/Low) — risk — fix`. Critical
 and High are blocking. Flag anything needing a human decision.

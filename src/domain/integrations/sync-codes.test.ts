@@ -3,6 +3,9 @@ import { en } from "@/i18n/messages/en";
 import { es } from "@/i18n/messages/es";
 import { pt } from "@/i18n/messages/pt";
 import {
+  CONNECTION_ERROR_REASONS,
+  CONSECUTIVE_FAILED_RUNS_LIMIT,
+  isConnectionErrorReason,
   isSyncIssueCode,
   isSyncRunCode,
   issueCodeLabelKey,
@@ -99,5 +102,18 @@ describe("mapping a stored code to its label", () => {
       expect(isSyncIssueCode(value)).toBe(false);
       expect(isSyncRunCode(value)).toBe(false);
     }
+  });
+});
+
+describe("the connection error reasons", () => {
+  it("are a fixed allow-list that fits the status_reason CHECK, PHI-free, and includes PI3's repeated_failures", () => {
+    expect(CONNECTION_ERROR_REASONS).toContain("repeated_failures");
+    for (const reason of CONNECTION_ERROR_REASONS) {
+      expect(reason).toMatch(/^[a-z_]{1,64}$/);
+      expect(isConnectionErrorReason(reason)).toBe(true);
+    }
+    expect(isConnectionErrorReason("Jane Synthetic")).toBe(false);
+    expect(isConnectionErrorReason(undefined)).toBe(false);
+    expect(CONSECUTIVE_FAILED_RUNS_LIMIT).toBe(3);
   });
 });

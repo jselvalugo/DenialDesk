@@ -3,6 +3,7 @@ import {
   canCorrectClaims,
   canEditPatients,
   canEditPayerFields,
+  canGenerateClaimFile,
   canImportCharges,
   canTagSensitivity,
   canViewUniversity,
@@ -28,6 +29,17 @@ describe("charge import (R-5.1.2, docs/specs/claims.md C2)", () => {
     ["compliance", false],
   ] as const)("%s can import charges: %s", (role, allowed) => {
     expect(canImportCharges(role)).toBe(allowed);
+  });
+});
+
+describe("837P generation (R-5.1.2, R-3.10.1)", () => {
+  it.each([
+    ["admin", true],
+    ["manager", true],
+    ["specialist", true],
+    ["compliance", false],
+  ] as const)("%s can generate a claim file: %s", (role, allowed) => {
+    expect(canGenerateClaimFile(role)).toBe(allowed);
   });
 });
 
