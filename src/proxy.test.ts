@@ -1,10 +1,7 @@
+import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { NextRequest } from "next/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { config, proxy } from "./proxy";
-
-afterEach(() => {
-  vi.unstubAllEnvs();
-});
 
 function nonceIn(csp: string | null): string | undefined {
   return csp?.match(/'nonce-([^']+)'/)?.[1];
@@ -12,7 +9,6 @@ function nonceIn(csp: string | null): string | undefined {
 
 describe("proxy (SC-B10.1)", () => {
   it("sends the same fresh nonce in the response CSP and to the renderer", () => {
-    vi.stubEnv("NODE_ENV", "production");
     const response = proxy(new NextRequest("https://denialdesk.test/login"));
     const csp = response.headers.get("content-security-policy");
     const nonce = nonceIn(csp);
@@ -21,7 +17,6 @@ describe("proxy (SC-B10.1)", () => {
     expect(response.headers.get("x-middleware-request-x-nonce")).toBe(nonce);
     expect(response.headers.get("x-middleware-request-content-security-policy")).toBe(csp);
     expect(csp).not.toContain("'unsafe-eval'");
-    expect(csp).not.toContain(" ws:");
   });
 
   it("uses a new nonce for every request", () => {
@@ -42,10 +37,20 @@ describe("proxy (SC-B10.1)", () => {
     expect(response.headers.get("content-security-policy")).not.toContain("script-src *");
   });
 
-  it("covers every page but skips only static build assets", () => {
-    const source = config.matcher[0]?.source ?? "";
-    const matches = (path: string) => new RegExp(`^${source}$`).test(path);
-    for (const path of ["/", "/login", "/claims/123", "/api/preview/seed", "/.well-known/jwks.json"]) {
+  it("covers every page, and skips only the static paths next.config.ts covers", () => {
+    // Next's own matcher compiler, so the test cannot drift from how Next reads `config`.
+    const matches = (path: string) => unstable_doesMiddlewareMatch({ config, url: path });
+    for (const path of [
+      "/",
+      "/login",
+      "/claims/123",
+      "/claims?_rsc=abc",
+      "/api/preview/seed",
+      "/.well-known/jwks.json",
+      "/icon.png.html",
+      "/_next/staticx",
+      "/brandx",
+    ]) {
       expect(matches(path), path).toBe(true);
     }
     for (const path of ["/_next/static/chunks/app.js", "/_next/image", "/icon.png", "/brand/logo.svg"]) {

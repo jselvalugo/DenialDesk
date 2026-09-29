@@ -7,7 +7,7 @@ import { contentSecurityPolicy, newNonce } from "@/lib/csp";
  */
 export function proxy(request: NextRequest) {
   const nonce = newNonce();
-  const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV !== "production");
+  const csp = contentSecurityPolicy(nonce);
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
@@ -17,6 +17,10 @@ export function proxy(request: NextRequest) {
   return response;
 }
 
+/**
+ * Every path except static build assets, the image optimizer, the icon, and `/brand/`; those get
+ * the static deny-all policy from `next.config.ts` instead (keep the two lists in step).
+ */
 export const config = {
-  matcher: [{ source: "/((?!_next/static|_next/image|icon.png|brand/).*)" }],
+  matcher: [{ source: "/((?!_next/static/|_next/image$|icon\\.png$|brand/).*)" }],
 };

@@ -42,6 +42,17 @@ test("pages send a strict nonce-based Content-Security-Policy and load without v
   expect(violations).toEqual([]);
 });
 
+test("paths the proxy skips still send a deny-all Content-Security-Policy", async ({ request }) => {
+  for (const path of ["/brand/not-a-file.svg", "/_next/static/not-a-chunk.js", "/icon.png"]) {
+    const csp = (await request.get(path)).headers()["content-security-policy"] ?? "";
+    expect(csp, path).toContain("default-src 'none'");
+    expect(csp, path).toContain("frame-ancestors 'none'");
+  }
+  // Near-miss paths are not skipped: they get the page policy with a nonce.
+  const nearMiss = (await request.get("/icon.png.html")).headers()["content-security-policy"] ?? "";
+  expect(nearMiss).toMatch(/'nonce-[A-Za-z0-9+/=]+'/);
+});
+
 test.describe("signed in", () => {
   test.use({ storageState: "test/e2e/.auth/worker.json" });
 
@@ -54,8 +65,11 @@ test.describe("signed in", () => {
       const nonce = response?.headers()["content-security-policy"]?.match(/'nonce-([^']+)'/)?.[1];
       expect(nonce, path).toBeDefined();
       nonces.add(nonce ?? "");
+      // The header nonce reached the rendered scripts (a prerendered page would carry none).
+      const scriptNonces = await page.evaluate(() => [...document.scripts].map((script) => script.nonce));
+      expect(scriptNonces.length, path).toBeGreaterThan(0);
+      expect(new Set(scriptNonces), path).toEqual(new Set([nonce]));
     }
-    // A fresh nonce per response; a cached or static page would repeat one.
     expect(nonces.size).toBe(3);
     // Client-side navigation runs the nonce-trusted runtime and whatever it loads.
     await page.goto("/");
