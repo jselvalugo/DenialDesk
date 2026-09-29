@@ -111,3 +111,24 @@ export async function withTenantAsSystem<T>(
     throw sanitizeDatabaseError(error);
   }
 }
+
+/**
+ * Runs `fn` in a transaction as the `denialdesk_jobs` role (drizzle/0044), for the two background-job
+ * functions and nothing else: `integration_claim_run` and `integration_enqueue_due_runs` (docs/specs/
+ * patient-integrations.md "PI2b" Jobs and "PI3"). The role has no table privilege and no tenant is set,
+ * because the functions run as their owner (SECURITY DEFINER) and walk the practices themselves. It is
+ * **not** a way to read practice data: anything that needs a practice goes through `withTenantAsSystem`
+ * (as `denialdesk_app`, under row-level security) once the claim has named the tenant. Like
+ * `denialdesk_app`, the role is reached with `SET LOCAL ROLE` from the connection's login role, so it
+ * needs no credential of its own.
+ */
+export async function withJobsRole<T>(fn: (tx: TenantTx) => Promise<T>): Promise<T> {
+  try {
+    return await systemDb().transaction(async (tx) => {
+      await tx.execute(sql`set local role denialdesk_jobs`);
+      return fn(tx);
+    });
+  } catch (error) {
+    throw sanitizeDatabaseError(error);
+  }
+}
