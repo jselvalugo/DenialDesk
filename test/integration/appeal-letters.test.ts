@@ -48,9 +48,20 @@ afterAll(() => closeDatabase());
 
 async function newAppeal(): Promise<string> {
   return withTenant(ctx, async (tx) => {
+    // Only patients with no sensitivity tag, label or restriction: the fail-closed test marks some patients
+    // sensitive, and letters for those are refused by design.
     const [denial] = await tx
       .select({ id: denials.id, claimId: denials.claimId })
       .from(denials)
+      .innerJoin(claims, eq(claims.id, denials.claimId))
+      .innerJoin(patients, eq(patients.id, claims.patientId))
+      .where(
+        and(
+          sql`cardinality(${patients.sensitivityTags}) = 0`,
+          sql`cardinality(${patients.sourceSensitivity}) = 0`,
+          eq(patients.sourceRestricted, false),
+        ),
+      )
       .orderBy(sql`random()`)
       .limit(1);
     const [inserted] = await tx
