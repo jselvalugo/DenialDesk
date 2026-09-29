@@ -53,7 +53,10 @@ the one picture in the product apart from the "University of DenialDesk" logo
 (`public/brand/denialdesk-wiki.png`), both owner-approved variants of the logo mark supplied
 2026-09-27 with the background removed: they are the University and Wiki buttons in the global
 header and on the welcome page, always on a white surface, never recolored, and never anywhere else. Working screens use no other
-imagery. The product line next to the reception image is Inter, not serif: Playfair stays reserved
+imagery. One owner-approved exception (owner request 2026-09-29): the "University of DenialDesk"
+banner (`public/brand/university-welcome.webp`, a supplied render that includes its own styling of
+the logo) heads the University access prompt (`AccessPrompt.tsx`) and appears nowhere else; §3's
+no-gradient rule governs our UI, not the owner's artwork. The product line next to the reception image is Inter, not serif: Playfair stays reserved
 for page titles (§6).
 
 | Token | Hex | Use |

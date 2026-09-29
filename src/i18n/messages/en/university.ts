@@ -128,6 +128,8 @@ export const university = {
   "access.title": "Get access to DenialDesk University",
   "access.body":
     "A self-paced training program for practice staff: how DenialDesk works, how to read a denial, the Florida prompt-pay and appeal clocks the product enforces, and how patient data is protected, plus the reference Wiki.",
+  "access.imageAlt":
+    "University of DenialDesk: on-demand training, step-by-step guides, and expert support. Learn. Master. Get results.",
   "access.coursesLabel": "Courses",
   "access.lengthLabel": "Length",
   "access.lengthMinutes": "about {count, plural, one {# minute} other {# minutes}}",

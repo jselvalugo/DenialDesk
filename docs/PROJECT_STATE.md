@@ -6,6 +6,10 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-29_
 
 ## Where we are
+- University access prompt now opens with the owner's banner (`public/brand/university-welcome.webp`,
+  DESIGN.md §4 exception) and the user menu has a "DenialDesk Wiki" item beneath the University
+  (owner request 2026-09-29). Open: owner to confirm the banner's "Expert Support" / "On-Demand
+  Training" claims match the paid offer, and its license (OA-037).
 - Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
   of practice denial totals (`queueSummary`, aggregates only, no audit; owner to confirm, OA-058), the two step flows as a
   connected pipeline (`src/components/home/FlowSteps.tsx`), and "Your modules" as a card grid with
@@ -333,6 +337,29 @@ _Last updated: 2026-09-29_
   integration file green; the fix-round tests (`claim-import-actions.test.ts`, the synced-patient and
   repeated-line cases, shared fixtures now in `test/integration/helpers.ts`) await a CI run. Owner: OA-083 (a `claim_imports` table
   needs a GRANT, R-15.9), OA-084 (biller roles, duplicate override, encounter split, PM export source).
+- **Claims C3a — 837P generation** (`specs/claims.md` C3a, approved by delegated technical authority 2026-09-29;
+  branch `claude/vigilant-tesla-ps41e9-c3-837p`; migration `0046_claim_837p_billing_data.sql`, **no new table, no
+  GRANT**; C3 is split, C3b is the clearinghouse stub and the filing-deadline block). A panel on `/claims/[id]`
+  (admin, manager, specialist; draft or rejected claims) generates one 837P (005010X222A1), shows a preview with the
+  member ID and TIN masked, and downloads the file (built in the browser, stored nowhere). Pure builder and validator:
+  `src/edi/x12/837p.ts` (golden file `test/fixtures/synthetic/x12/837p-golden.x12`, SE01/HL round trip, one test per refusal
+  code); service `src/domain/claims/edi-837p.ts` (loads the claim, guards coverage: member ID present and decrypted in memory
+  only, synced patient `mapped`, the patient's primary payer is the claim's payer; takes the next control number; audits
+  `claim.837p_generated` or `claim.837p_refused` with IDs, counts, and codes only); server action `edi-actions.ts` (role,
+  `generate_837p` rate limit 30 per practice per 10 minutes, pointer choice read from the form). Every refusal lists all
+  problems by fixed code, none with a value. Codes are copied exactly; the ICD-10 decimal is removed only as the X12
+  representation (`restoreIcd10Decimal` proves it reversible). Diagnosis pointers are a person's choice, derived only when the
+  claim has one diagnosis. **Control numbers** (ISA13, GS06, ST02, BHT03 share one value) come from the `practice_settings` row
+  `x12_control_number` (existing table and grant, one atomic upsert), because a dedicated table would need a GRANT (OA-090).
+  **Migration 0046** adds nullable `providers.first_name/last_name/address_line1/city/state/postal_code/tin_type/tin_enc`
+  (TIN field-encrypted, AAD-bound) and `locations.place_of_service`; the schema held none of these. **Synthetic-only:** ISA15
+  is `T` and the submitter and receiver identifiers are fixed synthetic constants, so production refuses
+  (`not_synthetic_environment`) until C3b. **Not built:** a settings page to enter a provider's billing details and a
+  location's place of service (until then: the synthetic seed, or the platform operator in the database), so a real practice
+  cannot yet generate; **blockers before C3b and any real claim** (spec C3a, OA-091): sensitive diagnoses (sensitivity tags, Part 2 consent) on outgoing claims, persisting and auditing the diagnosis-pointer choice, the hard-coded CLM06 to CLM09 attestations, and clearinghouse status / real downloads; group billing (type 2 NPI) with a rendering provider, dependents, secondary payers, several claims per
+  file, frequency 7/8. Regimes `medicare_advantage`, `erisa_self_funded`, `smmc`, `pip` are refused (no confirmed SBR09).
+  Mapping is from the specialist's knowledge of the guide, not the licensed guide: every ⚠️ VERIFY row in the spec must be
+  cleared before a `P` file (OA-089). Integration tests (`claim-837p.test.ts`, `claim-837p-action.test.ts`) pass in CI (PR #102).
 - UI shell is ERP-style: global header with a "Go to" field (Ctrl/⌘ K), navy tab bar whose first
   control is the current module's name, and a grouped module switcher (`specs/erp-shell.md`).
   Deliberately not a copy of any vendor's shell: no grid icon, no "app launcher", tinted module
@@ -485,8 +512,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    migrations (item 8).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
-4. Claims C3–C4 (`specs/claims.md`): 837P via clearinghouse stub with the timely-filing block;
-   999/277CA capture. (C2 CSV charge import is built; run its integration tests in CI first.)
+4. Claims C3b–C4 (`specs/claims.md`): clearinghouse stub submission (R-7.9.5) with the timely-filing block and the
+   provider billing-details settings page; 999/277CA capture. (C2 and C3a are built; run their integration tests in CI first.)
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
    PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›

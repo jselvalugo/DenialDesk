@@ -155,6 +155,8 @@ export const locations = pgTable("locations", {
   name: text("name").notNull(),
   city: text("city").notNull(),
   timeZone: text("time_zone").notNull().default("America/New_York"),
+  /** Two-digit place of service code on the 837P (CLM05-1). Null until set; a claim without it refuses (claims C3a). */
+  placeOfService: text("place_of_service"),
   createdAt: createdAt(),
 });
 
@@ -167,6 +169,18 @@ export const providers = pgTable(
     npi: text("npi").notNull(),
     taxonomy: text("taxonomy").notNull(),
     flLicense: text("fl_license"),
+    // Billing details for the 837P (claims C3a): the provider bills as an individual (type 1 NPI), loop
+    // 2010AA. All nullable; a claim whose provider lacks one refuses to generate.
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    addressLine1: text("address_line1"),
+    city: text("city"),
+    state: text("state"),
+    postalCode: text("postal_code"),
+    /** "EI" (employer ID) or "SY" (SSN), the REF01 qualifier; present with `tinEnc` or not at all. */
+    tinType: text("tin_type"),
+    /** Field-level encrypted tax ID (R-7.3.3; a sole proprietor's TIN can be an SSN). Never select into logs. */
+    tinEnc: text("tin_enc"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("providers_tenant_npi_key").on(t.tenantId, t.npi)],

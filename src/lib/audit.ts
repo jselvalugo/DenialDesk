@@ -31,6 +31,8 @@ export type AuditAction =
   | "claim.created"
   | "claim.import_completed"
   | "claim.import_rejected"
+  | "claim.837p_generated"
+  | "claim.837p_refused"
   | "patient.member_id_revealed"
   | "patient.list_viewed"
   | "patient.searched"

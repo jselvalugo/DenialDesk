@@ -34,7 +34,8 @@ lesson completions are kept per practice so the practice has a training record (
       otherwise unaltered; `public/brand/university-of-denialdesk.png`; it replaced the
       graduation-cap text link on 2026-09-27, matching the Wiki wordmark button), the same logo
       button on the welcome page, and a "DenialDesk University" item in the user menu above "Sign
-      out". Both go to `/university`. The University is not a module in the module switcher: it is
+      out", with a "DenialDesk Wiki" item (to `/university/wiki`) directly beneath it (owner request
+      2026-09-29). The logo buttons and the University item go to `/university`. The University is not a module in the module switcher: it is
       not a place where practice records are worked, so the tab bar keeps the current module's
       tabs (on `/university` the bar falls back to the first module with no tab selected, as `/`
       does).
@@ -93,7 +94,8 @@ lesson completions are kept per practice so the practice has a training record (
       cross-practice read that the policy alone must hide.
 - [x] While the practice has no access, every visit to `/university` opens a modal dialog "Get
       access to DenialDesk University" (`AccessPrompt.tsx`, a native `<dialog>` like the module
-      switcher): what the program is, how long it is (courses, lessons, reading minutes computed
+      switcher), headed by the owner's University banner (`public/brand/university-welcome.webp`,
+      2026-09-29; translated alt text): what the program is, how long it is (courses, lessons, reading minutes computed
       from the catalog by `programSummary()`, Wiki article count), "Access starts at $299.00"
       (`UNIVERSITY_ACCESS_FROM_CENTS`, owner-set business content formatted by the platform money
       rule, never a legal value), that the courses unlock for the whole practice once access is

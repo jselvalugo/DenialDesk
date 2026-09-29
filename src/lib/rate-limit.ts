@@ -19,6 +19,7 @@ export type Bucket =
   | "integration_submit"
   | "integration_sync_now"
   | "import_charges"
+  | "generate_837p"
   | "jwks";
 
 const POLICY: Record<Bucket, { limit: number; windowSeconds: number; env?: string }> = {
@@ -39,6 +40,9 @@ const POLICY: Record<Bucket, { limit: number; windowSeconds: number; env?: strin
   // and claims, and holds a per-practice advisory lock while it writes, so attempts are bounded so a held
   // lock or a stream of large files can't be used to stall the practice's imports or the database.
   import_charges: { limit: 10, windowSeconds: 10 * 60 },
+  // 837P generation per practice (claims C3a): each one decrypts a member ID and a TIN, takes a control number,
+  // and audits, so attempts are bounded; a biller working through a day's claims stays well inside it.
+  generate_837p: { limit: 30, windowSeconds: 10 * 60 },
   // Public JWKS reads, per client network; EHRs fetch a key at token time, not per request.
   jwks: { limit: 120, windowSeconds: 60 },
 };
