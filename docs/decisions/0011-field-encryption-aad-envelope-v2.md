@@ -74,7 +74,10 @@ Facts that shape the design (checked 2026-09-29):
   variable. Changing only such a variable would relabel the key: every `v2.k1` value would fail and
   every TOTP sign-in would be locked out. The rotation ADR adds a real key/`kid` set.
 - **Key-check value (KCV) per `kid`.** `KCV(kid)` is the first 8 bytes of
-  `HMAC-SHA256(key, "denialdesk.field-key-check." + kid)`, base64url. It is not secret.
+  `HMAC-SHA256(HKDF-SHA256(key, info = "denialdesk.field-key-check." + kid), "check")`, base64url:
+  a subkey with its own label, so the AES-GCM key itself is never used for a second primitive. It
+  is not secret. Never use the conventional "encrypt a zero block" check value: for GCM,
+  AES_K(0^128) is the hash subkey H, and exposing any of it weakens forgery resistance.
   - Pre-production stores it as `FIELD_KEY_CHECK_K1` next to the key.
   - Boot computes it and compares with `timingSafeEqual`. A mismatch refuses to boot everywhere. A
     missing value refuses to boot under `APP_ENV=production` and logs `crypto.key_check_missing`
@@ -183,8 +186,10 @@ value.
      - Runs per tenant as `denialdesk_app` under RLS (`withTenantAsSystem`).
      - Each row is decrypted and checked: the plaintext's last 4 characters (`slice(-4)`) must equal
        `member_id_last4`. On a mismatch the row is not converted, and an integrity failure is
-       audited (`reason: last4_mismatch`). This stops the job from resealing a legacy value that was
-       swapped into the wrong row.
+       audited (`reason: last4_mismatch`). This stops the job from resealing a legacy ciphertext
+       swapped into the wrong row on its own. It does not stop a swap that also copies
+       `member_id_last4`, and four characters can collide by chance, so wipe and re-seed stays the
+       recommended pre-production path (open question 2).
      - The row is resealed and written back with a compare-and-swap on the old ciphertext.
        `updated_at` is not touched.
    - **Users pass.** The same steps through `systemDb().transaction(…)`, as the auth code already
@@ -226,7 +231,12 @@ value.
     for a limit. It also avoids a hot counter row that would serialize every write.
   - Audit events cannot serve as the count: they undercount (one event per batch, and the create
     and update paths do not record each seal).
-  - It needs `GRANT USAGE` to `denialdesk_app`, so that PR needs R-15.9 human sign-off.
+  - It needs `GRANT USAGE` (only; never `UPDATE` or `ALL`, so the app role cannot `setval` it
+    back) to `denialdesk_app`, so that PR needs R-15.9 human sign-off.
+  - The count is per database. Where `k1` seals into more than one database (Netlify branch
+    databases, restored copies), the counts add up; negligible against 2^30, but `--verify`
+    reports the counter against 2^30 and logs `crypto.key_usage_high` from 2^29, so it is read
+    somewhere.
 - **Option for the cutover ADR: per-tenant subkeys.** `HKDF-SHA256(master, info = <kid>|<tenant>)`
   spreads usage across tenants and limits the damage of one tenant's key. TOTP would use a `global`
   subkey.
@@ -265,7 +275,8 @@ value.
   NM109 or "find by member ID" feature would need a tenant-keyed HMAC blind index and a new ADR.
 - **Transition residual risk.** Until the cut-off, someone with database write access could replace
   a value with another row's legacy `v1` ciphertext, and it would decrypt.
-  - For member IDs, the job's last-4 check refuses to reseal a swapped value.
+  - For member IDs, the job's last-4 check refuses to reseal a ciphertext swapped on its own (not
+    one swapped together with `member_id_last4`).
   - For TOTP secrets there is no such check, so a swapped secret would be resealed under the
     victim's user ID.
   - Wiping and re-seeding pre-production instead of converting removes this risk (spec, open

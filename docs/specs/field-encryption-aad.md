@@ -110,7 +110,8 @@ Design: ADR 0011. It covers the envelope, the AAD bytes, the legacy policy, and 
     PI2b's helper if that has merged, and otherwise adds it with the same design.
   - Before resealing, the job checks that the plaintext's `slice(-4)` equals `member_id_last4`. On a
     mismatch the row stays unchanged, and `security.field_integrity_failed` is audited with
-    `reason: last4_mismatch`.
+    `reason: last4_mismatch`. This catches a ciphertext swapped on its own, not one swapped together
+    with `member_id_last4`.
   - Each row is written with a compare-and-swap on the old ciphertext. `updated_at` is not changed.
 - [ ] Users pass. The same steps inside `systemDb().transaction(…)`; only `totp_secret_enc`
       changes.
@@ -156,7 +157,8 @@ Design: ADR 0011. It covers the envelope, the AAD bytes, the legacy policy, and 
     Each value that fails to open also gets `security.field_integrity_failed`, once per run.
   - The counts are summed across tenants. A final `security.field_formats_verified` event records
     the totals.
-  - It prints the active `kid`'s key-check value (ADR 0011 §1).
+  - It prints the active `kid`'s key-check value (ADR 0011 §1) and `field_key_seals_<kid>` against
+    2^30, warning (`crypto.key_usage_high`) from 2^29.
 - [ ] Logs carry event names and counts only (SC-B9.1).
 
 ### Cut-off
@@ -185,7 +187,8 @@ See "Tests" below; SC-B11.1 negative tests are required.
 ## Data / API changes
 - **No new table and no new column.**
 - **Migrations.**
-  - PR 3: sequence `field_key_seals_k1` plus `GRANT USAGE ON SEQUENCE … TO denialdesk_app`. This is
+  - PR 3: sequence `field_key_seals_k1` plus `GRANT USAGE ON SEQUENCE … TO denialdesk_app` (USAGE
+    only; never UPDATE or ALL). This is
     a GRANT, so the PR needs R-15.9 human sign-off.
   - PR 5: the two CHECK constraints.
 - **No SECURITY DEFINER, trigger, or `audit_events` change.** `principal` and `operator` go in
