@@ -550,12 +550,17 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    draft/revoked; PI2b: refresh the drop-down's summary during a session) → PI2a → PI1c → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
 12. Close the known gaps in `docs/SECURE_CODING.md` and `docs/HIPAA_COMPLIANCE.md` (tracked, not
-   waived; they gate the first real practice): AAD on member-ID and TOTP encryption, exact
-   pins, digest-pinned images, 7-day release quarantine, strict Zod objects, upload malware scanning,
-   missing threat models, CI license check, SAST/DAST/SBOM, signed commits; WebAuthn, JIT and
-   break-glass access, WORM audit + SIEM, mTLS, Key Vault, legal hold, disclosure-accounting export,
-   and the written HIPAA policy set.
-   Closed: SC-B10.1 (strict CSP, `base-uri 'none'`, no `'unsafe-eval'` even in development).
+   waived; they gate the first real practice): AAD on member-ID and TOTP encryption, Node.js
+   version/hash pins in CI and Netlify, a CI check on lockfile entries a PR adds, strict Zod objects,
+   upload malware scanning, missing threat models, CI license check, SAST/DAST/SBOM, signed commits;
+   WebAuthn, JIT and break-glass access, WORM audit + SIEM, mTLS, Key Vault, legal hold,
+   disclosure-accounting export, and the written HIPAA policy set.
+   Closed: SC-B10.1 (strict CSP, `base-uri 'none'`, no `'unsafe-eval'` even in development);
+   SC-A4.1 (every dependency pinned exactly; enforced by a unit test); SC-B12.3 and most of SC-A4.2
+   (images by digest, pnpm by sha512 via corepack in the image and CI, no package managers or
+   source maps in the runtime image); most of SC-A4.3 (7-day hold in pnpm `minimumReleaseAge` and
+   Dependabot `cooldown`); most of SC-A2.6 (Next.js telemetry off in CI and `.env.example`, pnpm
+   update notifier off; still open: `next dev`'s version check and the dev launcher's shutdown event).
 
 ## Open questions for humans
 

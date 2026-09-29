@@ -13,6 +13,7 @@ Requires Node 24 (22 works), pnpm, and PostgreSQL 16.
 ```bash
 pnpm install
 cp .env.example .env.local          # then set FIELD_ENCRYPTION_KEY=$(openssl rand -base64 32)
+pnpm exec next telemetry disable    # once per machine: no telemetry from the dev launcher (SC-A2.6)
 docker compose up -d db
 pnpm db:migrate
 SEED_ADMIN_PASSWORD='a-long-passphrase' pnpm db:seed   # synthetic sample practice
