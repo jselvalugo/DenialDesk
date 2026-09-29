@@ -1,4 +1,4 @@
-# Keeps GitHub Actions and npm dependencies patched (R-7.4.2, REQUIREMENTS §7.6 SLAs).
+# Keeps every dependency ecosystem in this file patched (R-7.4.2, REQUIREMENTS §7.6 SLAs).
 # Every ecosystem holds a new release for 7 days before proposing it (SC-A4.3), matching pnpm's
 # minimumReleaseAge. Cooldown applies to version updates only: a security update opens at once, but
 # pnpm still refuses a fix younger than 7 days until that PR adds a minimumReleaseAgeExclude entry
