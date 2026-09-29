@@ -171,4 +171,119 @@ export const operator: Messages["operator"] = {
   "errors.universityNotGranted": "Este consultorio no tiene acceso que revocar.",
   "errors.universityAlreadyGranted":
     "Este consultorio ya tiene acceso. Vuelva a cargar la página para verlo.",
+  "integrations.link": "Aprobación de integraciones",
+  "integrations.metaTitle": "Aprobación de integraciones",
+  "integrations.title": "Aprobación de integraciones",
+  "integrations.description":
+    "Conexiones reales de EHR/PM que enviaron los consultorios. Verifique cada una con el administrador de EHR del consultorio, fuera de DenialDesk, antes de aprobarla. Solo configuración; sin datos de pacientes.",
+  "integrations.panelTitle": "Pendientes de aprobación",
+  "integrations.tableCaption": "Conexiones pendientes de aprobación",
+  "integrations.empty": "No hay conexiones pendientes de aprobación.",
+  "integrations.columns.name": "Conexión",
+  "integrations.columns.baseUrl": "URL base",
+  "integrations.columns.clientId": "ID de cliente",
+  "integrations.columns.submitted": "Enviada",
+  "integrations.review": "Revisar",
+  "integrations.practiceTitle": "Conexiones de EHR/PM pendientes de aprobación",
+  "integrations.practiceDescription":
+    "Enviadas por los administradores de este consultorio. Revise la configuración, verifíquela fuera de DenialDesk y luego apruébela o recházela.",
+  "integrations.practiceEmpty": "Ninguna conexión de este consultorio está pendiente de aprobación.",
+  "integrations.reviewMetaTitle": "Revisar conexión",
+  "integrations.reviewTitle": "Revisar conexión",
+  "integrations.reviewDescription": "Consultorio: {practice}. No se sincroniza nada hasta que apruebe.",
+  "integrations.config.title": "Configuración",
+  "integrations.config.description":
+    "Exactamente lo que envió el consultorio. Compruebe cada valor con el administrador de EHR del consultorio.",
+  "integrations.field.name": "Nombre de la conexión",
+  "integrations.field.baseUrl": "URL base",
+  "integrations.field.tokenEndpoint": "Punto de conexión de tokens",
+  "integrations.field.issuer": "Emisor",
+  "integrations.field.clientId": "ID de cliente",
+  "integrations.field.mrnSystem": "Sistema de identificadores de MRN",
+  "integrations.field.jwks": "Dirección de la clave pública (JWKS)",
+  "integrations.field.jwksHint":
+    "Es una ruta en este sitio. Dé la dirección completa al administrador de EHR del consultorio.",
+  "integrations.field.keyMode": "Modo de clave",
+  "integrations.field.scope": "Alcance de la población",
+  "integrations.field.submitted": "Enviada",
+  "integrations.field.attested": "Residencia en EE. UU. confirmada",
+  "integrations.field.notDiscovered": "No detectado",
+  "integrations.keyMode.unassigned": "Aún sin asignar",
+  "integrations.keyMode.per_connection": "Una clave por conexión",
+  "integrations.keyMode.shared_vendor_exception": "Clave compartida (excepción del proveedor)",
+  "integrations.keyMode.preprod_shared": "Clave compartida de preproducción",
+  "integrations.scope.unset": "Lo define usted al aprobar",
+  "integrations.approve.title": "Aprobar",
+  "integrations.approve.description":
+    "Al aprobar, se sincronizan los pacientes de este consultorio. Apruebe solo después de verificar la configuración con el administrador de EHR del consultorio, fuera de DenialDesk.",
+  "integrations.choose": "Elija…",
+  "integrations.approve.methodLabel": "Cómo lo verificó",
+  "integrations.approve.dateLabel": "Fecha de la verificación",
+  "integrations.approve.dateHint":
+    "No puede ser futura ni anterior al día en que el consultorio envió la conexión.",
+  "integrations.approve.roleLabel": "Cargo del contacto en el consultorio",
+  "integrations.approve.roleHint": "Solo el cargo, nunca un nombre.",
+  "integrations.approve.scopeLabel": "Alcance de la población",
+  "integrations.approve.scopeHint":
+    "Limita la sincronización a los pacientes propios de este consultorio. Por ahora solo se puede aprobar una exportación de Group: un filtro de búsqueda verificado aún no tiene dónde registrarse.",
+  "integrations.approve.nineDigitsLabel": "Los MRN tienen 9 dígitos (verificado)",
+  "integrations.approve.nineDigitsHint": "Opcional. Márquelo solo si el consultorio lo confirmó.",
+  "integrations.approve.ownershipLabel":
+    "Verifiqué, fuera de DenialDesk, que este consultorio es titular del ID de cliente {clientId}",
+  "integrations.approve.ownershipHint":
+    "El consultorio lo registró en su propio EHR/PM, no otra organización. La clave de firma por sí sola no lo demuestra.",
+  "integrations.approve.submit": "Aprobar conexión",
+  "integrations.approve.pending": "Aprobando…",
+  "integrations.approve.done": "Aprobada. La conexión está activa.",
+  "integrations.reject.title": "Rechazar",
+  "integrations.reject.description":
+    "Devuelve la conexión al consultorio como borrador y libera su reserva del punto de conexión. El consultorio ve el motivo y puede corregirla y enviarla de nuevo.",
+  "integrations.reject.reasonLabel": "Motivo",
+  "integrations.reject.submit": "Rechazar conexión",
+  "integrations.reject.pending": "Rechazando…",
+  "integrations.reject.done": "Rechazada. La conexión vuelve a ser un borrador.",
+  "integrations.method.phone_callback": "Llamada a un número registrado",
+  "integrations.method.video_call": "Videollamada con el administrador de EHR/PM",
+  "integrations.method.written_confirmation":
+    "Confirmación escrita desde la dirección verificada del administrador",
+  "integrations.method.vendor_portal": "Confirmado en el registro de aplicaciones del proveedor de EHR/PM",
+  "integrations.role.ehr_administrator": "Administrador de EHR/PM",
+  "integrations.role.practice_administrator": "Administrador del consultorio",
+  "integrations.role.it_contact": "Contacto de TI del consultorio",
+  "integrations.role.vendor_representative": "Representante del proveedor de EHR/PM",
+  "integrations.role.other": "Otro",
+  "integrations.scope.group_export": "Exportación de Group (el Group del propio consultorio)",
+  "integrations.scope.verified_filter": "Filtro de búsqueda verificado",
+  "errors.integrationNotOperator": "Solo el operador de la plataforma puede decidir sobre una conexión.",
+  "errors.approvalFormInvalid": "Elija cómo se verificó, el cargo del contacto y el alcance de la población.",
+  "errors.approvalDateInvalid": "Indique la fecha en que lo verificó. No puede ser futura.",
+  "errors.approvalOwnershipRequired":
+    "Confirme que verificó, fuera de DenialDesk, que el consultorio es titular de este ID de cliente.",
+  "errors.rejectReasonRequired": "Elija un motivo.",
+  "errors.integrationNotFound": "Esta conexión no está pendiente de aprobación para este consultorio.",
+  "errors.integrationNotPending":
+    "Esta conexión ya no está pendiente de aprobación. Vuelva a cargar la página.",
+  "errors.integrationStale":
+    "Esta conexión cambió desde que la abrió. Vuelva a cargar la página y revise de nuevo la configuración.",
+  "errors.integrationNotClaimed":
+    "El registro del punto de conexión de esta conexión ya no coincide con su configuración. No se puede aprobar; rechácela.",
+  "errors.integrationPracticeSuspended":
+    "Este consultorio está suspendido. Reactívelo antes de aprobar una conexión.",
+  "integrations.scope.notYet": "aún no disponible",
+  "errors.approvalScopeUnsupported":
+    "Un filtro de búsqueda verificado aún no tiene dónde registrarse, así que solo se puede aprobar una exportación de Group.",
+  "errors.integrationRealEndpointRefused":
+    "En este entorno no se pueden aprobar conexiones reales de EHR: solo contiene datos sintéticos.",
+  "errors.approvalDateBeforeSubmission":
+    "La fecha de verificación no puede ser anterior al día en que el consultorio envió la conexión ({date}).",
+  "errors.approvalBaaRequired":
+    "Este consultorio no tiene un Acuerdo de Asociado Comercial (BAA) vigente. Registre el acuerdo firmado en la página del consultorio antes de aprobar una conexión.",
+  "integrations.rejectReason.endpoint_not_verified":
+    "Punto de conexión no verificado con el administrador de EHR/PM",
+  "integrations.rejectReason.client_id_not_verified":
+    "ID de cliente no verificado con el administrador de EHR/PM",
+  "integrations.rejectReason.contact_not_verified": "No se pudo contactar al administrador de EHR/PM",
+  "integrations.rejectReason.population_not_scoped": "Población de pacientes no limitada al consultorio",
+  "integrations.rejectReason.configuration_incorrect": "La configuración es incorrecta",
+  "integrations.rejectReason.other": "Otro motivo",
 };

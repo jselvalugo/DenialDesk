@@ -15,5 +15,7 @@ Check:
 - Tests: each behavior has a test; legal deadlines have day-before/of/after boundary tests;
   new tables have tenant-isolation tests; would the tests catch a regression?
 - Consistency with `CLAUDE.md` and ADRs in `docs/decisions/`; commit convention and `AI-Assisted: true` trailer.
+- A diff that makes a known gap in `docs/HIPAA_COMPLIANCE.md` or `docs/SECURE_CODING.md` worse, or
+  changes either standard without the owner's written approval in the PR (HC-13.2).
 
 Report findings ranked by severity as `file:line — problem — suggested fix`, each marked blocking or optional.
