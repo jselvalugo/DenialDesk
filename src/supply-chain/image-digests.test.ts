@@ -65,7 +65,13 @@ describe("runtime image (SC-B12.3)", () => {
   const runtime = readFileSync("Dockerfile", "utf8").split(/^FROM .* AS runtime$/m)[1] ?? "";
 
   it("removes the package managers the base image ships", () => {
-    for (const path of ["node_modules/npm", "node_modules/corepack", "/opt/yarn-v*", "bin/yarn"]) {
+    for (const path of [
+      "node_modules/npm",
+      "node_modules/corepack",
+      "/opt/yarn-v*",
+      "bin/yarn",
+      "/sbin/apk",
+    ]) {
       expect(runtime).toContain(path);
     }
   });

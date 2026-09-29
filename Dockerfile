@@ -21,11 +21,12 @@ RUN pnpm build && find .next/standalone -name '*.map' -delete
 FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
-# SC-B12.3: the runtime needs only node. Remove the package managers the base image ships.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
+# SC-B12.3: the runtime needs only node. Remove the package managers the base image ships
+# (npm, corepack, yarn, and Alpine's apk). The user is created first, while apk's scripts still work.
+RUN addgroup -S app && adduser -S app -G app \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn \
-      /usr/local/bin/yarnpkg \
-  && addgroup -S app && adduser -S app -G app
+      /usr/local/bin/yarnpkg /sbin/apk /etc/apk /lib/apk /usr/share/apk /var/cache/apk
 COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static
 COPY --from=build --chown=app:app /app/public ./public
