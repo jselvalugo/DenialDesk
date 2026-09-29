@@ -592,8 +592,9 @@ and 11 is OA-104.
 9. Run one pre-production key-rotation drill with this job after the cut-off?
 10. Should a future 835 or "find patient by member ID" feature get a tenant-keyed blind index (new
     ADR), or is it not needed for the MVP?
-11. Should `rcm_claim_lines.account_number` be field-encrypted? No MUST rule requires it (HC-7.3,
-    R-7.3.3), but it is an HC-1.1 identifier.
+11. Should `rcm_claim_lines.account_number` be field-encrypted? HC-7.3 and R-7.3.3 do not require
+    it, but it is an HC-1.1 identifier and a tracked HC-3.5 gap (ADR 0013): the column is meant to
+    give way to a reference to the patient.
 12. Production starts with no `v1` provider TINs. Should production refuse `v1` provider TINs, as
     it does member IDs, so a same-row rollback to an older `v1` TIN cannot happen there? If not,
     the rollback stays an accepted risk.
