@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { closeDatabase, systemDb } from "@/db/client";
 import { auditEvents, locations, payers, providers } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
@@ -110,6 +110,21 @@ async function events(p: Ctx, entityId: string) {
     .select()
     .from(auditEvents)
     .where(and(eq(auditEvents.tenantId, p.tenantId), eq(auditEvents.entityId, entityId)))
+    .orderBy(auditEvents.id);
+}
+
+/** The list view's audit event has no entity ID (it covers several providers), so it is found by practice and action. */
+async function listChecks(p: Ctx) {
+  return systemDb()
+    .select()
+    .from(auditEvents)
+    .where(
+      and(
+        eq(auditEvents.tenantId, p.tenantId),
+        eq(auditEvents.action, "settings.provider_billing_viewed"),
+        isNull(auditEvents.entityId),
+      ),
+    )
     .orderBy(auditEvents.id);
 }
 
@@ -254,12 +269,18 @@ describe("the TIN is encrypted, bound to its provider, and write-only (R-7.3.3, 
     expect(() => decryptField(stored.tinEnc!)).toThrow();
   });
 
-  it("uses a fresh ciphertext each time and accepts hyphens typed in the TIN", async () => {
+  it("stores a different TIN typed with hyphens as a new ciphertext of the digits, and the same TIN as no change", async () => {
     const before = (await row(a.providerId)).tinEnc;
-    await save(a, { recentMfa: true }, { tin: "00-9182736" });
-    const after = await row(a.providerId);
-    expect(after.tinEnc).not.toBe(before);
-    expect(decryptProviderTin(after.tinEnc!, a.tenantId, a.providerId)).toBe(TIN_A);
+    await save(a, { recentMfa: true }, { tin: "66-6827364" });
+    const changed = await row(a.providerId);
+    expect(changed.tinEnc).not.toBe(before);
+    expect(decryptProviderTin(changed.tinEnc!, a.tenantId, a.providerId)).toBe(TIN_B);
+    // The same TIN typed again (with or without hyphens) is not a change: the ciphertext is left alone.
+    expect(await save(a, { recentMfa: true }, { tin: "666827364" })).toEqual({ changed: [] });
+    expect((await row(a.providerId)).tinEnc).toBe(changed.tinEnc);
+    // Back to the first TIN for the tests below.
+    await save(a, { recentMfa: true }, { tin: TIN_A });
+    expect(decryptProviderTin((await row(a.providerId)).tinEnc!, a.tenantId, a.providerId)).toBe(TIN_A);
   });
 
   it("gives back only the last four digits, audits that read, and never the TIN", async () => {
@@ -289,15 +310,16 @@ describe("the TIN is encrypted, bound to its provider, and write-only (R-7.3.3, 
     const other = await row(a.providerId);
     await systemDb().update(providers).set({ tinEnc: other.tinEnc }).where(eq(providers.id, p.providerId));
     expect((await listed()).providers[0]!.missing).toEqual(["postalCode", "tin"]);
-    const checks = (await events(p, p.providerId)).filter(
-      (e) => e.action === "settings.provider_billing_viewed",
-    );
+    const checks = await listChecks(p);
+    // One event per list view that decrypted a TIN (the first listing read a readable one, the second an unreadable one).
+    expect(checks).toHaveLength(2);
     expect(checks.at(-1)!.metadata).toEqual({ phi: "tin_readable_check", provider_count: 1 });
+    expect(checks.at(-1)).toMatchObject({ actorUserId: p.userId, entityType: "provider" });
     // A bare provider has nothing to decrypt, so its list view writes no event.
     const bare = await bareTargets(await createTestTenant("Billing list bare"));
     const bareList = await withTenant(bare, (tx) => listBillingTargets(tx, actorOf(bare)));
     expect(bareList.providers[0]!.missing).toHaveLength(7);
-    expect(await events(bare, bare.providerId)).toEqual([]);
+    expect(await listChecks(bare)).toEqual([]);
   });
 
   it("treats typing the stored TIN again as no change: no write, no audit", async () => {
