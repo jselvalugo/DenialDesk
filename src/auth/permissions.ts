@@ -111,3 +111,11 @@ export function canViewUniversity(role: Role): boolean {
 export function canManageIntegrations(role: Role): boolean {
   return role === "admin";
 }
+
+/**
+ * Editing the practice's appeal letter templates (docs/specs/appeals.md A2): administrators and
+ * managers, since the wording goes to payers. Anyone who can open appeals can read them.
+ */
+export function canManageAppealTemplates(role: Role): boolean {
+  return role === "admin" || role === "manager";
+}

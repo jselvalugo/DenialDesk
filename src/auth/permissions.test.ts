@@ -5,6 +5,8 @@ import {
   canEditPayerFields,
   canGenerateClaimFile,
   canImportCharges,
+  canManageAppealTemplates,
+  canWorkAppeals,
   canTagSensitivity,
   canViewUniversity,
   canWorkDenials,
@@ -70,6 +72,26 @@ describe("payer custom fields (docs/specs/settings-and-custom-fields.md S2 PR4)"
       expect(canEditPayerFields(role)).toBe(true);
       expect(canWorkDenials(role)).toBe(true);
     }
+  });
+});
+
+describe("appeal letters (R-5.1.2, docs/specs/appeals.md A2)", () => {
+  it.each([
+    ["admin", true],
+    ["manager", true],
+    ["specialist", true],
+    ["compliance", false],
+  ] as const)("%s can edit, attest, and export a letter: %s", (role, allowed) => {
+    expect(canWorkAppeals(role)).toBe(allowed);
+  });
+
+  it.each([
+    ["admin", true],
+    ["manager", true],
+    ["specialist", false],
+    ["compliance", false],
+  ] as const)("%s can edit letter templates: %s", (role, allowed) => {
+    expect(canManageAppealTemplates(role)).toBe(allowed);
   });
 });
 

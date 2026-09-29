@@ -50,10 +50,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { locale, messages } = await getMessages();
   return (
     <html lang={locale} className={`${inter.variable} ${playfair.variable} ${spaceMono.variable}`}>
-      <body className="flex h-dvh flex-col">
+      <body className="flex h-dvh flex-col print:block print:h-auto">
         <LocaleProvider locale={locale} messages={messages}>
-          {!isProduction() && <PreviewBanner appEnv={appEnv()} />}
-          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+          {!isProduction() && (
+            <div className="print:hidden">
+              <PreviewBanner appEnv={appEnv()} />
+            </div>
+          )}
+          <div className="flex min-h-0 flex-1 flex-col print:block">{children}</div>
         </LocaleProvider>
       </body>
     </html>

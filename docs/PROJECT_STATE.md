@@ -259,6 +259,22 @@ _Last updated: 2026-09-29_
   5-level ladder, A4 overturn-rate analytics, A5 attachment storage. Open questions from the spec
   (late-filing blocking, appeal version history, withdrawn/dismissed → denial status mapping,
   amount-in-controversy source) are added to `docs/owner/OWNER_ACTION_ITEMS.xlsx`.
+- **Appeals A2 — letters** (`specs/appeals.md` "Acceptance criteria (A2)", approved by delegated technical
+  authority 2026-09-29; `threat-models/appeal-letters.md`; migration `drizzle/0048_appeal_letters.sql`; branch
+  `claude/vigilant-tesla-ps41e9-appeals-a2`, no PR yet). Practice-editable templates per denial category
+  (`/settings/appeal-templates`, admin and manager edit) over a small set of generic starter templates in code
+  that cite no payer rule (visible `VERIFY` / `FILL IN` placeholders block attestation). A letter body stores
+  merge tokens (19 allow-listed fields, unknown ones refused at save); values are filled in when shown, the
+  member ID only masked to its last four. `/appeals/[id]/letter` edits the body (append-only versions with who
+  and when), a named user attests a version (a SHA-256 of the rendered letter is stored), and
+  `/appeals/[id]/letter/print` is the audited export, refused without an attestation that still matches. Print
+  uses the browser dialog (no new dependency). Three new tables with RLS and grants to `denialdesk_app`
+  (`SELECT, INSERT, UPDATE` on templates; `SELECT, INSERT` on the two history tables); R-15.9 sign-off on the
+  GRANTs is with the coordinator. Not built: template history, es/pt letter templates (OA-093), full member ID
+  in the letter (OA-094), a payer address field (OA-095), gating "record submission" on an attestation and
+  four-eyes review (OA-096); attachments stay A5. Integration tests were written but not run here (no
+  reachable Postgres); CI runs them. `purge_demo_practices()` was not extended (no demo practices can exist,
+  and it is a SECURITY DEFINER function that needs R-15.9 sign-off).
 - Remittances and prompt pay R1/PP1 (`specs/remittances-and-prompt-pay.md`): 835 upload (parser in
   `src/edi/x12/`), `/remittances` table and record page with balance check, post (claim version +
   prompt-pay response per claim) and void with reason; `/prompt-pay` table and clock record page
@@ -597,7 +613,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Month-end clamping of the 6- and 12-month timely-filing windows (billing-structure review §3.4,
   §8 item 3): being researched separately; not yet decided.
 - Appeals A1 (`specs/appeals.md`): late-filing blocking (OA-023), withdrawn/dismissed → denial
-  status mapping (OA-024), appeal version history before A2 (OA-025), Medicare amount-in-controversy
+  status mapping (OA-024), appeal version history before A2 (OA-025; A2 adds append-only letter versions and attestations, appeal-record history is still open), Medicare amount-in-controversy
   thresholds source (OA-026), tracking/recovered-amount field masking (OA-027), abandoning a draft
   appeal (OA-028), compliance member-ID reveal on appeals (OA-029), counsel sign-off on the level
   2–5 Medicare rules added in this review round (OA-030), sensitivity-tag masking timing (OA-031),

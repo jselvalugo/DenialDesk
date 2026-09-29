@@ -181,4 +181,30 @@ export const settings: Messages["settings"] = {
   "error.notPayerEditor":
     "Somente administradores e gerentes podem alterar os campos personalizados de um pagador.",
   "error.recordNotFound": "Registro não encontrado.",
+
+  "tabs.appealLetters": "Cartas de recurso",
+  "appealTemplates.metaTitle": "Modelos de cartas de recurso",
+  "appealTemplates.panelTitle": "Modelos de cartas de recurso",
+  "appealTemplates.panelDescription":
+    "Um modelo por categoria de negativa. Uma carta nova começa a partir do modelo da categoria da sua negativa.",
+  "appealTemplates.tableCaption": "Modelos de cartas de recurso por categoria de negativa",
+  "appealTemplates.source": "Texto",
+  "appealTemplates.sourcePractice": "Seu modelo",
+  "appealTemplates.sourceStarter": "Texto inicial",
+  "appealTemplates.lastEdited": "Última edição",
+  "appealTemplates.editAria": "Editar o modelo de {category}",
+  "appealTemplates.viewAria": "Ver o modelo de {category}",
+  "appealTemplates.breadcrumb": "Caminho de navegação",
+  "appealTemplates.editTitle": "Modelo de {category}",
+  "appealTemplates.editMetaTitle": "Editar modelo de carta de recurso",
+  "appealTemplates.bodyLabel": "Texto do modelo",
+  "appealTemplates.bodyHint":
+    "Use campos de mesclagem como {example}. Não digite dados do paciente; eles vêm do registro. As cartas são escritas em inglês porque o pagador as lê.",
+  "appealTemplates.starterNote":
+    "Esta categoria ainda não tem um modelo próprio, então as cartas começam a partir do texto inicial. Ele não cita política de pagador nem lei; adicione citações somente depois de verificá-las.",
+  "appealTemplates.useStarter": "Usar o texto inicial",
+  "appealTemplates.save": "Salvar modelo",
+  "appealTemplates.saved": "Modelo salvo.",
+  "appealTemplates.readOnly": "Somente administradores e gerentes podem editar os modelos.",
+  "appealTemplates.fieldsTitle": "Campos disponíveis",
 };
