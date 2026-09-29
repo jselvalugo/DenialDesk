@@ -18,8 +18,9 @@ describe("build-tool phone-home is disabled (SC-A2.6)", () => {
     expect(envLines.filter((line) => line.includes("NEXT_TELEMETRY_DISABLED=1"))).toHaveLength(2);
   });
 
-  it("pnpm's update notifier is off", () => {
+  it("pnpm's update notifier is off, including in the image build", () => {
     expect(readFileSync(".npmrc", "utf8")).toMatch(/^update-notifier=false$/m);
+    expect(readFileSync("Dockerfile", "utf8")).toMatch(/^COPY .*\.npmrc/m);
   });
 
   it("in Netlify builds", () => {
