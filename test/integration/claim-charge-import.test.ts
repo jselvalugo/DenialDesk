@@ -577,7 +577,7 @@ describe("a patient synced from an EHR (R-5.1.2, patient-integrations PI1a)", ()
 });
 
 describe("lines that repeat (a file pasted twice or two overlapping exports)", () => {
-  it("refuses at the parser, before any claim is created", () => {
+  it("refuses at the parser (parser-only check)", () => {
     const [header, ...body] = FIXTURE.trim().split("\n");
     const doubled = parseChargeFile([header, ...body, ...body].join("\n"), {
       syntheticOnly: true,
@@ -590,12 +590,11 @@ describe("lines that repeat (a file pasted twice or two overlapping exports)", (
     expect(codes.has("claim_rows_not_contiguous")).toBe(true);
   });
 
-  it("creates nothing when an import would otherwise add the same lines again to a claim", async () => {
-    const ctx = await practice("Charge import doubled lines");
-    // The same claim, twice in the file: refused by the parser, so the import is never reached.
+  it("refuses one claim's identical line given twice at the parser (parser-only; the end-to-end case is in claim-import-actions.test.ts)", () => {
     const text = csv({ "Claim number": "SYN-D-1" }, { "Claim number": "SYN-D-1" });
-    expect(parseChargeFile(text, { syntheticOnly: true, today: TODAY }).ok).toBe(false);
-    expect(await claimCount(ctx)).toBe(0);
+    const result = parseChargeFile(text, { syntheticOnly: true, today: TODAY });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.problems.map((p) => p.code)).toEqual(["duplicate_line"]);
   });
 });
 

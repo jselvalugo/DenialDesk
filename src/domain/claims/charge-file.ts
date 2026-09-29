@@ -319,7 +319,9 @@ export function parseChargeFile(text: string, options: ParseOptions): ChargePars
 
     const existing = groupKey ? claims.get(groupKey) : undefined;
     const previous = previousKey;
-    previousKey = groupKey;
+    // Only a valid claim number moves the marker: a blank or invalid row between two rows of one claim
+    // (A, invalid, A) isn't another claim coming back.
+    if (groupKey) previousKey = groupKey;
     if (groupKey && existing && previous !== groupKey && !notContiguous.has(groupKey)) {
       notContiguous.add(groupKey);
       add(line, "claim_rows_not_contiguous", "claimNumber");

@@ -6,7 +6,7 @@ import { DatabaseError } from "@/db/errors";
 import { auditEvents, claims } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { CHARGE_FILE_HEADER } from "@/domain/claims/charge-file";
-import { hit } from "@/lib/rate-limit";
+import { hit, limitFor } from "@/lib/rate-limit";
 import { createTestTenant, seedChargeImportPractice, type ChargeImportPractice } from "./helpers";
 
 // docs/specs/claims.md C2: the importCharges server action, run against the real domain and database.
@@ -96,6 +96,21 @@ async function claimCount(practice: ChargeImportPractice): Promise<number> {
 }
 
 const init = {};
+
+/**
+ * Runs `fn` with the clock fixed in the middle of a rate-limit window, so a ten-minute boundary can't fall
+ * between the hits and the action (`hit()` reads `new Date()` for its fixed window). Only Date is faked.
+ */
+async function midWindow<T>(fn: () => Promise<T>): Promise<T> {
+  const windowMs = limitFor("import_charges").windowSeconds * 1000;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(Math.floor(Date.now() / windowMs) * windowMs + windowMs / 2);
+  try {
+    return await fn();
+  } finally {
+    vi.useRealTimers();
+  }
+}
 
 describe("importCharges: success", () => {
   it("creates the claims and audits the import with the batch ID that names the claims", async () => {
@@ -244,8 +259,10 @@ describe("importCharges: every refusal is audited with a fixed reason, counts, a
 describe("importCharges: rate limit (import_charges, per practice)", () => {
   it("refuses the eleventh attempt in ten minutes, audits it, and creates nothing", async () => {
     const practice = await signedIn();
-    for (let i = 0; i < 10; i++) await hit("import_charges", `practice:${practice.tenantId}`);
-    const state = await importCharges(init, form(practice, FIXTURE));
+    const state = await midWindow(async () => {
+      for (let i = 0; i < 10; i++) await hit("import_charges", `practice:${practice.tenantId}`);
+      return importCharges(init, form(practice, FIXTURE));
+    });
     expect(state.error).toBe(
       "Too many imports in a short time for this practice. Wait a few minutes and try again.",
     );

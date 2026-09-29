@@ -148,7 +148,11 @@ export async function importCharges(_: ImportState, formData: FormData): Promise
     }
     // Anything else (a database failure) is not the user's file: audit the refusal with a fixed reason and
     // counts only, then let it surface. The transaction has rolled back, so no claim was created.
-    await rejected("error", { rows: parsed.rowCount });
+    try {
+      await rejected("error", { rows: parsed.rowCount });
+    } catch {
+      // A failing audit write must not replace the original error: the original is what surfaces.
+    }
     throw error;
   }
   if (!outcome.ok) {

@@ -333,9 +333,11 @@ export async function importChargeClaims(
         if (others.some((other) => isSameService(identity, other))) add(r.claim, "matches_existing_claim");
       }
       const bucket = `${r.patientId}|${r.payerId}|${r.claim.serviceDate}`;
-      const earlier = seenInFile.get(bucket) ?? [];
-      if (earlier.some((other) => isSameService(identity, other))) add(r.claim, "matches_claim_in_file");
-      seenInFile.set(bucket, [...earlier, identity]);
+      const earlier = seenInFile.get(bucket);
+      if (earlier) {
+        if (earlier.some((other) => isSameService(identity, other))) add(r.claim, "matches_claim_in_file");
+        earlier.push(identity);
+      } else seenInFile.set(bucket, [identity]);
     }
   }
 

@@ -383,6 +383,31 @@ describe("charge file: claims of several lines", () => {
     });
   });
 
+  it("doesn't call a claim non-contiguous because a blank or invalid claim-number row sits inside it", () => {
+    const result = parseChargeFile(
+      file(
+        line({ "Procedure code": "99213" }),
+        line({ "Claim number": "SYN BAD", "Procedure code": "36415" }),
+        line({ "Procedure code": "93000" }),
+      ),
+      open,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      total: 1,
+      problems: [{ row: 3, code: "claim_number_format" }],
+    });
+    const blank = parseChargeFile(
+      file(
+        line({ "Procedure code": "99213" }),
+        line({ "Claim number": "", "Procedure code": "36415" }),
+        line({ "Procedure code": "93000" }),
+      ),
+      open,
+    );
+    expect(codesOf(blank)).toEqual(["claim_number_blank"]);
+  });
+
   it("refuses the same file body pasted twice: nothing is merged or doubled", () => {
     const body = [
       line({ "Claim number": "SYN-T-1", "Procedure code": "99213" }),

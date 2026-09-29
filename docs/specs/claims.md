@@ -216,7 +216,7 @@ no payer receipt date and no payment. A claim can have at most 50 lines (⚠️ 
       (past deadline, due within 30 days, no filing rule, unverified payer, no coverage on file), and
       links to `/claims` (unsubmitted, by filing deadline) and to its past-deadline filter.
 
-- [ ] **Tests.** Unit: parser (every column rule, header aliases, grouping, claim-field mismatch, line
+- [x] **Tests.** Unit: parser (every column rule, header aliases, grouping, claim-field mismatch, line
       cap, limits, synthetic guard, codes untouched, money edge cases), matching (payer resolution and
       ambiguity, duplicate rules with and without modifiers), warning classification with boundary dates,
       permission, message keys in en/es/pt, the fixture file. Integration (Postgres): import creates
@@ -226,8 +226,7 @@ no payer receipt date and no payment. A claim can have at most 50 lines (⚠️ 
       Also (fix round): duplicate and non-contiguous lines, a synced patient (`source = 'fhir'`, coverage
       `none`, inactive at the source: warnings counted, row unchanged), the server action (refused attempts
       audited, conflict, database error, rate limit), and the rate-limit bucket.
-      Status: CI ran the first integration file green; the fix-round tests await a CI run, and the
-      coordinator confirms this box.
+      Status: CI green on f3b233a, integration and e2e included (confirmed by the coordinator).
 
 - [x] Every new string is a key in English, Spanish, and Portuguese. The Spanish and Portuguese are
       agent-written and unreviewed by a native speaker (OA-041).
