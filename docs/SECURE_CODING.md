@@ -82,8 +82,9 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
 
 ### A4. Pinning, updates, and removal
 
-- **SC-A4.1 MUST** Exact versions in `package.json` for every new dependency (no `^` or `~`);
-  `pnpm-lock.yaml` is committed; CI installs with `--frozen-lockfile`.
+- **SC-A4.1 MUST** Exact versions in `package.json` for every dependency (no `^` or `~`);
+  `pnpm-lock.yaml` is committed; CI installs with `--frozen-lockfile`. Enforced by
+  `src/supply-chain/exact-versions.test.ts`.
 - **SC-A4.2 MUST** GitHub Actions are pinned to a full commit SHA with a version comment (as
   `ci.yml` does today). Container images — the `Dockerfile` base and CI service containers — are
   pinned by digest. Tools fetched at build time (such as pnpm through corepack) are version- and
@@ -223,7 +224,12 @@ for scripts (no ADR yet); and their type packages.
   `no-referrer`, frame denial, Permissions-Policy) plus a strict Content-Security-Policy (set per
   request in `src/proxy.ts`): a
   per-request nonce with `strict-dynamic`, no `unsafe-eval`, no `unsafe-inline` for scripts,
-  `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors 'none'`.
+  `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors 'none'`. The policy is built in
+  `src/lib/csp.ts`; paths the proxy skips (static assets, `/brand/`, `/icon.png`, and image-optimizer
+  errors) get a static deny-all CSP from `next.config.ts`; successful `/_next/image` responses carry
+  Next's own image policy (`script-src 'none'; sandbox`) plus the global frame denial. `'unsafe-eval'` is absent in development too, which costs in-place Fast Refresh:
+  `next dev` falls back to a full page reload on every edit. Tested in `src/lib/csp.test.ts`,
+  `src/proxy.test.ts`, and the e2e smoke (`test/e2e/shell.spec.ts`).
 - **SC-B10.2 MUST** Authenticated and PHI responses send `Cache-Control: no-store` (HC-2.3).
 
 ### B11. Tests for controls
@@ -259,9 +265,7 @@ exception.
 
 | Rule | Gap |
 | --- | --- |
-| SC-B10.1 | The per-request nonce CSP in `src/proxy.ts` still sets `base-uri 'self'` and adds `'unsafe-eval'` in development. |
 | SC-B7.1 | Member IDs (`src/domain/patients/queries.ts`, `src/db/seed.ts`) and TOTP secrets (`src/auth/enrollment.ts`) are encrypted without AAD; only custom field values bind AAD. |
-| SC-A4.1 | Some existing ranges are not exact (`server-only`, `@types/*`, `eslint`, `tsx`, `typescript-eslint`). |
 | SC-A4.2 | CI (`actions/setup-node`) and Netlify (`NODE_VERSION`) download Node.js 24 by major version, with no exact version or hash; Netlify's handling of the `packageManager` sha512 is unverified. |
 | SC-A4.3 | No release-age quarantine configured for pnpm, and no `cooldown` in `.github/dependabot.yml`. |
 | SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
