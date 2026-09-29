@@ -1,0 +1,1 @@
+ALTER TABLE "appeal_letter_attestations" ALTER COLUMN "attested_at" SET DEFAULT clock_timestamp();

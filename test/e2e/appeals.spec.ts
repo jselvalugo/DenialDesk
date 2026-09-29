@@ -47,6 +47,28 @@ test.describe("appeal lifecycle", () => {
     await expect(page.getByRole("region", { name: "Open appeal totals" })).toBeVisible();
   });
 
+  test("the appeal letter page is never cached (no-store from dynamic rendering, HC-2.3)", async ({
+    page,
+  }) => {
+    // Self-contained: use any appeal (all statuses); if the practice has none, start one from a denial.
+    await page.goto("/appeals?status=all");
+    const link = page.locator("tbody a[href^='/appeals/']").first();
+    let path: string;
+    if (await link.isVisible()) {
+      path = (await link.getAttribute("href"))!;
+    } else {
+      await page.goto("/denials?assignee=unassigned");
+      await page.getByRole("table").locator("tbody").getByRole("link").first().click();
+      await page.getByRole("link", { name: "Start appeal" }).click();
+      await page.getByRole("button", { name: "Start appeal" }).click();
+      await expect(page.getByRole("heading", { name: "Record submission" })).toBeVisible();
+      path = new URL(page.url()).pathname;
+    }
+    const response = await page.goto(`${path}/letter`);
+    expect(response?.status()).toBe(200);
+    expect(response?.headers()["cache-control"]).toContain("no-store");
+  });
+
   test("appeals module is reachable from the switcher", async ({ page }) => {
     await page.goto("/overview");
     await page.getByRole("button", { name: /switch module/i }).click();
