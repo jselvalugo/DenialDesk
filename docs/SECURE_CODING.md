@@ -222,8 +222,9 @@ for scripts (no ADR yet); and their type packages.
   request in `src/proxy.ts`): a
   per-request nonce with `strict-dynamic`, no `unsafe-eval`, no `unsafe-inline` for scripts,
   `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors 'none'`. The policy is built in
-  `src/lib/csp.ts`; paths the proxy skips (static assets, `/brand/`) get a static deny-all CSP from
-  `next.config.ts`. `'unsafe-eval'` is absent in development too, which costs in-place Fast Refresh:
+  `src/lib/csp.ts`; paths the proxy skips (static assets, `/brand/`, `/icon.png`, and image-optimizer
+  errors) get a static deny-all CSP from `next.config.ts`; successful `/_next/image` responses carry
+  Next's own image policy (`script-src 'none'; sandbox`) plus the global frame denial. `'unsafe-eval'` is absent in development too, which costs in-place Fast Refresh:
   `next dev` falls back to a full page reload on every edit. Tested in `src/lib/csp.test.ts`,
   `src/proxy.test.ts`, and the e2e smoke (`test/e2e/shell.spec.ts`).
 - **SC-B10.2 MUST** Authenticated and PHI responses send `Cache-Control: no-store` (HC-2.3).

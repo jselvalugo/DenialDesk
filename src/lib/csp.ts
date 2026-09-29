@@ -25,6 +25,8 @@ export function contentSecurityPolicy(nonce: string): string {
 /**
  * For responses the proxy does not see (static build assets, `/brand/`, and not-found pages under
  * those paths): nothing may load or run, and nothing may frame them. Set in `next.config.ts`.
+ * A worker takes its policy from its own response, so a Worker or service worker script served from
+ * `/_next/static` would be blocked by this; none exists today.
  */
 export const STATIC_ASSET_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; sandbox";
 
