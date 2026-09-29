@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { DatabaseError } from "@/db/errors";
 import { en } from "@/i18n/messages/en";
 import { es } from "@/i18n/messages/es";
 import { pt } from "@/i18n/messages/pt";
@@ -16,6 +17,10 @@ import { isRevokeReasonCode, REVOKE_REASON_CODES, REVOKE_REASON_LABEL_KEYS } fro
 
 // Pure parts of the PI2a lifecycle (docs/specs/patient-integrations.md); the transitions themselves
 // run against the database in test/integration/integration-lifecycle.test.ts.
+
+// Submit spends the practice's rate limit before it opens a transaction; the limiter is a database
+// table, so these unit tests replace it (the real one is exercised in test/integration).
+vi.mock("@/lib/rate-limit", () => ({ hit: async () => ({ allowed: true, retryAfterSeconds: 0 }) }));
 
 const actor = { tenantId: "t", userId: "u", role: "admin" as const, syntheticOnly: false };
 
@@ -182,11 +187,67 @@ describe("environmentRefusalKey (the Submit panel and assertEnvironmentAllows sh
     for (const key of [
       "error.anotherConnectionLive",
       "error.localeChanged",
+      "error.attestationChanged",
       "error.submitRateLimited",
     ] as const) {
       expect(en.integrations[key], key).toBeTruthy();
       expect(es.integrations[key], key).toBeTruthy();
       expect(pt.integrations[key], key).toBeTruthy();
     }
+  });
+
+  it("words the one-connection refusal so it covers paused and error connections too", () => {
+    // Any status but draft/revoked counts against the practice's one connection (the unique index).
+    expect(en.integrations["error.anotherConnectionLive"]).toBe(
+      "Another connection is already in use (submitted, active, paused, or in error). Withdraw or revoke it first.",
+    );
+    expect(es.integrations["error.anotherConnectionLive"]).toMatch(/en pausa/);
+    expect(pt.integrations["error.anotherConnectionLive"]).toMatch(/pausada/);
+  });
+});
+
+describe("submitConnection's mapping of a unique violation (spec PI2a: two drafts racing)", () => {
+  // Two drafts of one practice leaving `draft` at the same moment: the loser hits the partial unique
+  // index integration_connections_one_active, and reads the same refusal as the check in front of it.
+  const submitWith = (run: () => Promise<never>) =>
+    submitConnection(
+      run,
+      { ...actor, recentMfa: true },
+      "00000000-0000-4000-8000-000000000000",
+      "2026-01-01T00:00:00.000Z",
+      { attested: true, locale: "en" },
+      { keyStore: () => ({ kid: async () => "kid-1" }) as never },
+    );
+
+  it("maps a 23505 on integration_connections_one_active to error.anotherConnectionLive", async () => {
+    const violation = new DatabaseError(
+      "duplicate key value violates unique constraint",
+      "23505",
+      "integration_connections_one_active",
+    );
+    const error = await submitWith(() => Promise.reject(violation)).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(IntegrationConnectionError);
+    expect(error).not.toBe(violation);
+    expect((error as IntegrationConnectionError).message).toBe(
+      en.integrations["error.anotherConnectionLive"],
+    );
+    // A refusal in words: no field, and no step-up to offer.
+    expect((error as IntegrationConnectionError).field).toBeUndefined();
+    expect((error as IntegrationConnectionError).stepUpRequired).toBe(false);
+  });
+
+  it.each([
+    [
+      "another constraint name",
+      new DatabaseError("unique", "23505", "integration_connections_tenant_id_key"),
+    ],
+    ["no constraint name", new DatabaseError("unique", "23505")],
+    [
+      "the right constraint name under another SQLSTATE",
+      new DatabaseError("check", "23514", "integration_connections_one_active"),
+    ],
+    ["a plain error", new Error("boom")],
+  ])("rethrows %s unchanged", async (_label, failure) => {
+    await expect(submitWith(() => Promise.reject(failure))).rejects.toBe(failure);
   });
 });

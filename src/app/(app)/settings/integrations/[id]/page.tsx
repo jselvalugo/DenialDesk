@@ -16,7 +16,9 @@ import {
   getConnection,
   resolveSigningKid,
   submitBlockedReason,
+  US_RESIDENCY_ATTESTATION_VERSION,
 } from "@/domain/integrations/connections";
+import { isRejectReasonCode, REJECT_NOTICE_KEYS } from "@/domain/integrations/approval-codes";
 import { getFormat, getT } from "@/i18n/server";
 import { ConnectionForm } from "../ConnectionForm";
 import { integrationActor } from "../form-state";
@@ -173,6 +175,15 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
               <TestConnectionForm id={connection.id} />
             </Panel>
           )}
+          {/* A draft with a reject code came back from the operator (PI1c): say why. */}
+          {connection.status === "draft" && isRejectReasonCode(connection.statusReason) && (
+            <p
+              role="status"
+              className="rounded-panel border border-warning-border bg-warning-bg p-3 text-body text-warning-fg"
+            >
+              {t(REJECT_NOTICE_KEYS[connection.statusReason])}
+            </p>
+          )}
           {connection.status === "draft" && (
             <Panel title={t("submit.title")}>
               <SubmitConnectionForm
@@ -181,6 +192,7 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
                 sandbox={connection.isSandbox}
                 blockedReason={submitBlocked}
                 needsStepUp={!hasRecentMfa(auth.mfaVerifiedAt)}
+                attestationVersion={US_RESIDENCY_ATTESTATION_VERSION}
               />
             </Panel>
           )}
