@@ -198,7 +198,7 @@ exist (`src/domain/appeals/letter/merge-fields.ts`):
       any source sensitivity label, or `source_restricted = true`.
 - [x] Attesting is allowed in any appeal status. A version can be attested again after the claim or patient
       data changed (the attestation table is append-only and not unique per version; the newest wins, ordered by `attested_at`,
-      which defaults to `clock_timestamp()` from migration 0048 so rows never tie on the transaction start time), so a
+      which defaults to `clock_timestamp()` from migration 0048 so an attester who starts first but waits on the appeal lock is not stamped older than the one who ran before it; `now()` is the transaction start time), so a
       submitted appeal's letter never becomes permanently unprintable.
 - [x] Any new saved version has no attestation until someone attests it. Export is refused when the
       latest version has no attestation, and also when the rendered letter no longer matches the

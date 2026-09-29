@@ -50,11 +50,21 @@ test.describe("appeal lifecycle", () => {
   test("the appeal letter page is never cached (no-store from dynamic rendering, HC-2.3)", async ({
     page,
   }) => {
-    await page.goto("/appeals");
+    // Self-contained: use any appeal (all statuses); if the practice has none, start one from a denial.
+    await page.goto("/appeals?status=all");
     const link = page.locator("tbody a[href^='/appeals/']").first();
-    await expect(link).toBeVisible();
-    const href = await link.getAttribute("href");
-    const response = await page.goto(`${href}/letter`);
+    let path: string;
+    if (await link.isVisible()) {
+      path = (await link.getAttribute("href"))!;
+    } else {
+      await page.goto("/denials?assignee=unassigned");
+      await page.getByRole("table").locator("tbody").getByRole("link").first().click();
+      await page.getByRole("link", { name: "Start appeal" }).click();
+      await page.getByRole("button", { name: "Start appeal" }).click();
+      await expect(page.getByRole("heading", { name: "Record submission" })).toBeVisible();
+      path = new URL(page.url()).pathname;
+    }
+    const response = await page.goto(`${path}/letter`);
     expect(response?.status()).toBe(200);
     expect(response?.headers()["cache-control"]).toContain("no-store");
   });

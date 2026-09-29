@@ -29,7 +29,9 @@ export const APPEAL_ACTIVITY_KEYS = {
   "appeal.letter_exported": "activity.letterExported",
 } as const satisfies Partial<Record<AuditAction, MessageKey<"appeals">>>;
 /** Derived from the map above so the query filter and the page labels cannot drift apart. */
-export const APPEAL_ACTIVITY_ACTIONS = Object.keys(APPEAL_ACTIVITY_KEYS) as AuditAction[];
+export const APPEAL_ACTIVITY_ACTIONS = Object.keys(
+  APPEAL_ACTIVITY_KEYS,
+) as (keyof typeof APPEAL_ACTIVITY_KEYS)[];
 /** Same display window as the denial queue (denials/queries.ts): a UI setting, not a legal value. */
 export const DUE_SOON_DAYS = 7;
 

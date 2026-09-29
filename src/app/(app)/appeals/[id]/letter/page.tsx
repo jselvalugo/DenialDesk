@@ -32,6 +32,7 @@ import { templateCategoryToLoad } from "@/domain/appeals/letter/starter-template
 import { CATEGORY_LABEL_KEYS, CATEGORY_ORDER, type DenialCategory } from "@/domain/carc";
 import { getFormat, getT } from "@/i18n/server";
 import { AttestForm, LetterEditor } from "./LetterForms";
+import { SavedNotice } from "./SavedNotice";
 
 export async function generateMetadata(): Promise<Metadata> {
   // Generic on purpose: a page title never carries PHI (DESIGN.md §12).
@@ -111,14 +112,7 @@ export default async function AppealLetterPage({
         <h1 className="font-serif text-display font-bold text-primary">{t("letter.page.title")}</h1>
         <p className="mt-0.5 max-w-3xl text-body text-muted">{t("letter.page.description")}</p>
       </header>
-      {justSaved && (
-        <p
-          role="status"
-          className="rounded-control border border-success-border bg-success-bg px-3 py-2 text-body text-success-fg"
-        >
-          {t("letter.editor.saved")}
-        </p>
-      )}
+      {justSaved && <SavedNotice text={t("letter.editor.saved")} />}
       {!canWork && (
         <p
           role="note"

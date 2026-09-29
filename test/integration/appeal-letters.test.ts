@@ -466,20 +466,36 @@ describe("template create race", () => {
       await gate; // commit only after the second transaction is waiting on us
       return result;
     });
-    await inserted;
-    const second = withTenant(ctx, (tx) =>
-      saveTemplate(tx, ctx, { category: "bundling", body: "Second {{claim.number}}" }),
-    );
-    const deadline = Date.now() + 10_000;
-    let waiting = false;
-    while (!waiting && Date.now() < deadline) {
-      const { rows } = await systemDb().execute(sql`select 1 from pg_locks where not granted limit 1`);
-      waiting = rows.length > 0;
-      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 25));
+    let results: Awaited<typeof first>[] = [];
+    try {
+      await inserted;
+      let secondPid!: (pid: number) => void;
+      const pidKnown = new Promise<number>((resolve) => {
+        secondPid = resolve;
+      });
+      const second = withTenant(ctx, async (tx) => {
+        const { rows } = await tx.execute(sql`select pg_backend_pid() as pid`);
+        secondPid(Number((rows[0] as { pid: number | string }).pid));
+        return saveTemplate(tx, ctx, { category: "bundling", body: "Second {{claim.number}}" });
+      });
+      const pid = await pidKnown;
+      // Wait until Postgres says the second backend is blocked by another transaction (the first's insert).
+      const deadline = Date.now() + 10_000;
+      let blocked = false;
+      while (!blocked && Date.now() < deadline) {
+        const { rows } = await systemDb().execute(
+          sql`select cardinality(pg_blocking_pids(${pid}::int)) as n`,
+        );
+        blocked = Number((rows[0] as { n: number | string }).n) > 0;
+        if (!blocked) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(blocked).toBe(true);
+      releaseFirst();
+      results = await Promise.all([first, second]);
+    } finally {
+      releaseFirst(); // never leave the first transaction (and its pool connection) open on a failure
+      await first.catch(() => undefined);
     }
-    expect(waiting).toBe(true);
-    releaseFirst();
-    const results = await Promise.all([first, second]);
 
     expect(results).toEqual([
       { ok: true, created: true },
@@ -519,6 +535,9 @@ describe("attestation ordering", () => {
       return [a!, b!];
     });
     expect(rows[1]!.attestedAt.getTime()).toBeGreaterThan(rows[0]!.attestedAt.getTime());
+    // The reader that export and the page use picks the second (newest) digest.
+    const state = await withTenant(ctx, (tx) => getLetterState(tx, appealId));
+    expect(state.attestation?.renderedSha256).toBe("b".repeat(64));
   });
 });
 
@@ -530,6 +549,6 @@ describe("activity list", () => {
     const detail = await withTenant(ctx, (tx) => getAppeal(tx, appealId));
     const actions = detail!.activity.map((a) => a.action);
     expect(actions).toContain("appeal.letter_saved");
-    expect(actions.every((a) => (APPEAL_ACTIVITY_ACTIONS as string[]).includes(a))).toBe(true);
+    expect(actions.every((a) => new Set<string>(APPEAL_ACTIVITY_ACTIONS).has(a))).toBe(true);
   });
 });

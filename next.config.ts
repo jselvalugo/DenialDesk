@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
       { source: "/:path*", headers: securityHeaders },
       // No Cache-Control rule for the appeal letter pages (HC-2.3): Next overwrites Cache-Control on pages,
       // so a rule here would not apply. `no-store` comes from dynamic rendering (requireAuth reads cookies);
-      // test/e2e/appeals.spec.ts asserts it on the letter and print routes.
+      // test/e2e/appeals.spec.ts asserts it on the letter route only (the print route is not asserted).
       ...["/_next/static/:path*", "/_next/image", "/icon.png", "/brand/:path*"].map((source) => ({
         source,
         headers: staticCsp,
