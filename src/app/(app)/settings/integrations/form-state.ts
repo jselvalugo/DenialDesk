@@ -85,3 +85,20 @@ export function connectionFormFailure(
   if (isDatabaseError(error)) return { error: t("error.saveFailed") };
   throw error;
 }
+
+/**
+ * What the Sync now button shows: a refusal (`error`, alert style), or the run's collapsed result with
+ * its translated sentence (counts, or why it stopped). Never anything the remote server sent.
+ */
+export interface SyncNowState {
+  error?: string;
+  status?: "succeeded" | "failed" | "abandoned";
+  message?: string;
+}
+
+/** A Sync now refusal as state: domain refusals keep their message, database errors become one generic line. */
+export function syncNowFailure(error: unknown, t: Translator<Messages["integrations"]>): SyncNowState {
+  if (error instanceof IntegrationConnectionError) return { error: error.message };
+  if (isDatabaseError(error)) return { error: t("sync.error.failed") };
+  throw error;
+}

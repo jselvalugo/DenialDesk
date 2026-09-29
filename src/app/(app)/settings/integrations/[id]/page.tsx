@@ -27,6 +27,7 @@ import { connectionTestDeps } from "../test-deps";
 import { ConnectionLifecycleButton } from "./ConnectionLifecycle";
 import { RevokeConnectionForm } from "./RevokeConnectionForm";
 import { SubmitConnectionForm } from "./SubmitConnectionForm";
+import { SyncNowForm } from "./SyncNowForm";
 import { TestConnectionForm } from "./TestConnectionForm";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -196,12 +197,10 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
         )
       ) : (
         <>
-          {/* The built-in sandbox has no transport to test against until PI2b. */}
-          {!connection.isSandbox && (
-            <Panel title={t("test.title")} description={t("test.description")}>
-              <TestConnectionForm id={connection.id} />
-            </Panel>
-          )}
+          {/* Test connection works for the built-in sandbox too (PI2b: the in-process sandbox answers). */}
+          <Panel title={t("test.title")} description={t("test.description")}>
+            <TestConnectionForm id={connection.id} />
+          </Panel>
           {/* A draft with a reject code came back from the operator (PI1c): say why. */}
           {connection.status === "draft" && isRejectReasonCode(connection.statusReason) && (
             <p
@@ -226,6 +225,11 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
           {connection.status === "pending_approval" && (
             <Panel title={t("submit.awaitingTitle")}>
               <p className="text-body text-text">{t("submit.awaitingDescription")}</p>
+            </Panel>
+          )}
+          {connection.status === "active" && (
+            <Panel title={t("sync.title")} description={t("sync.description")}>
+              <SyncNowForm id={connection.id} />
             </Panel>
           )}
           {lifecycle && (

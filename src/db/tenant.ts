@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { INTEGRATION_SERVICE_PRINCIPAL_ID } from "@/domain/integrations/principal";
 import { systemDb, type Database } from "./client";
 import { sanitizeDatabaseError } from "./errors";
 
@@ -56,6 +57,55 @@ export async function withTenantAsPlatform<T>(
       await tx.execute(sql`select set_config('app.tenant_id', ${ctx.tenantId}, true)`);
       await tx.execute(sql`select set_config('app.user_id', ${ctx.userId}, true)`);
       return fn(tx);
+    });
+  } catch (error) {
+    throw sanitizeDatabaseError(error);
+  }
+}
+
+/** What `withTenantAsSystem` tells `fn` about the run it was opened for. */
+export interface SystemRunContext {
+  runId: string;
+  /** The run's own connection, read under the tenant's row-level security policy. */
+  connectionId: string;
+}
+
+/**
+ * Runs `fn` as the integration sync engine for one run (docs/specs/patient-integrations.md "PI2b";
+ * ADR 0010). It is **not** `withTenantAsPlatform` and **not** `systemDb` access: the transaction runs
+ * as the restricted `denialdesk_app` role with `app.tenant_id` set, so row-level security limits every
+ * statement to the run's practice, exactly as for a signed-in user. The actor (`app.user_id`) is the
+ * fixed integration service principal (`INTEGRATION_SERVICE_PRINCIPAL_ID`, seeded by drizzle/0043),
+ * never a person; the administrator who pressed Sync now is recorded in the audit metadata instead.
+ *
+ * The run's connection is looked up first (a run that isn't in this tenant is refused, so a forged or
+ * cross-tenant `runId` finds nothing), then `app.sync_run_id` and `app.sync_connection_id` are set so
+ * the `patients_synced_readonly` trigger will accept the engine's writes, and only while that run is
+ * `running` for an `active` connection. Both are set with `set_config(..., true)`: transaction-local
+ * (`is_local = true`), never session-level, so a pooled connection reused by another request can't
+ * inherit a stale run setting that the trigger would then trust.
+ */
+export async function withTenantAsSystem<T>(
+  tenantId: string,
+  runId: string,
+  fn: (tx: TenantTx, run: SystemRunContext) => Promise<T>,
+): Promise<T> {
+  if (!UUID.test(tenantId) || !UUID.test(runId)) {
+    throw new Error("withTenantAsSystem requires UUID tenant and run IDs");
+  }
+  try {
+    return await systemDb().transaction(async (tx) => {
+      await tx.execute(sql`set local role denialdesk_app`);
+      await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
+      await tx.execute(sql`select set_config('app.user_id', ${INTEGRATION_SERVICE_PRINCIPAL_ID}, true)`);
+      const found = await tx.execute<{ connection_id: string }>(
+        sql`select connection_id from integration_sync_runs where id = ${runId}::uuid and tenant_id = ${tenantId}::uuid`,
+      );
+      const connectionId = found.rows[0]?.connection_id;
+      if (!connectionId) throw new Error("withTenantAsSystem: no such run in this practice");
+      await tx.execute(sql`select set_config('app.sync_run_id', ${runId}, true)`);
+      await tx.execute(sql`select set_config('app.sync_connection_id', ${connectionId}, true)`);
+      return fn(tx, { runId, connectionId });
     });
   } catch (error) {
     throw sanitizeDatabaseError(error);

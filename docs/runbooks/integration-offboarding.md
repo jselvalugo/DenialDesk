@@ -11,8 +11,9 @@ practice's EHR/PM administrator; DenialDesk staff never act on a practice's EHR/
 
 ## In DenialDesk
 0. Not ready to give the connection up? **Pause** (active connections) stops new sync runs
-   without deleting anything, and **Resume** undoes it. Stopping a run that is already in progress
-   is part of the sync engine (PI2b); until then a run that started before the Pause finishes.
+   without deleting anything, and **Resume** undoes it. A run already in progress is stopped
+   too: the database abandons it, and the sync checks the connection is still active before each page,
+   so it stops at its next page (patients already saved stay).
    Resume needs a verification within the last 5 minutes: signing in counts, so it only asks for a
    fresh authenticator code once the sign-in is older than that. A connection still **awaiting
    approval** can be **withdrawn** back to a draft (its registry claim and its residency

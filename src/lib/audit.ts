@@ -122,7 +122,16 @@ export type AuditAction =
   | "integration.payer_mappings_viewed"
   | "integration.sync_run_viewed"
   | "integration.transport_refused"
-  | "security.env_signing_key_in_production";
+  | "security.env_signing_key_in_production"
+  | "integration.connection_errored"
+  | "integration.sync_started"
+  | "integration.sync_completed"
+  | "integration.sync_failed"
+  | "patient.synced_created"
+  | "patient.synced_updated"
+  | "patient.linked_to_source"
+  | "patient.source_inactivated"
+  | "patient.source_merged";
 
 /**
  * Actions no longer written, which still appear in older audit rows (the log is append-only).
@@ -163,11 +172,18 @@ export interface AuditEvent {
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;
+  /**
+   * Written by a system actor (the integration sync engine). The request's client IP and user agent
+   * belong to whoever triggered the work (an administrator pressing Sync now), not to the actor, so
+   * they are not recorded; "where" is the runtime function id and host, which the caller puts in
+   * `metadata` (docs/specs/patient-integrations.md "PI2b").
+   */
+  system?: boolean;
   metadata?: Record<string, string | number | boolean | null>;
 }
 
 async function row(event: AuditEvent) {
-  const context = await requestContext();
+  const context = event.system ? { ip: null, userAgent: null } : await requestContext();
   return {
     action: event.action,
     actorUserId: event.actorUserId ?? null,
@@ -184,6 +200,15 @@ async function row(event: AuditEvent) {
 /** Records an event inside a tenant transaction, so it commits or rolls back with the change. */
 export async function audit(tx: TenantTx, event: AuditEvent): Promise<void> {
   await tx.insert(auditEvents).values(await row(event));
+}
+
+/**
+ * Records many events in one statement, inside a tenant transaction (one audit event per patient on a
+ * sync page, batched: spec "Risks").
+ */
+export async function auditBatch(tx: TenantTx, events: readonly AuditEvent[]): Promise<void> {
+  if (events.length === 0) return;
+  await tx.insert(auditEvents).values(await Promise.all(events.map((event) => row(event))));
 }
 
 /** Records an event outside tenant context (authentication). */
