@@ -6,6 +6,10 @@ that changes decisions, status, or open questions. Keep it short: facts and link
 _Last updated: 2026-09-29_
 
 ## Where we are
+- University access prompt now opens with the owner's banner (`public/brand/university-welcome.webp`,
+  DESIGN.md §4 exception) and the user menu has a "DenialDesk Wiki" item beneath the University
+  (owner request 2026-09-29). Open: owner to confirm the banner's "Expert Support" / "On-Demand
+  Training" claims match the paid offer, and its license (OA-037).
 - Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
   of practice denial totals (`queueSummary`, aggregates only, no audit; owner to confirm, OA-058), the two step flows as a
   connected pipeline (`src/components/home/FlowSteps.tsx`), and "Your modules" as a card grid with
