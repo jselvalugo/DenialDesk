@@ -545,7 +545,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    SC-A4.1 (every dependency pinned exactly; enforced by a unit test); SC-B12.3 and most of SC-A4.2
    (images by digest, pnpm by sha512 via corepack in the image and CI, no package managers or
    source maps in the runtime image); most of SC-A4.3 (7-day hold in pnpm `minimumReleaseAge` and
-   Dependabot `cooldown`).
+   Dependabot `cooldown`); most of SC-A2.6 (Next.js telemetry off in CI and `.env.example`, pnpm
+   update notifier off; still open: `next dev`'s version check and the dev launcher's shutdown event).
 
 ## Open questions for humans
 
