@@ -92,7 +92,7 @@ export function connectionFormFailure(
  */
 export interface SyncNowState {
   error?: string;
-  status?: "succeeded" | "failed" | "abandoned";
+  status?: "succeeded" | "failed" | "abandoned" | "queued";
   message?: string;
 }
 
