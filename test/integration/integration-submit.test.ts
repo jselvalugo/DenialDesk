@@ -803,11 +803,11 @@ describe("submitConnection — withdraw, then submit again", () => {
 });
 
 describe("submitConnection — the built-in sandbox", () => {
-  // The in-process sandbox transport arrives in PI2b, so Test connection can't pass for a sandbox yet
-  // (`test.error.sandboxUnavailable`). The domain path is real, though: these tests seed the pass
-  // Test connection will record, exactly as the gate reads it.
+  // These tests seed the pass Test connection records, exactly as the gate reads it; the real
+  // Test connection against the in-process sandbox (PI2b) runs end to end in `sync-engine.test.ts` and `sync-now.test.ts` (through `activeSandbox` in `test/support/sandbox-sync.ts`).
   const SANDBOX_TOKEN_ENDPOINT = "https://sandbox.fhir.denialdesk.invalid/token";
-  const SANDBOX_ISSUER = "sandbox-client";
+  // Discovery records the issuer as the normalized base URL (drizzle/0043 pins the sandbox to it).
+  const SANDBOX_ISSUER = SANDBOX_BASE_URL;
 
   async function sandboxDraft(ctx: Ctx = a) {
     const { id } = await withTenant(ctx, (tx) =>

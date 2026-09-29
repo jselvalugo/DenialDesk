@@ -28,7 +28,10 @@ export interface ConnectionFormState {
  * from the session's own `mfa_verified_at` (R-7.2.2), with an injectable clock for tests.
  */
 export function integrationActor(
-  auth: Pick<AuthContext, "tenantId" | "userId" | "role"> & { mfaVerifiedAt?: Date | null },
+  auth: Pick<AuthContext, "tenantId" | "userId" | "role"> & {
+    mfaVerifiedAt?: Date | null;
+    sessionId?: string;
+  },
   synthetic: () => boolean = syntheticDataOnly,
   now: Date = new Date(),
 ): IntegrationActor {
@@ -39,6 +42,7 @@ export function integrationActor(
     syntheticOnly: synthetic(),
     recentMfa: hasRecentMfa(auth.mfaVerifiedAt ?? null, now),
     stepUpVerifiedAt: auth.mfaVerifiedAt?.toISOString() ?? null,
+    sessionId: auth.sessionId ?? null,
   };
 }
 
@@ -79,5 +83,22 @@ export function connectionFormFailure(
     };
   }
   if (isDatabaseError(error)) return { error: t("error.saveFailed") };
+  throw error;
+}
+
+/**
+ * What the Sync now button shows: a refusal (`error`, alert style), or the run's collapsed result with
+ * its translated sentence (counts, or why it stopped). Never anything the remote server sent.
+ */
+export interface SyncNowState {
+  error?: string;
+  status?: "succeeded" | "failed" | "abandoned";
+  message?: string;
+}
+
+/** A Sync now refusal as state: domain refusals keep their message, database errors become one generic line. */
+export function syncNowFailure(error: unknown, t: Translator<Messages["integrations"]>): SyncNowState {
+  if (error instanceof IntegrationConnectionError) return { error: error.message };
+  if (isDatabaseError(error)) return { error: t("sync.error.failed") };
   throw error;
 }

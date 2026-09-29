@@ -80,6 +80,12 @@ export interface TransportResponse {
    * discarded unread (reviewer N3), so callers can't log or store it by accident.
    */
   body: string;
+  /**
+   * `Retry-After` of a non-2xx response, in whole seconds (delta-seconds, or an HTTP-date converted
+   * against our clock); absent when the header is missing or unusable. The header is the only thing
+   * read from an error response. Callers cap it (PI2b: 60 s) before waiting.
+   */
+  retryAfterSeconds?: number;
 }
 
 /**
@@ -135,6 +141,24 @@ export function assertTlsVerificationEnabled(env: NodeJS.ProcessEnv = process.en
         "refusing to start the FHIR transport (CLAUDE.md #6, R-7.4.x).",
     );
   }
+}
+
+/** Upper bound on a parsed `Retry-After` (a day): larger values are noise, not a schedule. */
+const MAX_RETRY_AFTER_SECONDS = 24 * 60 * 60;
+
+/** `Retry-After` (RFC 9110 §10.2.3): delta-seconds or an HTTP-date, as whole seconds, or undefined. */
+export function retryAfterSecondsOf(
+  raw: string | string[] | undefined,
+  now: Date = new Date(),
+): number | undefined {
+  const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+  if (!value) return undefined;
+  if (/^\d{1,9}$/.test(value)) return Math.min(Number(value), MAX_RETRY_AFTER_SECONDS);
+  // Only the IMF-fixdate form (`Mon, 28 Sep 2026 12:00:30 GMT`): `Date.parse` alone accepts far too much.
+  if (!/^[A-Za-z]{3}, \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(value)) return undefined;
+  const date = Date.parse(value);
+  if (Number.isNaN(date)) return undefined;
+  return Math.min(Math.max(Math.ceil((date - now.getTime()) / 1000), 0), MAX_RETRY_AFTER_SECONDS);
 }
 
 function contentTypeOf(res: IncomingMessage): string | undefined {
@@ -325,7 +349,21 @@ export class HttpsTransport implements Transport {
             // be told apart (`auth_refused`, `unreachable`) instead of surfacing as
             // `content_type_refused`, and an error body (which can echo a token, a URL, or PHI)
             // never enters memory, a log, or an error. Callers branch on `status`.
-            if (settle(() => resolve({ status, contentType, body: "" }))) teardown();
+            // Only `Retry-After` is read from an error response (never the body), so a retry can
+            // wait as long as the server asks (PI2b: capped at 60 s by the caller).
+            const retryAfterSeconds = retryAfterSecondsOf(res.headers["retry-after"]);
+            if (
+              settle(() =>
+                resolve({
+                  status,
+                  contentType,
+                  body: "",
+                  ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+                }),
+              )
+            ) {
+              teardown();
+            }
             return;
           }
           if (!contentType || !init.accept.some((accepted) => accepted.toLowerCase() === contentType)) {

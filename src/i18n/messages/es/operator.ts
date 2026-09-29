@@ -226,8 +226,9 @@ export const operator: Messages["operator"] = {
   "integrations.approve.scopeLabel": "Alcance de la población",
   "integrations.approve.scopeHint":
     "Limita la sincronización a los pacientes propios de este consultorio. Por ahora solo se puede aprobar una exportación de Group: un filtro de búsqueda verificado aún no tiene dónde registrarse.",
-  "integrations.approve.nineDigitsLabel": "Los MRN tienen 9 dígitos (verificado)",
-  "integrations.approve.nineDigitsHint": "Opcional. Márquelo solo si el consultorio lo confirmó.",
+  "integrations.approve.nineDigitsLabel": "Los MRN contienen un número de nueve dígitos (verificado)",
+  "integrations.approve.nineDigitsHint":
+    "Opcional. Márquelo solo si el consultorio confirmó que sus MRN reales contienen un número de nueve dígitos; de lo contrario, esos MRN se rechazan por parecerse a un número de Seguro Social.",
   "integrations.approve.ownershipLabel":
     "Verifiqué, fuera de DenialDesk, que este consultorio es titular del ID de cliente {clientId}",
   "integrations.approve.ownershipHint":
@@ -269,7 +270,7 @@ export const operator: Messages["operator"] = {
     "El registro del punto de conexión de esta conexión ya no coincide con su configuración. No se puede aprobar; rechácela.",
   "errors.integrationPracticeSuspended":
     "Este consultorio está suspendido. Reactívelo antes de aprobar una conexión.",
-  "integrations.scope.notYet": "aún no disponible",
+  "integrations.scope.verified_filter_unavailable": "Filtro de búsqueda verificado (aún no disponible)",
   "errors.approvalScopeUnsupported":
     "Un filtro de búsqueda verificado aún no tiene dónde registrarse, así que solo se puede aprobar una exportación de Group.",
   "errors.integrationRealEndpointRefused":

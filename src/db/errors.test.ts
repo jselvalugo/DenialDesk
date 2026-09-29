@@ -265,6 +265,10 @@ describe("migrations raise only listed, value-free trigger messages", () => {
       "OLD.status": "integrationConnectionStatus",
       "NEW.status": "integrationConnectionStatus",
     },
+    "0043_patient_integrations_sync_engine.sql": {
+      "OLD.status": "integrationConnectionStatus",
+      "NEW.status": "integrationConnectionStatus",
+    },
   };
 
   it("parses every RAISE strictly (no E'', quoted '' or USING forms slip past the checks)", () => {

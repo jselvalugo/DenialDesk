@@ -1,14 +1,20 @@
 import "server-only";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import type { OperatorContext } from "@/auth/operator";
 import { isOperatorAccount } from "@/auth/operator-account";
 import { systemDb } from "@/db/client";
-import { integrationConnections, integrationEndpointRegistry, tenants, users } from "@/db/schema";
+import {
+  integrationConnections,
+  integrationEndpointRegistry,
+  tenantAgreements,
+  tenants,
+  users,
+} from "@/db/schema";
 import { withTenantAsPlatform, type TenantTx } from "@/db/tenant";
-import { agreementStatus, listAgreements } from "@/domain/platform/agreements";
+import { agreementStatus } from "@/domain/platform/agreements";
 import { PracticeError } from "@/domain/platform/errors";
-import { audit } from "@/lib/audit";
+import { audit, auditSystem } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
 import {
   isApprovalMethodCode,
@@ -98,16 +104,64 @@ export function jwksPathFor(connectionId: string, synthetic: boolean = synthetic
  * (`isOperatorAccount`, docs/specs/operator-login.md): the account's email, as the database has it
  * (never the context's copy), is the configured operator email AND it belongs to no practice. A
  * practice administrator is refused (a membership), and so is any other account without one (not the
- * operator's email). `requireOperator` already applies this rule to every console request; repeating
- * it here means the domain refuses a hand-built context too. Fails closed on an unknown user.
+ * operator's email). A disabled account (`users.disabled_at` set) is refused as well: a session that
+ * outlives the account's disabling must not keep deciding connections. `requireOperator` already
+ * applies the first rule to every console request; repeating it here means the domain refuses a
+ * hand-built context too. Fails closed on an unknown user.
  */
 async function assertOperator(operator: OperatorContext): Promise<void> {
   const [user] = await systemDb()
-    .select({ id: users.id, email: users.email })
+    .select({ id: users.id, email: users.email, disabledAt: users.disabledAt })
     .from(users)
     .where(eq(users.id, operator.userId))
     .limit(1);
-  if (!user || !(await isOperatorAccount(user))) throw new PracticeError("errors.integrationNotOperator");
+  if (!user || user.disabledAt !== null || !(await isOperatorAccount(user))) {
+    throw new PracticeError("errors.integrationNotOperator");
+  }
+}
+
+/**
+ * Records that the operator opened the approval queue (no target: the count of connections shown) or
+ * one connection's review page (the practice and connection IDs). Configuration only, not PHI. Every
+ * event carries the operator's `session_id`, as the decisions do (R-7.5.1: who, and from which
+ * session), so a viewing can be tied to the session that made it.
+ */
+export async function auditIntegrationViewed(
+  operator: OperatorContext,
+  target: { tenantId: string; connectionId: string } | { count: number },
+): Promise<void> {
+  await auditSystem({
+    action: "operator.integration_viewed",
+    actorUserId: operator.userId,
+    ...("count" in target
+      ? { metadata: { count: target.count, session_id: operator.sessionId } }
+      : {
+          tenantId: target.tenantId,
+          entityType: "integration_connection" as const,
+          entityId: target.connectionId,
+          metadata: { session_id: operator.sessionId },
+        }),
+  });
+}
+
+/**
+ * The practice's Business Associate Agreements as Approve judges them, read through the decision's
+ * own transaction with a shared row lock (`FOR SHARE`): an operator voiding one concurrently
+ * (`voidAgreement` UPDATEs the row) waits for this decision to commit, or, if it committed first, is
+ * seen here, so a void can't be missed between the check and the approval. Only `kind = 'baa'`
+ * counts (as on the practices list), whatever other agreement kinds are added later.
+ */
+async function baaAgreements(tx: TenantTx, tenantId: string) {
+  return tx
+    .select({
+      status: tenantAgreements.status,
+      effectiveDate: tenantAgreements.effectiveDate,
+      expiresOn: tenantAgreements.expiresOn,
+    })
+    .from(tenantAgreements)
+    .where(and(eq(tenantAgreements.tenantId, tenantId), eq(tenantAgreements.kind, "baa")))
+    .orderBy(desc(tenantAgreements.createdAt))
+    .for("share");
 }
 
 async function pendingIn(tx: TenantTx, tenantId: string) {
@@ -226,7 +280,7 @@ export interface ApproveInput {
   contactRole: string;
   /** `group_export` or `verified_filter`: the population the sync is limited to. */
   populationScope: string;
-  /** Optional: the operator verified that the practice's MRNs are nine digits ("MRNs are 9 digits (verified)"). */
+  /** Optional: the operator verified that the practice's MRNs are nine digits ("MRNs contain a nine-digit number (verified)"). */
   mrnNineDigitsVerified: boolean;
   /** The operator verified, outside the app, that the practice owns this client ID. Required. */
   clientIdOwnershipVerified: boolean;
@@ -289,12 +343,31 @@ function configurationMetadata(current: {
  * shared key, so the key alone doesn't tie a client registration to a practice), the population
  * scope, and optionally that MRNs are nine digits.
  *
- * In one platform transaction: refuse a non-operator; refuse invalid input; lock the practice's
- * connection and refuse a missing, non-pending, or changed one; require the registry entry Submit
- * claimed to still match this configuration; then one UPDATE writes the status and a fresh approval
- * stamp (`approved_at` from the database clock; the 0040 trigger refuses an unchanged one); audit
- * `operator.integration_approved`. A suspended practice can't be approved for: suspension is a stop
- * the operator set, and activating a connection would start a sync in it.
+ * **Refusals, in order** (the first that applies wins; nothing is written by any of them):
+ *  1. Before the transaction (pure checks, no lock): not the operator (`assertOperator`: the
+ *     configured email, no membership, account not disabled); not a real environment (where
+ *     `syntheticDataOnly()` a real connection is never made live); a method, contact role, or scope
+ *     outside the fixed vocabularies; a scope other than `group_export` (a verified filter can't be
+ *     recorded yet: security review M2, spec PI1c); a verification date that is malformed or in the
+ *     future by the Florida date; no client ID ownership confirmation.
+ *  2. In one platform transaction: the practice is read `FOR SHARE` (unknown practice; suspended
+ *     practice: suspension is a stop the operator set and activating would start a sync in it; the
+ *     shared lock makes a suspension that lands meanwhile wait for this decision); the connection is
+ *     locked `FOR UPDATE` under **that practice** (missing, a sandbox, not `pending_approval`, or
+ *     changed since the page loaded: `updated_at`); then the verification date against the Florida
+ *     date of `submitted_at` (this check needs the locked row, so it comes after the lock, not with
+ *     the pure checks above); then the Business Associate Agreement (`baaAgreements`: read through
+ *     this transaction `FOR SHARE`, `kind = 'baa'`, so a concurrent void is waited for and can't be
+ *     missed); then the registry entry Submit claimed must still match this connection's endpoint,
+ *     token endpoint, and client ID.
+ *  3. One UPDATE writes the status and a fresh approval stamp (`approved_at` from the database clock;
+ *     the 0040 trigger refuses an unchanged one and one with no registry entry), and
+ *     `operator.integration_approved` is audited in the same transaction: if the audit write fails,
+ *     the whole decision rolls back (the row stays pending, the stamps unchanged, the registry claim
+ *     kept; `integration-approval.test.ts`).
+ *
+ * The date, the contact's role, and the ownership confirmation have no column: the audit event is
+ * their record (spec PI1c, OA-070).
  */
 export async function approveConnection(
   input: ApproveInput,
@@ -353,7 +426,7 @@ export async function approveConnection(
 
     // A real connection carries PHI: the practice needs a Business Associate Agreement in force
     // (docs/specs/practice-agreements.md), as for the rest of the platform.
-    const baa = agreementStatus(await listAgreements(input.tenantId), todayIn(undefined, now));
+    const baa = agreementStatus(await baaAgreements(tx, input.tenantId), todayIn(undefined, now));
     if (baa !== "active" && baa !== "expiring") throw new PracticeError("errors.approvalBaaRequired");
 
     // Submit claimed the registry for exactly this configuration. The lifecycle trigger requires an

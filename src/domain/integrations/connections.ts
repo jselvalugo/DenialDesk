@@ -103,6 +103,8 @@ export interface IntegrationActor {
   recentMfa?: boolean;
   /** When that verification happened (ISO), recorded with the actions it unlocked; from the session. */
   stepUpVerifiedAt?: string | null;
+  /** The signed-in session's row ID (`AuthContext.sessionId`), recorded in audit events that carry it. */
+  sessionId?: string | null;
 }
 
 /** SMART client IDs are opaque strings; visible ASCII without spaces covers every vendor we know. */
