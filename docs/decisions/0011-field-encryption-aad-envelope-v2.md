@@ -171,7 +171,8 @@ value.
 
 ### 4. Integrity failures are audited and committed
 - A reader that fails returns a typed failure. The caller then records
-  `security.field_integrity_failed` (IDs, `column`, and `reason` only) and returns a generic message
+  `security.field_integrity_failed` (IDs, `metadata.column`, and the failure `metadata.reason`
+  only; the audit row's own `reason` is why the data was read) and returns a generic message
   key. Nothing throws inside the transaction, so the event commits.
   - Tenant reads (member ID reveal, custom fields, and the 837P builder, which reads the member ID
     and the provider TIN) insert the event with `audit(tx, …)`. For the 837P builder, the member ID
@@ -310,6 +311,9 @@ value.
     question 2). This affects pre-production only (synthetic data). Production refuses `v1` from day
     one.
   - Custom-field and provider TIN `v1` values stay readable after the cut-off. Their AAD stops a
-    cross-row copy, but not a same-row rollback to an older `v1` value of that row.
+    cross-row copy, but not a same-row rollback to an older `v1` value of that row (spec question
+    12 asks whether production refuses `v1` TINs).
+  - Same-row replay of an older value is out of scope for every column and format: the AAD has no
+    per-row version counter, so an older `v2` value of the same row also opens.
 - **Old ciphertexts in backups.** Pre-production backups and WAL keep old `v1` ciphertexts until
   they age out. So `k1` is retired decrypt-only, never destroyed, while they exist (section 6).

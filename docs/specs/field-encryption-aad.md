@@ -71,7 +71,8 @@ Design: ADR 0011. It covers the envelope, the AAD bytes, the legacy policy, and 
   - The 837P builder (`src/domain/claims/edi-837p.ts:253`), via `openMemberId` (which audits in
     `tx`); the builder maps the failure to a `no_member_id` refusal and does not audit it again.
   - `seedPractice`.
-- [ ] The tenant in the AAD comes from the session (`actor.tenantId`), not from the row.
+- [ ] The tenant in the AAD comes from the session (`actor.tenantId`) or the job's tenant (the seed
+      tenant in `seedPractice`), never from the row.
 
 ### TOTP secrets
 - [ ] `sealTotpSecret(db, userId, secret)` and `openTotpSecret(userId, enc)` in
@@ -109,8 +110,9 @@ Design: ADR 0011. It covers the envelope, the AAD bytes, the legacy policy, and 
   - Callers: `seedPractice` (`src/db/seed.ts:248`) and the 837P builder
     (`src/domain/claims/edi-837p.ts:260`).
 - [ ] A failure stays a `billing_tin` refusal. The 837P builder audits
-      `security.field_integrity_failed` with `audit(tx, …)` and `metadata.column` set to
-      `providers.tin_enc`; `decryptProviderTin` has no transaction and does not audit.
+      `security.field_integrity_failed` with `audit(tx, …)`, `entityType: "provider"`,
+      `entityId: provider.id`, and `metadata` `{ column: "providers.tin_enc", reason, claimId }`;
+      `decryptProviderTin` has no transaction and does not audit.
 - [ ] The re-encryption job does not touch `providers.tin_enc` (ADR 0011 §3).
 
 ### Re-encryption job
@@ -227,7 +229,8 @@ See "Tests" below; SC-B11.1 negative tests are required.
   `security.field_formats_verified`. They are added to the TypeScript union in `src/lib/audit.ts`;
   there is no database constraint to change.
 - **Classification (§9.1).** Member IDs are Restricted PHI and are unchanged. Provider TINs are
-  Restricted and unchanged (a sole proprietor's TIN can be an SSN, HC-7.3). TOTP secrets are
+  Restricted and unchanged (SSN-equivalent when the qualifier is `SY`; a provider identifier, not
+  patient PHI; field-encrypted under HC-7.3). TOTP secrets are
   credentials (Secret). Counts, cursors, and record IDs in command and endpoint output are Internal.
   Audit rows take the audit log's classification and controls (append-only, 7-year retention,
   U.S.-only; HC-5.3, HC-5.4).
@@ -290,6 +293,10 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
 - `.github/workflows/ci.yml` (compute `FIELD_KEY_CHECK_K1` right after the throwaway
   `FIELD_ENCRYPTION_KEY` is generated) and `playwright.config.ts`: the e2e "production" project boots
   with `APP_ENV=production`, where a missing KCV refuses to boot.
+- Set `FIELD_LEGACY_V1_READ=on` in `ci.yml`'s integration and e2e environments and in the
+  Playwright preview server's `webServer.env`, never in the production server's (boot refuses it).
+  Until PR 3, writers and fixtures still write `v1`, so without the flag the PR 2 readers would
+  refuse them. PR 5 removes these settings.
 - Unit tests. There are no caller changes and no data changes, so reverting is always safe.
 
 **PR 2: `refactor(crypto): route every decrypt through AAD-aware readers [R-7.3.3, R-7.5.1]`** (about 400 lines)
@@ -298,10 +305,11 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
   `enrollment.ts:19`, `credentials.ts:174`, the 837P builder (`edi-837p.ts:253`, `:260`), and the
   sync run's `decrypt` hook (`sync.ts:616`).
   Integrity failures return typed results and are audited without being rolled back.
-- The provider TIN decrypt half: `decryptProviderTin(payload, tenantId, providerId)` returns the
-  typed result. `claim-837p.test.ts:462-464` assert `ok: false` instead of a throw, and
-  `edi-837p.test.ts:20-25` moves to canonical UUIDs, because this PR puts the builders' UUID check
-  on that path.
+- The provider TIN decrypt half: `decryptProviderTin(payload, tenantId, providerId, key?)` returns
+  the typed result. The optional test `key` stays until PR 3, because `edi-837p.test.ts:18-25`
+  seals with a test key. `claim-837p.test.ts:462` expects `{ ok: true, value }` and `:463-464`
+  expect `ok: false` instead of a throw. `edi-837p.test.ts:20-25` moves to canonical UUIDs, because
+  this PR puts the builders' UUID check on that path.
 - Switches custom fields to `openField` with `customFieldAad`, lowercases `recordId` at the entry
   points, and moves them to the single integrity event.
 - Adds the audit actions and the three i18n keys.
@@ -322,6 +330,9 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
   `encryptProviderTin(db, …)`, `:89` `sealMemberId` with an app-side patient ID) and changes
   `claim-837p.test.ts:460` from `startsWith("v1.")` to `startsWith("v2.k1.")`. The DB-free TIN
   test in `edi-837p.test.ts` now needs a `db` for the seal, so it moves to `claim-837p.test.ts`.
+  `claim-837p.test.ts:466` (`decryptField` with no AAD) is removed: on a `v2` value it would fail on
+  the format, not the missing AAD, and the unit test "`v1` without AAD is refused for provider
+  TINs" covers it. The PR 2 test `key` on `decryptProviderTin` is dropped.
 - Assertions that decrypt a value the app now writes as `v2` switch to the readers, because
   `decryptField` cannot read `v2`: `patients.test.ts:100`, `:204`; `sync-engine.test.ts:132`,
   `:151`, `:516`, `:613`; `custom-field-values.test.ts:817`.
@@ -363,7 +374,7 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
   CHECK constraints.
 - Fix the placeholder fixtures listed under "Cut-off".
 - Replace the remaining test uses of `encryptField`/`decryptField` (for example the `v1`
-  custom-field fixture in `custom-field-values.test.ts:765`, `:810`, and `claim-837p.test.ts:466`)
+  custom-field fixture in `custom-field-values.test.ts:765` and `:810`)
   with `v1` fixtures built with `node:crypto` in the test, or with the readers.
 - Tests move to "refused after the cut-off".
 - Remove the SC-B7.1 row from `docs/SECURE_CODING.md` and update `docs/PROJECT_STATE.md`. Because
@@ -527,7 +538,9 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
   - Wipe and re-seed removes the risk. It affects pre-production only (synthetic data), and closes at
     PR 5.
 - **Custom-field and provider TIN `v1` values stay readable after PR 5.** Their AAD stops a
-  cross-row copy; a same-row rollback to an older `v1` value of that row is not detected.
+  cross-row copy; a same-row rollback to an older `v1` value of that row is not detected (question
+  12). Same-row replay of an older value is out of scope for every column: the AAD has no per-row
+  version counter, so an older `v2` value of the same row also opens.
 - **Pre-production values that no longer decrypt.** A pre-production row sealed under an earlier
   key cannot be converted. The job reports it, and the fix is to re-enter the member ID or reset MFA
   (open question 5).
@@ -545,7 +558,7 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
   does bounded work per call, returns a cursor, and reports `done`.
 
 ### Open questions for the owner
-In `docs/owner/OWNER_ACTION_ITEMS.xlsx`: questions 1–5 are OA-078, 6 is OA-102, 7–10 are OA-103,
+In `docs/owner/OWNER_ACTION_ITEMS.xlsx`: questions 1–5 and 12 are OA-078, 6 is OA-102, 7–10 are OA-103,
 and 11 is OA-104.
 1. Approve ADR 0011: the `v2` envelope with `kid`, the header-bound AAD, and the `global` scope for
    TOTP secrets, including the platform operator.
@@ -581,3 +594,6 @@ and 11 is OA-104.
     ADR), or is it not needed for the MVP?
 11. Should `rcm_claim_lines.account_number` be field-encrypted? No MUST rule requires it (HC-7.3,
     R-7.3.3), but it is an HC-1.1 identifier.
+12. Production starts with no `v1` provider TINs. Should production refuse `v1` provider TINs, as
+    it does member IDs, so a same-row rollback to an older `v1` TIN cannot happen there? If not,
+    the rollback stays an accepted risk.
