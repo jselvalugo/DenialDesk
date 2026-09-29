@@ -171,6 +171,7 @@ export async function revealMemberId(
       .select({
         patientId: patients.id,
         memberIdEnc: patients.memberIdEnc,
+        memberIdLast4: patients.memberIdLast4,
         primaryPayerId: patients.primaryPayerId,
         claimPayerId: claims.payerId,
       })
@@ -178,7 +179,7 @@ export async function revealMemberId(
       .innerJoin(claims, eq(claims.id, denials.claimId))
       .innerJoin(patients, eq(patients.id, claims.patientId))
       .where(eq(denials.id, parsed.data.denial));
-    if (!row || !row.memberIdEnc) return { error: t("error.revealNotFound") };
+    if (!row || !row.memberIdEnc || !row.memberIdLast4) return { error: t("error.revealNotFound") };
     // The member ID on file is the primary payer's; never reveal it on another payer's claim (R-5.1.2).
     if (!memberIdBelongsToClaimPayer(row.primaryPayerId, row.claimPayerId)) {
       return { error: t("error.revealOtherPayer") };

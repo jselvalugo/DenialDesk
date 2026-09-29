@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, ne, notInArray } from "drizzle-orm";
 import { addCalendarDays, todayIn } from "@rules/calendar";
 import { closeDatabase } from "@/db/client";
 import { appeals, auditEvents, claims, denials, patients, payers } from "@/db/schema";
@@ -9,6 +9,7 @@ import { getAppeal } from "@/domain/appeals/queries";
 import { getClaim } from "@/domain/claims/queries";
 import { getDenial } from "@/domain/denials/queries";
 import { generateDataset } from "@/domain/synthetic/generator";
+import { encryptField } from "@/lib/crypto/field";
 
 // R-5.1.2 (minimum necessary), R-7.5.1 (reveal audited): the member ID on file is the patient's primary
 // payer's. A denial or appeal on a claim billed to another payer neither shows its last four nor reveals
@@ -37,16 +38,30 @@ interface Case {
 
 let samePayer: Case;
 let otherPayer: Case;
+let noPayer: Case;
+let noMemberId: Case;
 
-async function makeCase(): Promise<Case> {
+/** A denial billed to its patient's primary payer, on a patient not already used; deterministic order. */
+async function makeCase(used: Case[] = []): Promise<Case> {
   return withTenant(auth, async (tx) => {
     const [row] = await tx
       .select({ denialId: denials.id, claimId: claims.id, patientId: patients.id })
       .from(denials)
       .innerJoin(claims, eq(claims.id, denials.claimId))
       .innerJoin(patients, eq(patients.id, claims.patientId))
-      .where(and(isNotNull(patients.memberIdEnc), eq(patients.primaryPayerId, claims.payerId)))
-      .orderBy(sql`random()`)
+      .where(
+        and(
+          isNotNull(patients.memberIdEnc),
+          eq(patients.primaryPayerId, claims.payerId),
+          used.length
+            ? notInArray(
+                patients.id,
+                used.map((c) => c.patientId),
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(asc(denials.id))
       .limit(1);
     if (!row) throw new Error("Seeded practice has no denial billed to the patient's primary payer.");
     const [appeal] = await tx
@@ -87,8 +102,9 @@ beforeAll(async () => {
   });
   auth = { tenantId, userId: userIds[0]!, role: "specialist" };
   samePayer = await makeCase();
-  otherPayer = await makeCase();
-  while (otherPayer.patientId === samePayer.patientId) otherPayer = await makeCase();
+  otherPayer = await makeCase([samePayer]);
+  noPayer = await makeCase([samePayer, otherPayer]);
+  noMemberId = await makeCase([samePayer, otherPayer, noPayer]);
   // Move the second patient's primary payer to another payer: their member ID on file is now that
   // payer's, not the one this claim was billed to.
   await withTenant(auth, async (tx) => {
@@ -103,6 +119,13 @@ beforeAll(async () => {
       .limit(1);
     if (!other) throw new Error("Seeded practice has only one payer.");
     await tx.update(patients).set({ primaryPayerId: other.id }).where(eq(patients.id, otherPayer.patientId));
+    // Like a synced patient with unmapped coverage: a member ID on file, no payer mapped.
+    await tx.update(patients).set({ primaryPayerId: null }).where(eq(patients.id, noPayer.patientId));
+    // No member ID on file: a manual patient stores an encrypted empty value and an empty last four.
+    await tx
+      .update(patients)
+      .set({ primaryPayerId: null, memberIdEnc: encryptField(""), memberIdLast4: "" })
+      .where(eq(patients.id, noMemberId.patientId));
   });
 });
 
@@ -132,8 +155,12 @@ describe("member ID on the claim's own payer", () => {
   });
 });
 
-describe("member ID on file for a different payer", () => {
+describe.each([
+  ["for a different payer", () => otherPayer],
+  ["with no payer mapped", () => noPayer],
+])("member ID on file %s", (_, pick) => {
   it("hides the last four and flags it on the claim, denial, and appeal pages", async () => {
+    const otherPayer = pick();
     await withTenant(auth, async (tx) => {
       const denial = await getDenial(tx, otherPayer.denialId);
       const appeal = await getAppeal(tx, otherPayer.appealId);
@@ -146,13 +173,33 @@ describe("member ID on file for a different payer", () => {
   });
 
   it("refuses to reveal it from a denial or an appeal and writes no reveal event", async () => {
+    const otherPayer = pick();
     const before = await revealEvents(otherPayer.patientId);
     const fromDenial = await denialActions.revealMemberId(otherPayer.denialId, "payer_call");
     const fromAppeal = await appealActions.revealMemberId(otherPayer.appealId, "appeal");
     for (const result of [fromDenial, fromAppeal]) {
       expect(result.value).toBeUndefined();
-      expect(result.error).toBe("The member ID on file is for a different payer than this claim's.");
+      expect(result.error).toBe("The member ID on file isn't confirmed for this claim's payer.");
     }
     expect(await revealEvents(otherPayer.patientId)).toBe(before);
+  });
+});
+
+describe("no member ID on file", () => {
+  it("shows none and does not flag another payer", async () => {
+    await withTenant(auth, async (tx) => {
+      const denial = await getDenial(tx, noMemberId.denialId);
+      const appeal = await getAppeal(tx, noMemberId.appealId);
+      const claim = await getClaim(tx, noMemberId.claimId);
+      for (const patient of [denial!.patient, appeal!.patient, claim!.patient]) {
+        expect(patient.memberIdLast4).toBe("");
+        expect(patient.memberIdForOtherPayer).toBe(false);
+      }
+    });
+  });
+
+  it("answers not found to a reveal", async () => {
+    const result = await denialActions.revealMemberId(noMemberId.denialId, "payer_call");
+    expect(result).toEqual({ error: "Not found." });
   });
 });

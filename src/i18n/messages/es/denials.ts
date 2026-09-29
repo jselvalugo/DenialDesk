@@ -96,7 +96,7 @@ export const denials: Messages["denials"] = {
   "field.mrn": "Número de historia clínica",
   "field.memberId": "ID de miembro",
   "field.memberIdNone": "Ninguno en archivo",
-  "field.memberIdOtherPayer": "Registrado para otro pagador",
+  "field.memberIdOtherPayer": "No registrado para el pagador de esta reclamación",
   "field.addNote": "Agregar una nota",
   "note.placeholder": "Qué hizo, qué sigue, con quién habló.",
   "panel.denial": "Denegación",
@@ -148,7 +148,7 @@ export const denials: Messages["denials"] = {
   "error.invalidRevealReason": "Elija un motivo.",
   "error.revealNotFound": "No encontrado.",
   "error.revealOtherPayer":
-    "El ID de miembro registrado corresponde a un pagador distinto al de esta reclamación.",
+    "El ID de miembro registrado no está confirmado para el pagador de esta reclamación.",
   "error.fieldsReload": "Recargue la página e inténtelo de nuevo.",
 
   "action.editCustomFields": "Editar campos personalizados",

@@ -95,7 +95,7 @@ export const denials: Messages["denials"] = {
   "field.mrn": "Número de prontuário",
   "field.memberId": "ID de associado",
   "field.memberIdNone": "Nenhum registrado",
-  "field.memberIdOtherPayer": "Registrado para outro pagador",
+  "field.memberIdOtherPayer": "Não registrado para o pagador desta reivindicação",
   "field.addNote": "Adicionar uma nota",
   "note.placeholder": "O que você fez, o que vem a seguir, com quem falou.",
   "panel.denial": "Negativa",
@@ -144,7 +144,8 @@ export const denials: Messages["denials"] = {
   "error.invalidNote": "Escreva uma nota de até 4.000 caracteres.",
   "error.invalidRevealReason": "Escolha um motivo.",
   "error.revealNotFound": "Não encontrado.",
-  "error.revealOtherPayer": "O ID de associado registrado é de um pagador diferente do desta reivindicação.",
+  "error.revealOtherPayer":
+    "O ID de associado registrado não está confirmado para o pagador desta reivindicação.",
   "error.fieldsReload": "Recarregue a página e tente novamente.",
 
   "action.editCustomFields": "Editar campos personalizados",

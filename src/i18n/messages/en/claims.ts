@@ -92,7 +92,7 @@ export const claims = {
   "detail.patient.mrn": "MRN",
   "detail.patient.memberId": "Member ID",
   "detail.patient.memberIdNone": "None on file",
-  "detail.patient.memberIdOtherPayer": "On file for a different payer",
+  "detail.patient.memberIdOtherPayer": "Not on file for this claim's payer",
   "detail.payments.title": "Payments",
   "detail.payments.none": "No remittance has paid or denied this claim yet.",
   "detail.payments.paidOn": "paid {date}",

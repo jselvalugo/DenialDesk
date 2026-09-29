@@ -126,8 +126,8 @@ export async function getAppeal(tx: TenantTx, appealId: string) {
         firstName: patients.firstName,
         lastName: patients.lastName,
         mrn: patients.mrn,
-        // Null on a synced patient without a mapped coverage (PI1a); shown the same as self-pay.
-        // Only for the claim's own payer (R-5.1.2, `member-id.ts`).
+        // Only for the claim's own payer (R-5.1.2, `member-id.ts`); a synced patient with unmapped
+        // coverage has no primary payer, so its member ID is flagged, not shown.
         memberIdLast4: memberIdLast4ForClaim,
         memberIdForOtherPayer,
       },

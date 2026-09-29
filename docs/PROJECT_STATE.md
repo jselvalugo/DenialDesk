@@ -591,8 +591,10 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
 - Member-ID reveal on another payer's claim (R-5.1.2): **interim fix done 2026-09-29** — the claim,
   denial, and appeal pages show and reveal the member ID only when the claim's payer is the patient's
-  primary payer ("On file for a different payer" otherwise; both reveal actions refuse server-side).
-  Still open: coverage records with one member ID per payer (review §6.1).
+  primary payer ("Not on file for this claim's payer" otherwise, including unmapped synced coverage; both reveal actions refuse server-side).
+  The patient chart still shows and reveals it (it is labelled as the primary insurance there). Refused
+  reveals write no audit event (nothing is decrypted); whether they should is OA-085. Still open:
+  coverage records with one member ID per payer (review §6.1).
 - Claims C2 follow-up: nothing in the database forces a `claim_versions` version-1 row when a claim is
   INSERTed (the C1 triggers guard updates only). `createDraftClaims` (`src/domain/claims/versions.ts`) is the
   supported way to create a claim and writes version 1 and the `claim.created` audit event; a deferred

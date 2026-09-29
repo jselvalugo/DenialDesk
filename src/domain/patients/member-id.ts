@@ -11,7 +11,7 @@ import { claims, patients } from "@/db/schema";
 /** Last four of the member ID when it belongs to the claim's payer, otherwise ''. */
 export const memberIdLast4ForClaim = sql<string>`case when ${patients.primaryPayerId} = ${claims.payerId} then coalesce(${patients.memberIdLast4}, '') else '' end`;
 
-/** True when a member ID is on file but it belongs to a payer other than the claim's. */
+/** True when a member ID is on file but not for the claim's payer (another payer, or none mapped yet). */
 export const memberIdForOtherPayer = sql<boolean>`(${patients.memberIdLast4} is not null and ${patients.memberIdLast4} <> '' and ${patients.primaryPayerId} is distinct from ${claims.payerId})`;
 
 /** Whether a member ID on file may be revealed on a claim billed to `claimPayerId`. */
