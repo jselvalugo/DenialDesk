@@ -31,7 +31,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       # pnpm comes from package.json's packageManager; corepack refuses it unless its sha512 matches
-      # (SC-A4.2). pnpm/action-setup would drop the hash and self-update from the registry.
+      # (SC-A4.2). pnpm/action-setup would drop the hash and self-update from the registry. Node.js 25+
+      # no longer bundles corepack, so a NODE_VERSION bump past 24 must install it first.
       - run: corepack enable && corepack install
       # Again, now that pnpm exists, to restore the pnpm store cache.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -68,7 +69,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       # pnpm comes from package.json's packageManager; corepack refuses it unless its sha512 matches
-      # (SC-A4.2). pnpm/action-setup would drop the hash and self-update from the registry.
+      # (SC-A4.2). pnpm/action-setup would drop the hash and self-update from the registry. Node.js 25+
+      # no longer bundles corepack, so a NODE_VERSION bump past 24 must install it first.
       - run: corepack enable && corepack install
       # Again, now that pnpm exists, to restore the pnpm store cache.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -103,7 +105,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       # pnpm comes from package.json's packageManager; corepack refuses it unless its sha512 matches
-      # (SC-A4.2). pnpm/action-setup would drop the hash and self-update from the registry.
+      # (SC-A4.2). pnpm/action-setup would drop the hash and self-update from the registry. Node.js 25+
+      # no longer bundles corepack, so a NODE_VERSION bump past 24 must install it first.
       - run: corepack enable && corepack install
       # Again, now that pnpm exists, to restore the pnpm store cache.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

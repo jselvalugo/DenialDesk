@@ -76,6 +76,15 @@ describe("runtime image (SC-B12.3)", () => {
     }
   });
 
+  it("keeps the OS package database that container scanners read", () => {
+    const commands = runtime
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .join("\n");
+    expect(commands).toContain("/sbin/apk");
+    expect(commands).not.toMatch(/\/lib\/apk|\/etc\/apk/);
+  });
+
   it("deletes server source maps before the runtime stage copies the build", () => {
     expect(readFileSync("Dockerfile", "utf8")).toContain("find .next/standalone -name '*.map' -delete");
   });
