@@ -532,7 +532,7 @@ _Last updated: 2026-09-29_
 | 2026-09-27 | Patient Register is a synced, read-only copy of the practice EHR/PM (billing minimum only) over FHIR R4 / US Core + SMART Backend Services; data-source drop-down beside the Patients tab, Patients table only for now; manual entry kept only while no connection is active (OA-046) | ADR 0010, `specs/patient-integrations.md` |
 | 2026-09-29 | Background execution: signed `{ runId }` jobs, a read-only definer claim for a new `denialdesk_jobs` role (no table privilege), a 15-minute definer-queued schedule, platform-neutral core with a thin Netlify adapter, Sync now queues a job where a secret is configured; **Proposed, R-15.9 sign-off pending (OA-085)** | ADR 0012, PI2c |
 | 2026-09-28 | Record pattern P4: `DataTable` sorting is server-side via allow-listed `?sort=<key>&dir=asc\|desc` links, not TanStack Table (still deferred until a list needs client-side interactivity — column chooser, virtualized rows) | ADR 0004 addendum, `specs/record-pages.md` |
-| 2026-09-29 | Data model: the claim stays the workflow driver; a new `encounters` table (the visit) will be the parent of claims (spec and R-15.9 sign-off pending); appointments deferred to Phase 3 or later and never the driver. DenialDesk is a PHI system (business associate); PHI minimization is a design rule (identity only in `patients`, PHI footprint in every spec, no kept attachments, de-identified analytics) | ADR 0013, `HIPAA_COMPLIANCE.md` HC-3.5 to HC-3.9; Proposed until the owner approves PR #107 in writing (HC-13.2) |
+| 2026-09-29 | Data model: the claim stays the workflow driver; a new `encounters` table (the visit) will be the parent of claims (spec and R-15.9 sign-off pending); appointments deferred to Phase 3 or later and never the driver. DenialDesk is a PHI system (business associate); PHI minimization is a design rule (identity only in `patients`, PHI footprint in every spec, no kept attachments, de-identified analytics) | ADR 0013, `HIPAA_COMPLIANCE.md` HC-3.5 to HC-3.9; approved by the owner for merge 2026-09-29 (HC-13.2, recorded on PR #107) |
 | 2026-09-28 | Binding HIPAA and secure-coding standards; strictest reading wins; new third-party packages default to no (owner request) | `HIPAA_COMPLIANCE.md`, `SECURE_CODING.md` (OA-088) |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
@@ -594,7 +594,6 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    update notifier off; still open: `next dev`'s version check and the dev launcher's shutdown event).
 
 ## Open questions for humans
-- **Approve PR #107 in writing (OA-106, 2026-09-29):** ADR 0013 and HC-3.5 to HC-3.9 change `HIPAA_COMPLIANCE.md`, so HC-13.2 needs the owner's written approval on the PR before merge.
 - **Appeal attachment retention (OA-105, counsel):** may attachments be disposed of after sending (manifest + hash kept), or kept for the appeal-record period? HC-3.7 keeps them until answered.
 
 - **Field-encryption AAD (SC-B7.1) plan, ADR 0011 Proposed (OA-078 and OA-102 to OA-104, 2026-09-28; OA-078 was raised independently by PR #98's review):**

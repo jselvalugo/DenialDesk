@@ -1,7 +1,7 @@
 # ADR 0013: The claim drives the workflow, an encounter groups claims, and PHI is minimized by design
 
-Status: Proposed (owner agreed in chat 2026-09-29; becomes Accepted with the owner's written approval
-on PR #107, required by HC-13.2 because this changes `HIPAA_COMPLIANCE.md`). The encounter table is not
+Status: Accepted (owner, 2026-09-29: "approved merge" of PR #107 in the implementing session,
+recorded on the PR for HC-13.2 because this changes `HIPAA_COMPLIANCE.md`). The encounter table is not
 built yet: it needs a spec (`spec-writer`), a design pass (`architect`), and the owner's R-15.9 sign-off
 on its GRANT. Requirements: §8.2, §8.3, R-5.1.2, §9.2 (R-9.2.1 to R-9.2.3). Spec and threat model for
 the encounter: pending.
