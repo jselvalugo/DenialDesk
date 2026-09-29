@@ -24,6 +24,20 @@ function read<T extends z.ZodRawShape>(formData: FormData, shape: T) {
   return z.strictObject(shape).safeParse(raw);
 }
 
+/** Field messages for a value over its bound (never the value), so the person sees which field to shorten. */
+function boundFailure(error: z.ZodError, t: Awaited<ReturnType<typeof getT<"settings">>>): BillingFormState {
+  const fieldErrors: BillingFormState["fieldErrors"] = {};
+  for (const issue of error.issues) {
+    const name = String(issue.path[0] ?? "");
+    if (name === "id") return { error: t("billing.error.notFound") };
+    if (name in fieldErrors) continue;
+    const max = issue.code === "too_big" ? Number(issue.maximum) : undefined;
+    (fieldErrors as Record<string, string>)[name] =
+      max === undefined ? t("billing.error.required") : t("billing.error.tooLong", { max });
+  }
+  return { error: t("billing.error.fixFields"), fieldErrors };
+}
+
 const providerShape = {
   id: z.string().max(40),
   firstName: z.string().max(200),
@@ -45,7 +59,7 @@ export async function saveProviderBillingAction(
   const t = await getT("settings");
   if (!canConfigureSettings(auth.role)) return { error: t("billing.error.notAdmin") };
   const form = read(formData, providerShape);
-  if (!form.success) return { error: t("billing.error.fixFields") };
+  if (!form.success) return boundFailure(form.error, t);
   const { id, ...input } = form.data;
   const actor = billingActor(auth);
   try {
@@ -65,7 +79,7 @@ export async function saveLocationPlaceOfServiceAction(
   const t = await getT("settings");
   if (!canConfigureSettings(auth.role)) return { error: t("billing.error.notAdmin") };
   const form = read(formData, locationShape);
-  if (!form.success) return { error: t("billing.error.fixFields") };
+  if (!form.success) return boundFailure(form.error, t);
   const actor = billingActor(auth);
   try {
     await withTenant(auth, (tx) =>

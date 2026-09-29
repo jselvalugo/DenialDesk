@@ -31,7 +31,8 @@ const DEFAULT_TARGET: StepUpTarget = {
 /**
  * Resolves an untrusted `returnTo`. Anything that isn't `/settings/integrations`,
  * `/settings/integrations/new`, `/settings/integrations/<uuid>`, or the payer mapping page
- * `/settings/integrations/<uuid>/payers` (PI2b: saving a mapping needs a step-up), including a
+ * `/settings/integrations/<uuid>/payers` (PI2b: saving a mapping needs a step-up), or
+ * `/settings/billing/providers/<uuid>` (claims C3a-S: setting a TIN needs a step-up), including a
  * non-UUID id segment, an over-long value, or any off-site or malformed path, resolves to the
  * default page. A query string or fragment is dropped.
  */

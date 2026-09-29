@@ -56,6 +56,10 @@ export function ProviderBillingForm({
       onSubmit={(event) => {
         event.preventDefault();
         const formData = new FormData(event.currentTarget);
+        // The TIN is write-only: it leaves the field as soon as it is sent, so a refused save (step-up,
+        // validation) never leaves it sitting in the page.
+        const tin = event.currentTarget.elements.namedItem("tin");
+        if (tin instanceof HTMLInputElement) tin.value = "";
         startTransition(() => action(formData));
       }}
       className="flex flex-col"

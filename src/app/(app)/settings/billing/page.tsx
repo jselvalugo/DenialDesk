@@ -10,12 +10,23 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Panel } from "@/components/ui/Panel";
 import { secondaryLinkButtonClass } from "@/components/ui/linkButton";
 import { withTenant } from "@/db/tenant";
-import { listBillingTargets } from "@/domain/settings/billing";
+import { listBillingTargets, type MissingField } from "@/domain/settings/billing";
+import type { MessageKey } from "@/i18n/messages/types";
 import { getT } from "@/i18n/server";
 import { billingActor } from "./form-state";
 
 // Settings > Billing (docs/specs/claims.md C3a-S): the providers and locations the 837P reads, and what is
-// still missing on each. Administrators only. Reads no TIN.
+// still missing on each. Administrators only. Checks (in memory) that each stored TIN is readable; shows none.
+const MISSING_LABEL = {
+  firstName: "billing.form.firstName",
+  lastName: "billing.form.lastName",
+  addressLine1: "billing.form.addressLine1",
+  city: "billing.form.city",
+  state: "billing.form.state",
+  postalCode: "billing.form.postalCode",
+  tin: "billing.form.tin",
+} as const satisfies Record<MissingField, MessageKey<"settings">>;
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT("settings");
   return { title: t("billing.metaTitle") };
@@ -74,7 +85,9 @@ export default async function BillingSettingsPage({
                       <Badge tone="success">{t("billing.status.complete")}</Badge>
                     ) : (
                       <Badge tone="warning">
-                        {t("billing.status.missing", { count: provider.missing.length })}
+                        {t("billing.status.missing", {
+                          fields: provider.missing.map((field) => t(MISSING_LABEL[field])).join(", "),
+                        })}
                       </Badge>
                     )}
                   </Td>

@@ -506,7 +506,8 @@ and the synthetic seed); it edits the C3a columns only. NPI and taxonomy are sho
 
 ### Screens
 - `/settings/billing`: two lists (providers, locations), bounded to 200 rows each, each row showing what is missing.
-  It reads no TIN.
+  A row is complete only with a nine-digit ZIP and a TIN that decrypts; the row names the missing fields. Checking the TIN
+  decrypts it in memory and shows nothing, so the list view is audited (`phi` = `tin_readable_check`, with a count).
 - `/settings/billing/providers/[id]`: the provider form. The TIN field is a masked (`password`) input that is always
   empty; beside it the page shows "TIN on file, ends in 1234, type EI" (the only read of the ciphertext, audited).
 - `/settings/billing/locations/[id]`: the place-of-service form.
@@ -517,7 +518,8 @@ and the synthetic seed); it edits the C3a columns only. NPI and taxonomy are sho
 - **Step-up.** Setting or changing a TIN, or changing the type of an existing TIN, requires `hasRecentMfa` (five minutes,
   R-7.2.2) read from the session, never the request. A refusal carries `stepUpRequired` and the form shows the
   `/step-up` link (`/settings/billing/providers/<id>` is an allowed `returnTo`). Saving the other fields needs no
-  step-up. Clearing a stored TIN is not offered.
+  step-up. Clearing a stored TIN is not offered. Typing the TIN that is already stored is not a change (no write, no audit). A type-only
+  change sets the type and leaves the ciphertext alone: the AAD binds tenant, column, and provider, not the type.
 - **Write-only TIN.** It is never sent back to the browser, never in a form default, an error, a state object, a URL,
   a title, a log, or an audit row. The page only ever shows the last four digits.
 - **Encryption.** The TIN is encrypted on write with `encryptProviderTin` (AES-256-GCM, AAD `tenant|providers.tin_enc|provider`)
@@ -588,6 +590,10 @@ billing and a rendering provider; validating a POS code against the CMS set; USP
 ### Open questions (C3a-S)
 1. (owner, OA-092) Supply the CMS place of service code set (and the practice's usual codes) so the format check can become a
    real check.
+2. (owner, OA-097) Should changing the billing name or address (not only the TIN) also require a step-up? They go on every
+   claim, so a wrong address misroutes payment, but they are business data, not a secret. C3a-S requires it for the TIN only.
+3. Known gap, not closed here: the step-up that protects a TIN (which can be a sole proprietor's SSN) is TOTP, not the
+   phishing-resistant MFA HC-4.2 asks of administrators (OA-063). It stays a go-live condition, as in the other step-up gated actions.
 
 ## Data / API changes
 - `claims.version integer not null default 1` — current version number.

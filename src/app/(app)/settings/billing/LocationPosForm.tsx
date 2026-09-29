@@ -31,7 +31,7 @@ export function LocationPosForm({ id, placeOfService }: { id: string; placeOfSer
     >
       <input type="hidden" name="id" value={id} />
       <FormNotices>
-        <FormAlert message={state.fieldErrors ? undefined : state.error} id="billing-error" />
+        <FormAlert message={state.error} id="billing-error" />
       </FormNotices>
       <FormSection title={t("billing.section.pos.title")} description={t("billing.section.pos.description")}>
         <TextField

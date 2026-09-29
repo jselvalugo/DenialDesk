@@ -77,7 +77,7 @@ export function cleanPostalCode(raw: string): string | null {
   return /^[0-9]{5}(-?[0-9]{4})?$/.test(value) ? value.replace("-", "") : null;
 }
 
-/** Nine digits; hyphens and spaces between digits (12-3456789, 123-45-6789) are dropped. Never anything else. */
+/** Nine digits once every hyphen and space is dropped (12-3456789, 123-45-6789, 123 45 6789); anything else is refused. */
 export function cleanTin(raw: string): string | null {
   const value = raw.trim().replace(/[- ]/g, "");
   return /^[0-9]{9}$/.test(value) ? value : null;
@@ -174,8 +174,10 @@ export interface LocationListRow {
 export const BILLING_LIST_LIMIT = 200;
 
 /**
- * The practice's providers and locations with what is missing. Reads no TIN (only whether one is on file), so
- * it is not a PHI read.
+ * The practice's providers and locations with what is missing. A ZIP counts only with nine digits (the 837P
+ * billing loop needs ZIP+4), and a TIN that is on file but can't be decrypted counts as missing. Checking that
+ * decrypts each stored TIN in memory (nothing is returned from it), so when any was, one
+ * `settings.provider_billing_viewed` event records the read (`phi: tin_readable_check`, with a count).
  */
 export async function listBillingTargets(
   tx: TenantTx,
@@ -193,7 +195,8 @@ export async function listBillingTargets(
       city: providers.city,
       state: providers.state,
       postalCode: providers.postalCode,
-      hasTin: providers.tinType,
+      tinType: providers.tinType,
+      tinEnc: providers.tinEnc,
     })
     .from(providers)
     .orderBy(asc(providers.name), asc(providers.id))
@@ -208,15 +211,37 @@ export async function listBillingTargets(
     .from(locations)
     .orderBy(asc(locations.name), asc(locations.id))
     .limit(BILLING_LIST_LIMIT);
-  return {
-    providers: providerRows.map((row) => {
-      const missing: MissingField[] = [];
-      for (const field of ["firstName", "lastName", "addressLine1", "city", "state", "postalCode"] as const) {
-        if (row[field] === null) missing.push(field);
+  let decrypted = 0;
+  const providerList = providerRows.map((row) => {
+    const missing: MissingField[] = [];
+    for (const field of ["firstName", "lastName", "addressLine1", "city", "state"] as const) {
+      if (row[field] === null) missing.push(field);
+    }
+    if (row.postalCode === null || !/^[0-9]{9}$/.test(row.postalCode)) missing.push("postalCode");
+    let readable = false;
+    if (row.tinType !== null && row.tinEnc !== null) {
+      decrypted += 1;
+      try {
+        readable = /^[0-9]{9}$/.test(decryptProviderTin(row.tinEnc, actor.tenantId, row.id));
+      } catch {
+        readable = false;
       }
-      if (row.hasTin === null) missing.push("tin");
-      return { id: row.id, name: row.name, npi: row.npi, missing };
-    }),
+    }
+    if (!readable) missing.push("tin");
+    return { id: row.id, name: row.name, npi: row.npi, missing };
+  });
+  if (decrypted > 0) {
+    await audit(tx, {
+      action: "settings.provider_billing_viewed",
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      entityType: "provider",
+      reason: "billing_settings",
+      metadata: { phi: "tin_readable_check", provider_count: decrypted },
+    });
+  }
+  return {
+    providers: providerList,
     locations: locationRows,
   };
 }
@@ -264,7 +289,9 @@ export async function getProviderBilling(
     entityType: "provider",
     entityId: row.id,
     reason: "billing_settings",
-    metadata: { phi: row.tinEnc !== null ? "tin_last4" : "none" },
+    metadata: {
+      phi: row.tinEnc === null ? "none" : tinLast4 === "unreadable" ? "tin_unreadable" : "tin_last4",
+    },
   });
   return {
     id: row.id,
@@ -350,8 +377,21 @@ export async function updateProviderBilling(
   }
   if (issues.length > 0) throw new BillingSettingsError("validation", issues);
 
-  const tinChanged = newTin !== null || (input.tinType !== "" && input.tinType !== current.tinType);
-  if (tinChanged && !actor.recentMfa) throw new BillingSettingsError("step_up");
+  const typeChanged = current.tinEnc !== null && input.tinType !== "" && input.tinType !== current.tinType;
+  // Typing a TIN, or changing the type of the stored one, is a TIN change: it needs a recent MFA. This comes
+  // before the stored value is decrypted for the comparison below.
+  if ((newTin !== null || typeChanged) && !actor.recentMfa) throw new BillingSettingsError("step_up");
+
+  // Typing the TIN that is already stored is not a change: no write, no audit. (Decrypting here is acceptable
+  // because a new TIN was typed; an unreadable stored value simply counts as different.)
+  let tinValueChanged = newTin !== null;
+  if (newTin !== null && current.tinEnc !== null) {
+    try {
+      tinValueChanged = decryptProviderTin(current.tinEnc, actor.tenantId, current.id) !== newTin;
+    } catch {
+      tinValueChanged = true;
+    }
+  }
 
   const changed: ProviderBillingField[] = [];
   const set: Partial<typeof providers.$inferInsert> = {};
@@ -361,21 +401,17 @@ export async function updateProviderBilling(
       set[field] = values[field];
     }
   }
-  if (tinChanged) {
-    // Changing only the type re-encrypts the stored TIN under the same binding, so type and ciphertext stay a pair.
-    let tin = newTin;
-    if (tin === null) {
-      try {
-        tin = decryptProviderTin(current.tinEnc!, actor.tenantId, current.id);
-      } catch {
-        // The stored value can't be read, so a type change alone can't be applied: ask for the TIN again.
-        throw new BillingSettingsError("validation", [{ field: "tin", key: "billing.error.tinRequired" }]);
-      }
-    }
+  if (tinValueChanged) {
+    // Type and ciphertext are stored together (providers_tin_together), in one statement.
     set.tinType = input.tinType;
-    set.tinEnc = encryptProviderTin(tin, actor.tenantId, current.id);
+    set.tinEnc = encryptProviderTin(newTin!, actor.tenantId, current.id);
+    changed.push("tin");
     if (input.tinType !== current.tinType) changed.push("tinType");
-    if (newTin !== null) changed.push("tin");
+  } else if (typeChanged) {
+    // The AAD binds tenant, column, and provider, not the type, so the ciphertext stays as it is (and is not
+    // decrypted, even if it can't be read).
+    set.tinType = input.tinType;
+    changed.push("tinType");
   }
   if (changed.length === 0) return { changed: [] };
 
@@ -391,7 +427,7 @@ export async function updateProviderBilling(
     metadata: {
       fields: names.join(","),
       tin_changed: changed.includes("tin"),
-      step_up_verified_at: tinChanged ? (actor.stepUpVerifiedAt ?? null) : null,
+      step_up_verified_at: tinValueChanged || typeChanged ? (actor.stepUpVerifiedAt ?? null) : null,
     },
   });
   return { changed: names };

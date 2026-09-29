@@ -206,7 +206,7 @@ export const settings: Messages["settings"] = {
   "billing.col.city": "Cidade",
   "billing.col.pos": "Local de atendimento",
   "billing.status.complete": "Completo",
-  "billing.status.missing": "{count, plural, one {Falta # item} other {Faltam # itens}}",
+  "billing.status.missing": "Falta: {fields}",
   "billing.pos.notSet": "Não definido",
   "billing.action.edit": "Editar",
   "billing.section.name.title": "Nome de faturamento",

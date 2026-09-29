@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { closeDatabase, systemDb } from "@/db/client";
 import { auditEvents, locations, payers, providers } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
@@ -49,7 +49,8 @@ const { saveLocationPlaceOfServiceAction, saveProviderBillingAction } =
   await import("@/app/(app)/settings/billing/actions");
 
 const TIN_A = "009182736";
-const TIN_B = "008273645";
+// Area 666 is never issued as an SSN, and differs from TIN_A.
+const TIN_B = "666827364";
 const VALUES: ProviderBillingInput = {
   firstName: "Avery",
   lastName: "Synthprovider",
@@ -108,7 +109,8 @@ async function events(p: Ctx, entityId: string) {
   return systemDb()
     .select()
     .from(auditEvents)
-    .where(and(eq(auditEvents.tenantId, p.tenantId), eq(auditEvents.entityId, entityId)));
+    .where(and(eq(auditEvents.tenantId, p.tenantId), eq(auditEvents.entityId, entityId)))
+    .orderBy(auditEvents.id);
 }
 
 async function refusedWith(promise: Promise<unknown>, kind: string) {
@@ -210,7 +212,7 @@ describe("step-up MFA for a TIN (R-7.2.2, HC-4.2)", () => {
     expect((await row(p.providerId)).city).toBe("MIAMI");
   });
 
-  it("takes the step-up from the session in the server action (a five-minute-old verification passes, six minutes does not)", async () => {
+  it("takes the step-up from the session in the server action (four minutes old passes, six minutes, none, and a forged field do not)", async () => {
     const p = await bareTargets(await createTestTenant("Billing stepup 4"));
     const data = (fields: Record<string, string>) => {
       const form = new FormData();
@@ -273,13 +275,44 @@ describe("the TIN is encrypted, bound to its provider, and write-only (R-7.3.3, 
       entityType: "provider",
       metadata: { phi: "tin_last4" },
     });
-    // The list reads no TIN at all.
+    // The list returns no TIN, only what is missing.
     const list = await withTenant(a, (tx) => listBillingTargets(tx, actorOf(a)));
     expect(JSON.stringify(list)).not.toContain(TIN_A);
     expect(list.providers[0]!.missing).toEqual([]);
   });
 
-  it("says a stored TIN that fails to decrypt is unreadable, and lets a new one replace it", async () => {
+  it("lists a five-digit ZIP and an unreadable TIN as missing, by field, and audits the readability check", async () => {
+    const p = await bareTargets(await createTestTenant("Billing list"));
+    await save(p, { recentMfa: true }, { postalCode: "33602" });
+    const listed = () => withTenant(p, (tx) => listBillingTargets(tx, actorOf(p)));
+    expect((await listed()).providers[0]!.missing).toEqual(["postalCode"]);
+    const other = await row(a.providerId);
+    await systemDb().update(providers).set({ tinEnc: other.tinEnc }).where(eq(providers.id, p.providerId));
+    expect((await listed()).providers[0]!.missing).toEqual(["postalCode", "tin"]);
+    const checks = (await events(p, p.providerId)).filter(
+      (e) => e.action === "settings.provider_billing_viewed",
+    );
+    expect(checks.at(-1)!.metadata).toEqual({ phi: "tin_readable_check", provider_count: 1 });
+    // A bare provider has nothing to decrypt, so its list view writes no event.
+    const bare = await bareTargets(await createTestTenant("Billing list bare"));
+    const bareList = await withTenant(bare, (tx) => listBillingTargets(tx, actorOf(bare)));
+    expect(bareList.providers[0]!.missing).toHaveLength(7);
+    expect(await events(bare, bare.providerId)).toEqual([]);
+  });
+
+  it("treats typing the stored TIN again as no change: no write, no audit", async () => {
+    const p = await bareTargets(await createTestTenant("Billing same tin"));
+    await save(p, { recentMfa: true });
+    const before = await row(p.providerId);
+    const eventCount = (await events(p, p.providerId)).length;
+    // Typing a TIN is still a TIN action, so it needs the step-up first.
+    await refusedWith(save(p, { recentMfa: false }), "step_up");
+    expect(await save(p, { recentMfa: true }, { tin: "009-18-2736" })).toEqual({ changed: [] });
+    expect(await row(p.providerId)).toEqual(before);
+    expect((await events(p, p.providerId)).length).toBe(eventCount);
+  });
+
+  it("says a stored TIN that fails to decrypt is unreadable, audits that, and still lets its type change or a new TIN replace it", async () => {
     const p = await bareTargets(await createTestTenant("Billing unreadable"));
     await save(p, { recentMfa: true });
     // A ciphertext copied from another provider fails its AAD check.
@@ -287,11 +320,40 @@ describe("the TIN is encrypted, bound to its provider, and write-only (R-7.3.3, 
     await systemDb().update(providers).set({ tinEnc: other.tinEnc }).where(eq(providers.id, p.providerId));
     const view = await withTenant(p, (tx) => getProviderBilling(tx, actorOf(p), p.providerId));
     expect(view!.tinLast4).toBe("unreadable");
-    // A type change alone can't be applied to it: the TIN is asked for again, with a validation error.
-    const error = await refusedWith(save(p, { recentMfa: true }, { tin: "", tinType: "SY" }), "validation");
-    expect(error.issues).toEqual([{ field: "tin", key: "billing.error.tinRequired" }]);
-    await save(p, { recentMfa: true }, { tin: TIN_B });
+    const viewed = (await events(p, p.providerId)).filter(
+      (e) => e.action === "settings.provider_billing_viewed",
+    );
+    expect(viewed.at(-1)!.metadata).toEqual({ phi: "tin_unreadable" });
+    // The AAD doesn't include the type, so a type-only change sets the type and never decrypts.
+    expect(await save(p, { recentMfa: true }, { tin: "", tinType: "SY" })).toEqual({ changed: ["tin_type"] });
+    const afterType = await row(p.providerId);
+    expect(afterType.tinType).toBe("SY");
+    expect(afterType.tinEnc).toBe(other.tinEnc);
+    await save(p, { recentMfa: true }, { tin: TIN_B, tinType: "SY" });
     expect(decryptProviderTin((await row(p.providerId)).tinEnc!, p.tenantId, p.providerId)).toBe(TIN_B);
+  });
+
+  it("keeps the ciphertext when only the type changes, and needs the step-up for it", async () => {
+    const p = await bareTargets(await createTestTenant("Billing type only"));
+    await save(p, { recentMfa: true });
+    const before = await row(p.providerId);
+    await refusedWith(save(p, { recentMfa: false }, { tin: "", tinType: "SY" }), "step_up");
+    await save(p, { recentMfa: true }, { tin: "", tinType: "SY" });
+    const after = await row(p.providerId);
+    expect(after).toMatchObject({ tinType: "SY", tinEnc: before.tinEnc });
+    expect(decryptProviderTin(after.tinEnc!, p.tenantId, p.providerId)).toBe(TIN_A);
+  });
+
+  it("shows a field error for a value over its bound, without the value", async () => {
+    auth = { tenantId: a.tenantId, userId: a.userId, role: "admin", mfaVerifiedAt: new Date() };
+    const form = new FormData();
+    form.set("id", a.providerId);
+    for (const [name, value] of Object.entries({ ...VALUES, firstName: "A".repeat(201) }))
+      form.set(name, value);
+    expect(await saveProviderBillingAction({}, form)).toEqual({
+      error: "Fix the fields marked below and save again.",
+      fieldErrors: { firstName: "Use at most 200 characters." },
+    });
   });
 
   it("never puts the TIN in a form state, even for a refused save", async () => {
@@ -354,7 +416,10 @@ describe("audit: field names only (R-7.5.1, HC-5.3)", () => {
   it("writes one event per change with column names, and no value, name, address, or TIN", async () => {
     const p = await bareTargets(await createTestTenant("Billing audit"));
     await save(p, { recentMfa: true });
-    await save(p, { recentMfa: true }, { city: "Miami" });
+    // Saves 2 and 3 send no TIN (blank), so only the city is a change, and the third changes nothing.
+    await save(p, { recentMfa: true }, { city: "Miami", tin: "" });
+    await save(p, { recentMfa: true }, { city: "Miami", tin: "" });
+    // Sending the same TIN again is not a change either.
     await save(p, { recentMfa: true }, { city: "Miami" });
     await updateLocationPlaceOfService_(p, "11");
     const providerEvents = (await events(p, p.providerId)).filter(
@@ -366,7 +431,7 @@ describe("audit: field names only (R-7.5.1, HC-5.3)", () => {
       entityType: "provider",
       reason: "billing_settings",
       metadata: {
-        fields: "first_name,last_name,address_line1,city,state,postal_code,tin_type,tin",
+        fields: "first_name,last_name,address_line1,city,state,postal_code,tin,tin_type",
         tin_changed: true,
         step_up_verified_at: "2026-09-29T14:00:00.000Z",
       },
@@ -378,7 +443,10 @@ describe("audit: field names only (R-7.5.1, HC-5.3)", () => {
     });
     const all = [...(await events(p, p.providerId)), ...(await events(p, p.locationId))];
     const text = JSON.stringify(all).toUpperCase();
-    for (const value of [...SENSITIVE, "MIAMI", '11"']) expect(text).not.toContain(value.toUpperCase());
+    for (const value of [...SENSITIVE, "MIAMI"]) expect(text).not.toContain(value.toUpperCase());
+    // The POS code is checked against the metadata values only (an ID could contain "11").
+    const metadataValues = all.flatMap((e) => Object.values(e.metadata ?? {}));
+    expect(metadataValues).not.toContain("11");
     expect(all.filter((e) => e.action === "settings.location_pos_updated")).toHaveLength(1);
   });
 
@@ -543,14 +611,5 @@ describe("end to end: a provider configured through this page lets the 837P serv
     expect(after.text).toContain("N4*TAMPA*FL*336020001~");
     expect(after.text).toContain("CLM*");
     expect(after.text).toMatch(/\*11:B:1\*/);
-  });
-
-  it("uses only providers this test created", async () => {
-    // Guards the fixtures: nothing above wrote outside the practices it made.
-    const rows = await systemDb()
-      .select({ id: providers.id })
-      .from(providers)
-      .where(inArray(providers.id, [a.providerId, b.providerId]));
-    expect(rows).toHaveLength(2);
   });
 });

@@ -205,7 +205,7 @@ export const settings = {
   "billing.col.city": "City",
   "billing.col.pos": "Place of service",
   "billing.status.complete": "Complete",
-  "billing.status.missing": "{count, plural, one {# item missing} other {# items missing}}",
+  "billing.status.missing": "Missing: {fields}",
   "billing.pos.notSet": "Not set",
   "billing.action.edit": "Edit",
   "billing.section.name.title": "Billing name",
