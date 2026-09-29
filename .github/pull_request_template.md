@@ -31,6 +31,8 @@
 ## Checklist
 
 - [ ] Synthetic data only; no PHI in code, fixtures, logs, or snapshots
+- [ ] No `MUST` rule in `docs/HIPAA_COMPLIANCE.md` or `docs/SECURE_CODING.md` broken (or exception ADR linked)
+- [ ] No new dependency, or each one passes `docs/SECURE_CODING.md` Part A and is in the register
 - [ ] No legal deadline, rate, or threshold outside `rules/`
 - [ ] Spec and roadmap checkboxes updated
 - [ ] IAM / branch protection / audit-logging changes called out for human sign-off (or none)

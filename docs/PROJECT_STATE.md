@@ -346,17 +346,16 @@ _Last updated: 2026-09-29_
   problems by fixed code, none with a value. Codes are copied exactly; the ICD-10 decimal is removed only as the X12
   representation (`restoreIcd10Decimal` proves it reversible). Diagnosis pointers are a person's choice, derived only when the
   claim has one diagnosis. **Control numbers** (ISA13, GS06, ST02, BHT03 share one value) come from the `practice_settings` row
-  `x12_control_number` (existing table and grant, one atomic upsert), because a dedicated table would need a GRANT (OA-089).
+  `x12_control_number` (existing table and grant, one atomic upsert), because a dedicated table would need a GRANT (OA-090).
   **Migration 0046** adds nullable `providers.first_name/last_name/address_line1/city/state/postal_code/tin_type/tin_enc`
   (TIN field-encrypted, AAD-bound) and `locations.place_of_service`; the schema held none of these. **Synthetic-only:** ISA15
   is `T` and the submitter and receiver identifiers are fixed synthetic constants, so production refuses
   (`not_synthetic_environment`) until C3b. **Not built:** a settings page to enter a provider's billing details and a
   location's place of service (until then: the synthetic seed, or the platform operator in the database), so a real practice
-  cannot yet generate; **blockers before C3b and any real claim** (spec C3a, OA-090): sensitive diagnoses (sensitivity tags, Part 2 consent) on outgoing claims, persisting and auditing the diagnosis-pointer choice, the hard-coded CLM06 to CLM09 attestations, and clearinghouse status / real downloads; group billing (type 2 NPI) with a rendering provider, dependents, secondary payers, several claims per
+  cannot yet generate; **blockers before C3b and any real claim** (spec C3a, OA-091): sensitive diagnoses (sensitivity tags, Part 2 consent) on outgoing claims, persisting and auditing the diagnosis-pointer choice, the hard-coded CLM06 to CLM09 attestations, and clearinghouse status / real downloads; group billing (type 2 NPI) with a rendering provider, dependents, secondary payers, several claims per
   file, frequency 7/8. Regimes `medicare_advantage`, `erisa_self_funded`, `smmc`, `pip` are refused (no confirmed SBR09).
   Mapping is from the specialist's knowledge of the guide, not the licensed guide: every ⚠️ VERIFY row in the spec must be
-  cleared before a `P` file (OA-088). Integration tests (`claim-837p.test.ts`, `claim-837p-action.test.ts`) await a CI run:
-  the agent had no database access.
+  cleared before a `P` file (OA-089). Integration tests (`claim-837p.test.ts`, `claim-837p-action.test.ts`) pass in CI (PR #102).
 - UI shell is ERP-style: global header with a "Go to" field (Ctrl/⌘ K), navy tab bar whose first
   control is the current module's name, and a grouped module switcher (`specs/erp-shell.md`).
   Deliberately not a copy of any vendor's shell: no grid icon, no "app launcher", tinted module
@@ -494,6 +493,7 @@ _Last updated: 2026-09-29_
 | 2026-09-27 | Patient Register is a synced, read-only copy of the practice EHR/PM (billing minimum only) over FHIR R4 / US Core + SMART Backend Services; data-source drop-down beside the Patients tab, Patients table only for now; manual entry kept only while no connection is active (OA-046) | ADR 0010, `specs/patient-integrations.md` |
 | 2026-09-29 | Background execution: signed `{ runId }` jobs, a read-only definer claim for a new `denialdesk_jobs` role (no table privilege), a 15-minute definer-queued schedule, platform-neutral core with a thin Netlify adapter, Sync now queues a job where a secret is configured; **Proposed, R-15.9 sign-off pending (OA-085)** | ADR 0012, PI2c |
 | 2026-09-28 | Record pattern P4: `DataTable` sorting is server-side via allow-listed `?sort=<key>&dir=asc\|desc` links, not TanStack Table (still deferred until a list needs client-side interactivity — column chooser, virtualized rows) | ADR 0004 addendum, `specs/record-pages.md` |
+| 2026-09-28 | Binding HIPAA and secure-coding standards; strictest reading wins; new third-party packages default to no (owner request) | `HIPAA_COMPLIANCE.md`, `SECURE_CODING.md` (OA-088) |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -531,6 +531,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    "Register patient" and give the drop-down panel a sentence per state while a connection is outside
    draft/revoked; PI2b: refresh the drop-down's summary during a session) → PI2a → PI1c → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
+12. Close the known gaps in `docs/SECURE_CODING.md` and `docs/HIPAA_COMPLIANCE.md` (tracked, not
+   waived; they gate the first real practice): CSP base-uri and dev eval, AAD on member-ID and TOTP encryption, exact
+   pins, digest-pinned images, 7-day release quarantine, strict Zod objects, upload malware scanning,
+   missing threat models, CI license check, SAST/DAST/SBOM, signed commits; WebAuthn, JIT and
+   break-glass access, WORM audit + SIEM, mTLS, Key Vault, legal hold, disclosure-accounting export,
+   and the written HIPAA policy set.
 
 ## Open questions for humans
 
