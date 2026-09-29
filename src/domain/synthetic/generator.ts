@@ -180,8 +180,24 @@ const PATIENT_TOWNS = [
 
 export interface SyntheticDataset {
   asOf: string;
-  locations: Array<{ key: string; name: string; city: string }>;
-  providers: Array<{ key: string; name: string; npi: string; taxonomy: string; flLicense: string }>;
+  locations: Array<{ key: string; name: string; city: string; placeOfService: string }>;
+  providers: Array<{
+    key: string;
+    name: string;
+    npi: string;
+    taxonomy: string;
+    flLicense: string;
+    /** Billing details for the 837P (claims C3a): all synthetic, none from a random draw. */
+    firstName: string;
+    lastName: string;
+    addressLine1: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    tinType: "EI";
+    /** Not an assignable EIN (prefix 00), so it can never be a real one. */
+    tin: string;
+  }>;
   payers: SyntheticPayer[];
   patients: Array<{
     key: string;
@@ -234,20 +250,28 @@ export function generateDataset(options: {
   const { asOf } = options;
 
   const locations = [
-    { key: "tampa", name: "Bayshore Internal Medicine", city: "Tampa" },
-    { key: "orlando", name: "Lake Eola Family Care", city: "Orlando" },
+    { key: "tampa", name: "Bayshore Internal Medicine", city: "Tampa", placeOfService: "11" },
+    { key: "orlando", name: "Lake Eola Family Care", city: "Orlando", placeOfService: "11" },
   ];
 
   const providers = [
-    "Dr. Avery Castellan",
-    "Dr. Jordan Whitlock",
-    "Dr. Riley Lindqvist",
-    "Dr. Sage Holloway",
-  ].map((name, i) => {
+    ["Avery", "Castellan"],
+    ["Jordan", "Whitlock"],
+    ["Riley", "Lindqvist"],
+    ["Sage", "Holloway"],
+  ].map(([firstName, lastName], i) => {
     const first9 = `1${String(random.int(10_000_000, 99_999_999))}`;
     return {
       key: `prov${i}`,
-      name: `${name} (synthetic)`,
+      name: `Dr. ${firstName} ${lastName} (synthetic)`,
+      firstName: firstName!,
+      lastName: lastName!,
+      addressLine1: `${100 + i} Synthetic Way`,
+      city: "Tampa",
+      state: "FL",
+      postalCode: `33602000${i}`,
+      tinType: "EI" as const,
+      tin: `00000000${i + 1}`,
       npi: `${first9}${npiCheckDigit(first9)}`,
       taxonomy: i % 2 === 0 ? "207R00000X" : "207Q00000X",
       flLicense: `SYN${String(random.int(10_000, 99_999))}`,

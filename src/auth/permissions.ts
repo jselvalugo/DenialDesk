@@ -38,6 +38,14 @@ export function canImportCharges(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "specialist";
 }
 
+/**
+ * Generating an 837P file from a claim (docs/specs/claims.md C3a): the people who bill, the same set as
+ * `canCorrectClaims`. The file carries the member ID, so compliance (which reviews only) does not get it (R-5.1.2).
+ */
+export function canGenerateClaimFile(role: Role): boolean {
+  return role === "admin" || role === "manager" || role === "specialist";
+}
+
 /** Registering and updating patient records: the people who bill (compliance reviews, R-5.1.2). */
 export function canEditPatients(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "specialist";
