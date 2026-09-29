@@ -12,7 +12,8 @@ import { encryptProviderTin } from "@/lib/crypto/provider-tin";
 export type Ctx = { tenantId: string; userId: string };
 
 export const MEMBER_ID = "SYN123456789";
-export const TIN = "000000001";
+// Starts with 00 (never issued); must not collide with control numbers such as 000000001.
+export const TIN = "009182736";
 
 export interface Billing {
   providerId: string;
@@ -111,7 +112,7 @@ export async function newClaim(
       ctx,
       [
         {
-          claimNumber: `SYN-837-${seq}-${Date.now()}`,
+          claimNumber: `SYN-837-${seq}-${randomUUID().slice(0, 8)}`,
           patientId: overrides.patientId ?? base.patientId,
           providerId: overrides.providerId ?? base.providerId,
           locationId: overrides.locationId ?? base.locationId,
