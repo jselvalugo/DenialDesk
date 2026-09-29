@@ -16,7 +16,7 @@ import { MaskedMemberId } from "@/components/patients/MaskedMemberId";
 import { withTenant } from "@/db/tenant";
 import { CARC, CATEGORY_LABEL_KEYS } from "@/domain/carc";
 import { getLetterSummary } from "@/domain/appeals/letter/queries";
-import { DUE_SOON_DAYS, getAppeal } from "@/domain/appeals/queries";
+import { APPEAL_ACTIVITY_KEYS, DUE_SOON_DAYS, getAppeal } from "@/domain/appeals/queries";
 import {
   APPEAL_DECISION_OUTCOME_LABEL_KEYS,
   APPEAL_LEVEL_LABEL_KEYS,
@@ -35,15 +35,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t("detail.title") };
 }
 
-const ACTIVITY_KEYS: Record<string, MessageKey<"appeals">> = {
-  "appeal.created": "activity.created",
-  "appeal.submission_recorded": "activity.submissionRecorded",
-  "appeal.decision_recorded": "activity.decisionRecorded",
-  "appeal.note_added": "activity.noteAdded",
-  "appeal.letter_saved": "activity.letterSaved",
-  "appeal.letter_attested": "activity.letterAttested",
-  "appeal.letter_exported": "activity.letterExported",
-};
+const ACTIVITY_KEYS: Record<string, MessageKey<"appeals"> | undefined> = APPEAL_ACTIVITY_KEYS;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

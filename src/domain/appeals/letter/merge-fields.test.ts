@@ -188,6 +188,19 @@ describe("malformed tokens name the offending text", () => {
       token: "{{claim.number and more",
     });
   });
+
+  it("cuts the snippet from the original body, keeping valid tokens that precede it", () => {
+    expect(checkBody("Re {{claim.number}} and {{payer.name} oops")).toEqual({
+      ok: false,
+      reason: "malformed",
+      token: "{{payer.name} oops",
+    });
+    expect(checkBody("{{claim.number}}{{payer.name}} stray } here")).toEqual({
+      ok: false,
+      reason: "malformed",
+      token: "} here",
+    });
+  });
 });
 
 describe("starters avoid the CARC description (its source wording is still VERIFY)", () => {

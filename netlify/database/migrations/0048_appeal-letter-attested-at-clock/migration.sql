@@ -1,0 +1,2 @@
+-- Generated from drizzle/0048_appeal_letter_attested_at_clock.sql by `pnpm netlify:migrations`. Do not edit.
+ALTER TABLE "appeal_letter_attestations" ALTER COLUMN "attested_at" SET DEFAULT clock_timestamp();

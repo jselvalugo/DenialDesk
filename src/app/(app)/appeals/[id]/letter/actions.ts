@@ -7,6 +7,7 @@ import { canWorkAppeals } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
 import { denialCategoryEnum } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
+import { letterSavedPath } from "@/domain/appeals/letter/flash";
 import { MAX_LETTER_CHARS } from "@/domain/appeals/letter/merge-fields";
 import { attestLetter, saveLetterVersion, type ServiceError } from "@/domain/appeals/letter/service";
 import { getT } from "@/i18n/server";
@@ -62,7 +63,8 @@ export async function saveLetter(_: LetterActionState, formData: FormData): Prom
   if ("errorKey" in result) return { error: await message(result) };
   revalidatePath(`/appeals/${parsed.data.appealId}`, "layout");
   // Back to the plain letter URL: a `?template=` from "Load template" must not stay and reload over the save.
-  redirect(`/appeals/${parsed.data.appealId}/letter`);
+  // `?saved=1` lets the page confirm the save, since the form state is gone after a redirect.
+  redirect(letterSavedPath(parsed.data.appealId));
 }
 
 /** Records the signed-in user's review of the latest letter version (R-7.11.2). */

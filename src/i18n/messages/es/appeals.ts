@@ -247,7 +247,7 @@ export const appeals: Messages["appeals"] = {
   "letter.error.malformed":
     "Un campo de combinación no está cerrado correctamente cerca de “{token}”. Cada uno es un nombre entre llaves dobles.",
   "letter.error.unknownField": "Campo de combinación desconocido: {names}. Use solo los campos de la lista.",
-  "letter.error.locked": "Esta apelación ya se presentó, por lo que la carta no se puede cambiar ni revisar.",
+  "letter.error.locked": "Esta apelación ya se presentó, por lo que la carta no se puede cambiar.",
   "letter.error.stale": "Otra persona cambió la carta. Recargue la página para ver la última versión.",
   "letter.error.unchanged": "No hay cambios desde la última versión guardada.",
   "letter.error.noLetter": "Guarde la carta antes de revisarla.",
