@@ -124,6 +124,7 @@ export type AuditAction =
   | "integration.transport_refused"
   | "security.env_signing_key_in_production"
   | "integration.connection_errored"
+  | "integration.sync_queued"
   | "integration.sync_started"
   | "integration.sync_completed"
   | "integration.sync_failed"

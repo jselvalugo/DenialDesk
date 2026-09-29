@@ -221,7 +221,7 @@ export const integrations: Messages["integrations"] = {
     "DenialDesk no aprobó esta conexión. DenialDesk se pondrá en contacto con usted para explicar el motivo. Cuando se resuelva, ejecute Probar conexión y envíela de nuevo.",
   "sync.title": "Sincronizar ahora",
   "sync.description":
-    "Trae ahora los últimos cambios de pacientes del EHR/PM conectado. Se ejecuta completo en esta solicitud, por lo que una clínica grande debería esperar a la sincronización programada. Los pacientes son copias de solo lectura: corrija los datos demográficos en el EHR/PM.",
+    "Trae ahora los últimos cambios de pacientes del EHR/PM conectado, y vuelve a hacerlo automáticamente cada 15 minutos. El resultado aparece aquí o, cuando la sincronización se ejecuta en segundo plano, en el historial de sincronización. Los pacientes son copias de solo lectura: corrija los datos demográficos en el EHR/PM.",
   "sync.submit": "Sincronizar ahora",
   "sync.pending": "Sincronizando…",
   "sync.resultOk": "Sincronización terminada",
@@ -230,11 +230,15 @@ export const integrations: Messages["integrations"] = {
     "{created} nuevos, {updated} actualizados, {linked} vinculados a pacientes existentes, {skipped} omitidos. Los registros omitidos y sus motivos se conservan con la ejecución de la sincronización.",
   "sync.result.abandoned":
     "La sincronización se detuvo porque la conexión se pausó, se revocó o pasó a error mientras se ejecutaba. Los pacientes ya guardados se conservaron.",
+  "sync.resultQueued": "Sincronización en cola",
+  "sync.result.queued":
+    "La sincronización quedó en cola y se ejecuta en segundo plano. Su resultado aparecerá en el historial de sincronización en un momento.",
   "sync.error.notActive": "Solo una conexión activa puede sincronizar. Reanúdela primero.",
   "sync.error.rateLimited":
     "Sincronizar ahora se puede ejecutar una vez por minuto. Espere un momento e inténtelo de nuevo.",
   "sync.error.alreadyRunning": "Ya hay una sincronización en curso para esta conexión.",
   "sync.error.failed": "No se pudo completar la sincronización. Recargue la página e inténtelo de nuevo.",
+  "sync.error.notQueued": "No se pudo iniciar la sincronización. Inténtelo de nuevo en un momento.",
   "sync.failure.auth_refused":
     "El EHR/PM rechazó las credenciales de DenialDesk, por lo que la conexión ahora requiere atención. Cuando el administrador del EHR/PM lo haya resuelto, ejecute Probar conexión y reanude.",
   "sync.failure.token_endpoint_changed":

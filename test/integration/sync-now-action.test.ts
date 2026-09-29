@@ -1,6 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
-import { closeDatabase } from "@/db/client";
+import { eq } from "drizzle-orm";
+import { closeDatabase, systemDb } from "@/db/client";
+import { integrationSyncRuns } from "@/db/schema";
+import { verifyJob } from "@/integrations/jobs/signature";
 import type { TransportResponse } from "@/integrations/fhir/transport";
 import {
   activeSandbox,
@@ -170,5 +173,107 @@ describe("syncNowAction", () => {
     h.clock.current = new Date(Math.floor(Date.now() / 60_000) * 60_000 + 10_000);
     expect((await press()).status).toBe("succeeded");
     expect(await press()).toEqual({ error: "Sync now can run once a minute. Wait a moment and try again." });
+  });
+});
+
+describe("syncNowAction with a background worker configured (ADR 0012)", () => {
+  const SECRET = "synthetic".repeat(5);
+  const WORKER = "http://localhost:8888/.netlify/functions/integration-sync-background";
+  const sent: { url: string; init: RequestInit }[] = [];
+
+  beforeEach(() => {
+    sent.length = 0;
+    vi.stubEnv("INTEGRATION_JOB_SECRET", SECRET);
+    vi.stubEnv("INTEGRATION_JOB_URL", WORKER);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        sent.push({ url, init });
+        return new Response(null, { status: 202 });
+      }),
+    );
+    // Pin the shared clock so the once-a-minute window can't roll mid-test.
+    h.clock.current = new Date(Math.floor(Date.now() / 60_000) * 60_000 + 10_000);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("queues a signed `{ runId }` job and answers `queued` in the reader's language, without running the sync in the request", async () => {
+    const state = await press();
+    expect(state).toEqual({
+      status: "queued",
+      message:
+        "The sync was queued and runs in the background. Its result appears in the sync history in a moment.",
+    });
+    expect(await patientRows(ctx)).toEqual([]);
+    expect(h.transport.to("Patient")).toEqual([]);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.url).toBe(WORKER);
+    const [run] = await systemDb()
+      .select()
+      .from(integrationSyncRuns)
+      .where(eq(integrationSyncRuns.connectionId, id));
+    expect(run).toMatchObject({ status: "queued", trigger: "manual", triggeredBy: ctx.userId });
+    const headers = sent[0]!.init.headers as Record<string, string>;
+    expect(sent[0]!.init.body).toBe(JSON.stringify({ runId: run!.id }));
+    expect(
+      verifyJob(Buffer.from(SECRET), sent[0]!.init.body as string, {
+        get: (name) => headers[name.toLowerCase()] ?? null,
+      }),
+    ).toEqual({ ok: true, runId: run!.id });
+    expect(revalidated.paths).toContain("/");
+
+    const events = (await auditRows(ctx.tenantId)).filter(
+      (event) => event.action === "integration.sync_queued",
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actorUserId: ctx.userId,
+      ipAddress: "203.0.113.7",
+      userAgent: "Synthetic-Test-Browser/1.0",
+    });
+  });
+
+  it("says so in Spanish and Portuguese", async () => {
+    language = "es";
+    expect((await press()).message).toMatch(/^La sincronización quedó en cola/);
+    const other = await createTestTenant("Sync now action queued pt");
+    const otherHarness = harness();
+    otherHarness.clock.current = h.clock.current;
+    wiring.deps = otherHarness.deps;
+    const otherId = await activeSandbox(other, otherHarness);
+    auth = { ...other, role: "admin", mfaVerifiedAt: new Date() };
+    language = "pt";
+    expect((await press({ id: otherId })).message).toMatch(/^A sincronização foi colocada na fila/);
+  });
+
+  it("refuses in words, and abandons the run, when the worker can't be reached", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 502 })),
+    );
+    expect(await press()).toEqual({ error: "The sync couldn't be started. Try again in a moment." });
+    const runs = await systemDb()
+      .select()
+      .from(integrationSyncRuns)
+      .where(eq(integrationSyncRuns.connectionId, id));
+    expect(runs.map((row) => row.status)).toEqual(["abandoned"]);
+    expect(await patientRows(ctx)).toEqual([]);
+  });
+
+  it("refuses, and never runs quietly in the request, when the secret is set but too short", async () => {
+    vi.stubEnv("INTEGRATION_JOB_SECRET", "short");
+    expect(await press()).toEqual({ error: "The sync couldn't be started. Try again in a moment." });
+    expect(sent).toEqual([]);
+    expect(await patientRows(ctx)).toEqual([]);
+  });
+
+  it("with no secret it still runs in the request, as in local development", async () => {
+    vi.stubEnv("INTEGRATION_JOB_SECRET", "");
+    expect((await press()).status).toBe("succeeded");
+    expect(sent).toEqual([]);
   });
 });

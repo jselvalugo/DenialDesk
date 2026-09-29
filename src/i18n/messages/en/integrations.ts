@@ -214,7 +214,7 @@ export const integrations = {
     "DenialDesk did not approve this connection. DenialDesk will contact you about why. Once it is resolved, run Test connection and submit it again.",
   "sync.title": "Sync now",
   "sync.description":
-    "Pulls the latest patient changes from the connected EHR/PM now. It runs to the end in this request, so a large practice should wait for the scheduled sync instead. Patients are read-only copies: fix demographics in the EHR/PM.",
+    "Pulls the latest patient changes from the connected EHR/PM now, and again automatically every 15 minutes. The result appears here or, when the sync runs in the background, in the sync history. Patients are read-only copies: fix demographics in the EHR/PM.",
   "sync.submit": "Sync now",
   "sync.pending": "Syncing…",
   "sync.resultOk": "Sync finished",
@@ -223,10 +223,14 @@ export const integrations = {
     "{created} new, {updated} updated, {linked} linked to existing patients, {skipped} skipped. Skipped records and their reasons are kept with the sync run.",
   "sync.result.abandoned":
     "The sync stopped because the connection was paused, revoked, or put in error while it ran. Patients already saved were kept.",
+  "sync.resultQueued": "Sync queued",
+  "sync.result.queued":
+    "The sync was queued and runs in the background. Its result appears in the sync history in a moment.",
   "sync.error.notActive": "Only an active connection can sync. Resume it first.",
   "sync.error.rateLimited": "Sync now can run once a minute. Wait a moment and try again.",
   "sync.error.alreadyRunning": "A sync is already running for this connection.",
   "sync.error.failed": "The sync couldn't be completed. Reload the page and try again.",
+  "sync.error.notQueued": "The sync couldn't be started. Try again in a moment.",
   "sync.failure.auth_refused":
     "The EHR/PM refused DenialDesk's credentials, so the connection now needs attention. Once the EHR/PM administrator has fixed it, run Test connection and resume.",
   "sync.failure.token_endpoint_changed":

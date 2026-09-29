@@ -136,6 +136,11 @@ export const TRIGGER_MESSAGES: readonly { format: string; args: readonly Trigger
   },
   { format: "integration_sync_runs %: the connection must be active to run", args: ["uuid"] },
   { format: "integration_registry_release: connection % is not draft or revoked", args: ["uuid"] },
+  // 0044 (security review L3): the migration verifies the integration service principal's row.
+  { format: "integration service principal % is missing", args: ["uuid"] },
+  { format: "integration service principal % must be disabled", args: ["uuid"] },
+  { format: "integration service principal % must have the non-hash password marker", args: ["uuid"] },
+  { format: "integration service principal % must have no membership in any practice", args: ["uuid"] },
   { format: "integration_connections %: revoked is terminal", args: ["uuid"] },
   { format: "integration_connections %: is_sandbox cannot change", args: ["uuid"] },
   { format: "integration_connections %: has_synced cannot be unset", args: ["uuid"] },

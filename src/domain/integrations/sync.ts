@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { PRACTICE_TIME_ZONE, todayIn } from "@rules/calendar";
 import { canManageIntegrations } from "@/auth/permissions";
 import { integrationConnections, integrationSyncRuns } from "@/db/schema";
@@ -42,7 +42,12 @@ import {
   type TxRunner,
 } from "./connections";
 import { INTEGRATION_SERVICE_PRINCIPAL_ID } from "./principal";
-import { normalizeRunCodes, type SyncStoredCode } from "./sync-codes";
+import {
+  CONSECUTIVE_FAILED_RUNS_LIMIT,
+  normalizeRunCodes,
+  type ConnectionErrorReason,
+  type SyncStoredCode,
+} from "./sync-codes";
 import { abandonStaleRuns, hasActiveRun, insertQueuedRun, isRunAlreadyActive } from "./sync-runs";
 import {
   commitPage,
@@ -55,8 +60,9 @@ import {
 } from "./sync-upsert";
 
 // The sync run (docs/specs/patient-integrations.md PI2b; ADR 0010; threat model D1, D4, T4, I9).
-// `syncNow` is the administrator's action: it queues a run and executes it in this request (background
-// jobs are a later slice). `executeSyncRun` does the work and touches the database **only** through
+// `requestSync` is the administrator's action: it queues a run and hands it to the background worker as a
+// signed job (`src/integrations/jobs`, ADR 0012), or, with no job secret configured (tests, local development),
+// executes it in this request (`syncNow`); the 15-minute scheduler queues runs the same way. `executeSyncRun` does the work and touches the database **only** through
 // `withTenantAsSystem` (the `denialdesk_app` role, the integration service principal as actor, the
 // run's tenant, run and connection settings for the read-only trigger), in short transactions: the
 // network calls (discovery, token, every page, every Coverage search) run with no transaction open, and
@@ -83,6 +89,12 @@ export interface SyncDeps {
   budget?: () => RunBudget;
   encrypt?: (plaintext: string) => string;
   decrypt?: (ciphertext: string) => string;
+  /**
+   * Hands a queued run to the background worker as a signed job (`src/integrations/jobs`); resolves
+   * `false` when it could not be sent. Absent: `requestSync` runs the run in the request (tests, local
+   * development, an environment without `INTEGRATION_JOB_SECRET`).
+   */
+  enqueueJob?: (runId: string) => Promise<boolean>;
 }
 
 export interface SyncCounts {
@@ -132,6 +144,14 @@ type Started = {
   triggeredBy: string | null;
   trigger: string;
 };
+
+/** The run is not `queued`: another worker has it, or it is finished or abandoned (a replayed job). */
+export class SyncRunNotQueuedError extends Error {
+  constructor() {
+    super("sync run is not queued");
+    this.name = "SyncRunNotQueuedError";
+  }
+}
 
 /** Where the work ran: the runtime function id and host, recorded in every audit event's metadata. */
 export function runtimeWhere(): { function: string; host: string } {
@@ -217,7 +237,7 @@ async function claimRun(input: {
     // (drizzle/0043): that is a result, not an error page.
     if (run.status === "abandoned") return { kind: "abandoned" } as const;
     // Only a queued run can be claimed: a second worker (or a replay) finds it already taken.
-    if (run.status !== "queued") throw new Error("sync run is not queued");
+    if (run.status !== "queued") throw new SyncRunNotQueuedError();
     if (connection.status !== "active") {
       await tx
         .update(integrationSyncRuns)
@@ -275,6 +295,30 @@ export function toSyncFailure(error: unknown): SyncFailure {
   return new SyncFailure("internal_error");
 }
 
+/**
+ * PI3 ("three consecutive failed runs -> error"): whether the run just marked `failed` is the
+ * `CONSECUTIVE_FAILED_RUNS_LIMIT`th failed run in a row. Only finished runs count (an `abandoned` run, one
+ * a Pause or a lost job cut short, neither fails nor rescues), and only runs queued since the connection
+ * last changed state (its `updated_at`), so a Resume starts a fresh count; a rename, or the first stored page of
+ * the very first sync, also restarts it, which only delays the error. A success in between ends the streak. Called
+ * inside the transaction that has already written the run's own `failed` status.
+ */
+async function isThirdFailureInARow(tx: TenantTx, connectionId: string, since: Date): Promise<boolean> {
+  const recent = await tx
+    .select({ status: integrationSyncRuns.status })
+    .from(integrationSyncRuns)
+    .where(
+      and(
+        eq(integrationSyncRuns.connectionId, connectionId),
+        inArray(integrationSyncRuns.status, ["succeeded", "failed"]),
+        gt(integrationSyncRuns.queuedAt, since),
+      ),
+    )
+    .orderBy(desc(integrationSyncRuns.queuedAt), desc(integrationSyncRuns.id))
+    .limit(CONSECUTIVE_FAILED_RUNS_LIMIT);
+  return recent.length === CONSECUTIVE_FAILED_RUNS_LIMIT && recent.every((row) => row.status === "failed");
+}
+
 async function finishFailed(
   input: { tenantId: string; runId: string },
   failure: SyncFailure,
@@ -282,7 +326,7 @@ async function finishFailed(
 ): Promise<"failed" | "abandoned"> {
   return withTenantAsSystem(input.tenantId, input.runId, async (tx, ctx) => {
     const [connection] = await tx
-      .select({ status: integrationConnections.status })
+      .select({ status: integrationConnections.status, updatedAt: integrationConnections.updatedAt })
       .from(integrationConnections)
       .where(eq(integrationConnections.id, ctx.connectionId))
       .for("no key update");
@@ -323,25 +367,35 @@ async function finishFailed(
         }),
       );
     }
-    // 401/403, `invalid_client`, or a changed token endpoint: the connection goes to `error`. The run
-    // was finished above first, so the abandon trigger (0043) finds nothing to overwrite, and this is
-    // the last write to the connection in the transaction: the database stamps the transition itself
-    // (clock_timestamp(), 0043), so Resume can tell a later Test connection pass from an earlier one.
-    if (failure.connectionError && connection?.status === "active") {
+    // 401/403, `invalid_client`, or a changed token endpoint: the connection goes to `error`. Otherwise,
+    // PI3: the third failed run in a row does the same (`repeated_failures`). The run was finished above
+    // first, so the abandon trigger (0043) finds nothing to overwrite, and this is the last write to the
+    // connection in the transaction: the database stamps the transition itself (clock_timestamp(), 0043),
+    // so Resume can tell a later Test connection pass from an earlier one.
+    let errorReason: ConnectionErrorReason | null = null;
+    if (connection?.status === "active") {
+      if (failure.connectionError) {
+        errorReason = failure.code === "token_endpoint_changed" ? "token_endpoint_changed" : "auth_refused";
+      } else if (await isThirdFailureInARow(tx, ctx.connectionId, connection.updatedAt)) {
+        errorReason = "repeated_failures";
+      }
+    }
+    if (errorReason) {
       await tx
         .update(integrationConnections)
         .set({
           status: "error",
-          statusReason: failure.code,
+          statusReason: errorReason,
           updatedBy: INTEGRATION_SERVICE_PRINCIPAL_ID,
           updatedAt: sql`now()`,
         })
         .where(eq(integrationConnections.id, ctx.connectionId));
       events.push(
-        systemAudit(input.tenantId, "integration.connection_errored", ctx.connectionId, failure.code, {
+        systemAudit(input.tenantId, "integration.connection_errored", ctx.connectionId, errorReason, {
           run_id: input.runId,
-          reason_code: failure.code,
+          reason_code: errorReason,
           previous_status: "active",
+          ...(errorReason === "repeated_failures" ? { failed_runs: CONSECUTIVE_FAILED_RUNS_LIMIT } : {}),
         }),
       );
     }
@@ -767,20 +821,26 @@ function refuse(t: IntegrationsT, key: MessageKey<"integrations">): never {
   throw new IntegrationConnectionError(t(key));
 }
 
+/** A run handed to the background worker (`requestSync`): it is queued, and its result is on the run's history row. */
+export interface SyncQueuedResult {
+  runId: string;
+  status: "queued";
+}
+
 /**
- * "Sync now" (administrator): queues a run and executes it in this request. Admin only, re-checked
- * here; the environment rule (a sandbox only where only synthetic data is allowed, and the reverse);
- * the connection must be `active` (and not revoked); once a minute per connection
- * (bucket `integration_sync_now`); one run at a time (a stale one is abandoned first, the 20 minute
- * lease). Returns the run's result; a run-level failure is a result, not an exception.
+ * "Sync now" (administrator), the checks and the queueing shared by both ways of running it: admin only,
+ * re-checked here; the environment rule (a sandbox only where only synthetic data is allowed, and the
+ * reverse); the connection must be `active` (and not revoked); once a minute per connection (bucket
+ * `integration_sync_now`); one run at a time (a stale one is abandoned first, the 20 minute lease). Returns
+ * the queued run and where the press came from.
  */
-export async function syncNow(
+async function queueSyncRun(
   run: TxRunner,
   actor: IntegrationActor,
   connectionId: string,
   deps: SyncDeps,
-  t: IntegrationsT = englishT,
-): Promise<SyncRunResult> {
+  t: IntegrationsT,
+): Promise<{ runId: string; origin: RunOrigin }> {
   if (!canManageIntegrations(actor.role)) refuse(t, "error.notAdmin");
   const connection = await run(async (tx) => {
     const [row] = await tx
@@ -846,12 +906,85 @@ export async function syncNow(
     throw error;
   }
   const context = await requestContext();
-  const origin: RunOrigin = {
-    ip: context.ip,
-    userAgent: context.userAgent,
-    sessionId: actor.sessionId ?? null,
+  return {
+    runId,
+    origin: { ip: context.ip, userAgent: context.userAgent, sessionId: actor.sessionId ?? null },
   };
+}
+
+/**
+ * Sync now, **in this request**: queues the run and executes it here. The inline path, used by tests and
+ * local development (no `INTEGRATION_JOB_SECRET`); `requestSync` is what the action calls. Returns the
+ * run's result; a run-level failure is a result, not an exception.
+ */
+export async function syncNow(
+  run: TxRunner,
+  actor: IntegrationActor,
+  connectionId: string,
+  deps: SyncDeps,
+  t: IntegrationsT = englishT,
+): Promise<SyncRunResult> {
+  const { runId, origin } = await queueSyncRun(run, actor, connectionId, deps, t);
   return executeSyncRun({ tenantId: actor.tenantId, runId, origin }, deps);
+}
+
+/**
+ * Sync now as the product runs it: with `deps.enqueueJob` (Netlify and Azure, where `INTEGRATION_JOB_SECRET`
+ * is set) the queued run is handed to the background worker as a signed `{ runId }` job and this returns
+ * at once with `queued`; without it the run executes in this request exactly as `syncNow` does (ADR 0012).
+ * The press is audited as `integration.sync_queued` with the administrator's network origin, because the
+ * job carries only the run ID and the worker's `integration.sync_started` therefore cannot say who pressed
+ * the button. If the worker can't be reached the run is abandoned at once (so the administrator can press
+ * again) and the press is refused, not left queued.
+ */
+export async function requestSync(
+  run: TxRunner,
+  actor: IntegrationActor,
+  connectionId: string,
+  deps: SyncDeps,
+  t: IntegrationsT = englishT,
+): Promise<SyncRunResult | SyncQueuedResult> {
+  const { runId, origin } = await queueSyncRun(run, actor, connectionId, deps, t);
+  if (!deps.enqueueJob) return executeSyncRun({ tenantId: actor.tenantId, runId, origin }, deps);
+
+  let sent = false;
+  try {
+    sent = await deps.enqueueJob(runId);
+  } catch {
+    // The dispatcher reports its own failure as a code in the log; nothing it threw is kept.
+  }
+  if (!sent) {
+    await run(async (tx) => {
+      await tx
+        .update(integrationSyncRuns)
+        .set({ status: "abandoned", finishedAt: sql`now()` })
+        .where(and(eq(integrationSyncRuns.id, runId), eq(integrationSyncRuns.status, "queued")));
+      await audit(tx, {
+        action: "integration.sync_failed",
+        actorUserId: actor.userId,
+        tenantId: actor.tenantId,
+        entityType: "integration_connection",
+        entityId: connectionId,
+        reason: "sync_now",
+        metadata: { code: "job_not_sent", run_id: runId, session_id: actor.sessionId ?? null },
+      });
+    });
+    refuse(t, "sync.error.notQueued");
+  }
+  await run((tx) =>
+    audit(tx, {
+      action: "integration.sync_queued",
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      entityType: "integration_connection",
+      entityId: connectionId,
+      reason: "sync_now",
+      ipAddress: origin.ip,
+      userAgent: origin.userAgent,
+      metadata: { run_id: runId, session_id: origin.sessionId },
+    }),
+  );
+  return { runId, status: "queued" };
 }
 
 /** Audits a refused Sync now on a real connection (no run exists to attach it to). */

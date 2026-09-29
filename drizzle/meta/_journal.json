@@ -309,6 +309,13 @@
       "when": 1790635345826,
       "tag": "0043_patient_integrations_sync_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1790649728177,
+      "tag": "0044_patient_integrations_jobs",
+      "breakpoints": true
     }
   ]
 }
