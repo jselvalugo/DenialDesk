@@ -53,6 +53,8 @@ test.describe("insight — compliance can view and download", () => {
   test("sees the download button on a report", async ({ page }) => {
     await page.goto("/");
     await openFromSwitcher(page, "Reports");
+    // Wait for the report list; otherwise "Open" can resolve to a link on the home page.
+    await expect(page.getByRole("heading", { level: 1, name: "Insight" })).toBeVisible();
     await page.getByRole("link", { name: "Open" }).first().click();
     await expect(page.getByRole("button", { name: "Download Excel" })).toBeVisible();
   });

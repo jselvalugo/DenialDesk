@@ -221,7 +221,12 @@ for scripts (no ADR yet); and their type packages.
   `no-referrer`, frame denial, Permissions-Policy) plus a strict Content-Security-Policy (set per
   request in `src/proxy.ts`): a
   per-request nonce with `strict-dynamic`, no `unsafe-eval`, no `unsafe-inline` for scripts,
-  `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors 'none'`.
+  `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors 'none'`. The policy is built in
+  `src/lib/csp.ts`; paths the proxy skips (static assets, `/brand/`, `/icon.png`, and image-optimizer
+  errors) get a static deny-all CSP from `next.config.ts`; successful `/_next/image` responses carry
+  Next's own image policy (`script-src 'none'; sandbox`) plus the global frame denial. `'unsafe-eval'` is absent in development too, which costs in-place Fast Refresh:
+  `next dev` falls back to a full page reload on every edit. Tested in `src/lib/csp.test.ts`,
+  `src/proxy.test.ts`, and the e2e smoke (`test/e2e/shell.spec.ts`).
 - **SC-B10.2 MUST** Authenticated and PHI responses send `Cache-Control: no-store` (HC-2.3).
 
 ### B11. Tests for controls
@@ -257,7 +262,6 @@ exception.
 
 | Rule | Gap |
 | --- | --- |
-| SC-B10.1 | The per-request nonce CSP in `src/proxy.ts` still sets `base-uri 'self'` and adds `'unsafe-eval'` in development. |
 | SC-B7.1 | Member IDs (`src/domain/patients/queries.ts`, `src/db/seed.ts`) and TOTP secrets (`src/auth/enrollment.ts`) are encrypted without AAD; only custom field values bind AAD. |
 | SC-A4.1 | Some existing ranges are not exact (`server-only`, `@types/*`, `eslint`, `tsx`, `typescript-eslint`). |
 | SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest, and pnpm is fetched without a hash check (`corepack enable` in the `Dockerfile`, `pnpm/action-setup` in CI; `packageManager` has no `+sha512`); CI's `postgres:16` service images are tag-only. |
