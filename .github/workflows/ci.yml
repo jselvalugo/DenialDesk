@@ -7,6 +7,8 @@ on:
 
 # Least privilege: no job may write to the repo or PRs (R-7.4.2). Every `uses:` is pinned to a
 # full commit SHA with a `# vX.Y.Z` comment; Dependabot (.github/dependabot.yml) bumps both.
+# Service images are pinned by digest; Dependabot does not update them, so refresh them together
+# with docker-compose.yml (which it does update).
 permissions:
   contents: read
 
@@ -25,7 +27,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # pnpm comes from package.json's packageManager; corepack refuses it unless its sha512 matches
+      # (SC-A4.2). pnpm/action-setup would drop the hash and self-update from the registry. Node.js 25+
+      # no longer bundles corepack, so a NODE_VERSION bump past 24 must install it first.
+      - run: corepack enable && corepack install
+      # Again, now that pnpm exists, to restore the pnpm store cache.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -41,7 +50,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # postgres:16 (16.15, built 2026-09-19) pinned by digest (SC-A4.2); keep in step with docker-compose.yml.
+        image: postgres:16@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
         env:
           POSTGRES_USER: denialdesk
           POSTGRES_PASSWORD: denialdesk-ci-only
@@ -55,7 +65,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # pnpm comes from package.json's packageManager; corepack refuses it unless its sha512 matches
+      # (SC-A4.2). pnpm/action-setup would drop the hash and self-update from the registry. Node.js 25+
+      # no longer bundles corepack, so a NODE_VERSION bump past 24 must install it first.
+      - run: corepack enable && corepack install
+      # Again, now that pnpm exists, to restore the pnpm store cache.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -69,7 +86,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # postgres:16 (16.15, built 2026-09-19) pinned by digest (SC-A4.2); keep in step with docker-compose.yml.
+        image: postgres:16@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
         env:
           POSTGRES_USER: denialdesk
           POSTGRES_PASSWORD: denialdesk-ci-only
@@ -83,7 +101,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # pnpm comes from package.json's packageManager; corepack refuses it unless its sha512 matches
+      # (SC-A4.2). pnpm/action-setup would drop the hash and self-update from the registry. Node.js 25+
+      # no longer bundles corepack, so a NODE_VERSION bump past 24 must install it first.
+      - run: corepack enable && corepack install
+      # Again, now that pnpm exists, to restore the pnpm store cache.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -110,12 +135,13 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       # No dependency cache: this job reads the lockfile only (no install), so there's nothing to
       # save, and setup-node's post step fails when the cache path doesn't exist.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
+      # pnpm from packageManager, sha512-checked by corepack (SC-A4.2).
+      - run: corepack enable && corepack install
       - run: pnpm audit --audit-level=high
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
@@ -131,3 +157,13 @@ jobs:
         with:
           persist-credentials: false
       - run: docker build -t denialdesk:ci .
+      # SC-B12.3: no package managers or source maps in the runtime image, and not root.
+      - name: Runtime image has no build tools or source maps
+        run: |
+          docker run --rm --entrypoint sh denialdesk:ci -c '
+            for tool in npm npx corepack yarn yarnpkg pnpm apk; do
+              if command -v "$tool"; then echo "found $tool"; exit 1; fi
+            done
+            if find /app -name "*.map" | grep .; then exit 1; fi
+            test "$(id -u)" != 0
+          '
