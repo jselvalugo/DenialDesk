@@ -93,8 +93,12 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
   Dependabot proposes new base-image and compose digests.
 - **SC-A4.3 MUST** A dependency update is a code change: full CI and `security-reviewer`. Read the
   changelog for major versions. Do not adopt a release younger than 7 days unless it fixes a
-  security advisory (defends against hijacked publishes); pnpm and Dependabot must be configured to
-  hold new releases for 7 days (a known gap today).
+  security advisory (defends against hijacked publishes); pnpm and Dependabot are both configured
+  to hold new releases for 7 days (`minimumReleaseAge` in `pnpm-workspace.yaml`, `cooldown` in
+  `.github/dependabot.yml`, enforced by `src/supply-chain/release-age.test.ts`). The advisory
+  exception is a `minimumReleaseAgeExclude` entry added in that PR, naming the advisory, and removed
+  once the release is 7 days old. pnpm checks release age only when it resolves a version;
+  `--frozen-lockfile` installs do not re-check the lockfile.
 - **SC-A4.4 MUST** Advisories are fixed within the REQUIREMENTS §7.6 SLAs: Critical in 15 days (7
   days if actively exploited), High in 30, Medium in 90. `pnpm audit --audit-level=high` stays a failing CI gate.
 - **SC-A4.5 MUST** Quarterly, remove unused dependencies and re-check A2.2–A2.3 for every direct
@@ -267,7 +271,7 @@ exception.
 | --- | --- |
 | SC-B7.1 | Member IDs (`src/domain/patients/queries.ts`, `src/db/seed.ts`) and TOTP secrets (`src/auth/enrollment.ts`) are encrypted without AAD; only custom field values bind AAD. |
 | SC-A4.2 | CI (`actions/setup-node`) and Netlify (`NODE_VERSION`) download Node.js 24 by major version, with no exact version or hash; Netlify's handling of the `packageManager` sha512 is unverified. |
-| SC-A4.3 | No release-age quarantine configured for pnpm, and no `cooldown` in `.github/dependabot.yml`. |
+| SC-A4.3 | pnpm checks release age only when it resolves a version, so nothing in CI checks the entries a PR adds to `pnpm-lock.yaml` (a hand-edited lockfile, or one written by pnpm older than 10.16, would pass). Some locked packages were under 7 days old when this rule arrived (for example `@types/node` 24.19.0, published 2026-09-25); they predate the rule. |
 | SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
 | SC-A2.5 | The lockfile also carries native binaries not on list (a): `@rolldown/binding-*` (Vitest → Vite → Rolldown) and `fsevents` (tsx, Vite, macOS only). Adding them needs human sign-off (OA-088). |
 | SC-A2.2 | No automated license check in CI. |

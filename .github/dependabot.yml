@@ -1,4 +1,8 @@
-# Keeps GitHub Actions and npm dependencies patched (R-7.4.2, REQUIREMENTS §7.6 SLAs).
+# Keeps every dependency ecosystem in this file patched (R-7.4.2, REQUIREMENTS §7.6 SLAs).
+# Every ecosystem holds a new release for 7 days before proposing it (SC-A4.3), matching pnpm's
+# minimumReleaseAge. Cooldown applies to version updates only: a security update opens at once, but
+# pnpm still refuses a fix younger than 7 days until that PR adds a minimumReleaseAgeExclude entry
+# naming the advisory (docs/SECURE_CODING.md SC-A4.3).
 version: 2
 updates:
   # ci.yml pins actions to full commit SHAs with a `# vX.Y.Z` comment; Dependabot updates the
@@ -7,6 +11,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   # The Dockerfile's base image is pinned by digest (SC-A4.2); this proposes new digests for the
   # same tag. Node.js stays on the 24 LTS line (ADR 0001): a major upgrade is a deliberate change.
   - package-ecosystem: docker
@@ -33,3 +39,5 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7

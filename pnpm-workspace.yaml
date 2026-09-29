@@ -1,0 +1,8 @@
+# pnpm settings (pnpm 10 reads them from this file; this repository is a single package, not a
+# workspace). Verified against pnpm 10.33.0, the version pinned in package.json's packageManager.
+
+# SC-A4.3: do not resolve any package version published less than 7 days ago (the value is in
+# minutes: 7 × 24 × 60). Defends against hijacked publishes, which are usually caught and pulled
+# within days. A release that fixes a security advisory may be let through by adding its package
+# name to minimumReleaseAgeExclude in the same PR, with the advisory ID and a removal date.
+minimumReleaseAge: 10080
