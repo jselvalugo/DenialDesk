@@ -31,6 +31,8 @@ export class FhirConnectError extends Error {
       | "issuer_changed"
       | "config_changed"
       | "token_host_not_permitted",
+    /** What a non-2xx answer carried that a caller may use: its status, and `Retry-After` in seconds. */
+    readonly response?: { httpStatus: number; retryAfterSeconds?: number },
   ) {
     super(outcome);
     this.name = "FhirConnectError";
@@ -79,10 +81,16 @@ export function outcomeForTransportError(error: unknown, fallback: FailureOutcom
  * credentials this call can't have (`auth_refused`); 408/425/429 and 5xx are the server's trouble
  * (`unreachable`); anything else means the URL isn't the thing we asked for (`invalidOutcome`).
  */
-export function outcomeForStatus(status: number, invalidOutcome: FailureOutcome): FhirConnectError {
-  if (status === 401 || status === 403) return new FhirConnectError("auth_refused");
+export function outcomeForStatus(
+  status: number,
+  invalidOutcome: FailureOutcome,
+  retryAfterSeconds?: number,
+): FhirConnectError {
+  const response = { httpStatus: status, ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}) };
+  if (status === 401 || status === 403)
+    return new FhirConnectError("auth_refused", undefined, undefined, response);
   if (status === 408 || status === 425 || status === 429 || status >= 500) {
-    return new FhirConnectError("unreachable");
+    return new FhirConnectError("unreachable", undefined, undefined, response);
   }
-  return new FhirConnectError(invalidOutcome);
+  return new FhirConnectError(invalidOutcome, undefined, undefined, response);
 }

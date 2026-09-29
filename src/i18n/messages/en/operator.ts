@@ -219,8 +219,9 @@ export const operator = {
   "integrations.approve.scopeLabel": "Population scope",
   "integrations.approve.scopeHint":
     "Limits the sync to this practice's own patients. Only a Group export can be approved for now: a verified search filter has nowhere to be recorded yet.",
-  "integrations.approve.nineDigitsLabel": "MRNs are 9 digits (verified)",
-  "integrations.approve.nineDigitsHint": "Optional. Tick it only if the practice confirmed it.",
+  "integrations.approve.nineDigitsLabel": "MRNs contain a nine-digit number (verified)",
+  "integrations.approve.nineDigitsHint":
+    "Optional. Tick it only if the practice confirmed that its real MRNs contain a nine-digit number; otherwise such MRNs are refused as look-alikes of a Social Security number.",
   "integrations.approve.ownershipLabel":
     "I verified, outside DenialDesk, that this practice owns client ID {clientId}",
   "integrations.approve.ownershipHint":

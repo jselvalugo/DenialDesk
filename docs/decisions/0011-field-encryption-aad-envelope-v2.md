@@ -25,6 +25,7 @@ Call-site inventory (2026-09-28, `grep encryptField|decryptField`):
 | `src/app/(app)/denials/[id]/actions.ts:185` `revealMemberId` | decrypt | `patients.member_id_enc` | **No** |
 | `src/app/(app)/appeals/[id]/actions.ts:210` `revealMemberId` | decrypt | `patients.member_id_enc` | **No** |
 | `src/db/seed.ts:256` `seedPractice` | encrypt | `patients.member_id_enc` | **No** |
+| `src/domain/integrations/sync.ts:538`, `:539` sync run `encrypt`/`decrypt` (PI2b part 1, PR #98; synced patients' Coverage member ID) | encrypt, decrypt | `patients.member_id_enc` | **No** |
 | `src/auth/enrollment.ts:19`, `:23` `pendingEnrollmentSecret` (practice users and the operator) | decrypt, encrypt | `users.totp_secret_enc` | **No** |
 | `src/auth/credentials.ts:174` `claimTotp`, reached from practice sign-in (`src/auth/actions.ts:147`), operator sign-in (`src/auth/operator-actions.ts:193`), and step-up (`src/app/(app)/step-up/actions.ts:86`) | decrypt | `users.totp_secret_enc` | **No** |
 | `src/domain/custom-fields/values.ts:404`, `:505`, `:611`, `:670` | decrypt, encrypt | `custom_field_values.value_enc` (history rows are copied into `custom_field_value_versions.value_enc` unchanged, `:583`) | Yes, `tenant_id\|field_id\|record_id` |
@@ -206,8 +207,12 @@ value.
    - **Synced patients.** `patients_synced_readonly` (`drizzle/0040`) forbids changing
      `member_id_enc` on `source = 'fhir'` rows outside a sync run.
      - The job excludes those rows in SQL. `--verify` counts them as `blocked`.
-     - `blocked` must be 0. It is 0 today, because no sync writer exists yet, and it stays 0 because
-       the PI2b sync writer must use `sealMemberId`.
+     - PI2b part 1 (PR #98) already writes synced member IDs unbound (`sync.ts:538-539`). PR 2 and
+       PR 3 switch those `decrypt`/`encrypt` hooks to `openMemberId`/`sealMemberId` (the run knows
+       the tenant and the patient row ID), and a sync run reseals a stored value that is not `v2`
+       at the active `kid` even when the plaintext is unchanged. Existing synced rows are therefore
+       converted by the next sync run (inside a run the trigger allows it) or by wipe and re-seed,
+       never by the job. `blocked` must be 0 before the cut-off.
    - **Why not SQL.** This cannot be a SQL migration: the key must never reach the database (HC-7.4).
 4. **Verify.** `--verify` reports counts per column: `v1`, `v2` at the active `kid`, `v2` at other
    keys, `blocked`, and `unparseable`. For custom fields it also opens every current value under the

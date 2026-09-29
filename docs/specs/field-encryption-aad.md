@@ -223,7 +223,7 @@ None (no legal clock). `LEGACY_V1_READ_EXPIRES` is an engineering date, not a st
   - HC-7.3 and R-7.3.3 list only SSN, MBI, member IDs, and bank data, so storing it in plaintext
     breaks no MUST rule.
   - It is still an HC-1.1 identifier. Whether to field-encrypt it is an owner and officer decision:
-    see owner row OA-083.
+    see owner row OA-087.
 
 ## Open questions
 Listed at the end of the implementation plan.
@@ -273,8 +273,8 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
 **PR 2: `refactor(crypto): route every decrypt through AAD-aware readers [R-7.3.3, R-7.5.1]`** (about 400 lines)
 - New `src/domain/patients/member-id.ts` and `src/auth/totp-secret.ts`.
 - Switches every decrypt in the inventory: `queries.ts:555`, the denials and appeals actions,
-  `enrollment.ts:19`, and `credentials.ts:174`. Integrity failures return typed results and are
-  audited without being rolled back.
+  `enrollment.ts:19`, `credentials.ts:174`, and the sync run's `decrypt` hook (`sync.ts:539`).
+  Integrity failures return typed results and are audited without being rolled back.
 - Switches custom fields to `openField` with `customFieldAad`, lowercases `recordId` at the entry
   points, and moves them to the single integrity event.
 - Adds the audit actions and the three i18n keys.
@@ -282,7 +282,8 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
 
 **PR 3: `feat(crypto): write member IDs and TOTP secrets as v2 with AAD [R-7.3.3, R-7.2.4, R-15.9]`** (about 340 lines)
 - Switches every encrypt in the inventory: `queries.ts:346/421/423`, `seed.ts:256`,
-  `enrollment.ts:23`, and `values.ts:505`.
+  `enrollment.ts:23`, `values.ts:505`, and the sync run's `encrypt` hook (`sync.ts:538`), which
+  also reseals a stored member ID that is not `v2` at the active `kid` even when it is unchanged.
 - Migration `drizzle/00NN_field_key_seal_counter.sql` with its Netlify mirror: the sequence and
   its `GRANT USAGE`. **R-15.9 human sign-off in the PR.**
 - `createPatient` gets the app-side `randomUUID()` ID.
@@ -343,8 +344,10 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
   - `replaced-by` only sets `source_status = 'merged'`. Nothing moves, and merge tooling is out of
     scope there.
   - A new synced row needs its ID before it is inserted.
-  - **Dependency:** PI2b's sync writer must use `sealMemberId`, so `blocked` stays 0. `spec-writer`
-    should add this to PI2b.
+  - **Sync writer:** PI2b part 1 (PR #98) landed first and writes synced member IDs unbound
+    (`sync.ts:538-539`). PR 2/PR 3 switch its hooks; existing synced rows are converted by the next
+    sync run (the trigger allows writes inside a run) or by wipe and re-seed, never by the job.
+    `spec-writer` should record this in PI2b.
 - **Cleared member IDs.** `updatePatient` seals `""` with `member_id_last4 = ""`. The parser accepts
   the empty ciphertext part, and the last-4 check passes (`"".slice(-4) === ""`).
 - **TOTP re-enrollment.**
@@ -483,16 +486,17 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
   lowercase. So PR 2's lowercasing should not make a normally reachable value unreadable.
   `verifyFormats` arrives after PR 2 (PR 4b), so the count (`openFailed`) is taken before the
   cut-off, not before the reader switch. A value that fails is audited on every read in between.
-- **PI2b landing first without `sealMemberId`.** That would create `blocked` rows, which the trigger
-  prevents the job from fixing. Mitigation: the PI2b dependency above.
+- **PI2b landed first without `sealMemberId`** (PR #98). Synced rows are `blocked` for the job;
+  mitigation: the sync writer reseals them on its next run after PR 3, or pre-production is wiped
+  and re-seeded. The cut-off waits for `blocked` = 0.
 - **Key-check value missing in pre-production** until the operator sets it from the first
   `--verify` output. Until then boot only logs a warning.
 - **Netlify function time limits** (⚠️ VERIFY; the seed route sets `maxDuration = 60`). The endpoint
   does bounded work per call, returns a cursor, and reports `done`.
 
 ### Open questions for the owner
-In `docs/owner/OWNER_ACTION_ITEMS.xlsx`: questions 1–5 are OA-080, 6 is OA-081, 7–10 are OA-082,
-and 11 is OA-083.
+In `docs/owner/OWNER_ACTION_ITEMS.xlsx`: questions 1–5 are OA-078, 6 is OA-085, 7–10 are OA-086,
+and 11 is OA-087.
 1. Approve ADR 0011: the `v2` envelope with `kid`, the header-bound AAD, and the `global` scope for
    TOTP secrets, including the platform operator.
 2. Pre-production conversion: run the job, or wipe and re-seed after PR 3 is deployed?

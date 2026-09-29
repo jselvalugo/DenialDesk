@@ -10,6 +10,8 @@ export const SANDBOX_CLIENT_ID = "sandbox-client";
 /** The sandbox's own MRN identifier system (its `SYN-` MRNs, PI2b); under the sandbox host, not a real OID. */
 export const SANDBOX_MRN_SYSTEM = "https://sandbox.fhir.denialdesk.invalid/mrn";
 export const SANDBOX_HOST = new URL(SANDBOX_BASE_URL).hostname;
+/** The sandbox's token endpoint, as its SMART configuration advertises it (pinned by drizzle/0040 and 0043). */
+export const SANDBOX_TOKEN_ENDPOINT = "https://sandbox.fhir.denialdesk.invalid/token";
 
 export const MAX_BASE_URL_LENGTH = 2048;
 

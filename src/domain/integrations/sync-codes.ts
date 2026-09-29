@@ -30,6 +30,17 @@ export const SYNC_ISSUE_CODES = [
   "mrn_conflict",
   "needs_review",
   "linked_to_source",
+  // Added by the sync engine (PI2b part 1): the rest of the mapper's skip codes, and the neutral
+  // note that stands in for "an administrator should look at this patient's tags" (never says why).
+  "resource_invalid",
+  "id_invalid",
+  "mrn_invalid",
+  "mrn_government_identifier",
+  "name_invalid",
+  "birthdate_invalid",
+  "review_required",
+  "record_rejected",
+  "other",
 ] as const;
 export type SyncIssueCode = (typeof SYNC_ISSUE_CODES)[number];
 
@@ -51,6 +62,19 @@ export const SYNC_RUN_CODES = [
   "auth_refused",
   "capability_missing",
   "internal_error",
+  // Added by the sync engine (PI2b part 1). `not_fhir_r4` is stored as `not_fhir` (a digit fails the CHECK).
+  "address_refused",
+  "redirect_refused",
+  "content_type_refused",
+  "too_large",
+  "bad_response",
+  "not_fhir",
+  "environment_refused",
+  "population_scope_unenforced",
+  "signing_key_unavailable",
+  "connection_not_active",
+  "issues_truncated",
+  "other",
   // R4 IssueType (https://hl7.org/fhir/R4/valueset-issue-type.html), the ones a run can record.
   "invalid",
   "security",
@@ -67,6 +91,23 @@ export const SYNC_RUN_CODES = [
   "incomplete",
   "informational",
   "unknown",
+  // The hyphenated R4 IssueType codes, stored with underscores (the CHECK allows no hyphen).
+  "structure",
+  "required",
+  "value",
+  "invariant",
+  "suppressed",
+  "not_supported",
+  "multiple_matches",
+  "not_found",
+  "deleted",
+  "too_long",
+  "code_invalid",
+  "extension",
+  "too_costly",
+  "business_rule",
+  "lock_error",
+  "no_store",
 ] as const;
 export type SyncRunCode = (typeof SYNC_RUN_CODES)[number];
 
@@ -114,3 +155,26 @@ export function runCodeLabelKeys(codes: readonly string[]): MessageKey<"integrat
   }
   return keys;
 }
+
+/** The code to store on an issue row: itself if allowed, else `other`. Nothing from a server is stored verbatim. */
+export function normalizeIssueCode(code: string): SyncIssueCode {
+  return isSyncIssueCode(code) ? code : "other";
+}
+
+/**
+ * The codes to store on a run: each allowed one once (a run aggregates its failure codes and the
+ * per-record issue codes, so either list counts), anything else as `other`, in a stable order.
+ */
+export function normalizeRunCodes(codes: Iterable<string>): SyncStoredCode[] {
+  const allowed = new Set<SyncStoredCode>();
+  for (const code of codes) {
+    allowed.add(isSyncRunCode(code) || isSyncIssueCode(code) ? code : "other");
+  }
+  return [...allowed].sort();
+}
+
+/** Any code a run's `issue_codes` may hold: a run-level code or a per-record issue code. */
+export type SyncStoredCode = SyncRunCode | SyncIssueCode;
+
+export const isSyncStoredCode = (value: unknown): value is SyncStoredCode =>
+  isSyncRunCode(value) || isSyncIssueCode(value);

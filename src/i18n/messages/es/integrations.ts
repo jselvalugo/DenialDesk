@@ -165,7 +165,7 @@ export const integrations: Messages["integrations"] = {
     "La clave de firma de DenialDesk no está configurada en este entorno, por lo que no se pueden probar las conexiones. Pida al operador de la plataforma que la configure.",
   "test.error.keyUnavailable":
     "La clave de firma de DenialDesk no se puede usar en este momento. Pida al operador de la plataforma que la revise.",
-  "test.error.sandboxUnavailable": "El entorno de pruebas integrado todavía no se puede probar.",
+  "test.error.sandboxUnavailable": "El entorno de pruebas integrado no está disponible en este entorno.",
   "test.error.failed": "No se pudo completar la prueba. Recargue la página e inténtelo de nuevo.",
   "test.title": "Probar conexión",
   "test.description":
@@ -186,7 +186,7 @@ export const integrations: Messages["integrations"] = {
   "submit.blocked.noPassingTest":
     "No se puede enviar: esta conexión no tiene una prueba de conexión exitosa de las últimas 24 horas. Ejecute Probar conexión arriba. Una prueba fallida, o un cambio en la conexión o en la clave de firma de DenialDesk, requiere una nueva prueba exitosa.",
   "submit.blocked.sandbox":
-    "No se puede enviar: requiere una prueba de conexión exitosa, y el entorno de pruebas integrado aún no se puede probar.",
+    "No se puede enviar: el entorno de pruebas integrado también necesita una prueba de conexión exitosa de las últimas 24 horas. Ejecute Probar conexión arriba. Una prueba fallida, o un cambio en la clave de firma de DenialDesk, requiere una nueva prueba exitosa.",
   "submit.submit": "Enviar para aprobación",
   "submit.submitSandbox": "Activar entorno de pruebas",
   "submit.pending": "Enviando…",
@@ -219,6 +219,43 @@ export const integrations: Messages["integrations"] = {
     "DenialDesk no aprobó esta conexión: la configuración es incorrecta. Corríjala, ejecute Probar conexión y envíela de nuevo.",
   "rejected.notice.other":
     "DenialDesk no aprobó esta conexión. DenialDesk se pondrá en contacto con usted para explicar el motivo. Cuando se resuelva, ejecute Probar conexión y envíela de nuevo.",
+  "sync.title": "Sincronizar ahora",
+  "sync.description":
+    "Trae ahora los últimos cambios de pacientes del EHR/PM conectado. Se ejecuta completo en esta solicitud, por lo que una clínica grande debería esperar a la sincronización programada. Los pacientes son copias de solo lectura: corrija los datos demográficos en el EHR/PM.",
+  "sync.submit": "Sincronizar ahora",
+  "sync.pending": "Sincronizando…",
+  "sync.resultOk": "Sincronización terminada",
+  "sync.resultFailed": "Sincronización detenida",
+  "sync.result.succeeded":
+    "{created} nuevos, {updated} actualizados, {linked} vinculados a pacientes existentes, {skipped} omitidos. Los registros omitidos y sus motivos se conservan con la ejecución de la sincronización.",
+  "sync.result.abandoned":
+    "La sincronización se detuvo porque la conexión se pausó, se revocó o pasó a error mientras se ejecutaba. Los pacientes ya guardados se conservaron.",
+  "sync.error.notActive": "Solo una conexión activa puede sincronizar. Reanúdela primero.",
+  "sync.error.rateLimited":
+    "Sincronizar ahora se puede ejecutar una vez por minuto. Espere un momento e inténtelo de nuevo.",
+  "sync.error.alreadyRunning": "Ya hay una sincronización en curso para esta conexión.",
+  "sync.error.failed": "No se pudo completar la sincronización. Recargue la página e inténtelo de nuevo.",
+  "sync.failure.auth_refused":
+    "El EHR/PM rechazó las credenciales de DenialDesk, por lo que la conexión ahora requiere atención. Cuando el administrador del EHR/PM lo haya resuelto, ejecute Probar conexión y reanude.",
+  "sync.failure.token_endpoint_changed":
+    "El endpoint de inicio de sesión del EHR/PM cambió, por lo que la conexión ahora requiere atención. Un endpoint distinto es una conexión nueva.",
+  "sync.failure.issuer_mismatch":
+    "El servidor ya no se identifica como el sistema para el que se aprobó esta conexión, por lo que no se sincronizó nada. Comuníquese con el soporte de DenialDesk.",
+  "sync.failure.not_synthetic":
+    "Los datos no llevaban la marca sintética, y este entorno solo acepta datos sintéticos. No se guardó nada.",
+  "sync.failure.environment_refused": "Esta conexión no puede sincronizar en este entorno.",
+  "sync.failure.signing_key_unavailable":
+    "La clave de firma de DenialDesk no se puede usar en este momento. Pida al operador de la plataforma que la revise.",
+  "sync.failure.unreachable":
+    "DenialDesk no pudo comunicarse con el EHR/PM, o tardó demasiado. No se perdió nada. Inténtelo de nuevo en unos minutos.",
+  "sync.failure.bad_response":
+    "El EHR/PM envió una respuesta que DenialDesk no pudo usar. No se guardó nada más. Ejecute Probar conexión para revisar la configuración.",
+  "sync.failure.capability_missing":
+    "El EHR/PM no puede hacer una búsqueda que DenialDesk necesita. Ejecute Probar conexión para revisar la configuración.",
+  "sync.failure.too_large":
+    "El EHR/PM envió más datos de los que acepta una sincronización. Los pacientes guardados hasta ahora se conservaron; inténtelo de nuevo.",
+  "sync.failure.other":
+    "La sincronización se detuvo por un problema inesperado. Inténtelo de nuevo y comuníquese con el soporte de DenialDesk si se repite.",
   "detail.moreTitle": "Pagadores e historial de sincronización",
   "detail.moreDescription":
     "Lo que DenialDesk leyó de esta conexión y cómo se asocian las aseguradoras con sus pagadores.",
@@ -343,7 +380,47 @@ export const integrations: Messages["integrations"] = {
   "runs.code.incomplete": "La respuesta del EHR/PM estaba incompleta",
   "runs.code.informational": "El EHR/PM envió un aviso",
   "runs.code.unknown": "Un problema no especificado del EHR/PM",
+  "runs.code.resource_invalid": "Un registro no era un paciente utilizable",
+  "runs.code.id_invalid": "Un registro no tenía un identificador utilizable",
+  "runs.code.mrn_invalid": "Número de registro no utilizable",
+  "runs.code.mrn_government_identifier": "El número de registro es un identificador oficial",
+  "runs.code.name_invalid": "Nombre no utilizable",
+  "runs.code.birthdate_invalid": "Fecha de nacimiento no utilizable",
+  "runs.code.review_required": "Revise a este paciente",
+  "runs.code.address_refused": "Se rechazó la dirección del EHR/PM",
+  "runs.code.redirect_refused": "El EHR/PM intentó redirigir la solicitud",
+  "runs.code.content_type_refused": "El EHR/PM respondió en un formato inesperado",
+  "runs.code.too_large": "El EHR/PM envió más datos de los que acepta una sincronización",
+  "runs.code.bad_response": "El EHR/PM envió una respuesta que DenialDesk no pudo usar",
+  "runs.code.not_fhir": "El servidor no respondió como FHIR R4",
+  "runs.code.environment_refused": "Esta conexión no puede sincronizar en este entorno",
+  "runs.code.signing_key_unavailable": "La clave de firma de DenialDesk no se pudo usar",
+  "runs.code.connection_not_active": "La conexión no estaba activa",
+  "runs.code.issues_truncated": "Solo se enumeran las primeras incidencias de esta ejecución",
+  "runs.code.structure": "El EHR/PM informó un problema de estructura",
+  "runs.code.required": "El EHR/PM informó que falta un elemento obligatorio",
+  "runs.code.value": "El EHR/PM informó un valor incorrecto",
+  "runs.code.invariant": "El EHR/PM informó una infracción de regla",
+  "runs.code.suppressed": "El EHR/PM omitió parte del contenido",
+  "runs.code.not_supported": "El EHR/PM no admite la solicitud",
+  "runs.code.multiple_matches": "El EHR/PM encontró más de una coincidencia",
+  "runs.code.not_found": "El EHR/PM no encontró lo solicitado",
+  "runs.code.deleted": "El EHR/PM informó un registro eliminado",
+  "runs.code.too_long": "El EHR/PM informó contenido demasiado largo",
+  "runs.code.code_invalid": "El EHR/PM informó un código no válido",
+  "runs.code.extension": "El EHR/PM informó una extensión no admitida",
+  "runs.code.too_costly": "El EHR/PM rechazó una solicitud por ser demasiado costosa",
+  "runs.code.business_rule": "El EHR/PM rechazó la solicitud por una regla de negocio",
+  "runs.code.lock_error": "El EHR/PM informó un problema de bloqueo",
+  "runs.code.no_store": "El EHR/PM no pudo almacenar la solicitud",
   "runs.code.other": "Otro",
   "payers.keyUnsupported":
     "La clave de esta aseguradora es demasiado larga o contiene caracteres ocultos, por lo que no se puede asignar aquí.",
+  "runs.code.record_rejected": "Los propios límites del almacén de datos rechazaron un registro",
+  "runs.code.population_scope_unenforced":
+    "Todavía no se puede limitar la sincronización a los pacientes de su clínica",
+  "sync.failure.population_scope_unenforced":
+    "No se sincronizó nada. DenialDesk todavía no puede limitar una conexión real de EHR/PM a los pacientes de su clínica, por lo que las conexiones reales no sincronizan hasta que pueda. No se solicitó nada al EHR/PM.",
+  "sync.error.populationScopeUnenforced":
+    "Las conexiones reales de EHR/PM todavía no pueden sincronizar: DenialDesk todavía no puede limitarlas a los pacientes de su clínica. No se solicitó nada.",
 };
