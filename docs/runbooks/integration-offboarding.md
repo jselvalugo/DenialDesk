@@ -48,15 +48,20 @@ reaches DenialDesk, and DenialDesk refuses manual edits to a synced patient. Whe
 revert to manual records or re-link to a new connection — and how an amendment request is honored
 for them meanwhile (45 CFR 164.504(e)(2)(ii)(F), the business associate's duty to make PHI available
 for amendment) — is an open owner and counsel decision (OA-048). Until it is made, nothing changes
-them automatically; escalate any amendment request for such a patient to the owner.
+them automatically; escalate any amendment request for such a patient to the DenialDesk owner.
 
 ## Suspected compromise
 1. Revoke first (above).
 2. Open an incident under the incident response plan (R-3.4.1, R-3.4.2); the notification duties and
    their clocks are the ones those requirements and counsel set, not restated here.
 3. Preserve evidence: nothing is deleted (connections, sync runs, and audit events are never
-   deleted); export the `integration.*` audit events and the connection's sync runs for the window.
-4. If the practice administrator's own account is suspected, suspend it; from PI1c the platform
-   operator can revoke the connection instead.
+   deleted); export the `integration.*` and `operator.integration_approved|rejected|viewed` audit events (the
+   approval evidence: who verified it, how, when, and the operator's session) and the connection's sync
+   runs for the window.
+4. If the practice administrator's own account is suspected, suspend it. Operator approval (PI1c) can
+   reject a connection still awaiting approval (back to draft, endpoint claim released); revoking a
+   live connection is an administrator action today, so ask the practice's other administrator, or
+   the DenialDesk owner (who holds the operator account), to have a practice administrator revoke it; an
+   operator-side revoke is not built yet (spec PI1c open item, OA-071).
 5. Follow the integration key compromise runbook once it exists (PI2a): revoke at every EHR that
    trusted the key.

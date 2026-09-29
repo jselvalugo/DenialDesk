@@ -12,7 +12,8 @@ Rule IDs (`SC-x.y`) are cited by `security-reviewer`. **MUST** rules are blockin
 breaks one, or makes a listed known gap worse, does not merge. Known gaps (end of this document) are
 tracked follow-ups that block production go-live, not unrelated PRs. Exceptions follow
 the same written, time-boxed, officer-signed process as `docs/HIPAA_COMPLIANCE.md` §0; agents cannot
-grant them.
+grant them. Changes to this document follow HC-13.2: reviewer agents plus the owner's written
+approval in the PR; an agent never merges them on its own authority.
 
 ---
 
@@ -90,8 +91,8 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
   hash-pinned.
 - **SC-A4.3 MUST** A dependency update is a code change: full CI and `security-reviewer`. Read the
   changelog for major versions. Do not adopt a release younger than 7 days unless it fixes a
-  security advisory (defends against hijacked publishes); pnpm and Dependabot are both configured
-  to hold new releases for 7 days.
+  security advisory (defends against hijacked publishes); pnpm and Dependabot must be configured to
+  hold new releases for 7 days (a known gap today).
 - **SC-A4.4 MUST** Advisories are fixed within the REQUIREMENTS §7.6 SLAs: Critical in 15 days (7
   days if actively exploited), High in 30, Medium in 90. `pnpm audit --audit-level=high` stays a failing CI gate.
 - **SC-A4.5 MUST** Quarterly, remove unused dependencies and re-check A2.2–A2.3 for every direct
@@ -115,9 +116,9 @@ always welcome.
 | `lucide-react` | 1.48.0 | ISC | Icons (DESIGN.md) | Active |
 | `server-only` | 0.0.1 | MIT | Build-time guard against server code reaching the client | Latest release 2022 — finished marker package with no code paths at runtime; published by the React/Next.js maintainers |
 
-Dev dependencies are the tools named in ADR 0001 (TypeScript, ESLint with `typescript-eslint` and
-`eslint-config-next`, Prettier, Vitest, Playwright, Tailwind with `@tailwindcss/postcss`, drizzle-kit,
-tsx) and their type packages.
+Dev dependencies are TypeScript, ESLint with `typescript-eslint` and `eslint-config-next`, Prettier,
+Vitest, Playwright, and drizzle-kit (ADR 0001); Tailwind with `@tailwindcss/postcss` (ADR 0004); `tsx`
+for scripts (no ADR yet); and their type packages.
 
 ---
 
@@ -218,7 +219,8 @@ tsx) and their type packages.
 ### B10. HTTP hardening
 
 - **SC-B10.1 MUST** Security headers in `next.config.ts` on every response (HSTS, `nosniff`,
-  `no-referrer`, frame denial, Permissions-Policy) plus a strict Content-Security-Policy: a
+  `no-referrer`, frame denial, Permissions-Policy) plus a strict Content-Security-Policy (set per
+  request in `src/proxy.ts`): a
   per-request nonce with `strict-dynamic`, no `unsafe-eval`, no `unsafe-inline` for scripts,
   `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors 'none'`.
 - **SC-B10.2 MUST** Authenticated and PHI responses send `Cache-Control: no-store` (HC-2.3).
@@ -237,7 +239,7 @@ tsx) and their type packages.
   (R-7.4.4), and a third-party license notice file generated from the lockfile.
 - **SC-B12.3 MUST** The container image runs as a non-root user on a minimal base pinned by digest,
   with no build tools or source maps in the runtime stage.
-- **SC-B12.4 MUST** `main` is protected: required status checks (CI), required pull requests, no
+- **SC-B12.4 MUST** The default branch (`main` once renamed, OA-001) is protected: required status checks (CI), required pull requests, no
   force pushes or deletions. Reviewer-agent results are recorded in the PR and gate merging under
   CLAUDE.md #12; changes to protection settings need human sign-off (R-15.9).
 
@@ -256,12 +258,17 @@ exception.
 
 | Rule | Gap |
 | --- | --- |
-| SC-B10.1 | No Content-Security-Policy header in `next.config.ts`. |
+| SC-B10.1 | The per-request nonce CSP in `src/proxy.ts` still sets `base-uri 'self'` and adds `'unsafe-eval'` in development. |
 | SC-B7.1 | Member IDs (`src/domain/patients/queries.ts`, `src/db/seed.ts`) and TOTP secrets (`src/auth/enrollment.ts`) are encrypted without AAD; only custom field values bind AAD. |
-| SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest, and `corepack enable` fetches pnpm without a hash check; CI's `postgres:16` service images are tag-only. |
+| SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest, and pnpm is fetched without a hash check (`corepack enable` in the `Dockerfile`, `pnpm/action-setup` in CI; `packageManager` has no `+sha512`); CI's `postgres:16` service images are tag-only. |
 | SC-A4.3 | No release-age quarantine configured for pnpm, and no `cooldown` in `.github/dependabot.yml`. |
 | SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
+| SC-A2.5 | The lockfile also carries native binaries not on list (a): `@rolldown/binding-*` (Vitest → Vite → Rolldown) and `fsevents` (tsx, Vite, macOS only). Adding them needs human sign-off (OA-077). |
 | SC-A2.2 | No automated license check in CI. |
+| SC-B1.2 | Threat models exist for four features only (`docs/threat-models/`); claims, denials, appeals, remittances, and sign-in have none. |
+| SC-B3.1 | Most Zod object schemas are not strict (4 of about 43 `z.object` schemas in `src/` reject unknown keys). |
+| SC-B3.3 | Uploads (revenue-cycle files, remittances) have no malware scanning yet (R-7.4.6). |
+| SC-B8.2 | No network-layer egress allow-list yet (Azure cutover, REQUIREMENTS §7.7). |
 | SC-A2.6 | Next.js telemetry is disabled in the `Dockerfile` and `netlify.toml` but not in CI or local development (`NEXT_TELEMETRY_DISABLED=1`). |
 | SC-B12.1, SC-B12.2 | No SAST, DAST, container/IaC scanning, SBOM, signed commits or artifacts, or license notice file yet. |
-| SC-B12.4 | Branch protection on `main` is not verifiable from the repository; the owner confirms the settings (OA-066). |
+| SC-B12.4 | The default branch is not yet renamed to `main`, and its protection is not verifiable from the repository; the owner confirms the settings (OA-001, OA-077). |
