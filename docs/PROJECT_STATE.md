@@ -418,10 +418,13 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Open questions for humans
 
-- **Field-encryption AAD (SC-B7.1) plan, ADR 0011 Proposed (OA-074 to OA-076, 2026-09-28):** approve
-  the `v2` envelope with key ID and mandatory AAD, and choose job vs. re-seed for pre-production, the
-  cut-off owner, and an empty Azure start (OA-074); a separate rate-limit hash key (OA-075); rotation of
-  append-only history, a rotation drill, and a member-ID blind index (OA-076).
+- **Field-encryption AAD (SC-B7.1) plan, ADR 0011 Proposed (OA-074 to OA-076 and OA-078, 2026-09-28):**
+  approve the `v2` envelope with key ID and header-bound AAD, and choose job vs. re-seed for
+  pre-production (security review recommends re-seed), the cut-off owner, and an empty Azure start
+  (OA-074); a separate rate-limit hash key (OA-075); rotation of append-only history, key retirement
+  under backups and legal hold, a rotation drill, and a member-ID blind index (OA-076); whether
+  `rcm_claim_lines.account_number` is field-encrypted (OA-078). PR 3's key-usage sequence needs a
+  `GRANT USAGE`, so that build PR needs R-15.9 sign-off.
 - **Confirm three PI2a coordinator decisions (OA-065, 2026-09-28; due before the first real connection):** (a) Submit's gate is stricter than the spec's plain wording: the newest Test connection must be a pass within 24 h, bound to the tested configuration and signing `kid` (a later failure or transport refusal voids it); (b) pre-production signs every connection with one shared key (`INTEGRATION_SIGNING_KEY`), a residual risk recorded in threat model S3, mitigated by the operator verifying `client_id` ownership at approval (PI1c); (c) a refused Submit ("This endpoint and client ID are already connected") reveals that *some* practice holds that endpoint and client ID pair, with no identity disclosed, bounded by the Test connection and Submit rate limits: accept or reject.
 - **PI1c operator approval, eight owner decisions (OA-066 to OA-073, 2026-09-28; all due before the first real connection unless noted):**
   (a) **OA-066** the approval verification-method and contact-role lists (`phone_callback`, `video_call`,
