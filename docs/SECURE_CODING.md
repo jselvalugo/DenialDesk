@@ -63,9 +63,7 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
   (c) Playwright's browser download in CI. Any change to these lists needs human sign-off.
 - **SC-A2.6 MUST — No phone-home.** No telemetry, analytics, update checks, remote code or config
   loading, or runtime network calls. Packages that do so are refused even if they can be "turned
-  off." Build tools that phone home by default are switched off everywhere they run: Next.js
-  telemetry via `NEXT_TELEMETRY_DISABLED=1` in CI, `.env.example`, the `Dockerfile`, and
-  `netlify.toml` (enforced by `src/supply-chain/telemetry.test.ts`).
+  off."
 - **SC-A2.7 MUST — Vendor SDKs are vendors.** A package that talks to an outside service also needs
   `docs/HIPAA_COMPLIANCE.md` §8 (BAA, U.S.-only, reviewed SOC 2) before it may see PHI, and a row in
   `docs/data-sources.xlsx`.
@@ -271,5 +269,6 @@ exception.
 | SC-B3.1 | Most Zod object schemas are not strict (4 of about 43 `z.object` schemas in `src/` reject unknown keys). |
 | SC-B3.3 | Uploads (revenue-cycle files, remittances) have no malware scanning yet (R-7.4.6). |
 | SC-B8.2 | No network-layer egress allow-list yet (Azure cutover, REQUIREMENTS §7.7). |
+| SC-A2.6 | Next.js (the approved framework, ADR 0001) phones home in local development. Telemetry is off in CI, the `Dockerfile`, `netlify.toml`, and `.env.example` (enforced by `src/supply-chain/telemetry.test.ts`), and pnpm's update notifier is off (`.npmrc`). But `next dev` checks registry.npmjs.org for newer Next.js versions with no opt-out (16.3.6), and the `next dev` launcher's shutdown event is off only after `next telemetry disable` on each machine. No PHI is sent; the owner decides whether to accept this as an exception (§0) or keep it tracked. |
 | SC-B12.1, SC-B12.2 | No SAST, DAST, container/IaC scanning, SBOM, signed commits or artifacts, or license notice file yet. |
 | SC-B12.4 | The default branch is not yet renamed to `main`, and its protection is not verifiable from the repository; the owner confirms the settings (OA-001, OA-077). |

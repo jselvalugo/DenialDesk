@@ -419,8 +419,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    missing threat models, CI license check, SAST/DAST/SBOM, signed commits; WebAuthn, JIT and
    break-glass access, WORM audit + SIEM, mTLS, Key Vault, legal hold, disclosure-accounting export,
    and the written HIPAA policy set.
-   Closed: SC-A2.6 (Next.js telemetry off in CI and `.env.example`; `next telemetry disable` once per
-   machine for the dev launcher).
+   Mostly closed: SC-A2.6 (Next.js telemetry off in CI and `.env.example`, pnpm update notifier off;
+   still open: `next dev`'s version check, which has no opt-out, and the dev launcher's shutdown event).
 
 ## Open questions for humans
 
