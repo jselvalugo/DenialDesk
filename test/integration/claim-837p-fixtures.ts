@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { systemDb } from "@/db/client";
 import { locations, patients, payers, providers } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
@@ -26,9 +26,13 @@ let seq = 0;
 /** A practice with a complete billing provider, a location with a place of service, a payer, and a patient. */
 export async function seedBilling(ctx: Ctx): Promise<Billing> {
   const db = systemDb();
+  // The TIN type and the encrypted TIN are stored together (providers_tin_together), and the ciphertext is
+  // bound to the provider's ID, so the ID is chosen first.
+  const providerId = randomUUID();
   const [provider] = await db
     .insert(providers)
     .values({
+      id: providerId,
       tenantId: ctx.tenantId,
       name: "Dr. Avery Synthprovider (synthetic)",
       npi: "1234567893",
@@ -40,12 +44,9 @@ export async function seedBilling(ctx: Ctx): Promise<Billing> {
       state: "FL",
       postalCode: "336020001",
       tinType: "EI",
+      tinEnc: encryptProviderTin(TIN, ctx.tenantId, providerId),
     })
     .returning({ id: providers.id });
-  await db
-    .update(providers)
-    .set({ tinEnc: encryptProviderTin(TIN, ctx.tenantId, provider!.id) })
-    .where(eq(providers.id, provider!.id));
   const [location] = await db
     .insert(locations)
     .values({
