@@ -3,6 +3,9 @@ import { eq, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
 import {
+  appealLetterAttestations,
+  appealLetterTemplates,
+  appealLetterVersions,
   appealNotes,
   appeals,
   auditEvents,
@@ -62,6 +65,28 @@ async function practice(label: string, seed: number): Promise<Ctx> {
       .insert(appealNotes)
       .values({ tenantId, appealId: appeal!.id, authorId: ctx.userId, body: "Synthetic appeal note" });
     await tx.insert(practiceSettings).values({ tenantId, key: "appeal_follow_up_days", value: "30" });
+    // Appeal letters (A2): a template, one letter version, and its attestation.
+    await tx.insert(appealLetterTemplates).values({
+      tenantId,
+      category: "coding",
+      body: "Synthetic template {{claim.number}}",
+      createdBy: ctx.userId,
+      updatedBy: ctx.userId,
+    });
+    await tx.insert(appealLetterVersions).values({
+      tenantId,
+      appealId: appeal!.id,
+      version: 1,
+      body: "Synthetic letter {{claim.number}}",
+      createdBy: ctx.userId,
+    });
+    await tx.insert(appealLetterAttestations).values({
+      tenantId,
+      appealId: appeal!.id,
+      version: 1,
+      renderedSha256: "a".repeat(64),
+      attestedBy: ctx.userId,
+    });
   });
   return ctx;
 }
@@ -83,6 +108,7 @@ const tenantTables = {
   denials,
   denialNotes,
   appeals,
+  appealLetterTemplates,
   practiceSettings,
   rcmSites,
   glAccounts,
@@ -247,6 +273,151 @@ describe("appeal_notes tenant isolation (insert/select only, no update grant)", 
     await expectDbError(
       withTenant(a, (tx) => tx.delete(appealNotes)),
       /permission denied/,
+    );
+  });
+});
+
+// Appeal letters (docs/specs/appeals.md A2): the templates table is covered by the generic block above;
+// the two history tables are append-only (SELECT and INSERT only), so they are checked here.
+describe.each([
+  ["appeal_letter_versions", appealLetterVersions],
+  ["appeal_letter_attestations", appealLetterAttestations],
+] as const)("%s tenant isolation (insert/select only, no update or delete grant)", (_name, table) => {
+  it("shows a tenant only its own rows", async () => {
+    const rows = await withTenant(a, (tx) => tx.select({ tenantId: table.tenantId }).from(table));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(new Set(rows.map((r) => r.tenantId))).toEqual(new Set([a.tenantId]));
+  });
+
+  it("hides another tenant's rows even when asked for them directly", async () => {
+    const rows = await withTenant(a, (tx) =>
+      tx.select({ id: table.id }).from(table).where(eq(table.tenantId, b.tenantId)),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("can't update a row at all (append-only: no UPDATE grant)", async () => {
+    await expectDbError(
+      withTenant(a, (tx) => tx.update(table).set({ tenantId: a.tenantId })),
+      /permission denied/,
+    );
+  });
+
+  it("can't hard-delete a row", async () => {
+    await expectDbError(
+      withTenant(a, (tx) => tx.delete(table)),
+      /permission denied/,
+    );
+  });
+});
+
+describe("appeal letter cross-tenant inserts", () => {
+  it("rejects a letter version on another tenant's appeal", async () => {
+    const [bAppeal] = await withTenant(b, (tx) => tx.select({ id: appeals.id }).from(appeals).limit(1));
+    // Stamped with the caller's tenant: the composite FK (tenant, appeal) finds no such appeal.
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(appealLetterVersions).values({
+          tenantId: a.tenantId,
+          appealId: bAppeal!.id,
+          version: 1,
+          body: "x",
+          createdBy: a.userId,
+        }),
+      ),
+      /Integrity constraint violation|foreign key|row-level security/,
+    );
+    // Stamped with the other tenant: row-level security refuses it.
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(appealLetterVersions).values({
+          tenantId: b.tenantId,
+          appealId: bAppeal!.id,
+          version: 2,
+          body: "x",
+          createdBy: a.userId,
+        }),
+      ),
+      /row-level security/,
+    );
+  });
+
+  it("rejects an attestation on another tenant's letter version", async () => {
+    const [bAppeal] = await withTenant(b, (tx) => tx.select({ id: appeals.id }).from(appeals).limit(1));
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(appealLetterAttestations).values({
+          tenantId: a.tenantId,
+          appealId: bAppeal!.id,
+          version: 1,
+          renderedSha256: "b".repeat(64),
+          attestedBy: a.userId,
+        }),
+      ),
+      /Integrity constraint violation|foreign key|row-level security/,
+    );
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(appealLetterAttestations).values({
+          tenantId: b.tenantId,
+          appealId: bAppeal!.id,
+          version: 1,
+          renderedSha256: "b".repeat(64),
+          attestedBy: a.userId,
+        }),
+      ),
+      /row-level security/,
+    );
+  });
+
+  it("rejects a template stamped with another tenant", async () => {
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(appealLetterTemplates).values({
+          tenantId: b.tenantId,
+          category: "eligibility",
+          body: "x",
+          createdBy: a.userId,
+          updatedBy: a.userId,
+        }),
+      ),
+      /row-level security/,
+    );
+  });
+
+  it("refuses a malformed digest and a non-English template", async () => {
+    await expectDbError(
+      withTenant(a, async (tx) => {
+        const [appeal] = await tx.select({ id: appeals.id }).from(appeals).limit(1);
+        await tx.insert(appealLetterVersions).values({
+          tenantId: a.tenantId,
+          appealId: appeal!.id,
+          version: 7,
+          body: "digest shape test",
+          createdBy: a.userId,
+        });
+        await tx.insert(appealLetterAttestations).values({
+          tenantId: a.tenantId,
+          appealId: appeal!.id,
+          version: 7,
+          renderedSha256: "not-a-digest",
+          attestedBy: a.userId,
+        });
+      }),
+      /digest_shape|check constraint/i,
+    );
+    await expectDbError(
+      withTenant(a, (tx) =>
+        tx.insert(appealLetterTemplates).values({
+          tenantId: a.tenantId,
+          category: "duplicate",
+          language: "es",
+          body: "x",
+          createdBy: a.userId,
+          updatedBy: a.userId,
+        }),
+      ),
+      /language_en|check constraint/i,
     );
   });
 });

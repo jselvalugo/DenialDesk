@@ -61,6 +61,9 @@ Appeals:
 - [x] Appeal case record, work list, and first-level lifecycle (create, submit, decide), synced to
       the denial's status (`specs/appeals.md` A1) [§8.4]
 - [ ] Appeal letter templates with merge fields and attachments; human review before export [R-7.11.2]
+  - [x] Templates by denial category, allow-listed merge fields, editable versioned body, named-user
+        review before export, print/PDF view (`specs/appeals.md` A2)
+  - [ ] Attachments (A5)
 - [ ] Corrected (freq 7) and void (freq 8) claims [§8.3]
 - [ ] Medicare 5-level appeal workflow [R-4.2.1]
 - [ ] Appeal outcome tracking (basic decision recording is in A1; a payer/category analytics view is A4)

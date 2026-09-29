@@ -180,6 +180,32 @@ export const settings: Messages["settings"] = {
   "error.notPayerEditor":
     "Solo los administradores y gerentes pueden cambiar los campos personalizados de un pagador.",
   "error.recordNotFound": "Registro no encontrado.",
+
+  "tabs.appealLetters": "Cartas de apelación",
+  "appealTemplates.metaTitle": "Plantillas de cartas de apelación",
+  "appealTemplates.panelTitle": "Plantillas de cartas de apelación",
+  "appealTemplates.panelDescription":
+    "Una plantilla por categoría de denegación. Una carta nueva comienza desde la plantilla de la categoría de su denegación.",
+  "appealTemplates.tableCaption": "Plantillas de cartas de apelación por categoría de denegación",
+  "appealTemplates.source": "Texto",
+  "appealTemplates.sourcePractice": "Su plantilla",
+  "appealTemplates.sourceStarter": "Texto inicial",
+  "appealTemplates.lastEdited": "Última edición",
+  "appealTemplates.editAria": "Editar la plantilla de {category}",
+  "appealTemplates.viewAria": "Ver la plantilla de {category}",
+  "appealTemplates.breadcrumb": "Ruta de navegación",
+  "appealTemplates.editTitle": "Plantilla de {category}",
+  "appealTemplates.editMetaTitle": "Editar plantilla de carta de apelación",
+  "appealTemplates.bodyLabel": "Texto de la plantilla",
+  "appealTemplates.bodyHint":
+    "Use campos de combinación como {example}. No escriba datos del paciente; vienen del registro. Las cartas se escriben en inglés porque las lee el pagador.",
+  "appealTemplates.starterNote":
+    "Esta categoría aún no tiene una plantilla propia, por lo que las cartas comienzan desde el texto inicial. No cita ninguna política del pagador ni ley; agregue citas solo después de verificarlas.",
+  "appealTemplates.useStarter": "Usar el texto inicial",
+  "appealTemplates.save": "Guardar plantilla",
+  "appealTemplates.saved": "Plantilla guardada.",
+  "appealTemplates.readOnly": "Solo los administradores y gerentes pueden editar las plantillas.",
+  "appealTemplates.fieldsTitle": "Campos disponibles",
   // Billing details (docs/specs/claims.md C3a-S)
   "tabs.billing": "Facturación",
   "billing.metaTitle": "Datos de facturación",
