@@ -28,6 +28,10 @@ export async function register() {
       }
       throw error;
     }
+    // Where real data is allowed and background jobs are not fully configured, Sync now refuses every press
+    // (ADR 0012, security review L4): say so once at boot. A code only.
+    const { logJobsConfigAtBoot } = await import("@/integrations/jobs/default-sender");
+    logJobsConfigAtBoot();
     // Fails the boot if a Drizzle upgrade removed the method errors are sanitized in (ADR 0006).
     const { installQueryErrorSanitizer } = await import("@/db/errors");
     installQueryErrorSanitizer();

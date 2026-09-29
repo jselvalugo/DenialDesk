@@ -20,6 +20,7 @@ import {
   US_RESIDENCY_ATTESTATION_VERSION,
 } from "@/domain/integrations/connections";
 import { isRejectReasonCode, REJECT_NOTICE_KEYS } from "@/domain/integrations/approval-codes";
+import { CONSECUTIVE_FAILED_RUNS_LIMIT } from "@/domain/integrations/sync-codes";
 import { getFormat, getT } from "@/i18n/server";
 import { ConnectionForm } from "../ConnectionForm";
 import { integrationActor } from "../form-state";
@@ -157,6 +158,16 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
           )}
         </FieldList>
       </Panel>
+
+      {/* PI3: the engine stopped this connection after three failed syncs in a row (no failure detail here: Sync history has the codes). */}
+      {connection.status === "error" && connection.statusReason === "repeated_failures" && (
+        <p
+          role="status"
+          className="rounded-panel border border-warning-border bg-warning-bg p-3 text-body text-warning-fg"
+        >
+          {t("detail.repeatedFailuresNotice", { count: CONSECUTIVE_FAILED_RUNS_LIMIT })}
+        </p>
+      )}
 
       {/* Once a connection can have synced (or has), where to see what it read and map its insurers. */}
       {(connection.hasSynced || ["active", "paused", "error", "revoked"].includes(connection.status)) && (

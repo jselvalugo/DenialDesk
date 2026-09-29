@@ -166,4 +166,156 @@ export const claims = {
   // Server action errors (app/(app)/claims/[id]/actions.ts)
   "action.error.forbiddenCorrect": "Your role can view claims but not correct them.",
   "action.error.reload": "Reload the page and try again.",
+
+  // Charge import (app/(app)/claims/import, docs/specs/claims.md C2)
+  "detail.history.createdByImport": "Created by charge import",
+  "import.button": "Import charges",
+  "import.title": "Import charges",
+  "import.description":
+    "Upload one CSV of charges and DenialDesk creates draft claims. If any row needs fixing, nothing is imported.",
+  "import.breadcrumbClaims": "Claims",
+  "import.forbidden": "Your role can view claims but not import charges.",
+  "import.backToClaims": "Back to claims",
+  "import.file.title": "Charge file",
+  "import.file.description": "One CSV, up to {size} MB and {rows} rows. It is read once and never stored.",
+  "import.file.label": "CSV file",
+  "import.file.hint": "One row per claim line, with the columns listed below.",
+  "import.defaults.title": "Provider and location",
+  "import.defaults.description":
+    "Used for claims whose rows have no Provider NPI or Location. A row that names its own provider or location keeps it.",
+  "import.defaults.provider": "Default provider",
+  "import.defaults.location": "Default location",
+  "import.defaults.choose": "Choose",
+  "import.synthetic.title": "Confirmation",
+  "import.synthetic.description": "This environment accepts synthetic data only.",
+  "import.synthetic.attestation":
+    "I confirm this file holds synthetic data only. Claim numbers start with SYN- and MRNs start with SYN.",
+  "import.submit": "Import charges",
+  "import.submitting": "Importing…",
+  "import.auditNote": "Every import and every claim it creates is recorded in the audit log.",
+  "import.format.title": "File format",
+  "import.format.description":
+    "Rows with the same claim number are the lines of one claim; the claim-level columns repeat on every line and must match. Codes are stored exactly as written: the import never changes, adds, or fixes a code.",
+  "import.format.column": "Column",
+  "import.format.rule": "What goes in it",
+  "import.format.required": "Required",
+  "import.format.optional": "Optional",
+  "import.format.template": "Download the template (header row only)",
+  "import.format.tableCaption": "Columns of the charge file",
+  "import.column.claimNumber":
+    "Your practice's own claim or charge number: up to 30 letters, digits, dots, dashes, or underscores. Never a member ID.",
+  "import.column.mrn":
+    "Medical record number of a patient already in DenialDesk. The import never creates or changes patients.",
+  "import.column.payer": "Payer name as it appears in this practice's payer list.",
+  "import.column.serviceDate": "YYYY-MM-DD or M/D/YYYY, not in the future.",
+  "import.column.diagnosisCodes": "1 to 12 ICD-10-CM codes separated by spaces or commas.",
+  "import.column.procedureCode": "CPT or HCPCS code: five letters or digits.",
+  "import.column.modifiers": "Up to four two-character modifiers.",
+  "import.column.units": "Whole number from 1 to 999.",
+  "import.column.charge": "Total charge for the line in dollars, from $0.01 to $99,999.99.",
+  "import.column.providerNpi":
+    "Ten-digit NPI of a provider in this practice. Blank uses the default provider.",
+  "import.column.location": "Location name as it appears in this practice. Blank uses the default location.",
+
+  // Upload checks and failures (returned by the import action)
+  "import.error.chooseFile": "Choose a CSV file to import.",
+  "import.error.notCsv": "The file must be a .csv file.",
+  "import.error.tooLarge": "The file is larger than {size} MB.",
+  "import.error.confirmSynthetic": "Confirm that the file holds synthetic data only.",
+  "import.error.notUtf8": "The file isn't UTF-8 text. Save it as CSV (UTF-8) and try again.",
+  "import.error.forbidden": "Your role can view claims but not import charges.",
+  "import.error.defaults": "Choose a default provider and a default location from this practice.",
+  "import.error.notImported": "Nothing was imported. Fix the rows below and upload the file again.",
+  "import.error.conflict":
+    "A claim with one of these numbers was created while the file was being read. Nothing was imported; try again.",
+
+  // Problem report
+  "import.problems.aria": "Rows to fix",
+  "import.problems.row": "Row {row}: {message}",
+  "import.problems.showing": "Showing the first {shown} of {total} problems.",
+  "import.problems.download": "Download report (CSV)",
+  "import.problems.truncated": "The report lists the first {limit} problems; {more} more were not listed.",
+
+  // Problems (domain/claims/charge-file.ts PROBLEM_MESSAGE_KEYS); never quote a cell value
+  "import.problem.noDataRows": "The file has a header but no charge rows.",
+  "import.problem.missingColumns": "The header is missing required columns: {columns}.",
+  "import.problem.ambiguousColumns": "More than one column matches: {columns}. Keep only one.",
+  "import.problem.csvTooManyColumns": "A row has more than {max} columns.",
+  "import.problem.csvTooManyRows": "The file has more than {max} rows.",
+  "import.problem.csvTextAfterQuote": "Text follows a closing quote.",
+  "import.problem.csvQuoteInField": "A quote appears inside an unquoted field.",
+  "import.problem.csvUnclosedQuote": "A quoted field is never closed.",
+  "import.problem.alreadyImported":
+    "Every claim number in this file already exists, so this file looks like it was imported before.",
+  "import.problem.tooLong": "{column} is longer than {max} characters.",
+  "import.problem.claimNumberBlank": "Claim number is blank.",
+  "import.problem.claimNumberFormat":
+    "Claim number must be 1 to 30 letters, digits, dots, dashes, or underscores.",
+  "import.problem.claimNumberNotSynthetic":
+    "Claim number must start with {prefix} in this environment (synthetic data only).",
+  "import.problem.mrnBlank": "MRN is blank.",
+  "import.problem.mrnNotSynthetic": "MRN must start with {prefix} in this environment (synthetic data only).",
+  "import.problem.payerBlank": "Payer is blank.",
+  "import.problem.serviceDateInvalid": "Service date isn't a real date. Use YYYY-MM-DD or M/D/YYYY.",
+  "import.problem.serviceDateTooOld": "Service date is before 2000-01-01.",
+  "import.problem.serviceDateFuture": "Service date is in the future.",
+  "import.problem.diagnosisBlank": "Diagnosis codes are blank.",
+  "import.problem.diagnosisFormat":
+    "A diagnosis code isn't in ICD-10-CM format (for example E11.9). Codes are never changed on import.",
+  "import.problem.diagnosisTooMany": "More than {max} diagnosis codes.",
+  "import.problem.procedureCodeFormat":
+    "Procedure code must be five letters or digits (CPT/HCPCS). Codes are never changed on import.",
+  "import.problem.modifierFormat": "A modifier must be two letters or digits.",
+  "import.problem.modifierTooMany": "More than {max} modifiers.",
+  "import.problem.unitsInvalid": "Units must be a whole number from 1 to 999.",
+  "import.problem.chargeInvalid": "Charge isn't a valid dollar amount.",
+  "import.problem.chargeRange": "Charge must be from $0.01 to $99,999.99 per line.",
+  "import.problem.providerNpiFormat": "Provider NPI must be 10 digits.",
+  "import.problem.claimFieldsDiffer":
+    "{column} differs from the first line of this claim. Claim-level columns must match on every line.",
+  "import.problem.tooManyLines": "A claim can have at most {max} lines.",
+  "import.problem.patientNotFound":
+    "No patient in this practice has this MRN. The import never creates patients.",
+  "import.problem.payerNotFound": "No payer in this practice's payer list has this name.",
+  "import.problem.payerAmbiguous": "Two payers have this name and can't be told apart.",
+  "import.problem.providerNotFound": "No provider in this practice has this NPI.",
+  "import.problem.locationNotFound": "No location in this practice has this name.",
+  "import.problem.locationAmbiguous": "More than one location has this name.",
+  "import.problem.claimNumberExists":
+    "A claim with this number already exists. Correct existing claims from the claim page.",
+  "import.problem.matchesExistingClaim":
+    "An existing claim has the same patient, payer, date of service, and a procedure code with the same modifiers. Possible duplicate.",
+  "import.problem.matchesClaimInFile":
+    "Another claim in this file has the same patient, payer, date of service, and a procedure code with the same modifiers. Possible duplicate.",
+
+  "import.problem.duplicateLine":
+    "This line repeats an earlier line of the same claim (same procedure code and modifiers). If the file was pasted twice, remove the copy.",
+  "import.problem.claimRowsNotContiguous":
+    "The lines of one claim must be next to each other, but this claim number appears again after other claims.",
+  "import.error.rateLimited":
+    "Too many imports in a short time for this practice. Wait a few minutes and try again.",
+  "import.file.claimNumberNotice":
+    "The claim number is stored without field-level encryption. Never put a member ID, Social Security number, or any other identifier in it.",
+
+  // Result
+  "import.result.title": "Import complete",
+  "import.result.summary":
+    "{claims, plural, one {# draft claim} other {# draft claims}} created from {lines, plural, one {# line} other {# lines}}, {billed} billed.",
+  "import.result.warningsTitle": "Worth a look",
+  "import.result.noWarnings": "No warnings.",
+  "import.result.pastDeadline":
+    "{count, plural, one {# claim is past its filing deadline} other {# claims are past their filing deadline}}.",
+  "import.result.dueSoon":
+    "{count, plural, one {# claim is due within {days} days} other {# claims are due within {days} days}}.",
+  "import.result.notConfigured":
+    "{count, plural, one {# claim has no filing rule configured for its payer} other {# claims have no filing rule configured for their payer}}.",
+  "import.result.payerUnverified":
+    "{count, plural, one {# claim is for an unverified payer, so it can't be submitted yet} other {# claims are for unverified payers, so they can't be submitted yet}}.",
+  "import.result.noCoverage":
+    "{count, plural, one {# claim is for a patient with no coverage on file} other {# claims are for patients with no coverage on file}}.",
+  "import.result.patientInactive":
+    "{count, plural, one {# claim is for a patient marked inactive or merged in the source record} other {# claims are for patients marked inactive or merged in the source record}}.",
+  "import.result.viewClaims": "View unsubmitted claims",
+  "import.result.viewPastDeadline": "View past-deadline claims",
+  "import.result.another": "Import another file",
 } as const;

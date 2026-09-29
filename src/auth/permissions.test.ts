@@ -3,6 +3,7 @@ import {
   canCorrectClaims,
   canEditPatients,
   canEditPayerFields,
+  canImportCharges,
   canTagSensitivity,
   canViewUniversity,
   canWorkDenials,
@@ -16,6 +17,17 @@ describe("claim corrections (R-5.1.2, R-3.10.1)", () => {
     ["compliance", false],
   ] as const)("%s can correct claims: %s", (role, allowed) => {
     expect(canCorrectClaims(role)).toBe(allowed);
+  });
+});
+
+describe("charge import (R-5.1.2, docs/specs/claims.md C2)", () => {
+  it.each([
+    ["admin", true],
+    ["manager", true],
+    ["specialist", true],
+    ["compliance", false],
+  ] as const)("%s can import charges: %s", (role, allowed) => {
+    expect(canImportCharges(role)).toBe(allowed);
   });
 });
 

@@ -178,3 +178,27 @@ export type SyncStoredCode = SyncRunCode | SyncIssueCode;
 
 export const isSyncStoredCode = (value: unknown): value is SyncStoredCode =>
   isSyncRunCode(value) || isSyncIssueCode(value);
+
+/**
+ * Why the sync engine itself moves a connection to `error`: the value stored as the connection's
+ * `status_reason` and as the reason of the `integration.connection_errored` audit event (a fixed
+ * allow-list, never a message). The first two are run failures that mean the credentials or endpoint
+ * are wrong (a 401/403 or `invalid_client`; a changed token endpoint); `repeated_failures` is PI3's
+ * "three consecutive failed runs" (docs/specs/patient-integrations.md). An administrator can Resume
+ * after a passing Test connection.
+ */
+export const CONNECTION_ERROR_REASONS = [
+  "auth_refused",
+  "token_endpoint_changed",
+  "repeated_failures",
+] as const;
+export type ConnectionErrorReason = (typeof CONNECTION_ERROR_REASONS)[number];
+
+export const isConnectionErrorReason = (value: unknown): value is ConnectionErrorReason =>
+  typeof value === "string" && (CONNECTION_ERROR_REASONS as readonly string[]).includes(value);
+
+/**
+ * PI3: this many failed runs in a row (no success between them, since the connection last changed
+ * state) move an active connection to `error`. A product rule from the spec's PI3 item ("Three consecutive failed runs -> error"), not a legal value; OA-056 is only the 15-minute interval.
+ */
+export const CONSECUTIVE_FAILED_RUNS_LIMIT = 3;
