@@ -470,6 +470,7 @@ _Last updated: 2026-09-29_
 | 2026-09-27 | Patient Register is a synced, read-only copy of the practice EHR/PM (billing minimum only) over FHIR R4 / US Core + SMART Backend Services; data-source drop-down beside the Patients tab, Patients table only for now; manual entry kept only while no connection is active (OA-046) | ADR 0010, `specs/patient-integrations.md` |
 | 2026-09-29 | Background execution: signed `{ runId }` jobs, a read-only definer claim for a new `denialdesk_jobs` role (no table privilege), a 15-minute definer-queued schedule, platform-neutral core with a thin Netlify adapter, Sync now queues a job where a secret is configured; **Proposed, R-15.9 sign-off pending (OA-085)** | ADR 0012, PI2c |
 | 2026-09-28 | Record pattern P4: `DataTable` sorting is server-side via allow-listed `?sort=<key>&dir=asc\|desc` links, not TanStack Table (still deferred until a list needs client-side interactivity — column chooser, virtualized rows) | ADR 0004 addendum, `specs/record-pages.md` |
+| 2026-09-28 | Binding HIPAA and secure-coding standards; strictest reading wins; new third-party packages default to no (owner request) | `HIPAA_COMPLIANCE.md`, `SECURE_CODING.md` (OA-088) |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
@@ -507,6 +508,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    "Register patient" and give the drop-down panel a sentence per state while a connection is outside
    draft/revoked; PI2b: refresh the drop-down's summary during a session) → PI2a → PI1c → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
+12. Close the known gaps in `docs/SECURE_CODING.md` and `docs/HIPAA_COMPLIANCE.md` (tracked, not
+   waived; they gate the first real practice): CSP base-uri and dev eval, AAD on member-ID and TOTP encryption, exact
+   pins, digest-pinned images, 7-day release quarantine, strict Zod objects, upload malware scanning,
+   missing threat models, CI license check, SAST/DAST/SBOM, signed commits; WebAuthn, JIT and
+   break-glass access, WORM audit + SIEM, mTLS, Key Vault, legal hold, disclosure-accounting export,
+   and the written HIPAA policy set.
 
 ## Open questions for humans
 

@@ -54,3 +54,7 @@ Split a merged role back out when its workload justifies it (e.g. a dedicated
 See `CLAUDE.md`. In short: requirement IDs cited, acceptance criteria checked, tests pass in CI,
 lint/typecheck clean, no blocking findings from the three reviewer agents, roadmap checkbox
 ticked, human approval.
+
+Every agent works to `docs/HIPAA_COMPLIANCE.md` (`HC-x.y`) and `docs/SECURE_CODING.md` (`SC-x.y`):
+`compliance-checker` and `security-reviewer` cite their rule IDs, and a PR that changes either
+standard needs the owner's written approval before it merges (HC-13.2).
