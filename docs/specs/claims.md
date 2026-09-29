@@ -278,7 +278,7 @@ piece is missing. The file is the claim as the person recorded it: every diagnos
 modifier, unit, and amount is copied as stored (R-3.10.1); the generator never adds, drops, reorders,
 "fixes", or infers a code.
 
-⚠️ VERIFY (owner, OA-085): the licensed 837P implementation guide (ASC X12 TR3 005010X222A1) is not in the
+⚠️ VERIFY (owner, OA-088): the licensed 837P implementation guide (ASC X12 TR3 005010X222A1) is not in the
 repository, and the mapping below is written from the `edi-x12-specialist`'s knowledge of it. Every row is
 cited by loop and segment as the guide names them; the rows marked ⚠️ VERIFY are the ones not certain
 (usage or code value). The whole table must be checked against the purchased guide and the chosen
@@ -337,7 +337,7 @@ segment `~`. All text is upper-cased and accents are removed; nothing else is ch
 | 2010BA · N3, N4 | `N3*<line1>`; `N4*<city>*<state>*<ZIP>` | `patients.address_line1`, `city`, `state`, `postal_code` (5 or 9 digits) |
 | 2010BA · DMG | `DMG*D8*<CCYYMMDD>*<F, M or U>` | `patients.birth_date`, `sex` |
 | 2010BB Payer name · NM1 | `NM1*PR*2*<payer name>*****PI*<payer ID>` | `payers.name`, `edi_payer_id`. Payer address (N3/N4) is situational and not written. |
-| 2300 Claim information · CLM | `CLM*<claim number>*<total>***<POS>:B:1*Y*A*Y*Y` | CLM01 `claims.claim_number` (patient control number, at most 38 characters; C1's are at most 30); CLM02 exact decimal string from integer cents; CLM05-1 `locations.place_of_service`, CLM05-2 `B` (professional POS qualifier), CLM05-3 frequency `1`. CLM06 `Y`, CLM07 `A`, CLM08 `Y`, CLM09 `Y` are the practice's attestations (signature on file, assignment accepted, benefits assigned, release of information) and are constants until a practice setting exists. ⚠️ VERIFY (owner, OA-085) |
+| 2300 Claim information · CLM | `CLM*<claim number>*<total>***<POS>:B:1*Y*A*Y*Y` | CLM01 `claims.claim_number` (patient control number, at most 38 characters; C1's are at most 30); CLM02 exact decimal string from integer cents; CLM05-1 `locations.place_of_service`, CLM05-2 `B` (professional POS qualifier), CLM05-3 frequency `1`. CLM06 `Y`, CLM07 `A`, CLM08 `Y`, CLM09 `Y` are the practice's attestations (signature on file, assignment accepted, benefits assigned, release of information) and are constants until a practice setting exists. ⚠️ VERIFY (owner, OA-088) |
 | 2300 · HI | `HI*ABK:<dx1>*ABF:<dx2>*...` | Up to 12; `ABK` principal (first), `ABF` others. Codes as stored **without the decimal point** (next section). |
 | 2400 Service line · LX | `LX*<n>` | `claim_lines.line_number` order |
 | 2400 · SV1 | `SV1*HC:<code>:<mod>:<mod>:<mod>:<mod>*<charge>*UN*<units>***<pointers>` | SV101-1 `HC`, procedure code and modifiers exactly as stored; SV102 exact decimal; SV103 `UN`; SV104 units; SV107 pointers such as `1:2`. Anesthesia-style minute units (`MJ`) are not modelled. ⚠️ VERIFY |
@@ -360,13 +360,13 @@ version number.
 
 ### Control numbers
 Every generation takes one number from a per-practice sequence, stored as the `practice_settings` row
-`x12.control_number` (an existing table, tenant-isolated by RLS, on which the app role already holds
+`x12_control_number` (an existing table, tenant-isolated by RLS, on which the app role already holds
 `SELECT, INSERT, UPDATE`, so this PR adds **no table and no GRANT**). One atomic
 `INSERT ... ON CONFLICT (tenant_id, key) DO UPDATE ... RETURNING` increments it, so two concurrent
 generations can't get the same number. ISA13, GS06, ST02, and BHT03 all carry it (ISA13 nine digits, ST02
 at least four). Numbers start at 1, are never reused, and gaps are allowed (a generated file the person
 doesn't use still consumed one). It stops at 999,999,999 with `control_number_exhausted`; it never wraps.
-A dedicated sequence table would be cleaner and is an owner choice because it needs a GRANT (R-15.9, OA-086).
+A dedicated sequence table would be cleaner and is an owner choice because it needs a GRANT (R-15.9, OA-089).
 
 ### Synthetic-only guard
 `ISA15` is `T` in every environment where `syntheticDataOnly()` is true (everything except production off
@@ -438,7 +438,7 @@ CI run of `pnpm test:integration`.
       are invisible to the service (a claim ID from practice B in practice A's session is "not found").
 - [x] **i18n.** Every string on the panel and every refusal sentence is a key in English, Spanish, and Portuguese.
       The Spanish and Portuguese are agent-written and unreviewed by a native speaker (OA-041).
-- [x] **Docs.** This spec, `docs/PROJECT_STATE.md`, `src/edi/README.md`, and owner rows OA-085 and OA-086.
+- [x] **Docs.** This spec, `docs/PROJECT_STATE.md`, `src/edi/README.md`, and owner rows OA-088 and OA-089.
       `docs/data-sources.xlsx` is unchanged (no integration is added in C3a; DS-03 stays "Needed").
 
 ### Data / API changes (C3a)
@@ -467,16 +467,16 @@ rendering provider (2310B), the 837I, production (`P`) files, attachments, NDC a
 validity against licensed code sets, and claim scrubbing (NCCI, MUE, LCD/NCD).
 
 ### Open questions (C3a)
-1. (owner, OA-085) Supply the 837P TR3 and the clearinghouse companion guide so every ⚠️ VERIFY row can be cleared.
+1. (owner, OA-088) Supply the 837P TR3 and the clearinghouse companion guide so every ⚠️ VERIFY row can be cleared.
 2. (owner) Should Download also be blocked past the filing deadline, or only submission (C3b)? C3a warns only.
-3. (owner, OA-085) CLM06 to CLM09 attestations: does the practice hold a signature on file, accept assignment, and
+3. (owner, OA-088) CLM06 to CLM09 attestations: does the practice hold a signature on file, accept assignment, and
    hold a release of information for every patient? C3a writes `Y`, `A`, `Y`, `Y` for all.
 4. (owner) Does the practice bill under a group (type 2) NPI with rendering providers? It needs a second provider
    record per claim and loop 2310B.
 5. (owner) Are dependents (the subscriber is not the patient) common enough that patients need a subscriber record?
 6. (owner and edi-x12-specialist) `SBR09` for Medicare Advantage, ERISA self-funded, SMMC, and PIP payers, and a
    per-payer override.
-7. (owner, OA-086) A dedicated control-number table (needs a GRANT) instead of the `practice_settings` row.
+7. (owner, OA-089) A dedicated control-number table (needs a GRANT) instead of the `practice_settings` row.
 8. (owner) Persist the diagnosis pointer choice on the claim lines (through the C1 version trigger) so it is not
    asked at every generation.
 
