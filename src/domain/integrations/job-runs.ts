@@ -1,4 +1,5 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { integrationSyncRuns } from "@/db/schema";
 import { withJobsRole, withTenantAsSystem } from "@/db/tenant";
 import { audit } from "@/lib/audit";
 import { systemAudit } from "./sync";
@@ -71,12 +72,17 @@ async function auditAbandon(
   // The service principal, in the run's own practice, under row-level security: the same context the engine uses.
   return withTenantAsSystem(tenantId, runId, async (tx, ctx) => {
     if (abandon && !(await abandonIfQueued(tx, runId))) return false;
+    // The run's real trigger (a lease can lapse on a manual run too), read under the practice's own policy.
+    const [run] = await tx
+      .select({ trigger: integrationSyncRuns.trigger })
+      .from(integrationSyncRuns)
+      .where(eq(integrationSyncRuns.id, runId));
     await audit(
       tx,
       systemAudit(tenantId, "integration.sync_abandoned", ctx.connectionId, reason, {
         run_id: runId,
         reason_code: reason,
-        trigger: "scheduled",
+        trigger: run?.trigger ?? "unknown",
       }),
     );
     return true;

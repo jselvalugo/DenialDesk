@@ -240,3 +240,116 @@ describe("runScheduledSync", () => {
     expect(d.enqueue).not.toHaveBeenCalled();
   });
 });
+
+describe("the deadline, exactly (review: correctness 1, security L2)", () => {
+  /** Runs a one-at-a-time tick where the first post takes `firstPostMs`, and reports what was sent and abandoned. */
+  async function tick(firstPostMs: number) {
+    quiet();
+    let clock = 0;
+    const timeouts: (number | undefined)[] = [];
+    const sent: string[] = [];
+    const d = deps({
+      rows: [queuedRun(1), queuedRun(2)],
+      concurrency: 1,
+      deadlineMs: 25_000,
+      now: () => clock,
+      sender: () => async (runId, options) => {
+        sent.push(runId);
+        timeouts.push(options?.timeoutMs);
+        clock += firstPostMs;
+        return true;
+      },
+    });
+    const result = await runScheduledSync(d.value);
+    return { result, sent, timeouts, abandoned: d.abandonUnsent.mock.calls };
+  }
+
+  it("a batch starts only if elapsed + the send timeout is under the deadline: 14.999 s in it starts, exactly 15 s does not", async () => {
+    const before = await tick(14_999);
+    expect(before.sent).toEqual([uuid(1), uuid(2)]);
+    expect(before.result).toMatchObject({ sent: 2, unsent: 0 });
+
+    const boundary = await tick(15_000);
+    expect(boundary.sent).toEqual([uuid(1)]);
+    expect(boundary.abandoned).toEqual([[tenant, uuid(2), "deadline"]]);
+    expect(boundary.result).toMatchObject({ sent: 1, unsent: 1 });
+
+    const after = await tick(15_001);
+    expect(after.sent).toEqual([uuid(1)]);
+    expect(after.result).toMatchObject({ unsent: 1 });
+  });
+
+  it("each post is given at most the send timeout and never more than what is left before the deadline", async () => {
+    const { timeouts } = await tick(14_999);
+    expect(timeouts[0]).toBe(10_000);
+    // Second batch at 14.999 s: 10.001 s are left, the timeout is still capped at 10 s.
+    expect(timeouts[1]).toBe(10_000);
+    for (const [index, timeout] of timeouts.entries()) {
+      expect(timeout!, String(index)).toBeLessThanOrEqual(25_000 - (index === 0 ? 0 : 14_999));
+    }
+  });
+});
+
+describe("the lease audits come after the sends, and the tick logs what an operator alerts on", () => {
+  function logs() {
+    const out: { level: string; line: string }[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+      out.push({ level: "info", line: String(chunk) });
+      return true;
+    });
+    vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+      out.push({ level: /"level":"error"/.test(String(chunk)) ? "error" : "warn", line: String(chunk) });
+      return true;
+    });
+    return out;
+  }
+  afterEach(() => vi.restoreAllMocks());
+
+  it("the lease-expired audits are written after every job has been posted, at the sends' concurrency width", async () => {
+    quiet();
+    const order: string[] = [];
+    let auditsInFlight = 0;
+    let maxAudits = 0;
+    const d = deps({
+      rows: [abandonedRun(1), abandonedRun(2), abandonedRun(3), queuedRun(4), queuedRun(5)],
+      concurrency: 2,
+      sender: () => async (runId) => {
+        order.push(`send:${runId}`);
+        return true;
+      },
+      auditLeaseAbandoned: async (_tenant, runId) => {
+        auditsInFlight += 1;
+        maxAudits = Math.max(maxAudits, auditsInFlight);
+        order.push(`audit:${runId}`);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        auditsInFlight -= 1;
+      },
+    });
+    await runScheduledSync(d.value);
+    expect(order.filter((entry) => entry.startsWith("send")).length).toBe(2);
+    const lastSend = order.map((entry) => entry.startsWith("send")).lastIndexOf(true);
+    const firstAudit = order.findIndex((entry) => entry.startsWith("audit"));
+    expect(firstAudit).toBeGreaterThan(lastSend);
+    expect(order.filter((entry) => entry.startsWith("audit"))).toHaveLength(3);
+    expect(maxAudits).toBeLessThanOrEqual(2);
+  });
+
+  it("info when every job was posted, warn when some could not be, error when none could", async () => {
+    const out = logs();
+    await runScheduledSync(deps({ rows: [queuedRun(1), queuedRun(2)] }).value);
+    await runScheduledSync(
+      deps({ rows: [queuedRun(1), queuedRun(2)], sender: () => async (runId) => runId === uuid(1) }).value,
+    );
+    await runScheduledSync(
+      deps({ rows: [queuedRun(1), queuedRun(2)], sender: () => async () => false }).value,
+    );
+    await runScheduledSync(deps({ rows: [] }).value);
+    const ran = out.filter((entry) => entry.line.includes('"event":"integration.schedule_ran"'));
+    expect(ran.map((entry) => [entry.level, /"status":"(\w+)"/.exec(entry.line)![1]])).toEqual([
+      ["info", "ok"],
+      ["warn", "partial"],
+      ["error", "failed"],
+      ["info", "ok"],
+    ]);
+  });
+});

@@ -84,7 +84,7 @@ export const integrations = {
   "lifecycle.error":
     "DenialDesk stopped syncing after an error. Once your EHR/PM administrator has fixed it, run Test connection and get a pass, then resume. Resuming also needs you to verify your identity with your authenticator app first.",
   "detail.repeatedFailuresNotice":
-    "The last three syncs in a row failed, so DenialDesk stopped syncing this connection. Open Sync history to see why, fix the cause, run Test connection and get a pass, then resume.",
+    "The last {count} syncs in a row failed, so DenialDesk stopped syncing this connection. Open Sync history to see why, fix the cause, run Test connection and get a pass, then resume.",
   "lifecycle.pending_approval":
     "This connection is waiting for approval. Withdrawing it returns it to a draft you can edit and submit again.",
   "pause.submit": "Pause sync",
@@ -233,6 +233,8 @@ export const integrations = {
   "sync.error.alreadyRunning": "A sync is already running for this connection.",
   "sync.error.failed": "The sync couldn't be completed. Reload the page and try again.",
   "sync.error.notQueued": "The sync couldn't be started. Try again in a moment.",
+  "sync.error.jobsUnavailable":
+    "Background sync isn't set up correctly for this environment, so the sync can't be started. Trying again won't help: an administrator of DenialDesk needs to fix the configuration.",
   "sync.failure.auth_refused":
     "The EHR/PM refused DenialDesk's credentials, so the connection now needs attention. Once the EHR/PM administrator has fixed it, run Test connection and resume.",
   "sync.failure.token_endpoint_changed":

@@ -260,3 +260,27 @@ describe("an unexpected failure in the claim is a 500 with a class name only (re
     expect(output).not.toContain("Jane");
   });
 });
+
+describe("a stream that fails while it is being read (security review L3)", () => {
+  it("is a 400 with a code-only log, and nothing is claimed", async () => {
+    const lines = captureLog();
+    const broken = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"runId":'));
+      },
+      pull(controller) {
+        controller.error(new Error("socket hang up for Jane Synthetic at 203.0.113.9"));
+      },
+    });
+    const { worker, claim, execute } = deps();
+    const response = await handleSyncJob({ body: broken, headers: headersOf({}) }, worker);
+    expect(response).toEqual({ status: 400, code: "bad_request" });
+    expect(claim).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    const output = lines.join("");
+    expect(output).toContain('"event":"integration.job_refused"');
+    expect(output).toContain('"status":"bad_body"');
+    expect(output).not.toContain("Jane");
+    expect(output).not.toContain("203.0.113.9");
+  });
+});

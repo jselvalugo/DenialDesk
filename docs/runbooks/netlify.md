@@ -182,12 +182,15 @@ sandbox connections only (a real connection is refused by the sync engine).
   | `integration.job_refused` `not_claimable` (with a run ID) | The run is already running or finished (a replay or a second worker), was abandoned, or its connection is no longer active. Nothing to fix. |
   | `integration.job_send_failed` `http_401` / `http_403` | The post to the worker was refused before it reached the function: check whether the site's **password protection** covers `/.netlify/functions/*` (OA-086). `http_404`: the deploy has no `netlify/functions` build. `network`: timeout or DNS. |
   | `integration.schedule_refused` `no_worker_url` / `missing_secret` | The scheduler queued nothing because it could not send. |
-  | `integration.schedule_ran` | One line per tick: `count` runs queued, `status` `ok` or `partial` (some jobs not sent or not reached before the ~25 s deadline; those runs are abandoned and audited `integration.sync_abandoned`, and the next tick queues the connections again). |
+  | `integration.schedule_ran` | One line per tick: `count` runs queued and `status`: `ok` (info), `partial` (**warn**: some jobs could not be posted or were not reached before the ~25 s deadline; those runs are abandoned and audited `integration.sync_abandoned`, and the next tick queues the connections again) or `failed` (**error**: every post failed). **Alert on `partial` and `failed` and on `integration.job_send_failed`:** a persistently failing post re-queues each connection once per tick forever and never reaches `error`, because a run that never started isn't a failed run. |
   | `integration.schedule_audit_failed` | An audit write or an abandon failed during a tick; the run is retried through the 20-minute lease. |
   | `integrations.jobs_not_configured` (once, at boot) | Real data is allowed in this environment and jobs are not fully configured (or the secret is too short): Sync now refuses every press until they are. |
 - **A connection is in `error` with reason `repeated_failures`:** three runs in a row failed. The connection page says so;
   Sync history has the codes (and the audit event `integration.connection_errored` carries the last failure code). Fix the
   cause (the EHR endpoint, or for the sandbox nothing external), run **Test connection**, then **Resume**.
+- **At the Azure cutover** the worker's ingress needs a request-body timeout (a slow or stalled body must not hold a
+  connection open; the worker caps the body at 1,024 bytes but reads it as a stream), a rate limit, and private ingress
+  (threat model D5). Netlify supplies these for the function URL; a worker container behind Front Door does not by default.
 - The scheduler queues **sandbox connections only** until the population-scope work (PI4) lands; a real connection is never
   queued by the schedule, and a manual Sync now on one is refused.
 

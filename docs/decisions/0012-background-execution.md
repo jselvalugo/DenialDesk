@@ -60,21 +60,27 @@ later (ADR 0002, 0003).
 - **The scheduler** (`src/integrations/jobs/scheduler.ts`) posts one signed job per queued run and never runs a
   sync itself (a scheduled function has about 30 seconds; a sync up to 12). It audits, as the integration service
   principal under `withTenantAsSystem`, each abandoned run as `integration.sync_abandoned` (reasons
-  `lease_expired`, `job_not_sent`, `deadline`). A run whose job could not be posted is abandoned with
+  `lease_expired`, `job_not_sent`, `deadline`); the lease audits are written after the sends, so they can't use up
+  the sending budget, and are best effort (see option 2). The same action and reason, `integration.sync_abandoned` with
+  `job_not_sent`, records a failed post from Sync now (actor: the administrator, with IP and user agent) and from the
+  scheduler (actor: the service principal). A run whose job could not be posted is abandoned with
   `UPDATE ... WHERE status = 'queued' RETURNING` (nothing is written if a worker had already claimed it) so its
-  connection is not blocked. Run IDs are shuffled before sending, at most 8 are in flight, and after about 25 s
-  the runs not yet sent are **abandoned and audited** (`deadline`) rather than left queued: a queued run nobody
+  connection is not blocked. Run IDs are shuffled before sending and at most 8 are in flight. A batch starts only if
+  `elapsed + the 10 s send timeout` is under the 25 s deadline, and each post gets no more than what is left, so the tick
+  never sends past the deadline; the runs not yet sent are **abandoned and audited** (`deadline`) rather than left queued: a queued run nobody
   will send blocks its connection for the 20-minute lease, whereas an abandoned one that never started lets the
   next tick queue it again.
 - **Sync now** (`requestSync`) queues the run and audits `integration.sync_queued` **in the same transaction as the
   run row**, with the administrator's IP, user agent and session (the job carries only the run ID, so the worker's
   `sync_started` cannot say who pressed the button); then it posts the same signed job and answers "queued". If the
   post fails the run is abandoned with RETURNING and audited `job_not_sent` (with the same IP and user agent) and the
-  press is refused; if nothing was abandoned (the worker already claimed it, a post that timed out after the worker
+  press is refused ("the sync couldn't be started, try again"); if nothing was abandoned (the worker already claimed it, a post that timed out after the worker
   started) the press counts as queued. Modes (`SyncDeps.jobs`): jobs fully configured, send; a secret that is set
   but too short, **refuse before anything is queued** (no run row, no rate-limit use); anything else missing, run in
   the request only where `syntheticDataOnly()` (tests, local development, pre-production not yet set up) and
-  **refuse where real data is allowed** (security review L4), logged once at boot.
+  **refuse where real data is allowed** (security review L4), logged once at boot. A persistent refusal has its own
+  message (`sync.error.jobsUnavailable`: the configuration needs fixing, trying again won't help), distinct from a failed
+  post (`sync.error.notQueued`, transient).
 - **Three consecutive failed runs -> `error`** (PI3, from the spec, not OA-056): the engine, after finishing a run
   as `failed`, counts the connection's finished runs since it last changed state; if the last three all failed
   (an `abandoned` run neither counts nor rescues, a success ends the streak) the connection moves to `error` with the
@@ -96,8 +102,10 @@ later (ADR 0002, 0003).
 1. **Run everything in the request (status quo).** Rejected: request limits, no scheduled sync.
 2. **Claim as `queued -> running` inside the SECURITY DEFINER function.** Rejected: the engine already claims
    atomically and audits `sync_started` as the service principal; a second state change in a definer function would
-   duplicate it. (Runs the scheduler abandons are different: the function reports them and the caller audits each in
-   TypeScript as the service principal, so no state change escapes an audit event.)
+   duplicate it. (Runs the scheduler abandons are different: the enqueue function commits the lease abandonment itself and
+   reports each run, and the caller audits it afterwards in a *later* transaction, as the service principal. That audit is
+   **best effort**, not atomic with the state change: if the audit write fails the run stays abandoned without an event, and
+   the `integration.schedule_audit_failed` log line is the backstop.)
 3. **A policy or BYPASSRLS for the definer's owner instead of walking tenants.** Rejected: a new policy is a wider
    privilege change than a loop, BYPASSRLS needs a superuser to grant and isn't available on every managed
    database, and either would be invisible in CI (superuser). Revisit at the Azure cutover if the per-practice

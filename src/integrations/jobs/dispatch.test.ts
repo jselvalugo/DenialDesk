@@ -75,3 +75,23 @@ describe("httpJobSender", () => {
     expect(() => httpJobSender({ url: "http://example.com/x", secret })).toThrow();
   });
 });
+
+describe("the per-call timeout (the scheduler's remaining budget)", () => {
+  it("can shorten the sender's own timeout but never lengthen it", async () => {
+    const seen: number[] = [];
+    const spy = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+      seen.push(ms);
+      return new AbortController().signal;
+    });
+    try {
+      const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
+      const send = httpJobSender({ url, secret, fetch: fetchMock as unknown as typeof fetch });
+      await send(runId);
+      await send(runId, { timeoutMs: 4_000 });
+      await send(runId, { timeoutMs: 60_000 });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(seen).toEqual([10_000, 4_000, 10_000]);
+  });
+});

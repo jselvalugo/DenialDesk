@@ -6,7 +6,8 @@ import { jobBodyFor, signJob } from "./signature";
 // worker URL comes from the environment (`INTEGRATION_JOB_URL`, or the platform adapter's default), never
 // from a request, so a forged Host header can't redirect a signed job somewhere else.
 
-export type JobSender = (runId: string) => Promise<boolean>;
+/** Sends one job. `timeoutMs` (the scheduler's remaining budget) can only shorten the sender's own timeout. */
+export type JobSender = (runId: string, options?: { timeoutMs?: number }) => Promise<boolean>;
 
 export interface HttpJobSenderOptions {
   url: string;
@@ -17,7 +18,7 @@ export interface HttpJobSenderOptions {
 }
 
 /** Long enough for a cold start; short enough that the scheduler's 30-second limit holds for a batch. */
-const DEFAULT_SEND_TIMEOUT_MS = 10_000;
+export const DEFAULT_SEND_TIMEOUT_MS = 10_000;
 
 /** https only, except a machine-local address for `netlify dev` / a local worker. No credentials, no query. */
 export function isAcceptableWorkerUrl(value: string): boolean {
@@ -41,15 +42,19 @@ export function isAcceptableWorkerUrl(value: string): boolean {
 export function httpJobSender(options: HttpJobSenderOptions): JobSender {
   if (!isAcceptableWorkerUrl(options.url)) throw new Error("The job worker URL must be https");
   const send = options.fetch ?? fetch;
-  return async (runId) => {
+  return async (runId, call) => {
     const body = jobBodyFor(runId);
+    const timeout = Math.max(
+      1,
+      Math.min(options.timeoutMs ?? DEFAULT_SEND_TIMEOUT_MS, call?.timeoutMs ?? Number.POSITIVE_INFINITY),
+    );
     try {
       const response = await send(options.url, {
         method: "POST",
         headers: { "content-type": "application/json", ...signJob(options.secret, body, options.now?.()) },
         body,
         redirect: "error",
-        signal: AbortSignal.timeout(options.timeoutMs ?? DEFAULT_SEND_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeout),
       });
       if (response.status >= 200 && response.status < 300) return true;
       log.warn("integration.job_send_failed", { runId, status: `http_${response.status}` });

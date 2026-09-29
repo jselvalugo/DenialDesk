@@ -87,7 +87,7 @@ export const integrations: Messages["integrations"] = {
   "lifecycle.error":
     "DenialDesk dejó de sincronizar por un error. Cuando el administrador de su EHR/PM lo haya resuelto, ejecute Probar conexión y obtenga una prueba exitosa, y luego reanude. Reanudar también requiere que antes verifique su identidad con su aplicación autenticadora.",
   "detail.repeatedFailuresNotice":
-    "Las últimas tres sincronizaciones seguidas fallaron, por lo que DenialDesk dejó de sincronizar esta conexión. Abra el Historial de sincronización para ver el motivo, corrija la causa, ejecute Probar conexión y obtenga una prueba exitosa, y luego reanude.",
+    "Las últimas {count} sincronizaciones seguidas fallaron, por lo que DenialDesk dejó de sincronizar esta conexión. Abra el Historial de sincronización para ver el motivo, corrija la causa, ejecute Probar conexión y obtenga una prueba exitosa, y luego reanude.",
   "lifecycle.pending_approval":
     "Esta conexión está esperando aprobación. Retirarla la devuelve a un borrador que puede editar y volver a enviar.",
   "pause.submit": "Pausar sincronización",
@@ -241,6 +241,8 @@ export const integrations: Messages["integrations"] = {
   "sync.error.alreadyRunning": "Ya hay una sincronización en curso para esta conexión.",
   "sync.error.failed": "No se pudo completar la sincronización. Recargue la página e inténtelo de nuevo.",
   "sync.error.notQueued": "No se pudo iniciar la sincronización. Inténtelo de nuevo en un momento.",
+  "sync.error.jobsUnavailable":
+    "La sincronización en segundo plano no está configurada correctamente en este entorno, por lo que no se puede iniciar la sincronización. Volver a intentarlo no ayudará: un administrador de DenialDesk debe corregir la configuración.",
   "sync.failure.auth_refused":
     "El EHR/PM rechazó las credenciales de DenialDesk, por lo que la conexión ahora requiere atención. Cuando el administrador del EHR/PM lo haya resuelto, ejecute Probar conexión y reanude.",
   "sync.failure.token_endpoint_changed":

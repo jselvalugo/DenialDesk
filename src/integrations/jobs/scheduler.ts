@@ -7,7 +7,7 @@ import {
 } from "@/domain/integrations/job-runs";
 import { SCHEDULED_SANDBOX_ONLY } from "@/domain/integrations/sync";
 import { log } from "@/lib/log";
-import type { JobSender } from "./dispatch";
+import { DEFAULT_SEND_TIMEOUT_MS, type JobSender } from "./dispatch";
 import { jobSecret, JobSecretError } from "./signature";
 
 // The scheduled sync (docs/specs/patient-integrations.md "PI3", OA-056; ADR 0012). Platform-neutral: the
@@ -60,6 +60,8 @@ export interface ScheduledSyncResult {
 
 export const DEFAULT_CONCURRENCY = 8;
 export const DEFAULT_DEADLINE_MS = 25_000;
+/** The longest one job post may take (`DEFAULT_SEND_TIMEOUT_MS` of the sender). */
+export const SEND_TIMEOUT_MS = DEFAULT_SEND_TIMEOUT_MS;
 
 const refused = (): ScheduledSyncResult => ({
   status: "refused",
@@ -116,23 +118,30 @@ export async function runScheduledSync(deps: ScheduledSyncDeps): Promise<Schedul
       return undefined;
     }
   };
-
-  for (const row of gone) await guarded(() => auditLease(row.tenantId, row.runId));
+  /** Runs `work` for every item, `width` at a time (the same bound as the sends). */
+  const inBatches = async <T>(items: T[], work: (item: T) => Promise<unknown>) => {
+    for (let start = 0; start < items.length; start += width) {
+      await Promise.all(items.slice(start, start + width).map((item) => guarded(() => work(item))));
+    }
+  };
 
   let sent = 0;
   let failed = 0;
   let unsent = 0;
   for (let start = 0; start < queued.length; start += width) {
-    const batch = queued.slice(start, start + width);
-    if (now() - startedAt >= deadline) {
-      for (const row of queued.slice(start))
-        await guarded(() => abandonUnsentRun_(row.tenantId, row.runId, "deadline"));
-      unsent = queued.length - start;
+    // A batch starts only if it can finish inside the deadline even if every post runs to its timeout, and each
+    // post is given no more than what is left, so the tick never sends past the deadline (review: L2).
+    const elapsed = now() - startedAt;
+    if (elapsed + SEND_TIMEOUT_MS >= deadline) {
+      const rest = queued.slice(start);
+      unsent = rest.length;
+      await inBatches(rest, (row) => abandonUnsentRun_(row.tenantId, row.runId, "deadline"));
       break;
     }
+    const timeoutMs = Math.min(SEND_TIMEOUT_MS, deadline - elapsed);
     const outcomes = await Promise.all(
-      batch.map(async (row) => {
-        const ok = await send(row.runId);
+      queued.slice(start, start + width).map(async (row) => {
+        const ok = await send(row.runId, { timeoutMs });
         // A job that could not be posted frees its connection at once (nobody will ever claim that run).
         if (!ok) await guarded(() => abandonUnsentRun_(row.tenantId, row.runId, "job_not_sent"));
         return ok;
@@ -143,9 +152,22 @@ export async function runScheduledSync(deps: ScheduledSyncDeps): Promise<Schedul
       else failed += 1;
     }
   }
-  log.info("integration.schedule_ran", {
-    count: queued.length,
-    status: failed === 0 && unsent === 0 ? "ok" : "partial",
-  });
+
+  // The lease-expired audits come last, so they can't use up the time the sends need (the runs were already
+  // abandoned, and committed, by the database function: this is the record of it, best effort).
+  await inBatches(gone, (row) => auditLease(row.tenantId, row.runId));
+
+  // What an operator alerts on (runbook): a tick where some jobs could not be posted is a warning, and one where
+  // none could (every post failing, so every connection is re-queued each tick without ever reaching `error`) is an error.
+  const status =
+    failed === 0 && unsent === 0
+      ? "ok"
+      : failed === queued.length && queued.length > 0
+        ? "failed"
+        : "partial";
+  const fields = { count: queued.length, status };
+  if (status === "failed") log.error("integration.schedule_ran", fields);
+  else if (status === "partial") log.warn("integration.schedule_ran", fields);
+  else log.info("integration.schedule_ran", fields);
   return { status: "ok", queued: queued.length, sent, failed, abandoned: gone.length, unsent };
 }

@@ -993,7 +993,7 @@ export async function requestSync(
   t: IntegrationsT = englishT,
 ): Promise<SyncRunResult | SyncQueuedResult> {
   if (!canManageIntegrations(actor.role)) refuse(t, "error.notAdmin");
-  if (deps.jobs?.kind === "refused") refuse(t, "sync.error.notQueued");
+  if (deps.jobs?.kind === "refused") refuse(t, "sync.error.jobsUnavailable");
   const send = deps.jobs?.kind === "send" ? deps.jobs.send : null;
   const { runId, origin } = await queueSyncRun(run, actor, connectionId, deps, t, {
     auditQueued: send !== null,
@@ -1011,15 +1011,22 @@ export async function requestSync(
       const gone = await abandonIfQueued(tx, runId);
       if (gone) {
         await audit(tx, {
-          action: "integration.sync_failed",
+          // The same action and reason as the scheduler's failed post (`job_not_sent`); the actor and the
+          // network origin say it was an administrator's press.
+          action: "integration.sync_abandoned",
           actorUserId: actor.userId,
           tenantId: actor.tenantId,
           entityType: "integration_connection",
           entityId: connectionId,
-          reason: "sync_now",
+          reason: "job_not_sent",
           ipAddress: origin.ip,
           userAgent: origin.userAgent,
-          metadata: { code: "job_not_sent", run_id: runId, session_id: origin.sessionId },
+          metadata: {
+            run_id: runId,
+            reason_code: "job_not_sent",
+            trigger: "manual",
+            session_id: origin.sessionId,
+          },
         });
       }
       return gone;

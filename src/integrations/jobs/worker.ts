@@ -108,7 +108,14 @@ export async function handleSyncJob(request: JobRequest, deps: JobWorkerDeps): P
     return { status: 503, code: "unavailable" };
   }
 
-  const body = await readJobBody(request.body);
+  let body: string | null;
+  try {
+    body = await readJobBody(request.body);
+  } catch {
+    // A stream that errors mid-read (a dropped connection, a body timeout): a bad request, a code only.
+    log.warn("integration.job_refused", { status: "bad_body" });
+    return { status: 400, code: "bad_request" };
+  }
   if (body === null) {
     log.warn("integration.job_refused", { status: "too_large" });
     return refusalStatus.too_large;

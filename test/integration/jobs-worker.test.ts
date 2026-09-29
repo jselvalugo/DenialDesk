@@ -334,9 +334,12 @@ describe("Sync now hands the run to the worker (requestSync)", () => {
       // Move past the once-a-minute window: the connection is free again.
       h.clock.current = new Date(h.clock.current.getTime() + 61_000);
     }
-    const failed = (await eventsOf("integration.sync_failed")).filter((event) => event.reason === "sync_now");
+    // One action for a failed post, for Sync now and for the scheduler: sync_abandoned, reason job_not_sent.
+    const failed = await eventsOf("integration.sync_abandoned");
     expect(failed).toHaveLength(2);
-    expect(failed[0]!.metadata).toMatchObject({ code: "job_not_sent" });
+    expect(failed[0]).toMatchObject({ reason: "job_not_sent", actorUserId: ctx.userId });
+    expect(failed[0]!.metadata).toMatchObject({ reason_code: "job_not_sent", trigger: "manual" });
+    expect(await eventsOf("integration.sync_failed")).toEqual([]);
   });
 
   it("a post that timed out after the worker had already claimed the run is still queued, not abandoned or refused (review O2)", async () => {
@@ -358,7 +361,7 @@ describe("Sync now hands the run to the worker (requestSync)", () => {
     });
     expect(result).toEqual({ runId: claimedRun, status: "queued" });
     expect(await runRow(claimedRun)).toMatchObject({ status: "running" });
-    expect(await eventsOf("integration.sync_failed")).toEqual([]);
+    expect(await eventsOf("integration.sync_abandoned")).toEqual([]);
     expect(await eventsOf("integration.sync_queued")).toHaveLength(1);
   });
 
@@ -367,7 +370,7 @@ describe("Sync now hands the run to the worker (requestSync)", () => {
     const id = await activeSandbox(ctx, h);
     await expect(
       requestSync(runnerFor(ctx), adminActor(ctx), id, { ...h.deps, jobs: { kind: "refused" } }),
-    ).rejects.toThrow("The sync couldn't be started. Try again in a moment.");
+    ).rejects.toThrow("Background sync isn't set up correctly for this environment");
     expect(
       await systemDb().select().from(integrationSyncRuns).where(eq(integrationSyncRuns.connectionId, id)),
     ).toEqual([]);
@@ -511,6 +514,28 @@ describe("the scheduled tick end to end", () => {
       metadata: expect.objectContaining({ run_id: stale!.id, reason_code: "lease_expired" }),
     });
     expect(results).toEqual([{ status: 200, code: "done", runStatus: "succeeded" }]);
+  });
+
+  it("the lease-expired audit records the run's real trigger, a manual run's included (not a hard-coded 'scheduled')", async () => {
+    const id = await activeSandbox(ctx, h);
+    const [stale] = await systemDb()
+      .insert(integrationSyncRuns)
+      .values({
+        tenantId: ctx.tenantId,
+        connectionId: id,
+        trigger: "manual",
+        triggeredBy: ctx.userId,
+        queuedAt: new Date(Date.now() - 25 * 60_000),
+      })
+      .returning({ id: integrationSyncRuns.id });
+    await runScheduledSync({
+      secret: () => secret,
+      enqueue: ownTick(),
+      sender: (key) => inProcessWorker(key, []),
+    });
+    const [event] = await eventsOf("integration.sync_abandoned");
+    expect(event).toMatchObject({ reason: "lease_expired" });
+    expect(event!.metadata).toMatchObject({ run_id: stale!.id, trigger: "manual" });
   });
 
   it("a job that can't be posted abandons its run and audits it (job_not_sent), and the very next tick queues the connection again", async () => {

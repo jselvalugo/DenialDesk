@@ -264,9 +264,10 @@ describe("syncNowAction with a background worker configured (ADR 0012)", () => {
     expect(await patientRows(ctx)).toEqual([]);
     // The failed post is audited with who pressed the button and from where (review O2).
     const failed = (await auditRows(ctx.tenantId)).find(
-      (event) => event.action === "integration.sync_failed" && event.reason === "sync_now",
+      (event) => event.action === "integration.sync_abandoned",
     )!;
-    expect(failed.metadata).toMatchObject({ code: "job_not_sent" });
+    expect(failed).toMatchObject({ reason: "job_not_sent", actorUserId: ctx.userId });
+    expect(failed.metadata).toMatchObject({ reason_code: "job_not_sent", trigger: "manual" });
     expect(failed.ipAddress).toBe("203.0.113.7");
     expect(failed.userAgent).toBe("Synthetic-Test-Browser/1.0");
   });
@@ -275,7 +276,10 @@ describe("syncNowAction with a background worker configured (ADR 0012)", () => {
     vi.stubEnv("APP_ENV", "production");
     for (const name of ["NETLIFY", "NETLIFY_DB_URL", "DEPLOY_ID", "SITE_ID"]) vi.stubEnv(name, "");
     vi.stubEnv("INTEGRATION_JOB_SECRET", "");
-    expect(await press()).toEqual({ error: "The sync couldn't be started. Try again in a moment." });
+    expect(await press()).toEqual({
+      error:
+        "Background sync isn't set up correctly for this environment, so the sync can't be started. Trying again won't help: an administrator of DenialDesk needs to fix the configuration.",
+    });
     expect(sent).toEqual([]);
     expect(await patientRows(ctx)).toEqual([]);
     expect(
@@ -285,7 +289,10 @@ describe("syncNowAction with a background worker configured (ADR 0012)", () => {
 
   it("refuses, and never runs quietly in the request, when the secret is set but too short", async () => {
     vi.stubEnv("INTEGRATION_JOB_SECRET", "short");
-    expect(await press()).toEqual({ error: "The sync couldn't be started. Try again in a moment." });
+    expect(await press()).toEqual({
+      error:
+        "Background sync isn't set up correctly for this environment, so the sync can't be started. Trying again won't help: an administrator of DenialDesk needs to fix the configuration.",
+    });
     expect(sent).toEqual([]);
     expect(await patientRows(ctx)).toEqual([]);
   });
