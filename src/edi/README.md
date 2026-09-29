@@ -59,5 +59,5 @@ on every element not certain, because the licensed guide is not in the repositor
 - ISA15 is `T` and the envelope is `SYNTHETIC_ENVELOPE`; real identifiers arrive with the clearinghouse (C3b).
 
 The service (`src/domain/claims/edi-837p.ts`) loads the claim, guards coverage, takes the control number from the practice's
-`practice_settings` row `x12.control_number`, and audits. Tests: `837p.test.ts` (golden file `test/fixtures/synthetic/x12/837p-golden.x12`,
+`practice_settings` row `x12_control_number`, and audits. Tests: `837p.test.ts` (golden file `test/fixtures/synthetic/x12/837p-golden.x12`,
 SE01 and HL round trips, one test per refusal code), `test/integration/claim-837p*.test.ts`.

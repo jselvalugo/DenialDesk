@@ -48,6 +48,7 @@ export const FIELD_KEYS: Record<string, ClaimsKey> = {
   subscriber_city: "edi.field.subscriber_city",
   subscriber_member_id: "edi.field.subscriber_member_id",
   payer_name: "edi.field.payer_name",
+  envelope_id: "edi.field.envelope_id",
 };
 
 export function issueMessage(issue: Issue837, t: ClaimsT): string {

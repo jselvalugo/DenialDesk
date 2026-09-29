@@ -520,3 +520,41 @@ describe("837P preview masking", () => {
     expect(tokenize(masked).segments.map((s) => s.id)).toEqual(tokenize(real).segments.map((s) => s.id));
   });
 });
+
+describe("837P fix round", () => {
+  it("counts LX 1..n whatever the claim's own line numbers are", () => {
+    const input = syntheticClaim();
+    input.claim.lines[0]!.lineNumber = 4;
+    input.claim.lines[1]!.lineNumber = 9;
+    const lx = tokenize(build837P(input).text)
+      .segments.filter((s) => s.id === "LX")
+      .map((s) => s.elements[0]);
+    expect(lx).toEqual(["1", "2"]);
+  });
+
+  it("writes dates and times in Eastern time, not UTC", () => {
+    // 02:30 UTC on the 30th is 22:30 EDT on the 29th.
+    const input = syntheticClaim({ createdAt: new Date("2026-09-30T02:30:00Z") });
+    const { segments } = tokenize(build837P(input).text);
+    expect(segments[0]!.elements.slice(8, 10)).toEqual(["260929", "2230"]);
+    expect(segments[1]!.elements.slice(3, 5)).toEqual(["20260929", "2230"]);
+    expect(segments.find((s) => s.id === "BHT")!.elements.slice(3, 5)).toEqual(["20260929", "2230"]);
+    // Winter (EST, UTC-5).
+    const winter = syntheticClaim({ createdAt: new Date("2026-01-15T03:05:00Z") });
+    expect(tokenize(build837P(winter).text).segments[0]!.elements.slice(8, 10)).toEqual(["260114", "2205"]);
+  });
+
+  it("refuses an envelope ID longer than 15 characters instead of truncating it", () => {
+    const input = syntheticClaim();
+    input.envelope = { ...input.envelope, senderId: "SIXTEENCHARACTER" };
+    expect(validate837P(input)).toContainEqual({ code: "invalid_character", field: "envelope_id" });
+  });
+
+  it("hides a short member ID or TIN entirely in the preview", () => {
+    const input = syntheticClaim();
+    input.subscriber.memberId = "AB12";
+    const masked = build837P(input, { mask: true }).text;
+    expect(masked).toContain("MI*••••~");
+    expect(masked).not.toContain("AB12");
+  });
+});

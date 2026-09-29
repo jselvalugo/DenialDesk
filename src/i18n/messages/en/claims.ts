@@ -319,7 +319,7 @@ export const claims = {
   "import.result.viewPastDeadline": "View past-deadline claims",
   "import.result.another": "Import another file",
 
-  // 837P generation (claims C3a): app/(app)/claims/[id]/Claim837Panel.tsx
+  // 837P generation (claims C3a): app/(app)/claims/[id]/Claim837Form.tsx
   "edi.title": "Electronic claim (837P)",
   "edi.description":
     "Builds this claim as an X12 837P file that you can preview and download. Nothing is sent to a payer or a clearinghouse.",
@@ -391,4 +391,5 @@ export const claims = {
   "edi.field.subscriber_member_id": "member ID",
   "edi.field.payer_name": "payer's name",
   "edi.result.title": "Generated file",
+  "edi.field.envelope_id": "sender or receiver ID",
 } as const;

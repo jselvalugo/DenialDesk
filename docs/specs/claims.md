@@ -320,9 +320,9 @@ segment `~`. All text is upper-cased and accents are removed; nothing else is ch
 | Guide loop · segment | Element(s) written | Source · rule |
 |---|---|---|
 | Interchange · ISA | ISA01 `00`, ISA02 ten spaces, ISA03 `00`, ISA04 ten spaces | No authorization or security information. ⚠️ VERIFY (clearinghouse companion guide) |
-| ISA | ISA05 `ZZ`, ISA06 sender ID (15, right-padded), ISA07 `ZZ`, ISA08 receiver ID (15, right-padded) | Pre-production: fixed synthetic identifiers (`SYNTHETIC_ENVELOPE`), never a real one. Real identifiers come from clearinghouse enrollment in C3b (DS-03). ⚠️ VERIFY |
-| ISA | ISA09 `YYMMDD`, ISA10 `HHMM` (UTC), ISA11 `^`, ISA12 `00501`, ISA13 control number (9 digits), ISA14 `0`, ISA15 `T`, ISA16 `:` | ISA13 from the practice sequence. ISA15 is `T` in every environment C3a runs in (synthetic-only guard). ISA14 `0` (no interchange acknowledgment requested; the 999 arrives anyway) ⚠️ VERIFY |
-| Functional group · GS | GS01 `HC`, GS02/GS03 codes as ISA06/ISA08 (trimmed), GS04 `CCYYMMDD`, GS05 `HHMM`, GS06 = ISA13 value, GS07 `X`, GS08 `005010X222A1` | |
+| ISA | ISA05 `ZZ`, ISA06 sender ID (15, right-padded), ISA07 `ZZ`, ISA08 receiver ID (15, right-padded) | Pre-production: fixed synthetic identifiers (`SYNTHETIC_ENVELOPE`), never a real one; an ID longer than 15 characters is refused, never truncated. Real identifiers come from clearinghouse enrollment in C3b (DS-03). ⚠️ VERIFY |
+| ISA | ISA09 `YYMMDD`, ISA10 `HHMM` (Eastern, the practice time zone), ISA11 `^`, ISA12 `00501`, ISA13 control number (9 digits), ISA14 `0`, ISA15 `T`, ISA16 `:` | ISA13 from the practice sequence. ISA15 is `T` in every environment C3a runs in (synthetic-only guard). ISA14 `0` (no interchange acknowledgment requested; the 999 arrives anyway) ⚠️ VERIFY |
+| Functional group · GS | GS01 `HC`, GS02/GS03 codes as ISA06/ISA08 (trimmed), GS04 `CCYYMMDD`, GS05 `HHMM`, GS06 = ISA13 value (nine digits with leading zeros; ⚠️ VERIFY that the receiver accepts leading zeros), GS07 `X`, GS08 `005010X222A1` | |
 | Transaction set · ST | ST01 `837`, ST02 = control number (at least four digits), ST03 `005010X222A1` | One ST per file, so ST02 is unique in the group by construction and, being the same sequence, per practice. |
 | Beginning of hierarchical transaction · BHT | BHT01 `0019`, BHT02 `00`, BHT03 = control number (9 digits), BHT04 `CCYYMMDD`, BHT05 `HHMM`, BHT06 `CH` | `00` original, `CH` chargeable |
 | 1000A Submitter name · NM1, PER | `NM1*41*2*<name>*****46*<id>`; `PER*IC*<contact>*TE*<phone>` | Pre-production synthetic constants (see ISA). `PER` is required in the guide. ⚠️ VERIFY (real values: C3b) |
@@ -337,10 +337,10 @@ segment `~`. All text is upper-cased and accents are removed; nothing else is ch
 | 2010BA · N3, N4 | `N3*<line1>`; `N4*<city>*<state>*<ZIP>` | `patients.address_line1`, `city`, `state`, `postal_code` (5 or 9 digits) |
 | 2010BA · DMG | `DMG*D8*<CCYYMMDD>*<F, M or U>` | `patients.birth_date`, `sex` |
 | 2010BB Payer name · NM1 | `NM1*PR*2*<payer name>*****PI*<payer ID>` | `payers.name`, `edi_payer_id`. Payer address (N3/N4) is situational and not written. |
-| 2300 Claim information · CLM | `CLM*<claim number>*<total>***<POS>:B:1*Y*A*Y*Y` | CLM01 `claims.claim_number` (patient control number, at most 38 characters; C1's are at most 30); CLM02 exact decimal string from integer cents; CLM05-1 `locations.place_of_service`, CLM05-2 `B` (professional POS qualifier), CLM05-3 frequency `1`. CLM06 `Y`, CLM07 `A`, CLM08 `Y`, CLM09 `Y` are the practice's attestations (signature on file, assignment accepted, benefits assigned, release of information) and are constants until a practice setting exists. ⚠️ VERIFY (owner, OA-088) |
+| 2300 Claim information · CLM | `CLM*<claim number>*<total>***<POS>:B:1*Y*A*Y*Y` | CLM01 `claims.claim_number` (patient control number, at most 38 characters; C1's are at most 30); CLM02 exact decimal string from integer cents (always two decimals, so `125.00`; ⚠️ VERIFY that trailing zeros are accepted, the guide allows omitting them); CLM05-1 `locations.place_of_service`, CLM05-2 `B` (professional POS qualifier), CLM05-3 frequency `1`. CLM06 `Y`, CLM07 `A`, CLM08 `Y`, CLM09 `Y` are the practice's attestations (signature on file, assignment accepted, benefits assigned, release of information) and are constants until a practice setting exists. ⚠️ VERIFY (owner, OA-088) |
 | 2300 · HI | `HI*ABK:<dx1>*ABF:<dx2>*...` | Up to 12; `ABK` principal (first), `ABF` others. Codes as stored **without the decimal point** (next section). |
-| 2400 Service line · LX | `LX*<n>` | `claim_lines.line_number` order |
-| 2400 · SV1 | `SV1*HC:<code>:<mod>:<mod>:<mod>:<mod>*<charge>*UN*<units>***<pointers>` | SV101-1 `HC`, procedure code and modifiers exactly as stored; SV102 exact decimal; SV103 `UN`; SV104 units; SV107 pointers such as `1:2`. Anesthesia-style minute units (`MJ`) are not modelled. ⚠️ VERIFY |
+| 2400 Service line · LX | `LX*<n>` | Counts 1 to n in `claim_lines.line_number` order; the claim's own numbers are not copied |
+| 2400 · SV1 | `SV1*HC:<code>:<mod>:<mod>:<mod>:<mod>*<charge>*UN*<units>***<pointers>` | SV101-1 `HC`, procedure code and modifiers exactly as stored; SV102 exact decimal, two decimals (⚠️ VERIFY trailing zeros, as CLM02); SV103 `UN`; SV104 units; SV107 pointers such as `1:2`. Anesthesia-style minute units (`MJ`) are not modelled. ⚠️ VERIFY |
 | 2400 · DTP | `DTP*472*D8*<CCYYMMDD>` | `claims.service_date` on every line |
 | Trailer · SE, GE, IEA | `SE*<segments ST..SE inclusive>*<ST02>`; `GE*1*<GS06>`; `IEA*1*<ISA13>` | Computed, and re-checked by a round-trip test |
 
@@ -421,16 +421,16 @@ CI run of `pnpm test:integration`.
       are distinct (integration); the sequence refuses at 999,999,999. No new table, no GRANT.
 - [ ] **Synthetic-only guard.** `ISA15` is `T`; production refuses with `not_synthetic_environment` and does not
       consume a control number.
-- [ ] **Encryption and PHI.** The member ID and TIN are decrypted only in memory inside the service call, never
+- [ ] **Encryption and PHI.** The status, coverage, and shape checks run first, and the member ID and TIN are decrypted only when they pass (a refused claim reads neither), only in memory inside the service call, a value that fails to decrypt is a refusal (`no_member_id` or `billing_tin`), never a 500; never
       logged, and never appear in an error, refusal, audit row, or the preview (masked); the file is returned to the
       signed-in user in the action's response and is never written to disk, object storage, or a log. The TIN is
       stored field-encrypted (`tin_enc`, AAD bound to practice, column, and provider), CLAUDE.md #6.
 - [ ] **Roles and limits.** Only `canGenerateClaimFile` roles (admin, manager, specialist) can generate; enforced
-      in the server action and again in the domain function; a refused attempt is audited. Rate limit
+      in the server action and again in the domain function; a refused attempt is audited (one row per attempt, capped per person at 30 per 10 minutes, past which it returns without a row). Rate limit
       `generate_837p`, per practice: 30 attempts per 10 minutes.
-- [ ] **Audit.** `claim.837p_generated` (entity `claim`, claim ID) with metadata: patient ID, claim version,
+- [ ] **Audit.** `claim.837p_generated` (entity `claim`, claim ID) with metadata: patient ID (refusals that got as far as loading the claim carry it too), claim version,
       interchange control number, segment count, line count, usage indicator (`T`), pointer source
-      (`single_diagnosis` or `user_selected`), and the PHI fields read (`member_id`, `tin`); reason
+      (`single_diagnosis` or `user_selected`), and every PHI category read (`patient_name`, `birth_date`, `address`, `diagnosis_codes`, `procedure_codes`, and `member_id` and `tin` only when actually decrypted); reason
       `edi_generation`. `claim.837p_refused` with the refusal codes and their count. Neither ever holds segment
       contents, a code, a name, a member ID, or an amount. The PHI read (member ID decrypt) is covered by the
       same event (R-7.5.1).
@@ -452,7 +452,7 @@ CI run of `pnpm test:integration`.
 - New audit actions `claim.837p_generated` and `claim.837p_refused`; `canGenerateClaimFile(role)` in
   `src/auth/permissions.ts`; rate-limit bucket `generate_837p`.
 - Pure module `src/edi/x12/837p.ts`; domain service `src/domain/claims/edi-837p.ts`; server action
-  `generateClaim837P` (`src/app/(app)/claims/[id]/edi-actions.ts`); panel `Claim837Panel.tsx`.
+  `generateClaim837P` (`src/app/(app)/claims/[id]/edi-actions.ts`); panel `Claim837Form.tsx`.
 - **Not built** (deferred): a settings page where an administrator enters a provider's billing details and TIN
   (step-up MFA) and a location's place of service. Until then the values come from the synthetic seed or a
   change made by the platform operator in the database. The refusal tells the person what is missing.
@@ -479,6 +479,17 @@ validity against licensed code sets, and claim scrubbing (NCCI, MUE, LCD/NCD).
 7. (owner, OA-089) A dedicated control-number table (needs a GRANT) instead of the `practice_settings` row.
 8. (owner) Persist the diagnosis pointer choice on the claim lines (through the C1 version trigger) so it is not
    asked at every generation.
+
+### Blockers before C3b and before any real claim (C3a compliance review)
+C3a is safe only because it is synthetic-only and refuses in production. These must be closed before C3b or any real
+claim, and none is closed by C3a:
+1. **Sensitive diagnoses.** Diagnosis and procedure codes can reveal HIV, substance use, or behavioral health. The file
+   carries them unmasked, and no sensitivity tag (R-3.5.1) or 42 CFR Part 2 consent check applies to an outgoing claim yet.
+2. **Diagnosis pointers are not persisted or audited as a decision.** The choice is asked at every generation, recorded
+   only as `user_selected`, and never as which pointers a person chose or a claim version.
+3. **Hard-coded attestations.** CLM06 to CLM09 (`Y`, `A`, `Y`, `Y`) are constants, not the practice's recorded attestations.
+4. **Clearinghouse status and real downloads.** Whether generating standard transactions makes DenialDesk a HIPAA health care
+   clearinghouse, and whether real claim files may ever be downloaded, are open (OA-090).
 
 ## Data / API changes
 - `claims.version integer not null default 1` — current version number.

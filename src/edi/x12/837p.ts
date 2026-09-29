@@ -13,6 +13,7 @@
 // safe to log, audit, and show. Which loops, segments, and elements are written is the mapping table in the
 // spec; usage or code values not certain are marked there as VERIFY.
 
+import { PRACTICE_TIME_ZONE } from "@rules/calendar";
 import type { Regime } from "@rules/types";
 
 export class Edi837Error extends Error {
@@ -161,7 +162,7 @@ export const MODIFIER_SHAPE = /^[A-Z0-9]{2}$/;
 export const ICD10CM_SHAPE = /^[A-Z][0-9][0-9A-Z](\.?[0-9A-Z]{1,4})?$/;
 
 /**
- * Claim filing indicator (2000B SBR09) by the payer's regime. Only values the specification is sure of;
+ * Claim filing indicator (2000B SBR09) by the payer's regime. Values believed correct but still VERIFY against the guide (spec C3a);
  * the other regimes are refused until the owner confirms them (spec C3a, open question 6).
  */
 export const CLAIM_FILING_INDICATOR: Partial<Record<Regime, string>> = {
@@ -259,6 +260,8 @@ export function validate837P(input: Claim837Input): Issue837[] {
   };
 
   const { billingProvider: bp, subscriber: sub, payer, claim } = input;
+  if (input.envelope.senderId.length > 15 || input.envelope.receiverId.length > 15)
+    add("invalid_character", { field: "envelope_id" });
 
   if (
     !Number.isInteger(input.controlNumber) ||
@@ -386,8 +389,10 @@ function seg(id: string, ...elements: string[]): string {
   return [id, ...list].join(EL);
 }
 
+/** Hides all but the last `keep` characters; a value no longer than `keep` is hidden entirely. */
 function maskTail(value: string, keep: number): string {
-  return `${"•".repeat(Math.max(0, value.length - keep))}${value.slice(-keep)}`;
+  if (value.length <= keep) return "•".repeat(value.length);
+  return `${"•".repeat(value.length - keep)}${value.slice(-keep)}`;
 }
 
 /**
@@ -402,10 +407,19 @@ export function build837P(input: Claim837Input, options: { mask?: boolean } = {}
   const t = (value: string, max: number): string => cleanText(value, max)!;
   const control9 = String(input.controlNumber).padStart(9, "0");
   const control4 = String(input.controlNumber).padStart(4, "0");
-  const d = input.createdAt;
-  const p2 = (n: number) => String(n).padStart(2, "0");
-  const yyyymmdd = `${d.getUTCFullYear()}${p2(d.getUTCMonth() + 1)}${p2(d.getUTCDate())}`;
-  const hhmm = `${p2(d.getUTCHours())}${p2(d.getUTCMinutes())}`;
+  // Dates and times in the practice's time zone (Eastern), not UTC.
+  const clock = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PRACTICE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(input.createdAt);
+  const part = (type: string) => clock.find((p) => p.type === type)!.value;
+  const yyyymmdd = `${part("year")}${part("month")}${part("day")}`;
+  const hhmm = `${part("hour")}${part("minute")}`;
   const tin = options.mask ? maskTail(bp.tin!, 4) : bp.tin!;
   const memberId = options.mask ? maskTail(sub.memberId!, 4) : sub.memberId!;
   const dx = claim.diagnosisCodes.map(icd10ToX12);
@@ -449,10 +463,12 @@ export function build837P(input: Claim837Input, options: { mask?: boolean } = {}
     seg("HI", ...dx.map((code, i) => `${i === 0 ? "ABK" : "ABF"}:${code}`)),
   ];
 
-  for (const line of [...claim.lines].sort((a, b) => a.lineNumber - b.lineNumber)) {
+  // LX01 counts 1..n in order; it does not copy the claim's own line numbers.
+  const ordered = [...claim.lines].sort((a, b) => a.lineNumber - b.lineNumber);
+  for (const [index, line] of ordered.entries()) {
     const service = ["HC", line.procedureCode, ...line.modifiers].join(":");
     body.push(
-      seg("LX", String(line.lineNumber)),
+      seg("LX", String(index + 1)),
       seg(
         "SV1",
         service,

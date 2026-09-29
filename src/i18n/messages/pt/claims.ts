@@ -330,7 +330,7 @@ export const claims: Messages["claims"] = {
   "import.result.viewPastDeadline": "Ver reivindicações fora do prazo",
   "import.result.another": "Importar outro arquivo",
 
-  // 837P generation (claims C3a): app/(app)/claims/[id]/Claim837Panel.tsx
+  // 837P generation (claims C3a): app/(app)/claims/[id]/Claim837Form.tsx
   "edi.title": "Reivindicação eletrônica (837P)",
   "edi.description":
     "Gera esta reivindicação como um arquivo X12 837P que você pode visualizar e baixar. Nada é enviado a um pagador nem a uma clearinghouse.",
@@ -412,4 +412,5 @@ export const claims: Messages["claims"] = {
   "edi.field.subscriber_member_id": "ID de associado",
   "edi.field.payer_name": "Nome do pagador",
   "edi.result.title": "Arquivo gerado",
+  "edi.field.envelope_id": "ID de remetente ou destinatário",
 };

@@ -352,7 +352,7 @@ _Last updated: 2026-09-29_
   is `T` and the submitter and receiver identifiers are fixed synthetic constants, so production refuses
   (`not_synthetic_environment`) until C3b. **Not built:** a settings page to enter a provider's billing details and a
   location's place of service (until then: the synthetic seed, or the platform operator in the database), so a real practice
-  cannot yet generate; group billing (type 2 NPI) with a rendering provider, dependents, secondary payers, several claims per
+  cannot yet generate; **blockers before C3b and any real claim** (spec C3a, OA-090): sensitive diagnoses (sensitivity tags, Part 2 consent) on outgoing claims, persisting and auditing the diagnosis-pointer choice, the hard-coded CLM06 to CLM09 attestations, and clearinghouse status / real downloads; group billing (type 2 NPI) with a rendering provider, dependents, secondary payers, several claims per
   file, frequency 7/8. Regimes `medicare_advantage`, `erisa_self_funded`, `smmc`, `pip` are refused (no confirmed SBR09).
   Mapping is from the specialist's knowledge of the guide, not the licensed guide: every ⚠️ VERIFY row in the spec must be
   cleared before a `P` file (OA-088). Integration tests (`claim-837p.test.ts`, `claim-837p-action.test.ts`) await a CI run:

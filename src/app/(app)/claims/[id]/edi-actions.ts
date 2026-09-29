@@ -46,6 +46,8 @@ function readPointers(formData: FormData): PointerChoice {
 /**
  * Generates the 837P for one claim (docs/specs/claims.md C3a). A POST, so nothing about the claim reaches a
  * URL, title, or log. The file is returned to the signed-in user in the response and never stored.
+ * A Next.js server action is a POST, and its response is not cached by the framework or the browser's HTTP
+ * cache (`Cache-Control` is not settable from an action). The client keeps it in component state only.
  */
 export async function generateClaim837PAction(_: Claim837State, formData: FormData): Promise<Claim837State> {
   const auth = await requireAuth();
@@ -53,7 +55,11 @@ export async function generateClaim837PAction(_: Claim837State, formData: FormDa
   const ids = z.object({ claimId: z.uuid() }).safeParse({ claimId: formData.get("claimId") });
   if (!ids.success) return { error: t("edi.error.reload") };
   if (!canGenerateClaimFile(auth.role)) {
-    // The domain function audits the refusal (it re-checks the role); no work is done for this role.
+    // A pure role refusal: capped per person (not per practice, so it can't use up the billers' allowance),
+    // and past the cap it returns without another audit row. Within the cap the domain function audits
+    // the refusal (it re-checks the role); no other work is done for this role.
+    const capped = await hit("generate_837p", `forbidden:${auth.userId}`);
+    if (!capped.allowed) return { error: t("edi.error.forbidden") };
     await withTenant(auth, (tx) =>
       generateClaim837P(
         tx,

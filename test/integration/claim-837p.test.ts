@@ -34,6 +34,8 @@ import {
 // service against the real tables: coverage guards, refusals, control numbers, audit, and tenant isolation.
 // R-3.10.1 (codes copied), R-7.2.4 (tenant isolation), R-7.3.3 (encrypted fields), R-7.5.1 (audit).
 
+// Read by every load; the member ID and TIN are added only when actually decrypted, after the checks pass.
+const BASE_PHI = "patient_name,birth_date,address,diagnosis_codes,procedure_codes";
 type Role = "admin" | "manager" | "specialist" | "compliance";
 let a: Ctx & Billing;
 let b: Ctx & Billing;
@@ -129,7 +131,7 @@ describe("generating an 837P (docs/specs/claims.md C3a)", () => {
         lineCount: 2,
         usage: "T",
         pointerSource: "single_diagnosis",
-        phiRead: "member_id,tin",
+        phiRead: `${BASE_PHI},member_id,tin`,
       },
     });
     // No segment content, code, name, member ID, TIN, or amount in the audit row.
@@ -255,7 +257,7 @@ describe("what is refused, and that nothing is spent or leaked (R-7.4.6)", () =>
     const [event] = await events(a, claimId, "claim.837p_refused");
     expect(event).toMatchObject({
       reason: "edi_generation",
-      metadata: { refusal: "invalid", issueCount: 6, phiRead: "member_id" },
+      metadata: { refusal: "invalid", issueCount: 6, phiRead: BASE_PHI, patientId: a.patientId },
     });
     expect(JSON.stringify(event)).not.toContain(MEMBER_ID);
     expect(await events(a, claimId, "claim.837p_generated")).toHaveLength(0);
@@ -280,7 +282,7 @@ describe("what is refused, and that nothing is spent or leaked (R-7.4.6)", () =>
     const claimId = await newClaim(a, a, { payerId: other!.id });
     expect(codes(await generate(a, claimId))).toEqual(["coverage_payer_mismatch"]);
     const [event] = await events(a, claimId, "claim.837p_refused");
-    expect(event!.metadata).toMatchObject({ phiRead: "tin" });
+    expect(event!.metadata).toMatchObject({ phiRead: BASE_PHI });
     // A patient with no primary payer at all is the same refusal.
     const noPayer = await manualPatient(a, null, "SYN-NOPAYER-1");
     const second = await newClaim(a, a, { patientId: noPayer });
@@ -387,7 +389,7 @@ describe("a patient synced from an EHR (patient-integrations PI1a, claims C1 not
       const claimId = await newClaim(ctx, base, { patientId });
       expect(codes(await generate(ctx, claimId))).toContain("no_member_id");
       const [event] = await events(ctx, claimId, "claim.837p_refused");
-      expect(event!.metadata).toMatchObject({ phiRead: "tin" });
+      expect(event!.metadata).toMatchObject({ phiRead: BASE_PHI });
     }
   });
 

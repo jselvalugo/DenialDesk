@@ -9,10 +9,16 @@ function aad(tenantId: string, providerId: string): string {
   return `${tenantId}|providers.tin_enc|${providerId}`;
 }
 
-export function encryptProviderTin(tin: string, tenantId: string, providerId: string): string {
-  return encryptField(tin, undefined, aad(tenantId, providerId));
+/** `key` is for tests; callers use the configured field-encryption key. */
+export function encryptProviderTin(tin: string, tenantId: string, providerId: string, key?: Buffer): string {
+  return encryptField(tin, key, aad(tenantId, providerId));
 }
 
-export function decryptProviderTin(payload: string, tenantId: string, providerId: string): string {
-  return decryptField(payload, undefined, aad(tenantId, providerId));
+export function decryptProviderTin(
+  payload: string,
+  tenantId: string,
+  providerId: string,
+  key?: Buffer,
+): string {
+  return decryptField(payload, key, aad(tenantId, providerId));
 }
