@@ -113,7 +113,9 @@ export async function requestAccessToken(input: TokenRequestInput): Promise<Acce
   } catch (error) {
     throw outcomeForTransportError(error, "smart_config_invalid");
   }
-  if (response.status !== 200) throw outcomeForStatus(response.status, "auth_refused");
+  if (response.status !== 200) {
+    throw outcomeForStatus(response.status, "auth_refused", response.retryAfterSeconds);
+  }
 
   let parsed: z.ZodSafeParseResult<z.infer<typeof tokenResponseSchema>>;
   try {

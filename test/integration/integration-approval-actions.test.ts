@@ -187,8 +187,11 @@ async function run<T>(action: (state: object, data: FormData) => Promise<T>, dat
 const errorOf = (result: { state?: unknown }) => (result.state as { error?: string } | undefined)?.error;
 
 // The console's "today" (a Florida date): the latest a verification can be dated and, for a
-// connection submitted just now, also the earliest.
-const VERIFIED_ON = todayIn();
+// connection submitted just now, also the earliest. Read when a test asks for it, never once at
+// module load: a suite that starts before Florida midnight and runs past it would otherwise carry
+// yesterday's date into later tests (a verification dated before the submission's Florida date is
+// refused). Each test reads it after it made its connection.
+const verifiedOnToday = () => todayIn();
 
 async function approveForm(ctx: Ctx, id: string, extra: Record<string, string> = {}) {
   return form({
@@ -196,7 +199,7 @@ async function approveForm(ctx: Ctx, id: string, extra: Record<string, string> =
     connectionId: id,
     updatedAt: (await row(id)).updatedAt.toISOString(),
     methodCode: "video_call",
-    verifiedOn: VERIFIED_ON,
+    verifiedOn: verifiedOnToday(),
     contactRole: "ehr_administrator",
     populationScope: "group_export",
     clientIdOwnership: "on",
@@ -336,11 +339,8 @@ describe("approveIntegration", () => {
 
   it("reads the verification date whole: a long or malformed value is refused, never truncated into a valid one", async () => {
     const id = await pending(a);
-    for (const verifiedOn of [
-      `${VERIFIED_ON}T00:00:00Z`,
-      `${VERIFIED_ON}xxxx`,
-      `${VERIFIED_ON}${" ".repeat(20)}9`,
-    ]) {
+    const day = verifiedOnToday();
+    for (const verifiedOn of [`${day}T00:00:00Z`, `${day}xxxx`, `${day}${" ".repeat(20)}9`]) {
       const result = await run(approveIntegration, await approveForm(a, id, { verifiedOn }));
       expect(errorOf(result)).toBe(en.operator["errors.approvalDateInvalid"]);
     }

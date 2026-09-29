@@ -762,10 +762,10 @@ describe("testConnection — refusals before any network call", () => {
     expect(transport.requests).toHaveLength(0);
   });
 
-  it("the built-in sandbox has no transport yet: a translated refusal, nothing dialed or audited", async () => {
+  it("no transport in this environment (the built-in sandbox where real data is allowed): a translated refusal, nothing dialed or audited", async () => {
     const { id } = await draft(a);
     const error = await refusal(testConnection(runner(a), admin(a), id, deps(null)));
-    expect(error.message).toMatch(/sandbox can't be tested yet/);
+    expect(error.message).toMatch(/sandbox isn't available in this environment/);
     expect((await audits(id)).some((event) => event.action === "integration.connection_tested")).toBe(false);
   });
 });

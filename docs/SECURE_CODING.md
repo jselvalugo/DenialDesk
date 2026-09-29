@@ -267,7 +267,7 @@ exception.
 | SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest, and pnpm is fetched without a hash check (`corepack enable` in the `Dockerfile`, `pnpm/action-setup` in CI; `packageManager` has no `+sha512`); CI's `postgres:16` service images are tag-only. |
 | SC-A4.3 | pnpm checks release age only when it resolves a version, so nothing in CI checks the entries a PR adds to `pnpm-lock.yaml` (a hand-edited lockfile, or one written by pnpm older than 10.16, would pass). Some locked packages were under 7 days old when this rule arrived (for example `@types/node` 24.19.0, published 2026-09-25); they predate the rule. |
 | SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
-| SC-A2.5 | The lockfile also carries native binaries not on list (a): `@rolldown/binding-*` (Vitest → Vite → Rolldown) and `fsevents` (tsx, Vite, macOS only). Adding them needs human sign-off (OA-077). |
+| SC-A2.5 | The lockfile also carries native binaries not on list (a): `@rolldown/binding-*` (Vitest → Vite → Rolldown) and `fsevents` (tsx, Vite, macOS only). Adding them needs human sign-off (OA-083). |
 | SC-A2.2 | No automated license check in CI. |
 | SC-B1.2 | Threat models exist for four features only (`docs/threat-models/`); claims, denials, appeals, remittances, and sign-in have none. |
 | SC-B3.1 | Most Zod object schemas are not strict (4 of about 43 `z.object` schemas in `src/` reject unknown keys). |
@@ -275,4 +275,4 @@ exception.
 | SC-B8.2 | No network-layer egress allow-list yet (Azure cutover, REQUIREMENTS §7.7). |
 | SC-A2.6 | Next.js telemetry is disabled in the `Dockerfile` and `netlify.toml` but not in CI or local development (`NEXT_TELEMETRY_DISABLED=1`). |
 | SC-B12.1, SC-B12.2 | No SAST, DAST, container/IaC scanning, SBOM, signed commits or artifacts, or license notice file yet. |
-| SC-B12.4 | The default branch is not yet renamed to `main`, and its protection is not verifiable from the repository; the owner confirms the settings (OA-001, OA-077). |
+| SC-B12.4 | The default branch is not yet renamed to `main`, and its protection is not verifiable from the repository; the owner confirms the settings (OA-001, OA-083). |

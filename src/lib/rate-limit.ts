@@ -17,6 +17,7 @@ export type Bucket =
   | "integration_test_connection"
   | "integration_test_practice"
   | "integration_submit"
+  | "integration_sync_now"
   | "jwks";
 
 const POLICY: Record<Bucket, { limit: number; windowSeconds: number; env?: string }> = {
@@ -30,6 +31,9 @@ const POLICY: Record<Bucket, { limit: number; windowSeconds: number; env?: strin
   // Submit attempts per practice (PI2a): a refused Submit says whether an endpoint and client ID are
   // already registered by some practice, so probing that is bounded like probing hosts is.
   integration_submit: { limit: 10, windowSeconds: 10 * 60 },
+  // "Sync now once a minute" per connection (spec PI2b): each press dials the practice's EHR and
+  // pulls patient data, so it is throttled like Test connection is (threat model D2).
+  integration_sync_now: { limit: 1, windowSeconds: 60 },
   // Public JWKS reads, per client network; EHRs fetch a key at token time, not per request.
   jwks: { limit: 120, windowSeconds: 60 },
 };

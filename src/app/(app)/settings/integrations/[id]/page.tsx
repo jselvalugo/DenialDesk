@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { canManageIntegrations } from "@/auth/permissions";
@@ -26,6 +27,7 @@ import { connectionTestDeps } from "../test-deps";
 import { ConnectionLifecycleButton } from "./ConnectionLifecycle";
 import { RevokeConnectionForm } from "./RevokeConnectionForm";
 import { SubmitConnectionForm } from "./SubmitConnectionForm";
+import { SyncNowForm } from "./SyncNowForm";
 import { TestConnectionForm } from "./TestConnectionForm";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -156,6 +158,32 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
         </FieldList>
       </Panel>
 
+      {/* Once a connection can have synced (or has), where to see what it read and map its insurers. */}
+      {(connection.hasSynced || ["active", "paused", "error", "revoked"].includes(connection.status)) && (
+        <Panel title={t("detail.moreTitle")} description={t("detail.moreDescription")}>
+          <ul className="flex flex-col gap-3">
+            <li>
+              <Link
+                href={`/settings/integrations/${connection.id}/payers`}
+                className="font-medium text-link hover:underline"
+              >
+                {t("detail.payersLink")}
+              </Link>
+              <p className="text-label text-muted">{t("detail.payersHint")}</p>
+            </li>
+            <li>
+              <Link
+                href={`/settings/integrations/${connection.id}/runs`}
+                className="font-medium text-link hover:underline"
+              >
+                {t("detail.runsLink")}
+              </Link>
+              <p className="text-label text-muted">{t("detail.runsHint")}</p>
+            </li>
+          </ul>
+        </Panel>
+      )}
+
       {revoked ? (
         offboarding && (
           <Panel title={t("offboarding.title")}>
@@ -169,12 +197,10 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
         )
       ) : (
         <>
-          {/* The built-in sandbox has no transport to test against until PI2b. */}
-          {!connection.isSandbox && (
-            <Panel title={t("test.title")} description={t("test.description")}>
-              <TestConnectionForm id={connection.id} />
-            </Panel>
-          )}
+          {/* Test connection works for the built-in sandbox too (PI2b: the in-process sandbox answers). */}
+          <Panel title={t("test.title")} description={t("test.description")}>
+            <TestConnectionForm id={connection.id} />
+          </Panel>
           {/* A draft with a reject code came back from the operator (PI1c): say why. */}
           {connection.status === "draft" && isRejectReasonCode(connection.statusReason) && (
             <p
@@ -199,6 +225,11 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
           {connection.status === "pending_approval" && (
             <Panel title={t("submit.awaitingTitle")}>
               <p className="text-body text-text">{t("submit.awaitingDescription")}</p>
+            </Panel>
+          )}
+          {connection.status === "active" && (
+            <Panel title={t("sync.title")} description={t("sync.description")}>
+              <SyncNowForm id={connection.id} />
             </Panel>
           )}
           {lifecycle && (
