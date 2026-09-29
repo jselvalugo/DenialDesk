@@ -1,6 +1,6 @@
 # ADR 0012: Background execution — signed `{ runId }` jobs, a definer-only claim, a 15-minute scheduler
 
-Status: Proposed (2026-09-29, PI2c builder; needs the owner's R-15.9 sign-off on migration 0044, OA-083).
+Status: Proposed (2026-09-29, PI2c builder; needs the owner's R-15.9 sign-off on migration 0044, OA-085).
 Builds on ADR 0010 ("Jobs") and ADR 0003 ("background jobs must fit both Netlify and Azure").
 Spec `docs/specs/patient-integrations.md` (PI2b Jobs, PI3); threat model `docs/threat-models/patient-integrations.md` (S5).
 
@@ -90,7 +90,7 @@ later (ADR 0002, 0003).
 - `INTEGRATION_JOB_SECRET` is a new secret (functions-only on Netlify, Key Vault in production). Anyone holding it
   can forge a job, but a job can only ask for an existing queued run of an active connection to be executed once.
 - Netlify Scheduled Functions run only on the published deploy, not on deploy previews; Sync now works everywhere.
-- The site password protection may cover function URLs (OA-084); the fix would be an exemption or a header.
+- The site password protection may cover function URLs (OA-086); the fix would be an exemption or a header.
 - The Netlify function bundle includes `next` (through the shared request-context import); a lazy import would
   trim it and is not needed for correctness.
 - One audit event per patient on initial load remains the cost of the engine, unchanged.

@@ -151,12 +151,12 @@ sandbox connections only (a real connection is refused by the sync engine).
 - **Sync now** queues a run and posts the same signed job to this deploy's own worker URL (`DEPLOY_URL`), then shows
   "Sync queued"; the result is in Sync history (Settings › Integrations › the connection › Sync history). With
   `INTEGRATION_JOB_SECRET` unset it runs in the request instead (the result appears on the page).
-- **Setting it up (owner, OA-084).** Generate the secret (`openssl rand -base64 48`), add it as a *secret* with the
+- **Setting it up (owner, OA-086).** Generate the secret (`openssl rand -base64 48`), add it as a *secret* with the
   **Functions** scope, redeploy (a value change reaches running functions only after a redeploy). Never commit it or paste it
   elsewhere. Rotating: change the value and redeploy; a job in flight during the switch is refused and its run is retried by
   the next tick after the 20-minute lease (a queued run nobody picked up is abandoned then).
 - **The migration is a privilege change (R-15.9).** `0044` creates the `denialdesk_jobs` role and two SECURITY DEFINER
-  functions and needs the owner's sign-off (OA-083) before Netlify applies it to the shared pre-production database.
+  functions and needs the owner's sign-off (OA-085) before Netlify applies it to the shared pre-production database.
   It needs no new database credential: the app's own login is made a member of the role, as it is of `denialdesk_app`.
 - **Troubleshooting** (function log: *Logs → Functions*; every line is a code and, where one exists, a run ID):
   | Log event and `status` | Meaning / fix |
@@ -164,7 +164,7 @@ sandbox connections only (a real connection is refused by the sync engine).
   | `integration.job_refused` `missing_secret` / `weak_secret` | `INTEGRATION_JOB_SECRET` isn't reaching the function (scope *Functions*, redeploy) or is under 32 bytes. |
   | `integration.job_refused` `unsigned`, `bad_timestamp`, `stale`, `bad_signature` | Something posted to the worker without a valid signature, or the two sides' secrets differ (set in different contexts) or their clocks are more than 5 minutes apart. Unrelated internet noise is expected to show up here occasionally and does nothing. |
   | `integration.job_refused` `not_claimable` (with a run ID) | The run is already running or finished (a replay or a second worker), was abandoned, or its connection is no longer active. Nothing to fix. |
-  | `integration.job_send_failed` `http_401` / `http_403` | The post to the worker was refused before it reached the function: check whether the site's **password protection** covers `/.netlify/functions/*` (OA-084). `http_404`: the deploy has no `netlify/functions` build. `network`: timeout or DNS. |
+  | `integration.job_send_failed` `http_401` / `http_403` | The post to the worker was refused before it reached the function: check whether the site's **password protection** covers `/.netlify/functions/*` (OA-086). `http_404`: the deploy has no `netlify/functions` build. `network`: timeout or DNS. |
   | `integration.schedule_refused` `no_worker_url` / `missing_secret` | The scheduler queued nothing because it could not send. |
   | `integration.schedule_ran` | One line per tick: `count` runs queued, `status` `ok` or `partial` (some jobs not sent; those runs are retried after the lease). |
 - **A connection is in `error` with reason `repeated_failures`:** three runs in a row failed. Open Sync history for the

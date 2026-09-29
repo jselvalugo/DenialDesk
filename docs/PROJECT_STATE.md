@@ -119,7 +119,7 @@ _Last updated: 2026-09-29_
   OA-077 to OA-082 (OA-076 is resolved).
   **PI2c done: signed background jobs and the 15-minute scheduled sync** (branch `claude/vigilant-tesla-ps41e9-pi2c-jobs`,
   from `claude/quirky-feynman-ufql5a`; migration `drizzle/0044_patient_integrations_jobs.sql`; ADR 0012 Proposed;
-  **R-15.9 owner sign-off required before it runs anywhere but a local or test database, OA-083**). Spec items ticked:
+  **R-15.9 owner sign-off required before it runs anywhere but a local or test database, OA-085**). Spec items ticked:
   PI2b "Jobs", PI3 "Scheduled every 15 minutes", PI3 "Three consecutive failed runs -> error" (SIEM alerts stay
   deferred to the Azure cutover). What it is: a job is a signed POST of `{ runId }` (HMAC-SHA256 over timestamp +
   body, 5-minute window, constant-time compare, `INTEGRATION_JOB_SECRET` of at least 32 bytes, refused when missing
@@ -149,7 +149,7 @@ _Last updated: 2026-09-29_
   (`app.tenant_id` set per practice and restored) because every integration table is FORCE ROW LEVEL SECURITY; a probe
   owner test proves it for an owner that doesn't bypass it. **No new database credential:** `withJobsRole` uses
   `SET LOCAL ROLE denialdesk_jobs` from the same login, which `GRANT denialdesk_jobs TO CURRENT_USER` makes a member,
-  as 0002 does for `denialdesk_app`. **Owner actions:** OA-083 (this sign-off), OA-084 (set `INTEGRATION_JOB_SECRET`
+  as 0002 does for `denialdesk_app`. **Owner actions:** OA-085 (this sign-off), OA-086 (set `INTEGRATION_JOB_SECRET`
   as a functions-only Netlify secret, and confirm site password protection doesn't block the worker's function URL;
   until it is set Sync now keeps running in the request and the worker and scheduler refuse). Not verifiable outside
   Netlify: the function bundle was checked with esbuild and smoke-run against a stub, not deployed.
@@ -299,7 +299,27 @@ _Last updated: 2026-09-29_
 - Phase 1 started: Overview, denial queue, and denial detail work end to end on seeded data.
 - Claims module C1 (`specs/claims.md`): claims list with timely-filing warnings, claim detail,
   corrections of draft/rejected claims with a required reason, and append-only version history
-  enforced by database triggers. Next: C2 CSV charge import, C3 837P + filing block, C4 999/277CA.
+  enforced by database triggers. Next: C3 837P + filing block, C4 999/277CA.
+- **Claims C2 — charge capture via CSV import** (`specs/claims.md` C2, approved by delegated technical
+  authority 2026-09-29; branch `claude/vigilant-tesla-ps41e9-c2-charge-import`, **no migration, no table,
+  no GRANT**): `/claims/import` (admin, manager, specialist; button in the `/claims` header) takes one
+  UTF-8 CSV (2 MB, 5,000 rows, one row per claim line, rows sharing a `Claim number` form one claim) and
+  creates **draft claims all or nothing** through `createDraftClaims` (`src/domain/claims/versions.ts`):
+  claim, lines, and version 1 (reason `charge_import`, shown localized in the history) so the C1 triggers
+  and history apply. Patients are matched by MRN and read only (never created or changed, synced or manual);
+  payers matched against the practice's catalog by name (unverified allowed, warned); CPT/HCPCS, modifier
+  and ICD-10-CM codes are format-checked with the C1 patterns and stored exactly as given (never upper-cased
+  or fixed). Duplicates are refused, not skipped: a claim number that exists, the same patient + payer + date
+  + code with the same modifiers as any existing claim or another claim in the file, and a whole file already
+  imported. Timely filing (C1 `filingStatus`) only warns; counts are shown after the import. Synthetic-only
+  environments need the attestation, `SYN-` claim numbers, and `SYN` MRNs. Audit: `claim.created` per claim,
+  `claim.import_completed` per import (batch ID, counts), `claim.import_rejected` (fixed reason, counts, attempt ID);
+  a per-practice `import_charges` rate limit (10 per 10 minutes); repeated or non-contiguous lines are refused so a
+  file pasted twice can't double a claim; no row value anywhere. Error report: first 20 rows on the page, CSV download (row, column, code, message) built
+  in the browser. Parse and match logic is in `charge-file.ts` (pure) and `charge-import.ts`. **Status:** CI ran the first
+  integration file green; the fix-round tests (`claim-import-actions.test.ts`, the synced-patient and
+  repeated-line cases, shared fixtures now in `test/integration/helpers.ts`) await a CI run. Owner: OA-083 (a `claim_imports` table
+  needs a GRANT, R-15.9), OA-084 (biller roles, duplicate override, encounter split, PM export source).
 - UI shell is ERP-style: global header with a "Go to" field (Ctrl/⌘ K), navy tab bar whose first
   control is the current module's name, and a grouped module switcher (`specs/erp-shell.md`).
   Deliberately not a copy of any vendor's shell: no grid icon, no "app launcher", tinted module
@@ -435,7 +455,7 @@ _Last updated: 2026-09-29_
 | 2026-09-27 | University Wiki: articles are code (PR-reviewed, no per-tenant or user-edited content), legal values only through rule tokens, search by POST; sits beside the U1 courses under the same header, not in the switcher; further structure waits for the owner (OA-036) | `specs/university-wiki.md` |
 | 2026-09-27 | Roll-forward pending counsel (OA-034), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-034 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
 | 2026-09-27 | Patient Register is a synced, read-only copy of the practice EHR/PM (billing minimum only) over FHIR R4 / US Core + SMART Backend Services; data-source drop-down beside the Patients tab, Patients table only for now; manual entry kept only while no connection is active (OA-046) | ADR 0010, `specs/patient-integrations.md` |
-| 2026-09-29 | Background execution: signed `{ runId }` jobs, a read-only definer claim for a new `denialdesk_jobs` role (no table privilege), a 15-minute definer-queued schedule, platform-neutral core with a thin Netlify adapter, Sync now queues a job where a secret is configured; **Proposed, R-15.9 sign-off pending (OA-083)** | ADR 0012, PI2c |
+| 2026-09-29 | Background execution: signed `{ runId }` jobs, a read-only definer claim for a new `denialdesk_jobs` role (no table privilege), a 15-minute definer-queued schedule, platform-neutral core with a thin Netlify adapter, Sync now queues a job where a secret is configured; **Proposed, R-15.9 sign-off pending (OA-085)** | ADR 0012, PI2c |
 | 2026-09-28 | Record pattern P4: `DataTable` sorting is server-side via allow-listed `?sort=<key>&dir=asc\|desc` links, not TanStack Table (still deferred until a list needs client-side interactivity — column chooser, virtualized rows) | ADR 0004 addendum, `specs/record-pages.md` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
@@ -451,8 +471,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    migrations (item 8).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
-4. Claims C2–C4 (`specs/claims.md`): CSV charge import → draft claims; 837P via clearinghouse
-   stub with the timely-filing block; 999/277CA capture.
+4. Claims C3–C4 (`specs/claims.md`): 837P via clearinghouse stub with the timely-filing block;
+   999/277CA capture. (C2 CSV charge import is built; run its integration tests in CI first.)
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
    PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›
@@ -566,6 +586,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   applies to the app role). Accept the risk or add a guard trigger? Owner decision.
 - Git history still contains the reference prototype's names from before C0. Rewrite history
   (force-push of the default branch), or leave it? Owner decision.
+- Claims C2 charge import: `claim_imports` table for file-identity duplicate detection (needs a GRANT,
+  R-15.9, `OA-083`); biller roles, an override for a legitimate repeat service, one-claim-per-number, and
+  which PM export feeds the file (`OA-084`, `specs/claims.md`).
 - Claims: which Florida timely-filing exceptions (§ 627.6131(2)) the C3 submission block must
   honor; Medicare Advantage filing windows assumed to come from payer contracts (`specs/claims.md`).
 - Patients before real data (`specs/patients.md`, P1 reviews): enforce sensitivity tags in access
@@ -606,6 +629,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Member-ID reveal on a denial decrypts the patient's primary-payer member ID even when the claim was
   billed to another payer (R-5.1.2); fix with coverage records (review §6.1), and until then reveal
   only when the claim's payer is the patient's primary payer (2026-09-26 review, security).
+- Claims C2 follow-up: nothing in the database forces a `claim_versions` version-1 row when a claim is
+  INSERTed (the C1 triggers guard updates only). `createDraftClaims` (`src/domain/claims/versions.ts`) is the
+  supported way to create a claim and writes version 1 and the `claim.created` audit event; a deferred
+  constraint trigger requiring version 1 at commit should land with C3 (no other code path inserts claims
+  today except the seed, which writes its own version 1).
 - `claims.status` / `paid_cents` are not covered by the version trigger, and no DB CHECK enforces
   0 ≤ paid ≤ billed, 0 < denied ≤ billed, charges ≥ 0; must land with C3 / 835 posting, before the
   Azure cutover (2026-09-26 review, security; owner decision §8.4).

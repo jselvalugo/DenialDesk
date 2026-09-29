@@ -11,9 +11,9 @@ type CommonT = Translator<Messages["common"]>;
 
 // Format checks only. Validity against licensed code sets (AMA CPT, CMS ICD-10-CM) is out of scope
 // until those files are licensed and loaded (docs/specs/claims.md).
-const CPT_HCPCS = /^[A-Z0-9]{5}$/;
-const MODIFIER = /^[A-Z0-9]{2}$/;
-const ICD10CM = /^[A-Z][0-9][0-9A-Z](\.?[0-9A-Z]{1,4})?$/;
+export const CPT_HCPCS = /^[A-Z0-9]{5}$/;
+export const MODIFIER = /^[A-Z0-9]{2}$/;
+export const ICD10CM = /^[A-Z][0-9][0-9A-Z](\.?[0-9A-Z]{1,4})?$/;
 /** Earliest date of service accepted; anything older is a typo, not a claim to correct. */
 export const MIN_SERVICE_DATE = "2000-01-01";
 /** Longest code-list text read from the form, so a huge field can't be split into millions of items. */

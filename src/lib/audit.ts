@@ -28,6 +28,9 @@ export type AuditAction =
   | "claim.list_viewed"
   | "claim.viewed"
   | "claim.corrected"
+  | "claim.created"
+  | "claim.import_completed"
+  | "claim.import_rejected"
   | "patient.member_id_revealed"
   | "patient.list_viewed"
   | "patient.searched"
@@ -152,6 +155,7 @@ export interface AuditEvent {
   entityType?:
     | "denial"
     | "claim"
+    | "claim_import"
     | "patient"
     | "user"
     | "session"
