@@ -16,6 +16,7 @@ import {
   MERGE_FIELDS,
   MERGE_FIELD_KEYS,
   hasUnresolvedPlaceholder,
+  letterDigest,
   missingFields,
   renderLetter,
 } from "@/domain/appeals/letter/merge-fields";
@@ -26,6 +27,7 @@ import {
   loadMergeValues,
 } from "@/domain/appeals/letter/queries";
 import { recordLetterViewed } from "@/domain/appeals/letter/service";
+import { templateCategoryToLoad } from "@/domain/appeals/letter/starter-templates";
 import { CATEGORY_LABEL_KEYS, CATEGORY_ORDER, type DenialCategory } from "@/domain/carc";
 import { getFormat, getT } from "@/i18n/server";
 import { AttestForm, LetterEditor } from "./LetterForms";
@@ -57,36 +59,43 @@ export default async function AppealLetterPage({
     const target = await getLetterTarget(tx, id);
     if (!target) return null;
     const state = await getLetterState(tx, id);
-    const templateCategory: DenialCategory | null = requested.success
-      ? requested.data
-      : state.latest
-        ? null
-        : target.category;
+    const editable = canWorkAppeals(auth.role) && EDITABLE.includes(target.status);
+    // `?template=` only counts while the letter can be edited (a stale link cannot swap the text shown).
+    const templateCategory: DenialCategory | null = templateCategoryToLoad({
+      editable,
+      requested: requested.success ? requested.data : null,
+      hasSavedLetter: state.latest !== null,
+      denialCategory: target.category,
+    });
     const template = templateCategory ? await getTemplateBody(tx, templateCategory) : null;
     const context = state.latest
       ? await loadMergeValues(tx, id, todayIn(undefined, state.latest.createdAt))
       : null;
     await recordLetterViewed(tx, auth, id, state.latest?.version ?? null);
-    return { target, state, templateCategory, template, context };
+    return { target, state, templateCategory, template, context, editable };
   });
   if (!data) notFound();
 
-  const { target, state, templateCategory, template, context } = data;
+  const { target, state, templateCategory, template, context, editable } = data;
   const canWork = canWorkAppeals(auth.role);
-  const editable = canWork && EDITABLE.includes(target.status);
   const latest = state.latest;
   const baseVersion = latest?.version ?? 0;
   const body = template?.body ?? latest?.body ?? "";
   const rendered = latest && context ? renderLetter(latest.body, context.values) : null;
   const missing = latest && context ? missingFields(latest.body, context.values) : [];
   const attestation = state.attestation;
+  // The attestation counts only while today's rendering still matches what was reviewed.
+  const attestationCurrent =
+    attestation !== null && rendered !== null && letterDigest(rendered) === attestation.renderedSha256;
+  const sensitive = context?.sensitive ?? false;
   const categoryOptions = CATEGORY_ORDER.map((category) => ({
     value: category,
     label: tc(CATEGORY_LABEL_KEYS[category]),
   }));
 
   return (
-    <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
+    // print:hidden: only /letter/print produces a printable letter, and only after review.
+    <div className="mx-auto flex max-w-[1600px] flex-col gap-6 print:hidden">
       <Breadcrumbs
         label={t("nav.breadcrumb")}
         items={[
@@ -178,7 +187,11 @@ export default async function AppealLetterPage({
           <Panel title={t("letter.review.title")} description={t("letter.review.description")}>
             {!latest ? (
               <p className="text-body text-muted">{t("letter.review.saveFirst")}</p>
-            ) : attestation ? (
+            ) : sensitive ? (
+              <p role="note" className="text-body font-medium text-warning-fg">
+                {t("letter.review.sensitive")}
+              </p>
+            ) : attestation && attestationCurrent ? (
               <div className="flex flex-col gap-3">
                 <Badge tone="success">{t("letter.panel.reviewed")}</Badge>
                 <p className="text-body text-text">
@@ -200,9 +213,11 @@ export default async function AppealLetterPage({
             ) : (
               <div className="flex flex-col gap-3">
                 <p className="text-body text-muted">
-                  {t("letter.review.needed", { version: latest.version })}
+                  {t(attestation ? "letter.review.changed" : "letter.review.needed", {
+                    version: latest.version,
+                  })}
                 </p>
-                {editable && <AttestForm appealId={id} version={latest.version} />}
+                {canWork && <AttestForm appealId={id} version={latest.version} />}
               </div>
             )}
           </Panel>

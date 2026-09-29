@@ -16,6 +16,16 @@ import { APPEAL_AWAITING_STATUSES, APPEAL_OPEN_STATUSES, type AppealStatus } fro
 import type { AppealLevel } from "@/domain/appeals/types";
 
 export const PAGE_SIZE = 25;
+/** The audit actions the appeal page's activity list shows (each has a message key on the page). */
+export const APPEAL_ACTIVITY_ACTIONS = [
+  "appeal.created",
+  "appeal.submission_recorded",
+  "appeal.decision_recorded",
+  "appeal.note_added",
+  "appeal.letter_saved",
+  "appeal.letter_attested",
+  "appeal.letter_exported",
+];
 /** Same display window as the denial queue (denials/queries.ts): a UI setting, not a legal value. */
 export const DUE_SOON_DAYS = 7;
 
@@ -176,7 +186,13 @@ export async function getAppeal(tx: TenantTx, appealId: string) {
     })
     .from(auditEvents)
     .leftJoin(users, eq(users.id, auditEvents.actorUserId))
-    .where(and(eq(auditEvents.entityType, "appeal"), eq(auditEvents.entityId, appealId)))
+    .where(
+      and(
+        eq(auditEvents.entityType, "appeal"),
+        eq(auditEvents.entityId, appealId),
+        inArray(auditEvents.action, APPEAL_ACTIVITY_ACTIONS),
+      ),
+    )
     .orderBy(desc(auditEvents.occurredAt))
     .limit(20);
 

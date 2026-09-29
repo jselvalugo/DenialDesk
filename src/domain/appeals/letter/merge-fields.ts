@@ -47,7 +47,8 @@ export function isMergeFieldKey(name: string): name is MergeFieldKey {
 
 export type BodyCheck =
   | { ok: true }
-  | { ok: false; reason: "empty" | "too_long" | "malformed" }
+  | { ok: false; reason: "empty" | "too_long" }
+  | { ok: false; reason: "malformed"; token: string }
   | { ok: false; reason: "unknown"; unknown: string[] };
 
 /**
@@ -64,7 +65,10 @@ export function checkBody(body: string): BodyCheck {
   }
   if (unknown.length > 0) return { ok: false, reason: "unknown", unknown: unknown.slice(0, 5) };
   const rest = body.replace(TOKEN, "");
-  if (rest.includes("{") || rest.includes("}")) return { ok: false, reason: "malformed" };
+  const stray = rest.search(/[{}]/);
+  // Names the offending text (a short piece of what the user typed, shown back to them only).
+  if (stray >= 0)
+    return { ok: false, reason: "malformed", token: rest.slice(stray, stray + 30).split("\n")[0]! };
   return { ok: true };
 }
 
@@ -97,8 +101,11 @@ export function renderLetter(body: string, values: MergeValues): string {
   });
 }
 
-/** A starter or practice placeholder that a person still has to replace before the letter can go out. */
-const UNRESOLVED_PLACEHOLDER = /⚠|\bVERIFY\b|\[FILL IN\b/;
+/**
+ * A bracketed VERIFY or FILL IN placeholder (`[⚠️ VERIFY: ...]`, `[FILL IN: ...]`) that a person still has
+ * to replace before the letter can go out. Case-insensitive.
+ */
+const UNRESOLVED_PLACEHOLDER = /\[\s*(⚠️?\s*)?(VERIFY|FILL IN)\b/i;
 
 export function hasUnresolvedPlaceholder(body: string): boolean {
   return UNRESOLVED_PLACEHOLDER.test(body);

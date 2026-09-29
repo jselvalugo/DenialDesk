@@ -183,7 +183,7 @@ export const appeals = {
   "letter.fields.title": "Merge fields",
   "letter.fields.description": "Only these fields can be used. An unknown field is refused when you save.",
   "letter.fields.memberIdNote":
-    "The member ID is masked to its last four characters. Type the full ID yourself only if the payer needs it.",
+    "The member ID is masked to its last four characters. The full ID is not available in letters yet.",
   "letter.history.title": "Versions",
   "letter.history.empty": "No versions saved yet.",
   "letter.history.row": "Version {version} · {author} · {when}",
@@ -234,7 +234,7 @@ export const appeals = {
   "letter.error.empty": "The letter can't be empty.",
   "letter.error.tooLong": "The letter is too long (20,000 characters at most).",
   "letter.error.malformed":
-    "A merge field is not closed properly. Each one looks like a name between double braces.",
+    "A merge field is not closed properly near “{token}”. Each one looks like a name between double braces.",
   "letter.error.unknownField": "Unknown merge field: {names}. Use only the fields in the list.",
   "letter.error.locked": "This appeal has been submitted, so the letter can't be changed or reviewed.",
   "letter.error.stale": "The letter was changed by someone else. Reload the page to see the latest version.",
@@ -244,4 +244,16 @@ export const appeals = {
     "Replace every VERIFY and FILL IN placeholder before reviewing the letter.",
   "letter.error.alreadyAttested": "This version has already been reviewed.",
   "letter.error.attestNotConfirmed": "Tick the box to confirm you reviewed the letter.",
+  "letter.review.sensitive":
+    "This patient has a sensitivity marking, so letters can't be reviewed or exported yet.",
+  "letter.review.changed":
+    "The claim or patient record changed since version {version} was reviewed. Review it again before exporting.",
+  "letter.error.missingValues":
+    "Some fields have no value on file (shown as [not on file]). Fix the record or remove them before reviewing.",
+  "letter.error.sensitivePatient":
+    "This patient has a sensitivity marking, so letters can't be reviewed or exported yet.",
+  "letter.print.refused.sensitive":
+    "This patient has a sensitivity marking, so the letter can't be exported yet.",
+  "letter.print.refused.role": "Your role can read appeal letters but not export them.",
+  "letter.print.syntheticMarker": "SYNTHETIC / PREVIEW - NOT FOR SUBMISSION",
 } as const;

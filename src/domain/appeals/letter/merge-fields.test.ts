@@ -13,7 +13,7 @@ import {
   renderLetter,
   type MergeValues,
 } from "./merge-fields";
-import { STARTER_TEMPLATES, starterTemplate } from "./starter-templates";
+import { STARTER_TEMPLATES, starterTemplate, templateCategoryToLoad } from "./starter-templates";
 import { CATEGORY_ORDER } from "@/domain/carc";
 
 // All values are synthetic.
@@ -122,7 +122,13 @@ describe("fieldsUsed", () => {
 });
 
 describe("unresolved placeholders block attestation", () => {
-  it.each(["[⚠️ VERIFY: cite the policy]", "VERIFY this", "[FILL IN: documents]"])("%s", (text) => {
+  it.each([
+    "[⚠️ VERIFY: cite the policy]",
+    "[VERIFY: cite the policy]",
+    "[ verify: cite the policy]",
+    "[FILL IN: documents]",
+    "[fill in: documents]",
+  ])("%s", (text) => {
     expect(hasUnresolvedPlaceholder(`Dear payer, ${text}`)).toBe(true);
   });
 
@@ -171,4 +177,37 @@ describe("starter templates", () => {
       expect(body).not.toMatch(/§|Fla\.? ?Stat|\bCFR\b|\bU\.?S\.?C\b|\b\d+\s*days\b/i);
     },
   );
+});
+
+describe("malformed tokens name the offending text", () => {
+  it("returns the stray brace and what follows it", () => {
+    expect(checkBody("Dear payer, {{claim.number and more")).toEqual({
+      ok: false,
+      reason: "malformed",
+      token: "{{claim.number and more",
+    });
+  });
+});
+
+describe("starters avoid the CARC description (its source wording is still VERIFY)", () => {
+  it.each(Object.entries(STARTER_TEMPLATES))("%s", (_category, body) => {
+    expect(body).not.toContain("denial.carcDescription");
+  });
+});
+
+describe("templateCategoryToLoad (a stale ?template= cannot swap the text shown)", () => {
+  const base = { requested: "coding", hasSavedLetter: true, denialCategory: "eligibility" } as const;
+  it("ignores the requested template when the letter cannot be edited", () => {
+    expect(templateCategoryToLoad({ ...base, editable: false })).toBeNull();
+    expect(templateCategoryToLoad({ ...base, editable: false, hasSavedLetter: false })).toBeNull();
+  });
+  it("uses the requested template while editing", () => {
+    expect(templateCategoryToLoad({ ...base, editable: true })).toBe("coding");
+  });
+  it("starts an unsaved letter from the denial's own category, and leaves a saved one alone", () => {
+    expect(templateCategoryToLoad({ ...base, editable: true, requested: null, hasSavedLetter: false })).toBe(
+      "eligibility",
+    );
+    expect(templateCategoryToLoad({ ...base, editable: true, requested: null })).toBeNull();
+  });
 });

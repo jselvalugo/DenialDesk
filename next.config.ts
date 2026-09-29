@@ -22,6 +22,8 @@ const nextConfig: NextConfig = {
     const staticCsp = [{ key: "Content-Security-Policy", value: STATIC_ASSET_CSP }];
     return [
       { source: "/:path*", headers: securityHeaders },
+      // A rendered appeal letter carries PHI: never stored by a browser or shared cache (HC-2.3).
+      { source: "/appeals/:id/letter/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
       ...["/_next/static/:path*", "/_next/image", "/icon.png", "/brand/:path*"].map((source) => ({
         source,
         headers: staticCsp,

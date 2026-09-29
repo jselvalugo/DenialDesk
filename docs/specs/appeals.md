@@ -156,9 +156,9 @@ exist (`src/domain/appeals/letter/merge-fields.ts`):
 | Key | Source | Note |
 | --- | --- | --- |
 | `patient.fullName`, `patient.birthDate` | patients | Payers match the member by name and date of birth. |
-| `patient.memberIdMasked` | patients.member_id_last4 | **Masked (`****1234`).** Minimum necessary (HC-3.3): the encrypted full member ID is never decrypted into a letter. A user who must print the full ID types it into the body after the audited reveal on the appeal page. Owner question OA-094. |
+| `patient.memberIdMasked` | patients.member_id_last4 | **Masked (`****1234`).** Minimum necessary (HC-3.3): the encrypted full member ID is never decrypted into a letter, and the full ID is not available in letters yet. Owner question OA-094. |
 | `claim.number`, `claim.serviceDate`, `claim.billedAmount` | claims | |
-| `denial.carc`, `denial.carcDescription`, `denial.rarcs`, `denial.category`, `denial.amount`, `denial.noticeDate` | denials, `src/domain/carc.ts` | The CARC description is DenialDesk's summary (⚠️ VERIFY status in `carc.ts`); the letter shows it as stored. |
+| `denial.carc`, `denial.carcDescription`, `denial.rarcs`, `denial.category`, `denial.amount`, `denial.noticeDate` | denials, `src/domain/carc.ts` | The CARC description is DenialDesk's summary (⚠️ VERIFY status in `carc.ts`); a practice may use the field, but no starter template does. |
 | `payer.name` | payers | The `payers` table has no address column, so there is no payer-address field; the starter has a placeholder for it. Owner question OA-095. |
 | `provider.name`, `provider.npi` | providers | |
 | `practice.name`, `practice.city` | tenants, locations | |
@@ -181,7 +181,8 @@ exist (`src/domain/appeals/letter/merge-fields.ts`):
       DELETE): version, body, who, when, and which category template it started from. Identical text is
       not saved again. The page lists the history (version, who, when).
 - [x] Body limit 20,000 characters; a letter can only be started or changed while the appeal is draft,
-      in review, or ready. After submission it is read-only (and stays printable).
+      in review, or ready. After submission the text is read-only, but the letter can still be re-reviewed
+      (attested again) and printed.
 - [x] Roles: admin, manager, and specialist edit, attest, and export; compliance can read the letter but not
       change or export it (R-5.1.2).
 
@@ -189,7 +190,15 @@ exist (`src/domain/appeals/letter/merge-fields.ts`):
 - [x] Before export, a signed-in user attests, by ticking a statement and pressing "I reviewed this
       letter", that they reviewed **this** version. The attestation row (`appeal_letter_attestations`,
       append-only) records the user, the time, the version, and a SHA-256 of the fully rendered letter.
-- [x] An attestation is refused while the body still contains a `⚠️ VERIFY` or `[FILL IN: …]` placeholder.
+- [x] An attestation is refused (and the refusal audited with a fixed reason code) while the body still
+      contains a bracketed `[⚠️ VERIFY: …]` or `[FILL IN: …]` placeholder (any letter case), while any
+      rendered field shows `[not on file]`, and when the same rendering was already attested.
+- [x] **Sensitive patients fail closed** (until OA-031 / OA-091 settle sensitivity handling): attestation and
+      export are refused, audited with reason `sensitive_patient`, when the patient has any sensitivity tag,
+      any source sensitivity label, or `source_restricted = true`.
+- [x] Attesting is allowed in any appeal status. A version can be attested again after the claim or patient
+      data changed (the attestation table is append-only and not unique per version; the newest wins), so a
+      submitted appeal's letter never becomes permanently unprintable.
 - [x] Any new saved version has no attestation until someone attests it. Export is refused when the
       latest version has no attestation, and also when the rendered letter no longer matches the
       attested digest (for example, the claim or patient record changed after review): the user must
@@ -201,7 +210,10 @@ exist (`src/domain/appeals/letter/merge-fields.ts`):
 ### Export
 - [x] `/appeals/[id]/letter/print` is a print-friendly page (the browser's print dialog saves a PDF).
       No new dependency, no PDF library, no third-party asset. The page title is generic ("Appeal
-      letter"), so a saved file name carries no PHI (HC-2.4). Screen chrome is hidden with print styles.
+      letter"), so a saved file name carries no PHI (HC-2.4). Screen chrome is hidden with print styles,
+      and the editor page is `print:hidden`, so only this page produces a printable letter, and only after
+      review. Outside production it prints "SYNTHETIC / PREVIEW - NOT FOR SUBMISSION".
+- [x] The letter routes send `Cache-Control: no-store` (`next.config.ts` headers; HC-2.3).
 - [x] The page is reached with a normal link (not prefetched) and each render is one audited export.
       Refusals are audited too.
 
@@ -209,7 +221,10 @@ exist (`src/domain/appeals/letter/merge-fields.ts`):
 - [x] `appeal.template_created`, `appeal.template_updated` (entity `appeal_letter_template`),
       `appeal.letter_viewed`, `appeal.letter_saved`, `appeal.letter_attested`, `appeal.letter_exported`,
       `appeal.letter_export_refused` (entity `appeal`). Metadata: version number, category, refusal reason
-      code. No body text, no field values, no names.
+      code. No body text, no field values, no names. Also `appeal.letter_attest_refused`; a refused export
+      by a role that may not export (compliance) is audited with reason `role`; `appeal.letter_exported`
+      carries the version and the attestation ID. The appeal page's activity list shows only actions that
+      have a label.
 - [x] No PHI in URLs (`/appeals/[id]/letter` uses the appeal UUID) or logs.
 
 ### Data (A2)
@@ -217,7 +232,10 @@ exist (`src/domain/appeals/letter/merge-fields.ts`):
       `test/integration/tenancy.test.ts`: `appeal_letter_templates` (`SELECT, INSERT, UPDATE`),
       `appeal_letter_versions` (`SELECT, INSERT`), `appeal_letter_attestations` (`SELECT, INSERT`). Grants
       follow the established pattern (table grants to `denialdesk_app` in the migration); no role,
-      no `SECURITY DEFINER`, nothing beyond it. The migration is `drizzle/0048_appeal_letters.sql`.
+      no `SECURITY DEFINER`, nothing beyond it. The migration is `drizzle/0047_appeal_letters.sql`. It also adds
+      append-only triggers (BEFORE UPDATE OR DELETE) on the two history tables, like `claim_versions`, and
+      replaces `purge_demo_practices()` (the 0039 definition plus the new tables and guards; it is not
+      SECURITY DEFINER) so a demo purge cannot fail on the new foreign keys.
 - [x] Classification: all three tables are Restricted PHI by inheritance (HC-1.2: appeal letters and
       free text). Template bodies are practice free text, so they get RLS and audited edits, but they are
       meant to hold merge tokens and no patient details (the template page says so); viewing a template

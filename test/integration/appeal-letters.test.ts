@@ -14,11 +14,13 @@ import {
 } from "@/db/schema";
 import { seedPractice } from "@/db/seed";
 import { withTenant } from "@/db/tenant";
+import { getAppeal, APPEAL_ACTIVITY_ACTIONS } from "@/domain/appeals/queries";
 import { getLetterState, getTemplateBody, listTemplateStatus } from "@/domain/appeals/letter/queries";
 import { starterTemplate } from "@/domain/appeals/letter/starter-templates";
 import {
   attestLetter,
   prepareExport,
+  recordExportRoleRefused,
   saveLetterVersion,
   saveTemplate,
 } from "@/domain/appeals/letter/service";
@@ -62,6 +64,18 @@ async function newAppeal(): Promise<string> {
       })
       .returning({ id: appeals.id });
     return inserted!.id;
+  });
+}
+
+/** Renames the appeal's patient (a synthetic record change after review). */
+async function renamePatient(appealId: string, lastName: string) {
+  await withTenant(ctx, async (tx) => {
+    const [row] = await tx
+      .select({ patientId: claims.patientId })
+      .from(appeals)
+      .innerJoin(claims, eq(claims.id, appeals.claimId))
+      .where(eq(appeals.id, appealId));
+    await tx.update(patients).set({ lastName }).where(eq(patients.id, row!.patientId));
   });
 }
 
@@ -117,7 +131,33 @@ describe("letter versions (append-only history)", () => {
         .where(eq(appeals.id, appealId)),
     );
     expect(await save(appealId, `${GOOD_BODY} late`, 1)).toMatchObject({ errorKey: "letter.error.locked" });
-    expect(await attest(appealId, 1)).toMatchObject({ errorKey: "letter.error.locked" });
+  });
+
+  it("after submission the letter can still be re-reviewed: data changes refuse export until re-attested", async () => {
+    const appealId = await newAppeal();
+    await save(appealId, GOOD_BODY, 0);
+    expect(await attest(appealId, 1)).toEqual({ ok: true });
+    await withTenant(ctx, (tx) =>
+      tx
+        .update(appeals)
+        .set({ status: "submitted", submittedMethod: "portal", submittedOn: today })
+        .where(eq(appeals.id, appealId)),
+    );
+    expect((await exportLetter(appealId)).ok).toBe(true);
+
+    await renamePatient(appealId, "Changed");
+    expect(await exportLetter(appealId)).toEqual({ ok: false, reason: "changed_since_review" });
+    // Same rendering as the old attestation would be refused as a duplicate; this one is new, so it is allowed.
+    expect(await attest(appealId, 1)).toEqual({ ok: true });
+    const again = await exportLetter(appealId);
+    expect(again.ok).toBe(true);
+    if (again.ok) expect(again.text).toContain("Changed");
+    // The history keeps both attestations, and saving is still locked.
+    const rows = await withTenant(ctx, (tx) =>
+      tx.select().from(appealLetterAttestations).where(eq(appealLetterAttestations.appealId, appealId)),
+    );
+    expect(rows).toHaveLength(2);
+    expect(await save(appealId, `${GOOD_BODY} late`, 1)).toMatchObject({ errorKey: "letter.error.locked" });
   });
 
   it("the app role cannot rewrite or delete history", async () => {
@@ -267,7 +307,11 @@ describe("audit trail holds IDs only, never letter content", () => {
     );
     for (const row of rows.filter((r) => r.action.startsWith("appeal.letter_"))) {
       expect(row.actorUserId).toBe(ctx.userId);
-      expect(row.metadata).toEqual({ version: 1 });
+      expect(row.metadata).toEqual(
+        row.action === "appeal.letter_exported"
+          ? { version: 1, attestationId: expect.stringMatching(/^[0-9a-f-]{36}$/) }
+          : { version: 1 },
+      );
       expect(JSON.stringify(row)).not.toContain(MARKER);
     }
   });
@@ -316,5 +360,107 @@ describe("templates", () => {
     expect(result).toMatchObject({ errorKey: "letter.error.unknownField", params: { names: "patient.mbi" } });
     const status = await withTenant(ctx, (tx) => listTemplateStatus(tx));
     expect(status.find((s) => s.category === "coding")?.source).toBe("starter");
+  });
+});
+
+describe("attestation and export refusals are audited with fixed reason codes", () => {
+  async function refusals(appealId: string, action: string) {
+    const rows = await withTenant(ctx, (tx) =>
+      tx
+        .select({ metadata: auditEvents.metadata })
+        .from(auditEvents)
+        .where(
+          and(eq(auditEvents.entityId, appealId), eq(auditEvents.action, action as "appeal.letter_saved")),
+        ),
+    );
+    return rows.map((r) => r.metadata);
+  }
+
+  it("refuses a letter whose fields have no value on file", async () => {
+    const appealId = await newAppeal();
+    // Every synthetic claim has a payer name, so blank the rendered value with a literal marker instead.
+    await save(appealId, `${GOOD_BODY} [not on file]`, 0);
+    expect(await attest(appealId, 1)).toMatchObject({ errorKey: "letter.error.missingValues" });
+    expect(await refusals(appealId, "appeal.letter_attest_refused")).toEqual([
+      { reason: "missing_values", version: 1 },
+    ]);
+  });
+
+  it("audits the placeholder, stale, and no-letter refusals", async () => {
+    const appealId = await newAppeal();
+    await attest(appealId, 1);
+    await save(appealId, `${GOOD_BODY} [FILL IN: x]`, 0);
+    await attest(appealId, 1);
+    await attest(appealId, 5);
+    const reasons = (await refusals(appealId, "appeal.letter_attest_refused")).map(
+      (m) => (m as { reason: string }).reason,
+    );
+    expect(reasons.sort()).toEqual(["no_letter", "stale", "unresolved_placeholder"]);
+  });
+
+  it("fails closed for a patient with a sensitivity tag or a source restriction", async () => {
+    for (const change of [{ sensitivityTags: ["hiv"] }, { sourceRestricted: true }]) {
+      const appealId = await newAppeal();
+      await save(appealId, GOOD_BODY, 0);
+      expect(await attest(appealId, 1)).toEqual({ ok: true });
+      expect((await exportLetter(appealId)).ok).toBe(true);
+
+      await withTenant(ctx, async (tx) => {
+        const [row] = await tx
+          .select({ patientId: claims.patientId })
+          .from(appeals)
+          .innerJoin(claims, eq(claims.id, appeals.claimId))
+          .where(eq(appeals.id, appealId));
+        await tx.update(patients).set(change).where(eq(patients.id, row!.patientId));
+      });
+      // Export is refused even though it was attested; a new attestation is refused too.
+      expect(await exportLetter(appealId)).toEqual({ ok: false, reason: "sensitive_patient" });
+      expect(await attest(appealId, 1)).toMatchObject({ errorKey: "letter.error.sensitivePatient" });
+      expect(await refusals(appealId, "appeal.letter_export_refused")).toContainEqual({
+        reason: "sensitive_patient",
+        version: 1,
+      });
+      expect(await refusals(appealId, "appeal.letter_attest_refused")).toContainEqual({
+        reason: "sensitive_patient",
+        version: 1,
+      });
+    }
+  });
+
+  it("audits a role refusal", async () => {
+    const appealId = await newAppeal();
+    await withTenant(ctx, (tx) => recordExportRoleRefused(tx, ctx, appealId));
+    expect(await refusals(appealId, "appeal.letter_export_refused")).toEqual([{ reason: "role" }]);
+  });
+});
+
+describe("template create race", () => {
+  it("two creators at once end as one row, one create and one update", async () => {
+    const results = await Promise.all([
+      withTenant(ctx, (tx) =>
+        saveTemplate(tx, ctx, { category: "bundling", body: "First {{claim.number}}" }),
+      ),
+      withTenant(ctx, (tx) =>
+        saveTemplate(tx, ctx, { category: "bundling", body: "Second {{claim.number}}" }),
+      ),
+    ]);
+    expect(results.every((r) => "ok" in r && r.ok)).toBe(true);
+    expect(results.filter((r) => "created" in r && r.created)).toHaveLength(1);
+    const rows = await withTenant(ctx, (tx) =>
+      tx.select().from(appealLetterTemplates).where(eq(appealLetterTemplates.category, "bundling")),
+    );
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe("activity list", () => {
+  it("shows only actions that have a label, not views or refusals", async () => {
+    const appealId = await newAppeal();
+    await save(appealId, GOOD_BODY, 0);
+    await exportLetter(appealId); // refused: audited but not listed
+    const detail = await withTenant(ctx, (tx) => getAppeal(tx, appealId));
+    const actions = detail!.activity.map((a) => a.action);
+    expect(actions).toContain("appeal.letter_saved");
+    expect(actions.every((a) => APPEAL_ACTIVITY_ACTIONS.includes(a))).toBe(true);
   });
 });

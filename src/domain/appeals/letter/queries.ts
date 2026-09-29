@@ -35,13 +35,16 @@ export async function loadMergeValues(
   tx: TenantTx,
   appealId: string,
   letterDate: string,
-): Promise<{ values: MergeValues; category: DenialCategory } | null> {
+): Promise<{ values: MergeValues; category: DenialCategory; sensitive: boolean } | null> {
   const [row] = await tx
     .select({
       firstName: patients.firstName,
       lastName: patients.lastName,
       birthDate: patients.birthDate,
       memberIdLast4: patients.memberIdLast4,
+      sensitivityTags: patients.sensitivityTags,
+      sourceRestricted: patients.sourceRestricted,
+      sourceSensitivity: patients.sourceSensitivity,
       claimNumber: claims.claimNumber,
       serviceDate: claims.serviceDate,
       billedCents: claims.billedCents,
@@ -90,7 +93,11 @@ export async function loadMergeValues(
     "appeal.deadline": usDate(row.deadline),
     "letter.date": usDate(letterDate),
   };
-  return { values, category: row.category };
+  // Fail closed until sensitivity handling exists (OA-031, OA-091): a patient with any sensitivity tag, or
+  // marked restricted at the source, never gets a letter attested or exported.
+  const sensitive =
+    row.sensitivityTags.length > 0 || row.sourceRestricted || row.sourceSensitivity.length > 0;
+  return { values, category: row.category, sensitive };
 }
 
 /** The wording a category starts from: the practice's own template, else the starter. */
@@ -172,6 +179,7 @@ export async function getLetterState(tx: TenantTx, appealId: string) {
         eq(appealLetterAttestations.version, latestMeta.version),
       ),
     )
+    .orderBy(desc(appealLetterAttestations.attestedAt))
     .limit(1);
   return { latest: latest ?? null, history, attestation: attestation ?? null };
 }

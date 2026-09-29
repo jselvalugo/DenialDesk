@@ -4,7 +4,12 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
 import { closeDatabase, systemDb } from "@/db/client";
 import {
+  appealLetterAttestations,
+  appealLetterTemplates,
+  appealLetterVersions,
+  appeals,
   auditEvents,
+  denials,
   claims,
   claimVersions,
   integrationConnections,
@@ -39,6 +44,8 @@ const GUARDS = [
   "tenant_agreements_guard_row",
   "integration_sync_issues_no_update",
   "integration_sync_runs_no_delete",
+  "appeal_letter_versions_no_update",
+  "appeal_letter_attestations_no_update",
   "audit_events_no_update", // never touched: the audit log stays append-only
 ];
 
@@ -85,6 +92,44 @@ describe("purge_demo_practices", () => {
     await systemDb()
       .insert(universityAccess)
       .values({ tenantId: demo.tenantId, requestedAt: new Date(), requestedBy: demo.userIds[0]! });
+    // Appeal letters (A2, 0047): a template, a letter version, and its attestation must not block the
+    // purge (their FKs point at appeals) and must be gone afterwards.
+    const demoCtx = { tenantId: demo.tenantId, userId: demo.userIds[0]! };
+    const demoAppealId = await withTenant(demoCtx, async (tx) => {
+      const [denial] = await tx.select({ id: denials.id, claimId: denials.claimId }).from(denials).limit(1);
+      const [appeal] = await tx
+        .insert(appeals)
+        .values({
+          tenantId: demo.tenantId,
+          denialId: denial!.id,
+          claimId: denial!.claimId,
+          level: "first_level",
+          filedBy: demoCtx.userId,
+        })
+        .returning({ id: appeals.id });
+      await tx.insert(appealLetterTemplates).values({
+        tenantId: demo.tenantId,
+        category: "coding",
+        body: "Synthetic template",
+        createdBy: demoCtx.userId,
+        updatedBy: demoCtx.userId,
+      });
+      await tx.insert(appealLetterVersions).values({
+        tenantId: demo.tenantId,
+        appealId: appeal!.id,
+        version: 1,
+        body: "Synthetic letter",
+        createdBy: demoCtx.userId,
+      });
+      await tx.insert(appealLetterAttestations).values({
+        tenantId: demo.tenantId,
+        appealId: appeal!.id,
+        version: 1,
+        renderedSha256: "c".repeat(64),
+        attestedBy: demoCtx.userId,
+      });
+      return appeal!.id;
+    });
     // A connection, a queued sync run, a sync issue and a payer mapping (PI1a, 0039) must not
     // block the purge and must themselves be gone afterwards, in FK order.
     const host = `demo-ehr-${s}.example.test`;
@@ -162,6 +207,12 @@ describe("purge_demo_practices", () => {
     expect(await systemDb().select().from(patients).where(eq(patients.tenantId, demo.tenantId))).toHaveLength(
       0,
     );
+
+    // The appeal letter rows are gone too.
+    expect(await systemDb().select().from(appeals).where(eq(appeals.id, demoAppealId))).toHaveLength(0);
+    for (const table of [appealLetterTemplates, appealLetterVersions, appealLetterAttestations]) {
+      expect(await systemDb().select().from(table).where(eq(table.tenantId, demo.tenantId))).toHaveLength(0);
+    }
 
     // Earlier audit events are kept, plus one purge record per practice and per user.
     const kept = await auditFor(demo.tenantId, demo.userIds[0]!);

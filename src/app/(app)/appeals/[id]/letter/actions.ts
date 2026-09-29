@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { canWorkAppeals } from "@/auth/permissions";
 import { requireAuth } from "@/auth/session";
@@ -60,7 +61,8 @@ export async function saveLetter(_: LetterActionState, formData: FormData): Prom
   );
   if ("errorKey" in result) return { error: await message(result) };
   revalidatePath(`/appeals/${parsed.data.appealId}`, "layout");
-  return { ok: true };
+  // Back to the plain letter URL: a `?template=` from "Load template" must not stay and reload over the save.
+  redirect(`/appeals/${parsed.data.appealId}/letter`);
 }
 
 /** Records the signed-in user's review of the latest letter version (R-7.11.2). */

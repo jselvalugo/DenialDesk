@@ -318,7 +318,7 @@ export default async function AppealPage({ params }: { params: Promise<{ id: str
                   <li key={event.id} className="text-body">
                     <p className="text-text">
                       <span className="font-medium">{event.actor ?? t("activity.actorSystem")}</span>{" "}
-                      {ACTIVITY_KEYS[event.action] ? t(ACTIVITY_KEYS[event.action]!) : event.action}
+                      {ACTIVITY_KEYS[event.action] ? t(ACTIVITY_KEYS[event.action]!) : ""}
                     </p>
                     <p className="text-label text-muted">{f.dateTime(event.occurredAt)}</p>
                   </li>

@@ -100,6 +100,7 @@ export type AuditAction =
   | "appeal.letter_attested"
   | "appeal.letter_exported"
   | "appeal.letter_export_refused"
+  | "appeal.letter_attest_refused"
   | "custom_field.value_revealed"
   | "custom_field.value_integrity_failed"
   | "custom_field.values_read"

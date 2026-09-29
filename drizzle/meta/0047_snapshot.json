@@ -54,8 +54,8 @@
         }
       },
       "indexes": {
-        "appeal_letter_attestations_key": {
-          "name": "appeal_letter_attestations_key",
+        "appeal_letter_attestations_lookup": {
+          "name": "appeal_letter_attestations_lookup",
           "columns": [
             {
               "expression": "tenant_id",
@@ -74,9 +74,15 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
+            },
+            {
+              "expression": "attested_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
-          "isUnique": true,
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}

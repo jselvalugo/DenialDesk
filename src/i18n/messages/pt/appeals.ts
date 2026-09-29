@@ -189,7 +189,7 @@ export const appeals: Messages["appeals"] = {
   "letter.fields.description":
     "Somente estes campos podem ser usados. Um campo desconhecido é recusado ao salvar.",
   "letter.fields.memberIdNote":
-    "O ID de associado é mascarado nos últimos quatro caracteres. Digite o ID completo você mesmo somente se o pagador precisar.",
+    "O ID de associado é mascarado nos últimos quatro caracteres. O ID completo ainda não está disponível nas cartas.",
   "letter.history.title": "Versões",
   "letter.history.empty": "Ainda não há versões salvas.",
   "letter.history.row": "Versão {version} · {author} · {when}",
@@ -241,7 +241,7 @@ export const appeals: Messages["appeals"] = {
   "letter.error.empty": "A carta não pode estar vazia.",
   "letter.error.tooLong": "A carta é longa demais (máximo de 20.000 caracteres).",
   "letter.error.malformed":
-    "Um campo de mesclagem não está fechado corretamente. Cada um é um nome entre chaves duplas.",
+    "Um campo de mesclagem não está fechado corretamente perto de “{token}”. Cada um é um nome entre chaves duplas.",
   "letter.error.unknownField": "Campo de mesclagem desconhecido: {names}. Use somente os campos da lista.",
   "letter.error.locked": "Este recurso já foi enviado, então a carta não pode ser alterada nem revisada.",
   "letter.error.stale": "Outra pessoa alterou a carta. Recarregue a página para ver a última versão.",
@@ -250,4 +250,16 @@ export const appeals: Messages["appeals"] = {
   "letter.error.unresolvedPlaceholder": "Substitua cada marcador VERIFY e FILL IN antes de revisar a carta.",
   "letter.error.alreadyAttested": "Esta versão já foi revisada.",
   "letter.error.attestNotConfirmed": "Marque a caixa para confirmar que revisou a carta.",
+  "letter.review.sensitive":
+    "Este paciente tem uma marcação de sensibilidade, então as cartas ainda não podem ser revisadas nem exportadas.",
+  "letter.review.changed":
+    "A reivindicação ou o registro do paciente mudou desde que a versão {version} foi revisada. Revise-a novamente antes de exportar.",
+  "letter.error.missingValues":
+    "Alguns campos não têm valor registrado (exibidos como [not on file]). Corrija o registro ou remova-os antes de revisar.",
+  "letter.error.sensitivePatient":
+    "Este paciente tem uma marcação de sensibilidade, então as cartas ainda não podem ser revisadas nem exportadas.",
+  "letter.print.refused.sensitive":
+    "Este paciente tem uma marcação de sensibilidade, então a carta ainda não pode ser exportada.",
+  "letter.print.refused.role": "Seu perfil pode ler as cartas de recurso, mas não exportá-las.",
+  "letter.print.syntheticMarker": "SINTÉTICO / PRÉ-VISUALIZAÇÃO - NÃO ENVIAR",
 };

@@ -6,7 +6,8 @@ import type { DenialCategory } from "@/domain/carc";
 //     cannot be attested (merge-fields.ts `hasUnresolvedPlaceholder`).
 //   - It never asks the payer to change a billed code, and nothing here changes one (CLAUDE.md #8).
 //   - It is English: the payer reads it. A practice replaces it with its own wording in Settings.
-// Only allow-listed merge fields are used (starter-templates.test.ts checks this).
+// Only allow-listed merge fields are used, and never the CARC description, whose source wording is still
+// ⚠️ VERIFY (src/domain/carc.ts). merge-fields.test.ts checks both.
 
 function frame(reason: string, argument: string): string {
   return [
@@ -20,7 +21,7 @@ function frame(reason: string, argument: string): string {
     "Patient: {{patient.fullName}}   Date of birth: {{patient.birthDate}}",
     "Member ID: {{patient.memberIdMasked}}",
     "Date of service: {{claim.serviceDate}}   Billed: {{claim.billedAmount}}   Denied: {{denial.amount}}",
-    "Denial notice dated {{denial.noticeDate}}: CARC {{denial.carc}} ({{denial.carcDescription}}); RARC {{denial.rarcs}}",
+    "Denial notice dated {{denial.noticeDate}}: CARC {{denial.carc}}; RARC {{denial.rarcs}}",
     "",
     "To the Appeals Reviewer:",
     "",
@@ -71,4 +72,20 @@ export const STARTER_TEMPLATES: Partial<Record<DenialCategory, string>> = {
 /** The starter for a category, or the generic one when the category has none of its own. */
 export function starterTemplate(category: DenialCategory): string {
   return STARTER_TEMPLATES[category] ?? OTHER;
+}
+
+/**
+ * Which category's template the letter editor should load: none when the person cannot edit (a template
+ * in the URL is ignored), the requested one when editing, else the denial's own category for a letter
+ * that has no saved version yet.
+ */
+export function templateCategoryToLoad(input: {
+  editable: boolean;
+  requested: DenialCategory | null;
+  hasSavedLetter: boolean;
+  denialCategory: DenialCategory;
+}): DenialCategory | null {
+  if (!input.editable) return null;
+  if (input.requested) return input.requested;
+  return input.hasSavedLetter ? null : input.denialCategory;
 }

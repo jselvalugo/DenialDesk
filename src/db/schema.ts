@@ -917,7 +917,7 @@ export const appealLetterVersions = pgTable(
 );
 
 /**
- * A named user's attestation that they reviewed one letter version (R-7.11.2). Append-only. The digest
+ * A named user's attestation that they reviewed one letter version (R-7.11.2). Append-only; a version can be attested again after the data it shows changed. The digest
  * is a SHA-256 of the fully rendered letter at review time, so an export can tell that the claim or
  * patient data changed since.
  */
@@ -935,7 +935,8 @@ export const appealLetterAttestations = pgTable(
     attestedAt: timestamp("attested_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("appeal_letter_attestations_key").on(t.tenantId, t.appealId, t.version),
+    // Not unique: a version is attested again after the claim or patient data changed (newest row wins).
+    index("appeal_letter_attestations_lookup").on(t.tenantId, t.appealId, t.version, t.attestedAt),
     foreignKey({
       name: "appeal_letter_attestations_version_fk",
       columns: [t.tenantId, t.appealId, t.version],
