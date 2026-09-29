@@ -39,10 +39,38 @@ describe("image digests (SC-A4.2, SC-B12.3)", () => {
 });
 
 describe("pnpm pin (SC-A4.2)", () => {
-  it("packageManager names an exact pnpm version and its sha512, which corepack verifies", () => {
+  const ci = readFileSync(".github/workflows/ci.yml", "utf8");
+
+  it("packageManager names an exact pnpm version and its sha512", () => {
     const { packageManager } = JSON.parse(readFileSync("package.json", "utf8")) as {
       packageManager?: string;
     };
     expect(packageManager).toMatch(/^pnpm@\d+\.\d+\.\d+\+sha512\.[0-9a-f]{128}$/);
+  });
+
+  it("CI gets pnpm from corepack, which checks the sha512, in every job that runs pnpm", () => {
+    expect(ci).not.toMatch(/uses:\s*pnpm\/action-setup/);
+    const jobs = ci.split(/^ {2}[a-z0-9-]+:\n {4}name:/m).slice(1);
+    const pnpmJobs = jobs.filter((body) => /run: pnpm /.test(body));
+    expect(pnpmJobs).toHaveLength(4);
+    for (const job of pnpmJobs) {
+      const install = job.indexOf("corepack enable && corepack install");
+      expect(install).toBeGreaterThan(-1);
+      expect(install).toBeLessThan(job.indexOf("run: pnpm "));
+    }
+  });
+});
+
+describe("runtime image (SC-B12.3)", () => {
+  const runtime = readFileSync("Dockerfile", "utf8").split(/^FROM .* AS runtime$/m)[1] ?? "";
+
+  it("removes the package managers the base image ships", () => {
+    for (const path of ["node_modules/npm", "node_modules/corepack", "/opt/yarn-v*", "bin/yarn"]) {
+      expect(runtime).toContain(path);
+    }
+  });
+
+  it("deletes server source maps before the runtime stage copies the build", () => {
+    expect(readFileSync("Dockerfile", "utf8")).toContain("find .next/standalone -name '*.map' -delete");
   });
 });

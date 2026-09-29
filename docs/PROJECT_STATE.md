@@ -415,11 +415,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    reviews the 837P fit of the mapping).
 12. Close the known gaps in `docs/SECURE_CODING.md` and `docs/HIPAA_COMPLIANCE.md` (tracked, not
    waived; they gate the first real practice): CSP base-uri and dev eval, AAD on member-ID and TOTP encryption, exact
-   pins, 7-day release quarantine, strict Zod objects, upload malware scanning,
+   pins, Node.js version/hash pins in CI and Netlify, 7-day release quarantine, strict Zod objects, upload malware scanning,
    missing threat models, CI license check, SAST/DAST/SBOM, signed commits; WebAuthn, JIT and
    break-glass access, WORM audit + SIEM, mTLS, Key Vault, legal hold, disclosure-accounting export,
    and the written HIPAA policy set.
-   Closed: SC-A4.2/SC-B12.3 (images by digest, pnpm by sha512; Dependabot docker updates).
+   Closed: SC-B12.3 and most of SC-A4.2 (images by digest, pnpm by sha512 via corepack in the
+   image and CI, no package managers or source maps in the runtime image).
 
 ## Open questions for humans
 
