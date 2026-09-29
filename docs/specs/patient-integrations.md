@@ -82,7 +82,7 @@ production only a practice-scoped population is accepted (see Environment and po
 ## Connection lifecycle
 `draft` → (admin **Submit**: passing test in the last 24 h, residency attested, MFA step-up) →
 sandbox: `active`; real: `pending_approval` (registry claimed) → operator **Approve** → `active` (all
-practice administrators notified) or **Reject** (reason code) → `draft` (registry released).
+practice administrators notified (notice pending, PI1c open item)) or **Reject** (reason code) → `draft` (registry released).
 `active` ⇄ `paused` (resume: MFA step-up); `active` → `error` (automatic, reason code) → re-test and
 resume. Any state → **`revoked`** (admin or operator; terminal; registry released; signing key
 destroyed; offboarding runbook). At most one connection per practice and target table outside
@@ -286,23 +286,139 @@ get their own tests in PI2a.
   per-request query on modules without a data-source tab.
 
 ### PI1c — operator approval
-- [ ] The operator practice page (`/operator/practices/<id>`, pattern of BAA recording and
-      University access) lists connections awaiting approval with base URL, token endpoint, client
-      ID, JWKS URL, key mode, and population scope — configuration only, no PHI.
-- [ ] Approve records how it was verified with the practice's EHR administrator (method code, date,
-      and the contact's role at the practice; **the operator also verifies, outside the app, that the
-      practice owns the `client_id`** — pre-production signs every connection with one shared key
-      (coordinator decision pending owner confirmation, OA-065), so the key alone doesn't tie a client registration to a practice), the population scope (`group_export` or
-      `verified_filter`), and optionally "MRNs are 9 digits (verified)"; Reject records a reason
-      code. Writes via `withTenantAsPlatform`; audited `operator.integration_approved|rejected`.
-- [ ] Activation (Approve) notifies every practice administrator (in-app notice now; e-mail once
-      Notifications ships).
-- [ ] Operator-side alert on `integration.registry_conflict` (PI2a Submit review, compliance N5): the
-      practice's audit event holds only its own configuration and can never show who holds the
-      endpoint and client ID pair. The operator console should raise an alert on each conflict and
-      record the **holding connection's ID outside the tenant's audit log** (an operator-only
-      record), so a squatting or confused-deputy attempt can be followed up. It is never shown in the
-      customer audit viewer and never in the refusal message.
+**No migration and no privilege change** (R-15.9 not triggered): every write goes through
+`withTenantAsPlatform` (the connection owner's privileges with `app.tenant_id` set, the path the
+operator's BAA and University-access writes already use), so the approval columns stay ungranted to
+`denialdesk_app`. The 0040 fresh-approval trigger and the 0039 registry functions apply to the owner
+as they do to anyone: the trigger requires a fresh `approved_at` and a registry entry for
+`pending_approval → active`, and `integration_registry_release` (tenant-checked against
+`app.tenant_id`, which the platform context sets) refuses to release until the connection is `draft`
+or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `approval-codes.ts`.
+- [x] Operator queue and practice page: `/operator/integrations` lists every customer practice's
+      `pending_approval` connections (oldest submission first; one platform transaction per practice,
+      three at a time, because the tenant policy applies to the owner unless it bypasses row-level
+      security and the connection pool is small) and the operator practice page (`/operator/practices/<id>`)
+      lists that practice's; each links to the review page
+      `/operator/practices/<id>/integrations/<connectionId>`, which shows base URL, token endpoint,
+      issuer, client ID, MRN identifier system, JWKS address, key mode, population scope (set at
+      approval), the practice's BAA status, the submission time and the residency confirmation time —
+      configuration only, no PHI, no key reference. `getPendingApproval` finds a connection only under
+      its own practice. Viewing the queue and a review page is audited `operator.integration_viewed`
+      (operator, and for a review the practice and connection IDs; configuration only, not PHI).
+- [x] Approve (`approveConnection`) records how it was verified with the practice's EHR administrator:
+      a **method code** (`phone_callback`, `video_call`, `written_confirmation`, `vendor_portal`), the
+      **date**, and the **contact's role at the practice** (`ehr_administrator`,
+      `practice_administrator`, `it_contact`, `vendor_representative`, `other`; never a name), the
+      **population scope**, optionally "MRNs are 9 digits (verified)", and **the operator's
+      confirmation, required, that the practice owns the `client_id`, verified outside the app**
+      (pre-production signs every connection with one shared key (coordinator decision pending owner
+      confirmation, OA-065), so the key alone doesn't tie a client registration to a practice). The
+      connection row has one column for the method (`approval_method`), plus `population_scope` and
+      `mrn_nine_digits_verified`; the date, the contact's role, and the ownership confirmation are
+      recorded in the audit event (there is no column for them; a column would need a migration, no
+      privilege change; retention of that evidence is OA-070). One UPDATE moves
+      `pending_approval → active` with `approved_by` and a fresh `approved_at` on the database clock
+      (0040), `status_reason` cleared. Refusals, in order: not the operator; not a real environment
+      (**the environment rule**: where `syntheticDataOnly()` a real connection is never made live,
+      as on the practice-side transitions); a code outside the fixed vocabularies; **a scope other
+      than `group_export`** (below); a date that is malformed, in the future (by the Florida date), or
+      **before the Florida date of the submission** (`submitted_at`; the form's `min`/`max` say the same);
+      no ownership confirmation; unknown or suspended practice (the row is read `FOR SHARE`, so a
+      suspension can't race the check); a sandbox or a connection missing, not awaiting approval, or
+      changed since the page loaded (`updated_at`); **no Business Associate Agreement in force for the
+      practice** (`agreementStatus` active or expiring; the review page shows the status and the reason);
+      a registry entry that doesn't match this connection's endpoint, token endpoint, and client ID.
+      Audited `operator.integration_approved` (reason = the method code; metadata: previous status,
+      method, `verified_on`, `contact_role`, `population_scope`, `mrn_nine_digits_verified`,
+      `client_id_ownership_verified`, `registry_verified`, `session_id` (the operator's session), and the
+      configuration: base URL, client ID, MRN identifier system, token endpoint, issuer, key mode).
+      ⚠️ The method and contact-role lists are the builder's proposal (the spec named neither): owner
+      review, OA-066.
+- [x] Reject (`rejectConnection`) takes a **reason code from a fixed vocabulary**
+      (`endpoint_not_verified`, `client_id_not_verified`, `contact_not_verified`,
+      `population_not_scoped`, `configuration_incorrect`, `other`; no free text, so no patient
+      information can reach the practice's page or the audit "why"), moves `pending_approval → draft`
+      (reason kept as `status_reason` and the audit `reason`), then releases the registry claim through
+      the SECURITY DEFINER function (after the status change, which the function requires), then a
+      second UPDATE clears what belonged to the rejected submission exactly as Withdraw does: the
+      residency attestation (the endpoint is editable again; 0042 refuses a stale one on the next
+      Submit) and the discovered token endpoint, its registry key, and the issuer. The submission stamp
+      stays. **Decision beyond the spec's words** ("→ `draft` (registry released)"): clearing the
+      attestation and discovery on Reject follows Withdraw's reasoning; owner confirmation OA-068. The
+      operator's dropdown shows a short label per code; the practice's connection page shows a whole
+      sentence per code ("DenialDesk did not approve this connection: …", `rejected.notice.<code>`) while
+      the connection is a draft carrying a reject code. Reject works for a suspended practice and needs no
+      BAA and no environment rule (the safe direction). Audited `operator.integration_rejected` (reason
+      code; what was cleared; `session_id`; the configuration).
+- [x] Operator-only, everywhere: the console actions call `requireOperator` first (a practice session,
+      an administrator's included, has no operator cookie and is sent to the operator sign-in), and the
+      domain applies the console's own rule again before it touches anything (`isOperatorAccount`, on the
+      user as the database has it: the configured operator email AND no practice membership), so a
+      hand-built context with a practice user's ID, or with any other user's, is refused too. Forms are
+      read as text only, checkboxes count only as `on`, the verification date is read whole (never
+      truncated into a valid one), and a connection is always named together with its practice (a
+      connection ID under the wrong practice is "not found"). Tests:
+      `test/integration/integration-approval.test.ts`, `integration-approval-actions.test.ts`,
+      `src/domain/integrations/approval-codes.test.ts`.
+- [ ] **Population scope: capture a `verified_filter` as a structured value** (security review M2).
+      `population_scope` is a code with nowhere to record the filter itself, so approving
+      `verified_filter` would record a claim and no filter: **Approve refuses it now** (`errors.approvalScopeUnsupported`;
+      the form labels the option "not available yet") and only `group_export` can be approved.
+      Needed: a structured filter value (for example the Patient search parameters the sync will use,
+      validated against an allow-list, and shown in the review page and the audit event) in a future
+      migration that adds a column with **no grant** to `denialdesk_app`, and the sync (PI2b/PI4)
+      must apply exactly that recorded filter.
+- [ ] **Operator step-up before Approve** (security review M1; owner decision, OA-073; before the Azure
+      cutover and the first real connection). Approve has no second factor beyond the operator's sign-in
+      (the practice-side Submit and Resume need a step-up within 5 minutes). Needed: an operator-realm
+      step-up (the operator session's `mfa_verified_at` within the window, separate from the practice
+      realm) gating Approve, with `step_up_verified_at` recorded in `operator.integration_approved`.
+      Reject stays ungated (the safe direction). Not built now, by decision.
+- [ ] **Operator-side revoke** (compliance review; OA-071; before the first real connection). The
+      lifecycle says any state → `revoked` by "admin or operator", but only a practice administrator can
+      revoke today (`revokeConnection` is admin-only). The operator needs a revoke action for a live
+      connection (suspected compromise, the practice's administrator unreachable): reason code from the
+      revoke vocabulary, registry released, signing key destroyed, audited `operator.integration_revoked`
+      with the operator's `session_id`, and the offboarding runbook updated.
+- [ ] **Activation notice to every practice administrator (open: no notice mechanism exists; OA-069).** The
+      app has no in-app notices, banners, or notifications table (Notifications is a planned Settings
+      tab, `specs/settings-and-custom-fields.md` S3; e-mail is planned with it). Building one is its own
+      system (a tenant-scoped notices table with RLS and isolation tests, per-user read state, an audit
+      trail, i18n, and the layout to show it), so it is not built in PI1c, per the coordinator's
+      instruction. Until then the practice sees the new state on the connection page, the Settings list,
+      and the tab-bar drop-down ("Awaiting approval" → "Active"), and an administrator learns of a
+      rejection from the reason on the connection page. Needed for this item: the Notifications spec
+      (who is notified, the notice's wording and retention, whether PHI-free e-mail is allowed), then a
+      builder slice that writes one notice per practice administrator inside the approval transaction.
+      Also wanted there: notify the practice's other administrators on revoke (CC7.3, PI1b follow-ups).
+- [ ] **Operator alert on `integration.registry_conflict` (open: needs infrastructure that does not
+      exist, and a privilege decision, OA-067).** The practice's audit event holds only its own
+      configuration and can never show who holds the endpoint and client ID pair (threat model S2).
+      Wanted: on each conflict, an operator-only record of the **holding connection's ID** outside the
+      tenant's audit log, an alert on the console, never in the customer audit viewer and never in the
+      refusal message. Why it isn't here: (1) the conflict is detected inside Submit, which runs as
+      `denialdesk_app` in a practice session, so recording it needs a place that role may write but not
+      read — a new operator-only table with an INSERT grant for the app role, or a SECURITY DEFINER
+      function (`integration_registry_conflict_record(connection_id)` that looks up the holder in the
+      registry and inserts the record), which is **a privilege change: R-15.9 needs the owner's
+      sign-off**; (2) the console has no alert surface yet (a queue badge or a list on the approvals page
+      would be the first). Sketch: table `integration_registry_conflicts` (`id`, `attempting_connection_id`,
+      `holding_connection_id`, `occurred_at`, `acknowledged_by/_at`), no RLS and no grant to
+      `denialdesk_app`, written only by the definer function (which checks the attempting connection
+      belongs to `app.tenant_id`, is `pending_approval`, and claims nothing), read by the operator on
+      `/operator/integrations`. Bounded meanwhile by the Test connection and Submit rate limits, and the
+      practice-side event (`integration.registry_conflict`, its own configuration only) is audited.
+      Owner decision needed: approve the definer function or the grant.
+- [ ] **Approval evidence and single-person approval** (OA-070, OA-072). The approval evidence is the
+      audit event (there are no columns for the date, the contact's role, or the ownership
+      confirmation): `operator.integration_approved|rejected` are to be kept for the life of the
+      connection plus six years and fall under legal hold, or dedicated columns are added later.
+      Approval is a single-person control, and the operator account must be one person's
+      (unique user identification, 45 CFR 164.312(a)(2)(i)); otherwise plan per-person operator
+      accounts before production.
+- [ ] Scale note for the queue: it reads one platform transaction per customer practice (three at a
+      time; `listPractices` does the same for denial counts). Replace with an operator-visible index of
+      pending connections when the number of practices makes that slow.
 - Moved to PI2a (Submit ships there): Submit claims the registry; a conflict refuses Submit.
 
 ### PI2a — transport, discovery, keys, test connection
@@ -346,7 +462,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       public material only, never a signer and never under the row lock. Then, all under the row lock
       in one transaction: not found (another practice's connection), revoked, stale page, status
       `draft`, the environment rule, **no other connection of the practice outside `draft`/`revoked`**
-      (refused in words, `error.anotherConnectionLive`; the `integration_connections_one_active`
+      (refused in words, `error.anotherConnectionLive`, which says paused and error connections count too; the `integration_connections_one_active`
       unique index is the backstop and a violation of it, two drafts racing, maps to the same
       refusal), `requireStepUp`, the passing test (a rotation between the `kid` lookup and the lock is
       caught by the pass binding), the attestation (real only), then one UPDATE (status, `status_reason`
@@ -354,7 +470,8 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       audit. No migration and no GRANT: the UPDATE names only columns 0039 already grants, and a test
       pins that the approval columns stay ungranted. The Submit panel shows the same reasons as a
       disabled button instead of one the server would refuse (`submitBlockedReason`: environment,
-      another live connection, no passing test), and the connection page shows "Awaiting DenialDesk
+      another live connection, no usable signing key (the key's own refusal, as Submit gives it, not
+      "no passing test"), no passing test), and the connection page shows "Awaiting DenialDesk
       approval" after a real Submit. **The passing test is required for the sandbox too**: only the
       attestation is "real only" (this line and "sandbox Submit becomes possible only in PI2b, which
       adds the in-process sandbox a test can pass against"), so the sandbox Submit path is
@@ -390,7 +507,10 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       form value of `on` counts. **`attestation_locale` is the displayed locale**: the form carries the
       language it rendered in (a hidden field), and the action refuses the Submit (`error.localeChanged`,
       en/es/pt) if it doesn't match the request's, so the text an administrator agrees to is the text
-      recorded. Whether the wording should also name backups/DR copies and "accessed only from the
+      recorded. The form likewise carries **the wording's version** (`attestationVersion`, a hidden
+      field set from `US_RESIDENCY_ATTESTATION_VERSION`), and the action refuses a missing or different
+      one (`error.attestationChanged`, en/es/pt), so a wording change deployed between the page load and
+      the click can't be recorded as agreed to under the old version. Whether the wording should also name backups/DR copies and "accessed only from the
       United States" is open (compliance N6, OA-045); changing it is a new version.
 - [x] Submit claims the registry; a conflict refuses Submit with "This endpoint and client ID are
       already connected" (no other practice named) and audits `integration.registry_conflict`.
@@ -668,6 +788,17 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       Messages in en/es/pt (`integrations.test.*`).
 
 ### PI2b — sync engine, sandbox, jobs, history, payer mapping
+- [ ] Every writer of `error` stamps the transition in the database (PI2a follow-up, PR #88 review):
+      the lifecycle trigger sets `NEW.updated_at := clock_timestamp()` on any status change (a PI2b
+      migration, changing the trigger function only, no privilege). Resume's gate compares a pass's
+      `occurred_at` with `updated_at` in the database (`afterLastChange`, "the pass is strictly newer
+      than the move into `error`"); the app's own transitions write `updated_at = now()`, which is the
+      **transaction's start**, so a sync that goes `active → error` at the end of a long transaction
+      stamps a time before a pass taken during that transaction, and Resume would accept a pass that
+      preceded the error. Every writer of `error` (the sync engine, and the trigger for any other) must
+      therefore get the database's actual clock, not the writer's start-of-transaction one. Test: an
+      `error` set inside a transaction that started before a pass was recorded is not cleared by that
+      pass.
 - [ ] Pause and `error` stop work already in flight: a connection leaving `active` (pause, error)
       abandons its queued runs (as revoke does), and the sync loop re-checks `status = 'active'`
       before each page commit, so a run that started before a Pause stops at its next page instead of
@@ -866,6 +997,7 @@ real vendor endpoints in pre-production.
   they stay unusable until the owner decides how their synthetic origin is proven.
 - **OA-050** Bulk Data (PI4) before the first real practice.
 - **OA-051** Who at the practice confirms the population scope at approval.
+- **OA-066** Approval method and contact-role lists. **OA-067** R-15.9 sign-off for the registry-conflict operator alert. **OA-068** Whether Reject clears the attestation. **OA-069** Notifications spec (activation notice). **OA-070** Retention of approval evidence. **OA-071** Operator-side revoke. **OA-072** Single-person approval and the operator account. **OA-073** Operator step-up before Approve.
 - **OA-052** Restricted-in-source patients until patients P4 masking; whether any practice is a
   42 CFR Part 2 program (human decision).
 - **OA-053** MRN conflicts: EHR-only fix or an admin tool.

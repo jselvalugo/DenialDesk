@@ -305,8 +305,12 @@ describe("Pause, resume, withdraw, and the revoke reason (PI2a)", () => {
       submitConnectionAction,
     ]) {
       for (const target of [id, "not-a-uuid"]) {
-        // Submit also carries the language its attestation was shown in (checked before anything else).
-        const result = await run(action, form({ id: target, updatedAt: stamp, locale: "en" }));
+        // Submit also carries the language and wording version its attestation was shown in; the
+        // action checks both after the role and the id, before it calls the domain.
+        const result = await run(
+          action,
+          form({ id: target, updatedAt: stamp, locale: "en", attestationVersion: "1" }),
+        );
         expect(result.state?.error).toMatch(/not found/);
       }
     }

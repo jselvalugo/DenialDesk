@@ -1,5 +1,5 @@
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { asc, eq, sql } from "drizzle-orm";
 import { closeDatabase, systemDb } from "@/db/client";
 import { auditEvents, integrationConnections, integrationEndpointRegistry } from "@/db/schema";
@@ -28,9 +28,11 @@ import {
   type TestConnectionDeps,
   type TxRunner,
 } from "@/domain/integrations/test-connection";
+import { en } from "@/i18n/messages/en";
 import { es } from "@/i18n/messages/es";
 import { pt } from "@/i18n/messages/pt";
-import { EnvSharedKeyStore } from "@/integrations/fhir/keys";
+import { EnvSharedKeyStore, SigningKeyStoreError } from "@/integrations/fhir/keys";
+import { log } from "@/lib/log";
 import { SANDBOX_BASE_URL, SANDBOX_CLIENT_ID } from "@/integrations/fhir/url-rules";
 import { FAKE_BASE_URL, FAKE_TOKEN_ENDPOINT, FakeFhirTransport } from "../support/fake-fhir-transport";
 import { createTestTenant } from "./helpers";
@@ -487,6 +489,57 @@ describe("submitConnection — the endpoint registry", () => {
     expect(await audits(first.id, "integration.registry_conflict")).toEqual([]);
   });
 
+  it("still shows the conflict message when the conflict's own audit transaction fails, and logs IDs only", async () => {
+    const clientId = `shared-client-${randomUUID().slice(0, 8)}`;
+    const first = await draft(a, clientId);
+    await passTest(a, first.id);
+    await submit(a, first.id);
+    const second = await draft(b, clientId);
+    await passTest(b, second.id);
+
+    // The first transaction (the Submit itself) is real and is rolled back by the conflict; the second
+    // one, which writes `integration.registry_conflict`, fails in the database.
+    let transactions = 0;
+    const failingSecond: TxRunner = (fn) => {
+      transactions += 1;
+      return transactions === 1
+        ? withTenant(b, fn)
+        : withTenant(b, async (tx) => {
+            await tx.execute(sql`select 1 / 0`);
+            return undefined as never;
+          });
+    };
+    const logged = vi.spyOn(log, "error").mockImplementation(() => undefined);
+    try {
+      const error = await refusal(
+        submitConnection(
+          failingSecond,
+          admin(b),
+          second.id,
+          await stamp(b, second.id),
+          DEFAULT_INPUT,
+          signing,
+        ),
+      );
+      // The administrator sees the conflict, not a database error, and nothing names the other practice.
+      expect(error.message).toBe("This endpoint and client ID are already connected");
+      expect(transactions).toBe(2);
+      // The failure is logged with IDs only: no configuration, no SQL text, no error detail.
+      // Two lines, both codes/IDs only: the database layer's own sanitized "db.query_failed" (SQLSTATE
+      // 22012, division by zero) and the conflict-audit failure.
+      expect(logged.mock.calls).toEqual([
+        ["db.query_failed", { status: "22012" }],
+        ["integration.registry_conflict_audit_failed", { tenantId: b.tenantId, connectionId: second.id }],
+      ]);
+    } finally {
+      logged.mockRestore();
+    }
+    // The submission was rolled back and no conflict event exists (that is the failure being tested).
+    await expectUntouchedDraft(second.id);
+    expect(await audits(second.id, "integration.registry_conflict")).toEqual([]);
+    expect((await registryRows(first.id))[0]).toMatchObject({ connectionId: first.id, clientId });
+  });
+
   it("frees the endpoint once the first practice withdraws, so the second can submit", async () => {
     const clientId = `shared-client-${randomUUID().slice(0, 8)}`;
     const first = await draft(a, clientId);
@@ -540,7 +593,7 @@ describe("submitConnection — two practices at once", () => {
 });
 
 describe("submitConnection — one connection outside draft/revoked per practice", () => {
-  const anotherLive = /Another connection is already submitted or active/;
+  const anotherLive = /Another connection is already in use/;
 
   it("refuses in words, not a save error, while another connection is submitted, and touches nothing", async () => {
     const first = await draft();
@@ -674,6 +727,35 @@ describe("submitConnection — the test's age, the rate limit, and the panel's r
 
     await passTest(a, id);
     expect(await reason(admin(a))).toBeNull();
+
+    // No usable signing key: the key's own refusal, as Submit itself gives it, not "no passing test"
+    // (a test can't pass without a key). Another live connection still comes first, like in Submit.
+    const keyRefusal = async (code: "not_configured" | "key_unreadable") => {
+      const missing: SigningDeps = {
+        keyStore: () =>
+          ({
+            kid: async () => {
+              throw new SigningKeyStoreError(code);
+            },
+          }) as never,
+      };
+      return withTenant(a, async (tx) =>
+        submitBlockedReason(tx, admin(a), info, await resolveSigningKid(missing, id)),
+      );
+    };
+    expect(await keyRefusal("not_configured")).toBe("test.error.keyNotConfigured");
+    expect(await keyRefusal("key_unreadable")).toBe("test.error.keyUnavailable");
+    // ... and the refusal the panel shows is the one Submit gives.
+    const noKey: SigningDeps = {
+      keyStore: () =>
+        ({
+          kid: async () => {
+            throw new SigningKeyStoreError("not_configured");
+          },
+        }) as never,
+    };
+    const submitError = await refusal(submit(a, id, { deps: noKey }));
+    expect(submitError.message).toBe(en.integrations["test.error.keyNotConfigured"]);
 
     const live = await draft();
     await passTest(a, live.id);

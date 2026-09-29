@@ -202,5 +202,20 @@ export const integrations: Messages["integrations"] = {
   "error.localeChanged":
     "O idioma da página mudou desde que você a abriu. Recarregue a página, leia a confirmação de novo e envie.",
   "error.submitRateLimited": "Muitas tentativas de envio. Aguarde alguns minutos e tente novamente.",
-  "error.anotherConnectionLive": "Já existe outra conexão enviada ou ativa. Retire-a ou revogue-a primeiro.",
+  "error.attestationChanged":
+    "O texto da confirmação mudou desde que você abriu a página. Recarregue a página, leia a confirmação novamente e envie.",
+  "error.anotherConnectionLive":
+    "Já existe outra conexão em uso (enviada, ativa, pausada ou com erro). Retire-a ou revogue-a primeiro.",
+  "rejected.notice.endpoint_not_verified":
+    "O DenialDesk não aprovou esta conexão: não foi possível verificar o endpoint com o administrador de EHR/PM. Corrija-a, execute Testar conexão e envie novamente.",
+  "rejected.notice.client_id_not_verified":
+    "O DenialDesk não aprovou esta conexão: não foi possível verificar o ID do cliente com o administrador de EHR/PM. Corrija-a, execute Testar conexão e envie novamente.",
+  "rejected.notice.contact_not_verified":
+    "O DenialDesk não aprovou esta conexão: não foi possível contatar o administrador de EHR/PM para confirmá-la. Corrija-a se necessário, execute Testar conexão e envie novamente.",
+  "rejected.notice.population_not_scoped":
+    "O DenialDesk não aprovou esta conexão: os pacientes a sincronizar não foram limitados à sua clínica. Corrija-a, execute Testar conexão e envie novamente.",
+  "rejected.notice.configuration_incorrect":
+    "O DenialDesk não aprovou esta conexão: a configuração está incorreta. Corrija-a, execute Testar conexão e envie novamente.",
+  "rejected.notice.other":
+    "O DenialDesk não aprovou esta conexão. O DenialDesk entrará em contato para explicar o motivo. Depois de resolvido, execute Testar conexão e envie novamente.",
 };
