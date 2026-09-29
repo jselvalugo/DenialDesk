@@ -1,10 +1,10 @@
 # Spec: Claims module
 
-Status: in progress — C1 approved by delegated technical authority (2026-09-26); C2 approved by delegated technical authority (2026-09-29)
+Status: in progress — C1 approved by delegated technical authority (2026-09-26); C2 approved by delegated technical authority (2026-09-29); C3a approved by delegated technical authority (2026-09-29)
 Roadmap items: Phase 1 → Claims ("Claim data model with immutable version history", "Charge capture
 via CSV import", "Timely-filing guardrail", "837P generation and clearinghouse submission",
 "999 / 277CA acknowledgment capture")
-Requirement IDs: R-3.10.1, R-3.10.3, R-3.1.5, R-3.1.1, R-5.1.2, R-7.2.4, R-7.4.6, R-7.4.8, R-7.5.1, R-15.1, §8.2
+Requirement IDs: R-3.10.1, R-3.10.2, R-3.10.3, R-3.1.5, R-3.1.1, R-5.1.2, R-7.2.4, R-7.3.3, R-7.4.6, R-7.4.8, R-7.5.1, R-7.9.5, R-15.1, §4.1, §8.2
 
 ## Goal
 Billing staff can see every claim the practice has, know which unsubmitted claims are close to
@@ -16,8 +16,9 @@ submission.
 | Phase | Scope | Roadmap item |
 |---|---|---|
 | **C1** (done) | Claims list, claim detail, immutable version history, correcting draft/rejected claims, timely-filing warnings | Claim data model; Timely-filing guardrail (warn) |
-| **C2** (this PR) | Charge capture via CSV import → draft claims (synthetic-only guard as in revenue cycle imports) | Charge capture via CSV import |
-| C3 | 837P generation and clearinghouse stub submission; submission **blocked** past the filing deadline unless an admin records an exception reason. Also blocked when the patient's member ID is null or unmapped (see note below) | 837P; Timely-filing guardrail (block) |
+| **C2** (done) | Charge capture via CSV import → draft claims (synthetic-only guard as in revenue cycle imports) | Charge capture via CSV import |
+| **C3a** (this PR) | 837P (005010X222A1) generation from one claim, validation with plain refusals, preview and download of the file (test indicator `T`, synthetic only). No submission, no clearinghouse. | 837P generation |
+| C3b | Clearinghouse interface and stub submission (R-7.9.5); submission **blocked** past the filing deadline unless an admin records an exception reason. Also blocked when the patient's member ID is null or unmapped (C3a already refuses to generate; see note below) | 837P submission; Timely-filing guardrail (block) |
 | C4 | 999 / 277CA capture: accepted/rejected status and payer receipt date (starts prompt pay) | 999 / 277CA |
 
 ## User stories
@@ -263,6 +264,232 @@ Only through C1's `filingStatus`: `fl.timely_filing.initial` and `medicare.timel
   the builder that never alters which code is billed (R-3.10.1).
 - Charge validation against a fee schedule or contract (a later underpayment item) and scrubbing rules
   (NCCI, MUE, LCD/NCD): nothing here changes or "fixes" a code.
+
+## C3a — 837P generation
+
+Approved by delegated technical authority (2026-09-29). Built on the C1 claim model and the C2 draft claims.
+**Nothing is sent anywhere**: C3a produces a file a person can preview and download. The clearinghouse
+interface, submission, and the timely-filing block are C3b.
+
+### Goal
+From a draft or rejected claim, a biller produces a valid 837P professional claim (005010X222A1) for one
+claim, or is told, in plain words and without any patient data in the message, exactly which required
+piece is missing. The file is the claim as the person recorded it: every diagnosis, procedure code,
+modifier, unit, and amount is copied as stored (R-3.10.1); the generator never adds, drops, reorders,
+"fixes", or infers a code.
+
+⚠️ VERIFY (owner, OA-089): the licensed 837P implementation guide (ASC X12 TR3 005010X222A1) is not in the
+repository, and the mapping below is written from the `edi-x12-specialist`'s knowledge of it. Every row is
+cited by loop and segment as the guide names them; the rows marked ⚠️ VERIFY are the ones not certain
+(usage or code value). The whole table must be checked against the purchased guide and the chosen
+clearinghouse's companion guide before the first real (`P`) file. Until then C3a only produces `T` files.
+
+### Which claims, and what is refused
+A claim can be generated only when **all** of these hold. Every failure is a refusal listing every problem
+found (not just the first), each with a fixed code, the line number where it concerns a line, and never a
+name, ID, code, date, or amount (R-7.4.6, CLAUDE.md #4). Nothing is written to the claim.
+
+| Refusal code | When |
+|---|---|
+| `status_not_generatable` | Claim status is not `draft` or `rejected`. A `rejected` claim (a payer's front-end rejection: never adjudicated) is sent again as an original, frequency code 1 (⚠️ VERIFY with the payer's companion guide). Corrected and void claims (frequency 7 and 8) are the Appeals phase. |
+| `not_synthetic_environment` | The environment is production (not `syntheticDataOnly()`): C3a has no real submitter or receiver identifiers, so it must not produce a `P` file. |
+| `no_member_id` | The patient has no member ID on file: `member_id_enc` is null, or decrypts to an empty value (a manual patient with no insurance yet stores an empty encrypted value), or a synced patient's `coverage_status` is not `mapped` (`unmapped`, `needs_review`, `none`). "No payer coverage on file for this patient" (C1 note); no blank or placeholder ID is ever written to `NM109` of loop 2010BA. |
+| `coverage_payer_mismatch` | The patient's primary payer (`primary_payer_id`, the payer the member ID belongs to) is not the claim's payer. C3a supports only the primary coverage; another payer's member ID is never sent. |
+| `payer_not_verified` | The payer has no EDI payer ID (loop 2010BB `NM109`) or no regime. Both come from the verified payer catalog only. |
+| `claim_filing_indicator_unmapped` | The payer's regime has no confirmed `SBR09` value (see the mapping table). |
+| `billing_*` | Billing provider (loop 2010AA): `billing_npi` (not ten digits or failing the NPI check digit), `billing_name` (first and last), `billing_taxonomy` (format only), `billing_tin` (missing, not nine digits, or type unset), `billing_address` (line 1, city, state, ZIP+4), `billing_address_po_box`. |
+| `subscriber_*` | Subscriber (loop 2010BA): `subscriber_name`, `subscriber_birth_date`, `subscriber_address` (line 1, city, state, ZIP of 5 or 9 digits). Sex is `F`, `M`, or `U` (unknown is sent as `U`). |
+| `missing_place_of_service` | The claim's location has no two-digit place of service code. Format only; the code set is not enumerated here (CMS POS codes change; ⚠️ VERIFY by the practice). |
+| `diagnosis_invalid` | No diagnosis, more than 12, or a code that is not ICD-10-CM shaped. |
+| `diagnosis_pointers_required` | The claim has more than one diagnosis and no pointer choice was made for a line. Which diagnosis supports which service line is a coding decision: the file never guesses it (R-3.10.1). |
+| `diagnosis_pointer_invalid` | A line's pointers are not 1–4 distinct numbers within the claim's diagnoses. |
+| `lines_missing` / `lines_too_many` | No lines, or more than 50 (⚠️ VERIFY: the 837P allows 50 service lines per claim). |
+| `line_invalid` | A procedure code, modifier (max 4), units, or charge is not in the C1 shape, or units are not 1–999. |
+| `billed_mismatch` | Total charge is not the exact sum of the line charges. |
+| `invalid_character` | A name or address holds a character X12 can't carry (a separator `* ~ : ^`, a control character, or a letter that stays non-ASCII after removing accents). The text is never altered beyond upper-casing and removing accents (`É` becomes `E`); the refusal names the field, not the value. |
+| `control_number_exhausted` | The practice's control number sequence passed 999,999,999. Never wraps. |
+
+Frequency code is `1` only. Diagnosis pointers are numbers `1`–`12` referencing the order of the claim's
+diagnosis list, whose first entry is the principal diagnosis (`ABK`); the C1 correction form keeps that order.
+
+### Mapping (837P to 005010X222A1)
+Sources: `claims`, `claim_lines`, `patients`, `providers`, `locations`, `payers`. "Guide" is the loop and
+segment as the implementation guide names it. Separators: element `*`, repetition `^`, component `:`,
+segment `~`. All text is upper-cased and accents are removed; nothing else is changed.
+
+| Guide loop · segment | Element(s) written | Source · rule |
+|---|---|---|
+| Interchange · ISA | ISA01 `00`, ISA02 ten spaces, ISA03 `00`, ISA04 ten spaces | No authorization or security information. ⚠️ VERIFY (clearinghouse companion guide) |
+| ISA | ISA05 `ZZ`, ISA06 sender ID (15, right-padded), ISA07 `ZZ`, ISA08 receiver ID (15, right-padded) | Pre-production: fixed synthetic identifiers (`SYNTHETIC_ENVELOPE`), never a real one; an ID longer than 15 characters is refused, never truncated. Real identifiers come from clearinghouse enrollment in C3b (DS-03). ⚠️ VERIFY |
+| ISA | ISA09 `YYMMDD`, ISA10 `HHMM` (Eastern, the practice time zone), ISA11 `^`, ISA12 `00501`, ISA13 control number (9 digits), ISA14 `0`, ISA15 `T`, ISA16 `:` | ISA13 from the practice sequence. ISA15 is `T` in every environment C3a runs in (synthetic-only guard). ISA14 `0` (no interchange acknowledgment requested; the 999 arrives anyway) ⚠️ VERIFY |
+| Functional group · GS | GS01 `HC`, GS02/GS03 codes as ISA06/ISA08 (trimmed), GS04 `CCYYMMDD`, GS05 `HHMM`, GS06 = ISA13 value (nine digits with leading zeros; ⚠️ VERIFY that the receiver accepts leading zeros), GS07 `X`, GS08 `005010X222A1` | |
+| Transaction set · ST | ST01 `837`, ST02 = control number (at least four digits), ST03 `005010X222A1` | One ST per file, so ST02 is unique in the group by construction and, being the same sequence, per practice. |
+| Beginning of hierarchical transaction · BHT | BHT01 `0019`, BHT02 `00`, BHT03 = control number (9 digits), BHT04 `CCYYMMDD`, BHT05 `HHMM`, BHT06 `CH` | `00` original, `CH` chargeable |
+| 1000A Submitter name · NM1, PER | `NM1*41*2*<name>*****46*<id>`; `PER*IC*<contact>*TE*<phone>` | Pre-production synthetic constants (see ISA). `PER` is required in the guide. ⚠️ VERIFY (real values: C3b) |
+| 1000B Receiver name · NM1 | `NM1*40*2*<name>*****46*<id>` | Same |
+| 2000A Billing provider HL · HL, PRV | `HL*1**20*1`; `PRV*BI*PXC*<taxonomy>` | `providers.taxonomy`. `PRV` is situational in the guide (required when the payer needs the taxonomy); always sent. ⚠️ VERIFY |
+| 2010AA Billing provider name · NM1 | `NM1*85*1*<last>*<first>****XX*<NPI>` | The claim's provider (`providers`): an **individual** (type 1) NPI billing for their own services, so the rendering-provider loop 2310B is not written (the guide omits it when rendering = billing). A group billing NPI (type 2) with a separate rendering provider is not modelled yet, open question 4. |
+| 2010AA · N3, N4 | `N3*<line1>`; `N4*<city>*<state>*<ZIP+4>` | `providers.address_line1`, `city`, `state`, `postal_code`. The guide requires the billing address to be a street address (no P.O. box) and a nine-digit ZIP. ⚠️ VERIFY |
+| 2010AA · REF | `REF*EI*<TIN>` or `REF*SY*<TIN>` | `providers.tin_enc` decrypted in memory; `tin_type` `EI` (EIN) or `SY` (SSN). |
+| 2000B Subscriber HL · HL, SBR | `HL*2*1*22*0`; `SBR*P*18*******<SBR09>` | Patient = subscriber (`18` self) and primary payer (`P`): the data model has one member ID per patient (patients P2). A dependent of a different subscriber is not supported (open question 5). SBR03/SBR04 (group) left empty. No 2000C loop (`HL04 = 0`). |
+| 2000B · SBR09 (claim filing indicator) | one code | By the payer's regime: `fl_insurer` `CI`, `fl_hmo` `HM`, `medicare` `MB`, `medicaid_ffs` `MC`, `workers_comp` `WC`. `medicare_advantage`, `erisa_self_funded`, `smmc`, `pip` are **refused** until the owner confirms the value (open question 6). ⚠️ VERIFY all five |
+| 2010BA Subscriber name · NM1 | `NM1*IL*1*<last>*<first>****MI*<member ID>` | `patients.last_name`, `first_name`; member ID decrypted in memory, never logged. Medicare's MBI is sent with qualifier `MI`. ⚠️ VERIFY |
+| 2010BA · N3, N4 | `N3*<line1>`; `N4*<city>*<state>*<ZIP>` | `patients.address_line1`, `city`, `state`, `postal_code` (5 or 9 digits) |
+| 2010BA · DMG | `DMG*D8*<CCYYMMDD>*<F, M or U>` | `patients.birth_date`, `sex` |
+| 2010BB Payer name · NM1 | `NM1*PR*2*<payer name>*****PI*<payer ID>` | `payers.name`, `edi_payer_id`. Payer address (N3/N4) is situational and not written. |
+| 2300 Claim information · CLM | `CLM*<claim number>*<total>***<POS>:B:1*Y*A*Y*Y` | CLM01 `claims.claim_number` (patient control number, at most 38 characters; C1's are at most 30); CLM02 exact decimal string from integer cents (always two decimals, so `125.00`; ⚠️ VERIFY that trailing zeros are accepted, the guide allows omitting them); CLM05-1 `locations.place_of_service`, CLM05-2 `B` (professional POS qualifier), CLM05-3 frequency `1`. CLM06 `Y`, CLM07 `A`, CLM08 `Y`, CLM09 `Y` are the practice's attestations (signature on file, assignment accepted, benefits assigned, release of information) and are constants until a practice setting exists. ⚠️ VERIFY (owner, OA-089) |
+| 2300 · HI | `HI*ABK:<dx1>*ABF:<dx2>*...` | Up to 12; `ABK` principal (first), `ABF` others. Codes as stored **without the decimal point** (next section). |
+| 2400 Service line · LX | `LX*<n>` | Counts 1 to n in `claim_lines.line_number` order; the claim's own numbers are not copied |
+| 2400 · SV1 | `SV1*HC:<code>:<mod>:<mod>:<mod>:<mod>*<charge>*UN*<units>***<pointers>` | SV101-1 `HC`, procedure code and modifiers exactly as stored; SV102 exact decimal, two decimals (⚠️ VERIFY trailing zeros, as CLM02); SV103 `UN`; SV104 units; SV107 pointers such as `1:2`. Anesthesia-style minute units (`MJ`) are not modelled. ⚠️ VERIFY |
+| 2400 · DTP | `DTP*472*D8*<CCYYMMDD>` | `claims.service_date` on every line |
+| Trailer · SE, GE, IEA | `SE*<segments ST..SE inclusive>*<ST02>`; `GE*1*<GS06>`; `IEA*1*<ISA13>` | Computed, and re-checked by a round-trip test |
+
+Not written in C3a (situational in the guide, no data modelled): 2310A referring provider, 2310B rendering
+provider, 2310C service facility (⚠️ VERIFY: the guide requires it when the place of service address differs
+from the billing address), 2300 prior authorization (`REF*G1`), referral, onset and accident dates, NDC,
+`PWK` attachments, claim notes, other subscriber (2320), and the pay-to address (2010AB).
+
+### Codes are copied exactly
+The ICD-10-CM decimal point is not carried in X12. `E11.9` is written `E119`. That is a change of
+representation, not of the code: the only transformation is deleting one `.`, and `restoreIcd10Decimal`
+proves it reversible (a test round-trips every fixture code). Procedure codes, modifiers, units, dates, and
+amounts are copied without any change. The generator never upper-cases a code, pads, re-orders,
+de-duplicates, or substitutes, and a code that isn't shaped correctly is refused, not repaired
+(CLAUDE.md #8, R-3.10.1, R-3.10.2). It writes the claim as it is now; the audit event records the claim's
+version number.
+
+### Control numbers
+Every generation takes one number from a per-practice sequence, stored as the `practice_settings` row
+`x12_control_number` (an existing table, tenant-isolated by RLS, on which the app role already holds
+`SELECT, INSERT, UPDATE`, so this PR adds **no table and no GRANT**). One atomic
+`INSERT ... ON CONFLICT (tenant_id, key) DO UPDATE ... RETURNING` increments it, so two concurrent
+generations can't get the same number. ISA13, GS06, ST02, and BHT03 all carry it (ISA13 nine digits, ST02
+at least four). Numbers start at 1, are never reused, and gaps are allowed (a generated file the person
+doesn't use still consumed one). It stops at 999,999,999 with `control_number_exhausted`; it never wraps.
+A dedicated sequence table would be cleaner and is an owner choice because it needs a GRANT (R-15.9, OA-090).
+
+### Synthetic-only guard
+`ISA15` is `T` in every environment where `syntheticDataOnly()` is true (everything except production off
+Netlify), and `T` is the only value the generator can write in C3a. In production the service refuses with
+`not_synthetic_environment`: the submitter and receiver identifiers are synthetic constants, and a `P`
+file carrying them must never exist. C3b replaces the constants with the practice's clearinghouse enrollment
+values (credentials from Azure Key Vault, never code or env files, R-7.9.5) and enables `P`.
+
+### The screen
+On `/claims/[id]`, for `admin`, `manager`, and `specialist` (the same set as `canCorrectClaims`; compliance
+reviews only, R-5.1.2) and only while the claim is `draft` or `rejected`, a panel **Electronic claim (837P)**
+offers **Generate 837P**. When the claim has more than one diagnosis the panel first asks, per line, which
+diagnoses (up to four) the line points to. On success it shows the control number, the segment count, a
+scrollable preview in which the member ID and TIN are masked, and **Download file**
+(`837p-<control number>.x12`, built in the browser from the action's response). A refusal shows every problem
+as a fixed sentence. If the claim is past its filing deadline the panel says so (C3b blocks submission; C3a
+only warns, open question 2). The action is a POST (server action): nothing about the claim appears in a
+URL, title, or log, and each press consumes one control number.
+
+### Acceptance criteria (C3a)
+Approved by delegated technical authority (2026-09-29).
+
+Ticked items have passing unit tests. Unticked items have their tests written (`test/integration/claim-837p.test.ts`,
+`claim-837p-action.test.ts`) but not yet run: the agent that built C3a had no database access, so they wait for the
+CI run of `pnpm test:integration`.
+
+- [x] **Pure generator.** `src/edi/x12/837p.ts` builds one 837P (one ST, one 2000A, one 2000B, one 2300, up
+      to 50 2400 loops) from plain data with no I/O and no clock (the time and control number are inputs), and
+      `validate837P` returns every refusal in the table above with a code, never a value. Same tokenizer and
+      conventions as the 835 (`src/edi/x12/segments.ts`, CCYYMMDD dates, integer cents to a decimal string with no
+      floating point).
+- [x] **Structure round trip.** A test tokenizes the output and checks `SE01` equals the number of segments from
+      `ST` to `SE` inclusive, `SE02 = ST02`, `GE02 = GS06`, `IEA02 = ISA13`, ISA is exactly 106 characters with the
+      terminator at position 105, and the HL hierarchy (`HL01` 1 and 2, `HL02` parent 1, `HL03` 20 and 22, `HL04`
+      1 and 0), for one to 50 lines, with and without modifiers, with one to 12 diagnoses.
+- [x] **Golden file.** `test/fixtures/synthetic/x12/837p-golden.x12` is the exact output for one fully synthetic
+      claim (synthetic names, `SYN` identifiers, an address on a synthetic street, a test NPI with a valid check
+      digit, a TIN in a made-up range), compared byte for byte, with a fixed time and control number.
+- [x] **Codes untouched.** For every fixture diagnosis, procedure code, and modifier the output contains it
+      unchanged (diagnosis without the decimal only), order preserved, none added or dropped;
+      `restoreIcd10Decimal` reverses the only change; a lower-case, padded, or malformed code is refused, never
+      repaired.
+- [x] **Refusals.** One unit test per refusal code, including all problems reported together, the boundary cases
+      (12 and 13 diagnoses, 50 and 51 lines, 4 and 5 modifiers, ZIP of nine digits, with a hyphen, and short, NPI
+      check digit), and that no refusal holds a name, ID, code, date, or amount.
+- [ ] **Coverage guard.** A patient with a null or empty member ID, a synced patient whose `coverage_status` is
+      `unmapped`, `needs_review`, or `none`, and a claim whose payer is not the patient's primary payer are each
+      refused, and the file never contains an empty or placeholder `NM109` in loop 2010BA.
+- [ ] **Status.** Only `draft` and `rejected` generate; every other status is refused (`status_not_generatable`).
+- [ ] **Control numbers.** ISA13, GS06, ST02, and BHT03 carry the same sequence value; two generations for one
+      practice never repeat; two practices count independently (RLS); concurrent generations for one practice
+      are distinct (integration); the sequence refuses at 999,999,999. No new table, no GRANT.
+- [ ] **Synthetic-only guard.** `ISA15` is `T`; production refuses with `not_synthetic_environment` and does not
+      consume a control number.
+- [ ] **Encryption and PHI.** The status, coverage, and shape checks run first, and the member ID and TIN are decrypted only when they pass (a refused claim reads neither), only in memory inside the service call, a value that fails to decrypt is a refusal (`no_member_id` or `billing_tin`), never a 500; never
+      logged, and never appear in an error, refusal, audit row, or the preview (masked); the file is returned to the
+      signed-in user in the action's response and is never written to disk, object storage, or a log. The TIN is
+      stored field-encrypted (`tin_enc`, AAD bound to practice, column, and provider), CLAUDE.md #6.
+- [ ] **Roles and limits.** Only `canGenerateClaimFile` roles (admin, manager, specialist) can generate; enforced
+      in the server action and again in the domain function; a refused attempt is audited (one row per attempt, capped per person at 30 per 10 minutes, past which it returns without a row). Rate limit
+      `generate_837p`, per practice: 30 attempts per 10 minutes.
+- [ ] **Audit.** `claim.837p_generated` (entity `claim`, claim ID) with metadata: patient ID (refusals that got as far as loading the claim carry it too), claim version,
+      interchange control number, segment count, line count, usage indicator (`T`), pointer source
+      (`single_diagnosis` or `user_selected`), and every PHI category read (`patient_name`, `birth_date`, `address`, `diagnosis_codes`, `procedure_codes`, and `member_id` and `tin` only when actually decrypted); reason
+      `edi_generation`. `claim.837p_refused` with the refusal codes and their count. Neither ever holds segment
+      contents, a code, a name, a member ID, or an amount. The PHI read (member ID decrypt) is covered by the
+      same event (R-7.5.1).
+- [ ] **Tenant isolation.** Integration: another practice's claim, patient, provider, payer, and control number
+      are invisible to the service (a claim ID from practice B in practice A's session is "not found").
+- [x] **i18n.** Every string on the panel and every refusal sentence is a key in English, Spanish, and Portuguese.
+      The Spanish and Portuguese are agent-written and unreviewed by a native speaker (OA-041).
+- [x] **Docs.** This spec, `docs/PROJECT_STATE.md`, `src/edi/README.md`, and owner rows OA-089 and OA-090.
+      `docs/data-sources.xlsx` is unchanged (no integration is added in C3a; DS-03 stays "Needed").
+
+### Data / API changes (C3a)
+- **Migration `0046_claim_837p_billing_data.sql`**: nullable columns only, no new table, no policy change, **no
+  GRANT** (`providers` and `locations` already carry the table-level grants from `0002_security.sql`, which cover
+  new columns). `providers`: `first_name`, `last_name`, `address_line1`, `city`, `state`, `postal_code`,
+  `tin_type` (`EI` or `SY`), `tin_enc`. `locations`: `place_of_service`. CHECK constraints on the shapes (ZIP,
+  state, POS, TIN type present with the TIN). Existing rows stay null, so every existing provider and location
+  refuses generation until its billing details are entered.
+- The synthetic seed and generator fill the new columns with fully synthetic values.
+- New audit actions `claim.837p_generated` and `claim.837p_refused`; `canGenerateClaimFile(role)` in
+  `src/auth/permissions.ts`; rate-limit bucket `generate_837p`.
+- Pure module `src/edi/x12/837p.ts`; domain service `src/domain/claims/edi-837p.ts`; server action
+  `generateClaim837P` (`src/app/(app)/claims/[id]/edi-actions.ts`); panel `Claim837Form.tsx`.
+- **Not built** (deferred): a settings page where an administrator enters a provider's billing details and TIN
+  (step-up MFA) and a location's place of service. Until then the values come from the synthetic seed or a
+  change made by the platform operator in the database. The refusal tells the person what is missing.
+
+### Legal rules used (C3a)
+None. C3a states no deadline, rate, or threshold; the filing-deadline note on the panel is C1's `filingStatus`.
+
+### Out of scope (C3a)
+Clearinghouse interface and submission (C3b, R-7.9.5), the filing-deadline block and exception (C3b), several
+claims per file, frequency 7 and 8, secondary and tertiary payers (2320), dependents, group billing with a
+rendering provider (2310B), the 837I, production (`P`) files, attachments, NDC and prior authorization, code
+validity against licensed code sets, and claim scrubbing (NCCI, MUE, LCD/NCD).
+
+### Open questions (C3a)
+1. (owner, OA-089) Supply the 837P TR3 and the clearinghouse companion guide so every ⚠️ VERIFY row can be cleared.
+2. (owner) Should Download also be blocked past the filing deadline, or only submission (C3b)? C3a warns only.
+3. (owner, OA-089) CLM06 to CLM09 attestations: does the practice hold a signature on file, accept assignment, and
+   hold a release of information for every patient? C3a writes `Y`, `A`, `Y`, `Y` for all.
+4. (owner) Does the practice bill under a group (type 2) NPI with rendering providers? It needs a second provider
+   record per claim and loop 2310B.
+5. (owner) Are dependents (the subscriber is not the patient) common enough that patients need a subscriber record?
+6. (owner and edi-x12-specialist) `SBR09` for Medicare Advantage, ERISA self-funded, SMMC, and PIP payers, and a
+   per-payer override.
+7. (owner, OA-090) A dedicated control-number table (needs a GRANT) instead of the `practice_settings` row.
+8. (owner) Persist the diagnosis pointer choice on the claim lines (through the C1 version trigger) so it is not
+   asked at every generation.
+
+### Blockers before C3b and before any real claim (C3a compliance review)
+C3a is safe only because it is synthetic-only and refuses in production. These must be closed before C3b or any real
+claim, and none is closed by C3a:
+1. **Sensitive diagnoses.** Diagnosis and procedure codes can reveal HIV, substance use, or behavioral health. The file
+   carries them unmasked, and no sensitivity tag (R-3.5.1) or 42 CFR Part 2 consent check applies to an outgoing claim yet.
+2. **Diagnosis pointers are not persisted or audited as a decision.** The choice is asked at every generation, recorded
+   only as `user_selected`, and never as which pointers a person chose or a claim version.
+3. **Hard-coded attestations.** CLM06 to CLM09 (`Y`, `A`, `Y`, `Y`) are constants, not the practice's recorded attestations.
+4. **Clearinghouse status and real downloads.** Whether generating standard transactions makes DenialDesk a HIPAA health care
+   clearinghouse, and whether real claim files may ever be downloaded, are open (OA-091).
 
 ## Data / API changes
 - `claims.version integer not null default 1` — current version number.

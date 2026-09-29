@@ -43,3 +43,21 @@ malformed date, oversize input, and confirms error messages never leak `NM1*QC` 
 
 Maps to R-4.1 (835 remittance advice transaction) and R-8.2 step 7 (remittance posting /
 reconciliation).
+
+## 837P (005010X222A1) — professional claim
+
+`src/edi/x12/837p.ts` is a pure builder and validator for **one** claim (no I/O, no clock: the time and control number are
+inputs). Spec and mapping table: `docs/specs/claims.md` C3a; the guide's loops and segments are cited there, with ⚠️ VERIFY
+on every element not certain, because the licensed guide is not in the repository.
+
+- `validate837P(input): Issue837[]` returns every problem by fixed code (and the line, or the field's name), never a value.
+- `build837P(input, { mask? }): { text, segmentCount }` throws `Edi837Error` (issues only) when the input is not valid.
+  `mask` hides the member ID and TIN except their last four, for the on-screen preview only.
+- `icd10ToX12` / `restoreIcd10Decimal`: the only change ever made to a code (the decimal point, a representation change).
+  Procedure codes, modifiers, units, dates, and amounts are copied exactly; a malformed code is refused, never repaired.
+- Text is upper-cased and stripped of accents; a separator or other character X12 can't carry is refused by field name.
+- ISA15 is `T` and the envelope is `SYNTHETIC_ENVELOPE`; real identifiers arrive with the clearinghouse (C3b).
+
+The service (`src/domain/claims/edi-837p.ts`) loads the claim, guards coverage, takes the control number from the practice's
+`practice_settings` row `x12_control_number`, and audits. Tests: `837p.test.ts` (golden file `test/fixtures/synthetic/x12/837p-golden.x12`,
+SE01 and HL round trips, one test per refusal code), `test/integration/claim-837p*.test.ts`.
