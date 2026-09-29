@@ -192,9 +192,9 @@ value.
      (`drizzle/0002`). There is no plaintext check value for TOTP secrets.
    - **Audit (HC-5.1–5.3).**
      - One `security.field_reencrypted` event per non-empty batch, inserted **in the batch's
-       transaction**: `audit(tx, …)` for patients, and a same-transaction insert into
-       `audit_events` for users. A failed audit insert rolls the batch back. `auditSystem()` is
-       never used here.
+       transaction**: `audit(tx, …)` for patients, and for users one `src/lib/audit.ts` helper that
+       takes the system transaction and reuses `row()` (so the request IP and user agent are
+       kept). A failed audit insert rolls the batch back. `auditSystem()` is never used here.
      - The event lists record IDs and never values. `actorUserId` is null. `metadata.principal` is
        `field-reencrypt`, `metadata.operator` is the person who started the run, and `reason` is the
        run reason. No `audit_events` change is needed.

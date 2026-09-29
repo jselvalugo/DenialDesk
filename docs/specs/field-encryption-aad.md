@@ -93,6 +93,8 @@ Design: ADR 0011. It covers the envelope, the AAD bytes, the legacy policy, and 
 - [ ] Failures audit `security.field_integrity_failed` with `metadata.column` set to
       `custom_field_values.value_enc`. Custom-field code no longer emits
       `custom_field.value_integrity_failed`. That action stays in the union for historical rows.
+      Changing which audit action a control emits is an audit-logging change: PR 2 asks the owner
+      for R-15.9 sign-off.
 
 ### Re-encryption job
 - [ ] `src/domain/crypto/reencrypt.ts` exports `reencryptBatch({ column, tenantId?, limit, after,
@@ -114,8 +116,10 @@ Design: ADR 0011. It covers the envelope, the AAD bytes, the legacy policy, and 
       changes.
 - [ ] Audit.
   - Each non-empty batch writes one `security.field_reencrypted` event **in the batch's
-    transaction**: `audit(tx, …)` for patients, and a same-transaction insert into `audit_events` for
-    users. If the audit insert fails, the batch rolls back. `auditSystem()` is never used.
+    transaction**: `audit(tx, …)` for patients and, for users, one helper in `src/lib/audit.ts` that
+    takes the system transaction and reuses `row()`, so the IP and user agent of an endpoint-started
+    run are recorded (HC-5.1 "where"). If the audit insert fails, the batch rolls back.
+    `auditSystem()` is never used.
     - Columns: `actorUserId` null, `reason` = the run reason.
     - Metadata: `column`, `count`, `recordIds` (comma-joined), `fromFormat`, `toFormat`, `kid`,
       `trigger` (`cli` or `preview_endpoint`), `principal` (`field-reencrypt`), and `operator`.
@@ -233,7 +237,9 @@ Listed at the end of the implementation plan.
 - **SOC 2 controls.**
   - Every PR: CC6.1 (encryption and key management), CC7.2 (integrity monitoring through audit),
     CC8.1 (change management), C1.1 (protecting confidential information), CC3.2 (risk
-    identification: the threat model), and PI1.3/PI1.5 (processing and stored-data integrity).
+    identification: the threat model), PI1.3/PI1.5 (processing and stored-data integrity), CC6.3
+    (least privilege: PR 3's single `GRANT USAGE`), and CC7.3 (evaluating integrity-failure
+    events).
   - At key rotation and key retirement, add C1.2 (disposal), CC6.5 (retiring protected assets),
     and A1.2 (backups and recovery).
 
@@ -313,7 +319,9 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
   CHECK constraints.
 - Fix the placeholder fixtures listed under "Cut-off".
 - Tests move to "refused after the cut-off".
-- Remove the SC-B7.1 row from `docs/SECURE_CODING.md` and update `docs/PROJECT_STATE.md`.
+- Remove the SC-B7.1 row from `docs/SECURE_CODING.md` and update `docs/PROJECT_STATE.md`. Because
+  it changes that standard, the PR needs the owner's written approval in the PR and is never
+  self-merged (HC-13.2).
 - This PR merges only after the owner confirms the verified counts.
 
 ### Edge cases
