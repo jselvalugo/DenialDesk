@@ -7,6 +7,27 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # The Dockerfile's base image is pinned by digest (SC-A4.2); this proposes new digests for the
+  # same tag. Node.js stays on the 24 LTS line (ADR 0001): a major upgrade is a deliberate change.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
+  # docker-compose.yml's postgres:16 digest (the same image CI's service containers use).
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /
     schedule:
