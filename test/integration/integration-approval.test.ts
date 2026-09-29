@@ -15,6 +15,7 @@ import {
 import { withTenant, withTenantAsPlatform } from "@/db/tenant";
 import {
   approveConnection,
+  auditIntegrationViewed,
   getPendingApproval,
   jwksPathFor,
   listPendingApprovals,
@@ -44,6 +45,25 @@ import type { MessageKey } from "@/i18n/messages/types";
 import { EnvSharedKeyStore } from "@/integrations/fhir/keys";
 import { FAKE_BASE_URL, FAKE_TOKEN_ENDPOINT, FakeFhirTransport } from "../support/fake-fhir-transport";
 import { createTestTenant, expectDbError } from "./helpers";
+
+/**
+ * Fault injection for the atomicity tests: while `action` is set, the audit write for exactly that
+ * action throws, after the decision's UPDATEs have run in the same transaction. Every other audit
+ * write, and every test that doesn't set it, goes through the real `audit`.
+ */
+const auditFailure = vi.hoisted(() => ({ action: null as string | null }));
+vi.mock("@/lib/audit", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/audit")>();
+  return {
+    ...actual,
+    audit: async (tx: Parameters<typeof actual.audit>[0], event: Parameters<typeof actual.audit>[1]) => {
+      if (auditFailure.action !== null && event.action === auditFailure.action) {
+        throw new Error("injected audit failure");
+      }
+      return actual.audit(tx, event);
+    },
+  };
+});
 
 // docs/specs/patient-integrations.md PI1c: the platform operator approves or rejects a submitted
 // (`pending_approval`) real connection. R-7.2.4 (tenant isolation), R-7.5.1 (audit), R-3.3.1.
@@ -98,6 +118,7 @@ beforeAll(async () => {
 });
 // Test connection is rate limited per practice, so every test gets fresh practices.
 beforeEach(async () => {
+  auditFailure.action = null;
   a = await createTestTenant("Approval A");
   b = await createTestTenant("Approval B");
 });
@@ -414,8 +435,11 @@ describe("approveConnection", () => {
       usResidencyAttestedBy: before.usResidencyAttestedBy,
     });
     expect(stored.approvedAt).not.toBeNull();
-    // approved_at and updated_at are the same database statement's clock.
-    expect(stored.approvedAt!.toISOString()).toBe(stored.updatedAt.toISOString());
+    // approved_at is the statement's clock (now(), the transaction start); drizzle/0043 stamps
+    // updated_at with clock_timestamp() on every status change, so it is at or just after it.
+    expect(stored.updatedAt.getTime()).toBeGreaterThanOrEqual(stored.approvedAt!.getTime());
+    // ...and only just after it: an upper bound, so a stamp that drifted (a stale or wrong clock) fails too.
+    expect(stored.updatedAt.getTime() - stored.approvedAt!.getTime()).toBeLessThan(5_000);
     expect(stored.updatedAt.getTime()).toBeGreaterThanOrEqual(new Date(reviewed).getTime());
     // The registry claim stays while the connection is live.
     expect(await registryRows(id)).toHaveLength(1);
@@ -1085,6 +1109,122 @@ describe("rejectConnection", () => {
     );
     expect((await row(id)).status).toBe("draft");
     expect(await registryRows(id)).toEqual([]);
+  });
+});
+
+describe("a decision is atomic with its audit event (PR #89 follow-up N1)", () => {
+  it("approve: if the audit write fails after the UPDATE, nothing is decided and the claim is kept", async () => {
+    const { id } = await pending();
+    const before = await row(id);
+    const claimBefore = await registryRows(id);
+    expect(claimBefore).toHaveLength(1);
+    const input = await approvalOf(a, id);
+
+    auditFailure.action = "operator.integration_approved";
+    await expect(approveConnection(input, operator, OPTS)).rejects.toThrow("injected audit failure");
+    auditFailure.action = null;
+
+    // The UPDATE ran, then the audit threw: the whole transaction rolled back. Still pending, with
+    // no approval stamp, method, scope, or `updated_at` change, the same claim, and no decision audit.
+    await expectStillPending(id, before.updatedAt.toISOString());
+    expect(await row(id)).toEqual(before);
+    expect(await registryRows(id)).toEqual(claimBefore);
+    expect(await audits(id, "operator.integration_approved")).toEqual([]);
+
+    // The decision can still be made afterwards, on the same reviewed version.
+    await approveConnection(input, operator, OPTS);
+    expect((await row(id)).status).toBe("active");
+    expect(await audits(id, "operator.integration_approved")).toHaveLength(1);
+  });
+
+  it("reject: if the audit write fails after the UPDATEs and the release, the submission and the claim are untouched", async () => {
+    const { id } = await pending();
+    const before = await row(id);
+    const claimBefore = await registryRows(id);
+    expect(claimBefore).toHaveLength(1);
+    const input = {
+      tenantId: a.tenantId,
+      connectionId: id,
+      expectedUpdatedAt: before.updatedAt.toISOString(),
+      reasonCode: "endpoint_not_verified",
+    };
+
+    auditFailure.action = "operator.integration_rejected";
+    await expect(rejectConnection(input, operator)).rejects.toThrow("injected audit failure");
+    auditFailure.action = null;
+
+    // Both UPDATEs (the move to draft, and clearing the attestation and discovery) and the registry
+    // release ran before the audit threw: all of it rolled back.
+    await expectStillPending(id, before.updatedAt.toISOString());
+    expect(await row(id)).toEqual(before);
+    expect(await registryRows(id)).toEqual(claimBefore);
+    expect(await audits(id, "operator.integration_rejected")).toEqual([]);
+
+    await rejectConnection(input, operator);
+    expect((await row(id)).status).toBe("draft");
+    expect(await registryRows(id)).toEqual([]);
+  });
+});
+
+describe("the operator's account (PR #89 follow-up N4)", () => {
+  it("refuses a disabled operator account everywhere, writing nothing, and works again once re-enabled", async () => {
+    const { id } = await pending();
+    const reviewed = await stampOf(id);
+    const input = await approvalOf(a, id);
+    await systemDb().update(users).set({ disabledAt: new Date() }).where(eq(users.id, operator.userId));
+    try {
+      await refusedWith(approveConnection(input, operator, OPTS), "errors.integrationNotOperator");
+      await refusedWith(
+        rejectConnection(
+          { tenantId: a.tenantId, connectionId: id, expectedUpdatedAt: reviewed, reasonCode: "other" },
+          operator,
+        ),
+        "errors.integrationNotOperator",
+      );
+      await refusedWith(listPendingApprovals(operator), "errors.integrationNotOperator");
+      await refusedWith(listPendingForPractice(a.tenantId, operator), "errors.integrationNotOperator");
+      await refusedWith(getPendingApproval(a.tenantId, id, operator), "errors.integrationNotOperator");
+      await expectStillPending(id, reviewed);
+      expect(await registryRows(id)).toHaveLength(1);
+    } finally {
+      await systemDb().update(users).set({ disabledAt: null }).where(eq(users.id, operator.userId));
+    }
+    await approveConnection(input, operator, OPTS);
+    expect((await row(id)).status).toBe("active");
+  });
+});
+
+describe("viewing the queue and a review page is audited with the operator's session (PR #89 follow-up N3)", () => {
+  it("records the session on the queue view (with the count) and on a review page (with the practice and connection)", async () => {
+    const { id } = await pending();
+    await auditIntegrationViewed(operator, { count: 3 });
+    await auditIntegrationViewed(operator, { tenantId: a.tenantId, connectionId: id });
+
+    const review = await audits(id, "operator.integration_viewed");
+    expect(review).toHaveLength(1);
+    expect(review[0]).toMatchObject({
+      actorUserId: operator.userId,
+      tenantId: a.tenantId,
+      entityType: "integration_connection",
+      entityId: id,
+    });
+    expect(review[0]!.metadata).toEqual({ session_id: operator.sessionId });
+
+    const queue = (
+      await systemDb()
+        .select()
+        .from(auditEvents)
+        .where(
+          and(
+            eq(auditEvents.actorUserId, operator.userId),
+            eq(auditEvents.action, "operator.integration_viewed"),
+          ),
+        )
+        .orderBy(asc(auditEvents.id))
+    ).filter((event) => event.entityId === null);
+    expect(queue.length).toBeGreaterThanOrEqual(1);
+    expect(queue.at(-1)).toMatchObject({ tenantId: null, entityType: null });
+    expect(queue.at(-1)!.metadata).toEqual({ count: 3, session_id: operator.sessionId });
   });
 });
 

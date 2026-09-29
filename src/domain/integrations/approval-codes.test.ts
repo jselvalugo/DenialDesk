@@ -119,8 +119,10 @@ describe("labels", () => {
     );
   });
 
-  it("the spec's optional confirmation reads 'MRNs are 9 digits (verified)'", () => {
-    expect(en.operator["integrations.approve.nineDigitsLabel"]).toBe("MRNs are 9 digits (verified)");
+  it("the spec's optional confirmation reads 'MRNs contain a nine-digit number (verified)'", () => {
+    expect(en.operator["integrations.approve.nineDigitsLabel"]).toBe(
+      "MRNs contain a nine-digit number (verified)",
+    );
   });
 });
 
