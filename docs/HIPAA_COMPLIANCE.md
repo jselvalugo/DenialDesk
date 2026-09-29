@@ -91,15 +91,31 @@ evidence.
   that party needs for the transaction, and the spec lists each field sent.
 - **HC-3.4 MUST** We do not collect a PHI field "in case it is useful later." Every PHI field in the
   schema traces to a requirement ID.
-- **HC-3.5 MUST** Patient identity (name, birth date, address, member ID, MRN, account number) is
-  stored once, in `patients`. Other tables reference the patient (or its encounter/claim) by ID and
-  never copy identity fields (ADR 0013).
-- **HC-3.6 MUST** Every spec that adds or reads PHI has a "PHI footprint" in its Data section: each
-  PHI field stored, why, where it is sent, and when it is deleted or de-identified.
-- **HC-3.7 MUST** Clinical attachments (records bundled into appeals) are not kept after they are
-  sent unless the spec justifies it and sets a retention period.
-- **HC-3.8 SHOULD** Reports and analytics use aggregates or data de-identified under 45 CFR
-  164.514(b) (Safe Harbor); cross-practice analytics MUST.
+- **HC-3.5 MUST** Identity of the patient (the HC-1.1 identifiers: name, birth date, address,
+  phone, member ID, MRN, PM account number, and the like) is stored once, in `patients`, and
+  sensitive identifiers are field-encrypted (R-7.3). Other tables reference the patient (or its
+  encounter/claim) by ID and never copy identity fields (ADR 0013). Subscriber and guarantor identity
+  gets one approved home the same way when a spec adds it (open: ADR 0013). Identifiers scoped to a
+  claim (claim number / CLM01, payer claim control number) belong on the claim. Custom fields
+  (`specs/settings-and-custom-fields.md`) must not be used to capture identity. Outbound transaction
+  files (837P, appeal letters) carry what HC-3.3 allows; a spec that stores a generated copy states
+  it in its PHI footprint (HC-3.6).
+- **HC-3.6 MUST** Every spec added or changed on or after 2026-09-29 that adds or reads PHI has a
+  "PHI footprint" in its Data section: each PHI field stored, why, where it is sent, and when it is
+  deleted or de-identified.
+- **HC-3.7 MUST** A spec that stores clinical attachments (records bundled into appeals) states
+  why and for how long. Retention follows REQUIREMENTS §9.2 and the evidence needs of R-3.1.7,
+  R-3.2.1, and R-3.8.2; legal hold overrides deletion (HC-10.1, R-9.2.1); deletion runs through the
+  disposal process (HC-10.2) and emits an audit event (HC-5). Whether attachments may be disposed of
+  earlier than the appeal record (keeping a manifest and hash of what was sent) is a counsel
+  question (OA-105); until answered, keep them for the appeal-record retention period.
+- **HC-3.8 SHOULD** Reports and analytics within a practice use aggregates or data de-identified
+  under 45 CFR 164.514(b)(2) (Safe Harbor).
+- **HC-3.9 MUST** Analytics across practices meet HC-1.4 (BAA permits de-identification, Safe Harbor
+  under 164.514(b)(2), small-cell suppression).
+
+HC-3.5 to HC-3.9 are internal design rules stricter than the minimum-necessary standard itself
+(ADR 0013).
 
 ## 4. Access control and authentication (45 CFR 164.312(a), (d))
 
@@ -240,18 +256,20 @@ Every PR is checked against this document by `compliance-checker`, and against
 
 ## Known gaps (tracked, not waived)
 
-These MUST rules are not yet met as of 2026-09-28. Pre-production holds synthetic data only (ADR
+These MUST rules are not yet met as of 2026-09-29. Pre-production holds synthetic data only (ADR
 0003), so each is a condition for the first real practice, not a waiver.
 
 | Rule | Gap |
 | --- | --- |
-| HC-3.5 | `rcm_claim_lines` stores patient name and account number in plain text (encryption open, OA-104) instead of referencing the patient (ADR 0013). |
+| HC-3.5 | `rcm_claim_lines` stores patient name and PM account number in plain text instead of referencing the patient; the fix needs an account-to-patient link (design item, ADR 0013); field encryption of `account_number` is open (OA-104). |
 | HC-3.4 | Stored patient fields not used by any feature (for example phone) still need a review against a requirement (ADR 0013). |
+| HC-3.6 | Specs written before 2026-09-29 have no PHI footprint; each gains one when it is next changed. |
 | HC-4.2 | Phishing-resistant MFA (WebAuthn) not built; TOTP only (`specs/operator-login.md`, `specs/sign-in-and-sessions.md`, OA-063). |
 | HC-4.6 | No just-in-time workforce access, session recording, or break-glass accounts yet. |
 | HC-5.3 | No WORM audit storage or SIEM alerting yet (Azure cutover, ADR 0003). |
 | HC-7.1 | No mTLS between internal services yet (Azure cutover). |
 | HC-7.4 | Pre-production keys come from platform environment variables, not Key Vault (ADR 0003, OA-064). |
 | HC-10.1 | No legal-hold capability yet; hard deletes of practice data are refused until it exists (`drizzle/0004_tenant_identity_rls.sql`). |
+| HC-10.1–10.2 | No retention-based purge or disposal of closed cases yet (REQUIREMENTS §9.2, ADR 0013); none may be built before legal hold exists. |
 | HC-11.1 | Disclosures are recorded as audit events, but there is no per-patient accounting-of-disclosures export yet (R-5.1.1). |
 | HC-12.2–12.5 | Risk analysis, sanction policy, training, contingency plan, and media controls are not written yet (REQUIREMENTS §6.4 policy set). |

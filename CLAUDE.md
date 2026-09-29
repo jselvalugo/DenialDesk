@@ -35,7 +35,7 @@ If a task is not backed by a spec, write or update the spec first.
 - The **claim** drives billing, legal deadlines, denials, and appeals. An **encounter** (the visit; spec pending)
   will group the claims of one visit. Appointments are deferred; never make them the driver.
 - DenialDesk holds PHI (it is a business associate). Minimize it: identity lives only in `patients`, other tables
-  reference IDs, and every spec states its PHI footprint (`HC-3.4` to `HC-3.8`).
+  reference IDs, and every spec states its PHI footprint (`HC-3.4` to `HC-3.9`).
 
 ## Non-negotiables
 

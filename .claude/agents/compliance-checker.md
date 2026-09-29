@@ -21,6 +21,8 @@ Look for:
 - Sensitive categories (HIV, mental health, SUD/Part 2, genetic, minors, reproductive)
   handled without tags and stricter access (R-3.5.1, R-4.5.1).
 - Retention or deletion that ignores legal hold (R-9.2.1).
+- A new table or custom field that copies patient identity instead of referencing the patient, or
+  a new or changed PHI spec without a PHI footprint (HC-3.5, HC-3.6, ADR 0013).
 - Legal deadlines outside `rules/`, or ⚠️ VERIFY flags removed without counsel sign-off.
 - Any `MUST` rule in `docs/HIPAA_COMPLIANCE.md` broken by the diff; cite the rule ID (`HC-x.y`).
   Where rules differ, apply the strictest reading.
