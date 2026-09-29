@@ -16,7 +16,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface StepUpTarget {
   /** Where to send the browser afterwards: a pathname on this site, no query string. */
   path: string;
-  /** The page's route template, for the audit log (`/settings/integrations/[id]`). */
+  /** The page's route template, for the audit log (`/settings/integrations/[id]`, `.../[id]/payers`). */
   route: string;
   /** The connection's UUID (lowercased) when the page is one connection's, else null. */
   routeId: string | null;
@@ -30,9 +30,10 @@ const DEFAULT_TARGET: StepUpTarget = {
 
 /**
  * Resolves an untrusted `returnTo`. Anything that isn't `/settings/integrations`,
- * `/settings/integrations/new`, or `/settings/integrations/<uuid>` (including a non-UUID id
- * segment, an over-long value, or any off-site or malformed path) resolves to the default page.
- * A query string or fragment is dropped.
+ * `/settings/integrations/new`, `/settings/integrations/<uuid>`, or the payer mapping page
+ * `/settings/integrations/<uuid>/payers` (PI2b: saving a mapping needs a step-up), including a
+ * non-UUID id segment, an over-long value, or any off-site or malformed path, resolves to the
+ * default page. A query string or fragment is dropped.
  */
 export function stepUpTarget(value: unknown): StepUpTarget {
   if (typeof value !== "string" || value.length > MAX_RETURN_TO_LENGTH) return DEFAULT_TARGET;
@@ -42,10 +43,15 @@ export function stepUpTarget(value: unknown): StepUpTarget {
   if (pathname === STEP_UP_DEFAULT_PATH || pathname === `${STEP_UP_DEFAULT_PATH}/new`) {
     return { path: pathname, route: pathname, routeId: null };
   }
-  const match = /^\/settings\/integrations\/([^/]+)$/.exec(pathname);
+  const match = /^\/settings\/integrations\/([^/]+)(\/payers)?$/.exec(pathname);
   if (match && UUID.test(match[1]!)) {
     const id = match[1]!.toLowerCase();
-    return { path: `${STEP_UP_DEFAULT_PATH}/${id}`, route: `${STEP_UP_DEFAULT_PATH}/[id]`, routeId: id };
+    const sub = match[2] ?? "";
+    return {
+      path: `${STEP_UP_DEFAULT_PATH}/${id}${sub}`,
+      route: `${STEP_UP_DEFAULT_PATH}/[id]${sub}`,
+      routeId: id,
+    };
   }
   return DEFAULT_TARGET;
 }

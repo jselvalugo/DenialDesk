@@ -265,7 +265,7 @@ exception.
 | SC-A4.2 | CI (`actions/setup-node`) and Netlify (`NODE_VERSION`) download Node.js 24 by major version, with no exact version or hash; Netlify's handling of the `packageManager` sha512 is unverified. |
 | SC-A4.3 | No release-age quarantine configured for pnpm, and no `cooldown` in `.github/dependabot.yml`. |
 | SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
-| SC-A2.5 | The lockfile also carries native binaries not on list (a): `@rolldown/binding-*` (Vitest → Vite → Rolldown) and `fsevents` (tsx, Vite, macOS only). Adding them needs human sign-off (OA-077). |
+| SC-A2.5 | The lockfile also carries native binaries not on list (a): `@rolldown/binding-*` (Vitest → Vite → Rolldown) and `fsevents` (tsx, Vite, macOS only). Adding them needs human sign-off (OA-083). |
 | SC-A2.2 | No automated license check in CI. |
 | SC-B1.2 | Threat models exist for four features only (`docs/threat-models/`); claims, denials, appeals, remittances, and sign-in have none. |
 | SC-B3.1 | Most Zod object schemas are not strict (4 of about 43 `z.object` schemas in `src/` reject unknown keys). |
@@ -273,4 +273,4 @@ exception.
 | SC-B8.2 | No network-layer egress allow-list yet (Azure cutover, REQUIREMENTS §7.7). |
 | SC-A2.6 | Next.js telemetry is disabled in the `Dockerfile` and `netlify.toml` but not in CI or local development (`NEXT_TELEMETRY_DISABLED=1`). |
 | SC-B12.1, SC-B12.2 | No SAST, DAST, container/IaC scanning, SBOM, signed commits or artifacts, or license notice file yet. |
-| SC-B12.4 | The default branch is not yet renamed to `main`, and its protection is not verifiable from the repository; the owner confirms the settings (OA-001, OA-077). |
+| SC-B12.4 | The default branch is not yet renamed to `main`, and its protection is not verifiable from the repository; the owner confirms the settings (OA-001, OA-083). |

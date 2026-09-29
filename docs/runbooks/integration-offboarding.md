@@ -11,8 +11,9 @@ practice's EHR/PM administrator; DenialDesk staff never act on a practice's EHR/
 
 ## In DenialDesk
 0. Not ready to give the connection up? **Pause** (active connections) stops new sync runs
-   without deleting anything, and **Resume** undoes it. Stopping a run that is already in progress
-   is part of the sync engine (PI2b); until then a run that started before the Pause finishes.
+   without deleting anything, and **Resume** undoes it. A run already in progress is stopped
+   too: the database abandons it, and the sync checks the connection is still active before each page,
+   so it stops at its next page (patients already saved stay).
    Resume needs a verification within the last 5 minutes: signing in counts, so it only asks for a
    fresh authenticator code once the sign-in is older than that. A connection still **awaiting
    approval** can be **withdrawn** back to a draft (its registry claim and its residency
@@ -32,7 +33,11 @@ practice's EHR/PM administrator; DenialDesk staff never act on a practice's EHR/
    - audit event `integration.connection_revoked` with the reason code (also its "why" column and the
      connection's `status_reason`), the previous status, the endpoint, client ID, MRN identifier
      system, and whether a registry entry was released (configuration only, no PHI).
-3. From PI2a: the connection's signing key is destroyed as part of revoke. Until then no key exists.
+3. Signing keys: revoke does **not** destroy a key today. Per-connection keys (Key Vault, destroyed on revoke) are
+   not built yet; pre-production connections (synthetic data only) sign with one shared key that revoke leaves in
+   place, and that key is rotated under the key runbook, not per connection. A real connection can't sync at all
+   until PI4 (the sync refuses it with `population_scope_unenforced`), so no real connection has a key in use. Destroying a
+   connection's key joins this step when per-connection keys ship.
 
 ## At the EHR/PM (the practice's EHR/PM administrator)
 1. Remove or disable the DenialDesk client registration (the client ID shown on the connection page).
