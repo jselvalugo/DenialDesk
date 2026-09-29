@@ -61,6 +61,19 @@ test.describe("university", () => {
     await expect(page).toHaveURL(/\/university$/);
   });
 
+  test("the user menu links to the Wiki beneath the University", async ({ page }) => {
+    await page.goto("/overview");
+    const menuButton = page.getByRole("button", { name: /Riley Worker/ });
+    await menuButton.click();
+    // Scoped to the menu panel: the header's Wiki wordmark button has the same name.
+    const panel = page.locator(`[id="${await menuButton.getAttribute("aria-controls")}"]`);
+    const links = panel.getByRole("link");
+    await expect(links.nth(0)).toHaveText("DenialDesk University");
+    await expect(links.nth(1)).toHaveText("DenialDesk Wiki");
+    await links.nth(1).click();
+    await expect(page).toHaveURL(/\/university\/wiki$/);
+  });
+
   test("the welcome page points new users at the University", async ({ page }) => {
     await page.goto("/");
     await page.getByRole("main").getByRole("link", { name: "University of DenialDesk" }).click();
@@ -172,6 +185,7 @@ test.describe("university locked", () => {
     await expect(prompt).toContainText("Access starts at $299.00");
     await expect(prompt).toContainText(/about \d+ minutes/);
     await expect(prompt.getByText("Courses", { exact: true })).toBeVisible();
+    await expect(prompt.getByRole("img", { name: /^University of DenialDesk:/ })).toBeVisible();
 
     // Escape, the close button, and the backdrop each dismiss it; nothing is remembered.
     await page.keyboard.press("Escape");

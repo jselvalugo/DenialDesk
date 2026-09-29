@@ -56,7 +56,7 @@ export function AccessPrompt({
       onClick={(event) => {
         if (event.target === dialog.current) close(); // backdrop click
       }}
-      className="fixed inset-x-0 top-16 mx-auto max-h-[calc(100vh-5rem)] w-[min(560px,calc(100vw-2rem))] overflow-y-auto rounded-panel border border-border bg-surface p-0 text-text shadow-lg backdrop:bg-navy/40"
+      className="fixed inset-x-0 top-16 mx-auto max-h-[calc(100dvh-5rem)] w-[min(560px,calc(100vw-2rem))] overflow-y-auto rounded-panel border border-border bg-surface p-0 text-text shadow-lg backdrop:bg-navy/40"
     >
       <div className="flex items-start gap-4 border-b border-border px-5 py-4">
         <span
