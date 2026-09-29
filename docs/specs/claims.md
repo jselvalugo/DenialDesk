@@ -1,6 +1,6 @@
 # Spec: Claims module
 
-Status: in progress — C1 approved by delegated technical authority (2026-09-26); C2 approved by delegated technical authority (2026-09-29); C3a approved by delegated technical authority (2026-09-29)
+Status: in progress — C1 approved by delegated technical authority (2026-09-26); C2 approved by delegated technical authority (2026-09-29); C3a approved by delegated technical authority (2026-09-29); C3a-S approved by delegated technical authority (2026-09-29)
 Roadmap items: Phase 1 → Claims ("Claim data model with immutable version history", "Charge capture
 via CSV import", "Timely-filing guardrail", "837P generation and clearinghouse submission",
 "999 / 277CA acknowledgment capture")
@@ -453,8 +453,8 @@ CI run of `pnpm test:integration`.
   `src/auth/permissions.ts`; rate-limit bucket `generate_837p`.
 - Pure module `src/edi/x12/837p.ts`; domain service `src/domain/claims/edi-837p.ts`; server action
   `generateClaim837P` (`src/app/(app)/claims/[id]/edi-actions.ts`); panel `Claim837Form.tsx`.
-- **Not built** (deferred): a settings page where an administrator enters a provider's billing details and TIN
-  (step-up MFA) and a location's place of service. Until then the values come from the synthetic seed or a
+- **Deferred to C3a-S (below)**: a settings page where an administrator enters a provider's billing details and TIN
+  (step-up MFA) and a location's place of service. Until it ships, the values come from the synthetic seed or a
   change made by the platform operator in the database. The refusal tells the person what is missing.
 
 ### Legal rules used (C3a)
@@ -490,6 +490,110 @@ claim, and none is closed by C3a:
 3. **Hard-coded attestations.** CLM06 to CLM09 (`Y`, `A`, `Y`, `Y`) are constants, not the practice's recorded attestations.
 4. **Clearinghouse status and real downloads.** Whether generating standard transactions makes DenialDesk a HIPAA health care
    clearinghouse, and whether real claim files may ever be downloaded, are open (OA-091).
+
+## C3a-S — Provider billing details
+
+Approved by delegated technical authority (2026-09-29). Follow-up to C3a: without it only the synthetic seed can
+supply the provider and location data the 837P generator needs (`billing_*` and `missing_place_of_service` refusals).
+Requirements: R-3.10.1 (nothing here touches a code), R-7.2.2 and HC-4.2 (step-up), R-7.3.3 and HC-7.3 (field
+encryption), R-7.5.1 and HC-5.1 to HC-5.3 (audit, IDs and field names only), R-7.2.4 (RLS), SC-B3.1 (validation).
+
+### Goal
+An administrator opens **Settings > Billing** and, for each existing provider, enters the name, address and tax ID (TIN)
+the 837P loop 2010AA needs, and for each existing location its place of service, so a claim that uses them stops
+refusing. It creates no provider and no location (the practice's providers and locations already come from onboarding
+and the synthetic seed); it edits the C3a columns only. NPI and taxonomy are shown, not edited.
+
+### Screens
+- `/settings/billing`: two lists (providers, locations), bounded to 200 rows each, each row showing what is missing.
+  A row is complete only with a nine-digit ZIP and a TIN that decrypts; the row names the missing fields. Checking the TIN
+  decrypts it in memory and shows nothing, so the list view is audited (`phi` = `tin_readable_check`, with a count).
+- `/settings/billing/providers/[id]`: the provider form. The TIN field is a masked (`password`) input that is always
+  empty; beside it the page shows "TIN on file, ends in 1234, type EI" (the only read of the ciphertext, audited).
+- `/settings/billing/locations/[id]`: the place-of-service form.
+
+### Rules
+- **Who.** `canConfigureSettings` (admin) only, on the pages, in the server actions, and again in the domain functions.
+  Any other role is refused (and sees no Billing tab content).
+- **Step-up.** Setting or changing a TIN, or changing the type of an existing TIN, requires `hasRecentMfa` (five minutes,
+  R-7.2.2) read from the session, never the request. A refusal carries `stepUpRequired` and the form shows the
+  `/step-up` link (`/settings/billing/providers/<id>` is an allowed `returnTo`). Saving the other fields needs no
+  step-up. Clearing a stored TIN is not offered. Typing the TIN that is already stored is not a change (no write, no audit). A type-only
+  change sets the type and leaves the ciphertext alone: the AAD binds tenant, column, and provider, not the type.
+- **Write-only TIN.** It is never sent back to the browser, never in a form default, an error, a state object, a URL,
+  a title, a log, or an audit row. The page only ever shows the last four digits.
+- **Encryption.** The TIN is encrypted on write with `encryptProviderTin` (AES-256-GCM, AAD `tenant|providers.tin_enc|provider`)
+  and stored with its type in one statement (`providers_tin_together`). It is never decrypted except for the last-four on
+  the detail page and by the 837P service.
+- **Validation** (allow-lists in the domain, a strict bounded Zod schema on the form fields in the action; same shapes as migration 0046, all server side, allow-lists):
+  first name 1 to 35, last name 1 to 60, address line 1 to 55, city 1 to 30 characters; state two letters;
+  ZIP five digits or nine (a hyphen after the fifth is allowed and dropped: `^[0-9]{5}(-?[0-9]{4})?$`); TIN type `EI` or
+  `SY`; TIN exactly nine digits (hyphens and spaces typed between digits are dropped); place of service two digits.
+  The billing address cannot be a P.O. box (the generator refuses it: `billing_address_po_box`). A five-digit ZIP is
+  stored (the database allows it) but the 837P billing loop needs nine digits, so the field says so and the claim keeps
+  refusing `billing_address` until a ZIP+4 is entered.
+- **POS is format only.** ⚠️ VERIFY: two digits is all that is checked. Whether a code is a valid CMS place of service
+  code (and valid for the service billed) is not checked; the CMS POS code set is not in the repository. (owner, OA-092)
+- **X12-safe text.** Text fields are trimmed, accents removed, upper-cased and blanks collapsed, then must use only
+  `A-Z 0-9 space & ' ( ) , . - / #`; anything else (a separator such as `*` `~` `:` `^`, a control character, a non-Latin
+  letter) is refused with a message naming the field, never silently changed or dropped. The stored value is the cleaned
+  value, so what the person sees is what X12 carries.
+- **Audit** (same transaction as the change, HC-5.2): `settings.provider_billing_updated` (entity `provider`, provider ID;
+  metadata `fields` = comma-separated column names that changed, `tin_changed` boolean, `step_up_verified_at` when a TIN
+  changed), `settings.location_pos_updated` (entity `location`, `fields`), `settings.provider_billing_viewed` (entity
+  `provider`, provider ID, `phi` = `tin_last4` only when a TIN was decrypted). Never a value, a name, an address, a
+  TIN or its last four, or a POS code. A save that changes nothing writes nothing and audits nothing.
+- **Tenant isolation.** Every query runs in `withTenant` (RLS); another practice's provider or location ID is "not
+  found", with no audit row in either practice and no change.
+- **Errors.** A database error is one generic message (ADR 0006); nothing from the database or the input reaches the page.
+- **Strings.** Every label, hint, error, and notice is a message key in en, es, and pt (`settings` namespace, `billing.*`).
+
+### Acceptance criteria (C3a-S)
+Approved by delegated technical authority (2026-09-29).
+
+Ticked items have passing unit tests. Unticked items have their tests written (`test/integration/billing-settings.test.ts`,
+plus the pure checks in `src/domain/settings/billing.test.ts`) but not yet run: the agent that built C3a-S had no database
+access, so they wait for the CI run of `pnpm test:integration`.
+
+- [ ] **Admin only.** A manager, specialist, and compliance user are refused by the actions and the domain functions, on
+      both providers and locations, and nothing is written or audited as a change.
+- [ ] **Step-up.** Setting or changing a TIN, or its type, is refused without a recent MFA (`stepUpRequired`), boundary
+      cases at the five-minute window; the same save without a TIN change succeeds without one; the refusal writes nothing.
+- [ ] **Write-only TIN.** No page, state, error, or audit row holds the TIN; the detail page shows only "ends in" the last four.
+- [ ] **Encryption round trip.** The stored `tin_enc` is not the TIN, decrypts to it with the provider's tenant and ID,
+      and fails to decrypt for another provider or practice (AAD); the type and ciphertext are stored together.
+- [ ] **Audit.** One event per change with field names only (asserted: no value appears in any event); a view event marks
+      the `tin_last4` read; a no-op save writes none.
+- [ ] **Validation matches the database.** State, ZIP (5, 9, hyphenated 9, and 4, 6, 8 digits refused), TIN type, TIN (8, 9,
+      10 digits; hyphens; letters), POS (1, 2, 3 digits; letters), and text lengths at the limit and one over; each value
+      the page accepts is accepted by the database CHECKs, and each it refuses would be refused by them or by the 837P
+      generator.
+- [x] **X12-safe text.** Lower case and accents are cleaned; `*`, `~`, `:`, `^`, control characters, and non-Latin letters are
+      refused naming the field; a P.O. box is refused.
+- [ ] **Tenant isolation.** Practice A cannot read, change, or audit practice B's provider or location by ID.
+- [ ] **End to end.** A provider and location configured through the domain functions (as the actions call them) let the 837P
+      service generate for a synthetic claim, with the TIN decrypted in the file, and a claim refuses `billing_tin`
+      before and generates after.
+- [x] **i18n.** Every string is a key in en, es, and pt (the message tests pass). Spanish and Portuguese are agent-written and unreviewed by a native speaker (OA-041).
+- [x] **Docs.** This spec, `docs/PROJECT_STATE.md`, and owner row OA-092 (POS code set).
+
+### Data / API changes (C3a-S)
+No migration and no GRANT: migration 0046 already holds every column and CHECK, and `providers` and `locations` carry the
+table-level grants from 0002. New audit actions and entity types `provider` and `location`; domain module
+`src/domain/settings/billing.ts`; server actions in `src/app/(app)/settings/billing/actions.ts`; the `/settings/billing`
+route `returnTo` for step-up (`src/auth/step-up-target.ts`); a Billing tab.
+
+### Out of scope (C3a-S)
+Creating, deactivating, or deleting a provider or location; editing NPI, taxonomy, or license; clearing a TIN; group (type 2)
+billing and a rendering provider; validating a POS code against the CMS set; USPS address verification.
+
+### Open questions (C3a-S)
+1. (owner, OA-092) Supply the CMS place of service code set (and the practice's usual codes) so the format check can become a
+   real check.
+2. (owner, OA-097) Should changing the billing name or address (not only the TIN) also require a step-up? They go on every
+   claim, so a wrong address misroutes payment, but they are business data, not a secret. C3a-S requires it for the TIN only.
+3. Known gap, not closed here: the step-up that protects a TIN (which can be a sole proprietor's SSN) is TOTP, not the
+   phishing-resistant MFA HC-4.2 asks of administrators (OA-063). It stays a go-live condition, as in the other step-up gated actions.
 
 ## Data / API changes
 - `claims.version integer not null default 1` — current version number.

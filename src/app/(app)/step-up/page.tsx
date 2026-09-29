@@ -16,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
  * Step-up MFA re-verification (R-7.2.2): a gated action (Submit, Resume) sends the administrator
  * here with `returnTo` set to the page they came from; on success they land back there and can
  * retry, and the action now sees a fresh `mfa_verified_at`. `returnTo` is untrusted input:
- * `stepUpTarget` keeps it to one of the integrations pages.
+ * `stepUpTarget` keeps it to one of the integrations pages or a provider's billing page.
  */
 export default async function StepUpPage({
   searchParams,

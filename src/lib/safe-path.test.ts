@@ -29,6 +29,8 @@ describe("safeInternalPath", () => {
     ["/patients/abc-123", "/patients/abc-123"],
     ["/settings/integrations", "/settings/integrations"],
     ["/settings/integrations/new", "/settings/integrations/new"],
+    ["/settings/billing", "/settings/billing"],
+    ["/settings/billing/providers/abc", "/settings/billing/providers/abc"],
     ["/settings/integrations/abc?tab=history", "/settings/integrations/abc?tab=history"],
     // The allow-list applies to the pathname; a query string on an allowed path is kept.
     ["/patients?page=2", "/patients?page=2"],
