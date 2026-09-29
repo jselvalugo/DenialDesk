@@ -115,3 +115,17 @@ export function hasUnresolvedPlaceholder(body: string): boolean {
 export function letterDigest(rendered: string): string {
   return createHash("sha256").update(rendered, "utf8").digest("hex");
 }
+
+/**
+ * Fail closed until sensitivity handling exists (OA-031, OA-091): a patient with any practice sensitivity tag,
+ * any source sensitivity label, or a source restriction never gets a letter attested or exported.
+ */
+export function isSensitivePatient(patient: {
+  sensitivityTags: readonly string[];
+  sourceSensitivity: readonly string[];
+  sourceRestricted: boolean;
+}): boolean {
+  return (
+    patient.sensitivityTags.length > 0 || patient.sourceSensitivity.length > 0 || patient.sourceRestricted
+  );
+}

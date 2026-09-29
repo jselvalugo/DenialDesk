@@ -8,6 +8,7 @@ import {
   checkBody,
   fieldsUsed,
   hasUnresolvedPlaceholder,
+  isSensitivePatient,
   letterDigest,
   missingFields,
   renderLetter,
@@ -209,5 +210,19 @@ describe("templateCategoryToLoad (a stale ?template= cannot swap the text shown)
       "eligibility",
     );
     expect(templateCategoryToLoad({ ...base, editable: true, requested: null })).toBeNull();
+  });
+});
+
+describe("isSensitivePatient (fail closed, OA-031/OA-091)", () => {
+  const clear = {
+    sensitivityTags: [] as string[],
+    sourceSensitivity: [] as string[],
+    sourceRestricted: false,
+  };
+  it("is false only when no tag, label or restriction is present", () => {
+    expect(isSensitivePatient(clear)).toBe(false);
+    expect(isSensitivePatient({ ...clear, sensitivityTags: ["hiv"] })).toBe(true);
+    expect(isSensitivePatient({ ...clear, sourceSensitivity: ["ETH"] })).toBe(true);
+    expect(isSensitivePatient({ ...clear, sourceRestricted: true })).toBe(true);
   });
 });

@@ -409,8 +409,10 @@ describe("attestation and export refusals are audited with fixed reason codes", 
     expect(reasons.sort()).toEqual(["no_letter", "stale", "unresolved_placeholder"]);
   });
 
-  it("fails closed for a patient with a sensitivity tag or a source restriction", async () => {
-    for (const change of [{ sensitivityTags: ["hiv"] }, { sourceRestricted: true }]) {
+  it("fails closed for a patient with a sensitivity tag", async () => {
+    // Source labels and restrictions can only be set on EHR-synced patients (patients_manual_defaults), so the
+    // integration path uses a practice tag; isSensitivePatient's unit tests cover the other two signals.
+    for (const change of [{ sensitivityTags: ["hiv"] }]) {
       const appealId = await newAppeal();
       await save(appealId, GOOD_BODY, 0);
       expect(await attest(appealId, 1)).toEqual({ ok: true });

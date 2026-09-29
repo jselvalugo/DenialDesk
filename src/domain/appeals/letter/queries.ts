@@ -17,7 +17,7 @@ import {
 import { CARC, CATEGORY_ORDER, CATEGORY_LABEL_KEYS, type DenialCategory } from "@/domain/carc";
 import { en } from "@/i18n/messages/en";
 import { formatCents, formatDate } from "@/lib/format";
-import type { MergeValues } from "./merge-fields";
+import { isSensitivePatient, type MergeValues } from "./merge-fields";
 import { starterTemplate } from "./starter-templates";
 
 /** How many history rows the letter page lists. */
@@ -95,8 +95,7 @@ export async function loadMergeValues(
   };
   // Fail closed until sensitivity handling exists (OA-031, OA-091): a patient with any sensitivity tag, or
   // marked restricted at the source, never gets a letter attested or exported.
-  const sensitive =
-    row.sensitivityTags.length > 0 || row.sourceRestricted || row.sourceSensitivity.length > 0;
+  const sensitive = isSensitivePatient(row);
   return { values, category: row.category, sensitive };
 }
 
