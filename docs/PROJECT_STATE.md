@@ -85,8 +85,7 @@ _Last updated: 2026-09-28_
   the sandbox too (only the attestation is real-only), so sandbox Submit is domain-tested with a seeded
   pass and unreachable from the page until PI2b (and a sandbox in `error` can't be resumed until PI2b
   gives it a test path). **Open owner decisions from this slice:** OA-045 (N3 stamp time floor, N6
-  attestation wording scope), OA-065 (c). **Next: PI1c operator approval** (Submit now produces
-  `pending_approval` connections with a claimed registry entry for it to approve). (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  attestation wording scope), OA-065 (c). **PI1c operator approval done except the activation notice and the conflict alert (open items)** (branch `claude/vigilant-tesla-ps41e9-pi1c-approval`, PR #89; no migration and no GRANT: writes go through `withTenantAsPlatform`, the connection owner's path; `src/domain/integrations/approval.ts`; queue `/operator/integrations`, review page under the practice; Approve records the method code, date, contact role, optional 9-digit MRNs and the required client-ID-ownership confirmation, and is refused for a scope other than `group_export`, in a synthetic-only environment, before the submission date, without a BAA in force, and for a non-operator account (`isOperatorAccount`); Reject takes a fixed reason code and releases the registry claim; audited `operator.integration_approved|rejected` with `session_id`, and views audited `operator.integration_viewed`). **Open from PI1c** (unticked spec items, owner rows OA-066 to OA-073): the activation notice to practice administrators (no in-app notice mechanism exists), the operator alert on `integration.registry_conflict` (R-15.9 owner sign-off), operator step-up before Approve, operator-side revoke, capturing a verified filter as a structured value. **Next: PI2b** (sync engine, sandbox, jobs); its spec now also carries the error-transition stamp item. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
   **PI2a lifecycle + step-up slice done** (PR #86, ported from closed #81 onto the
   #82/#84/#85 domain layer; Submit, the residency attestation, and the Submit registry claim wait on
   Test connection, PI2a-2): step-up MFA (R-7.2.2) — migration 0041 `sessions.mfa_verified_at`,
@@ -376,17 +375,12 @@ _Last updated: 2026-09-28_
 | 2026-09-27 | Roll-forward pending counsel (OA-034), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-034 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
 | 2026-09-27 | Patient Register is a synced, read-only copy of the practice EHR/PM (billing minimum only) over FHIR R4 / US Core + SMART Backend Services; data-source drop-down beside the Patients tab, Patients table only for now; manual entry kept only while no connection is active (OA-046) | ADR 0010, `specs/patient-integrations.md` |
 | 2026-09-28 | Record pattern P4: `DataTable` sorting is server-side via allow-listed `?sort=<key>&dir=asc\|desc` links, not TanStack Table (still deferred until a list needs client-side interactivity — column chooser, virtualized rows) | ADR 0004 addendum, `specs/record-pages.md` |
-| 2026-09-28 | Binding HIPAA and secure-coding standards; strictest reading wins; new third-party packages default to no (owner request) | `HIPAA_COMPLIANCE.md`, `SECURE_CODING.md` (OA-066) |
+| 2026-09-28 | Binding HIPAA and secure-coding standards; strictest reading wins; new third-party packages default to no (owner request) | `HIPAA_COMPLIANCE.md`, `SECURE_CODING.md` (OA-077) |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
 technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Next up
-- Close the `docs/SECURE_CODING.md` known gaps (tracked, not waived): AAD on
-  member-ID and TOTP-secret encryption, exact version pins, images pinned by digest, 7-day release
-  quarantine (pnpm + Dependabot), justify or replace `exceljs`/`qrcode`, CI license check,
-  SAST/DAST/container/IaC scanning, SBOM, signed commits and artifacts, license notice file.
-  Closed: SC-B10.1 (strict CSP: `base-uri 'none'`, no `'unsafe-eval'` even in development).
 0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger, B2 monthly file
    import, C0 (own design: month-end activity file, routing-only rules), B3 journal vouchers, and
    B4 aging/deposits/reconciliation, and B5 statements and RCM dashboard (denial tie-ins by
@@ -419,15 +413,36 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    "Register patient" and give the drop-down panel a sentence per state while a connection is outside
    draft/revoked; PI2b: refresh the drop-down's summary during a session) → PI2a → PI1c → PI2b → PI3 → PI4 (`specs/patient-integrations.md`, builder; edi-x12-specialist
    reviews the 837P fit of the mapping).
+12. Close the known gaps in `docs/SECURE_CODING.md` and `docs/HIPAA_COMPLIANCE.md` (tracked, not
+   waived; they gate the first real practice): AAD on member-ID and TOTP encryption, exact
+   pins, digest-pinned images, 7-day release quarantine, strict Zod objects, upload malware scanning,
+   missing threat models, CI license check, SAST/DAST/SBOM, signed commits; WebAuthn, JIT and
+   break-glass access, WORM audit + SIEM, mTLS, Key Vault, legal hold, disclosure-accounting export,
+   and the written HIPAA policy set.
+   Closed: SC-B10.1 (strict CSP, `base-uri 'none'`, no `'unsafe-eval'` even in development).
 
 ## Open questions for humans
 
 - **Confirm three PI2a coordinator decisions (OA-065, 2026-09-28; due before the first real connection):** (a) Submit's gate is stricter than the spec's plain wording: the newest Test connection must be a pass within 24 h, bound to the tested configuration and signing `kid` (a later failure or transport refusal voids it); (b) pre-production signs every connection with one shared key (`INTEGRATION_SIGNING_KEY`), a residual risk recorded in threat model S3, mitigated by the operator verifying `client_id` ownership at approval (PI1c); (c) a refused Submit ("This endpoint and client ID are already connected") reveals that *some* practice holds that endpoint and client ID pair, with no identity disclosed, bounded by the Test connection and Submit rate limits: accept or reject.
+- **PI1c operator approval, eight owner decisions (OA-066 to OA-073, 2026-09-28; all due before the first real connection unless noted):**
+  (a) **OA-066** the approval verification-method and contact-role lists (`phone_callback`, `video_call`,
+  `written_confirmation`, `vendor_portal`; `ehr_administrator`, `practice_administrator`, `it_contact`,
+  `vendor_representative`, `other`) are the builder's proposal; (b) **OA-067** R-15.9 sign-off for the operator alert
+  on `integration.registry_conflict`: a SECURITY DEFINER function or an INSERT grant so Submit can write an
+  operator-only record of the holding connection (threat model S2); (c) **OA-068** should Reject clear the
+  residency attestation and discovered endpoint, as built, or leave them; (d) **OA-069** the Notifications spec
+  behind the activation notice: who is notified, retention, whether PHI-free e-mail is allowed; (e) **OA-070**
+  retention of approval evidence: `operator.integration_approved|rejected` kept for the life of the connection plus
+  6 years and under legal hold, or dedicated columns later; (f) **OA-071** an operator-side revoke must exist
+  before the first real connection; (g) **OA-072** accept single-person approval and confirm exactly one person
+  uses the operator account (unique user identification, 45 CFR 164.312(a)(2)(i)), else plan per-person
+  operator accounts before production; (h) **OA-073** an operator-realm step-up gating Approve before the Azure
+  cutover (`step_up_verified_at` in the approve audit); not built by decision.
 - **TLS 1.3 minimum for the FHIR transport?** (2026-09-28, pending, `OA-062`.) R-7.3.1 is TLS 1.2+ (prefer 1.3); the transport enforces 1.2 with ECDHE + AEAD suites only and negotiates 1.3 when offered. A 1.3 minimum would refuse EHR vendors that only support 1.2. Must be decided before the first real endpoint is enabled.
 - Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter
   and BAA scope (OA-045); retire manual registration once connected (OA-046); phone/email not synced
   (OA-047); disconnect/switch EHR (OA-048); vendor sandboxes (OA-049); Bulk Data before first real
-  practice (OA-050); who confirms EHR app scope (OA-051); EHR-restricted (R/V) patients (OA-052);
+  practice (OA-050); who confirms EHR app scope (OA-051); PI1c approval decisions (OA-066 to OA-073, below); EHR-restricted (R/V) patients (OA-052);
   MRN conflicts (OA-053); interoperability requirement ID (OA-054); dependents' coverage (OA-055);
   sync interval (OA-056).
 - Custom field list columns (PR 2): tagged patients show no custom values in the patient list
