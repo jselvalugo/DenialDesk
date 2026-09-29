@@ -82,16 +82,23 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
 
 ### A4. Pinning, updates, and removal
 
-- **SC-A4.1 MUST** Exact versions in `package.json` for every new dependency (no `^` or `~`);
-  `pnpm-lock.yaml` is committed; CI installs with `--frozen-lockfile`.
+- **SC-A4.1 MUST** Exact versions in `package.json` for every dependency (no `^` or `~`);
+  `pnpm-lock.yaml` is committed; CI installs with `--frozen-lockfile`. Enforced by
+  `src/supply-chain/exact-versions.test.ts`.
 - **SC-A4.2 MUST** GitHub Actions are pinned to a full commit SHA with a version comment (as
   `ci.yml` does today). Container images — the `Dockerfile` base and CI service containers — are
   pinned by digest. Tools fetched at build time (such as pnpm through corepack) are version- and
-  hash-pinned.
+  hash-pinned (`packageManager` in `package.json`; the `Dockerfile` and CI both install pnpm through
+  corepack, which checks the sha512). Enforced by `src/supply-chain/image-digests.test.ts`;
+  Dependabot proposes new base-image and compose digests.
 - **SC-A4.3 MUST** A dependency update is a code change: full CI and `security-reviewer`. Read the
   changelog for major versions. Do not adopt a release younger than 7 days unless it fixes a
-  security advisory (defends against hijacked publishes); pnpm and Dependabot must be configured to
-  hold new releases for 7 days (a known gap today).
+  security advisory (defends against hijacked publishes); pnpm and Dependabot are both configured
+  to hold new releases for 7 days (`minimumReleaseAge` in `pnpm-workspace.yaml`, `cooldown` in
+  `.github/dependabot.yml`, enforced by `src/supply-chain/release-age.test.ts`). The advisory
+  exception is a `minimumReleaseAgeExclude` entry added in that PR, naming the advisory, and removed
+  once the release is 7 days old. pnpm checks release age only when it resolves a version;
+  `--frozen-lockfile` installs do not re-check the lockfile.
 - **SC-A4.4 MUST** Advisories are fixed within the REQUIREMENTS §7.6 SLAs: Critical in 15 days (7
   days if actively exploited), High in 30, Medium in 90. `pnpm audit --audit-level=high` stays a failing CI gate.
 - **SC-A4.5 MUST** Quarterly, remove unused dependencies and re-check A2.2–A2.3 for every direct
@@ -221,7 +228,12 @@ for scripts (no ADR yet); and their type packages.
   `no-referrer`, frame denial, Permissions-Policy) plus a strict Content-Security-Policy (set per
   request in `src/proxy.ts`): a
   per-request nonce with `strict-dynamic`, no `unsafe-eval`, no `unsafe-inline` for scripts,
-  `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors 'none'`.
+  `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors 'none'`. The policy is built in
+  `src/lib/csp.ts`; paths the proxy skips (static assets, `/brand/`, `/icon.png`, and image-optimizer
+  errors) get a static deny-all CSP from `next.config.ts`; successful `/_next/image` responses carry
+  Next's own image policy (`script-src 'none'; sandbox`) plus the global frame denial. `'unsafe-eval'` is absent in development too, which costs in-place Fast Refresh:
+  `next dev` falls back to a full page reload on every edit. Tested in `src/lib/csp.test.ts`,
+  `src/proxy.test.ts`, and the e2e smoke (`test/e2e/shell.spec.ts`).
 - **SC-B10.2 MUST** Authenticated and PHI responses send `Cache-Control: no-store` (HC-2.3).
 
 ### B11. Tests for controls
@@ -257,11 +269,9 @@ exception.
 
 | Rule | Gap |
 | --- | --- |
-| SC-B10.1 | The per-request nonce CSP in `src/proxy.ts` still sets `base-uri 'self'` and adds `'unsafe-eval'` in development. |
 | SC-B7.1 | Member IDs (`src/domain/patients/queries.ts`, `src/db/seed.ts`) and TOTP secrets (`src/auth/enrollment.ts`) are encrypted without AAD; only custom field values bind AAD. |
-| SC-A4.1 | Some existing ranges are not exact (`server-only`, `@types/*`, `eslint`, `tsx`, `typescript-eslint`). |
-| SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest, and pnpm is fetched without a hash check (`corepack enable` in the `Dockerfile`, `pnpm/action-setup` in CI; `packageManager` has no `+sha512`); CI's `postgres:16` service images are tag-only. |
-| SC-A4.3 | No release-age quarantine configured for pnpm, and no `cooldown` in `.github/dependabot.yml`. |
+| SC-A4.2 | CI (`actions/setup-node`) and Netlify (`NODE_VERSION`) download Node.js 24 by major version, with no exact version or hash; Netlify's handling of the `packageManager` sha512 is unverified. |
+| SC-A4.3 | pnpm checks release age only when it resolves a version, so nothing in CI checks the entries a PR adds to `pnpm-lock.yaml` (a hand-edited lockfile, or one written by pnpm older than 10.16, would pass). Some locked packages were under 7 days old when this rule arrived (for example `@types/node` 24.19.0, published 2026-09-25); they predate the rule. |
 | SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
 | SC-A2.5 | The lockfile also carries native binaries not on list (a): `@rolldown/binding-*` (Vitest → Vite → Rolldown) and `fsevents` (tsx, Vite, macOS only). Adding them needs human sign-off (OA-088). |
 | SC-A2.2 | No automated license check in CI. |
