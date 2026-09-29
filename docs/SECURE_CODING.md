@@ -82,8 +82,9 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
 
 ### A4. Pinning, updates, and removal
 
-- **SC-A4.1 MUST** Exact versions in `package.json` for every new dependency (no `^` or `~`);
-  `pnpm-lock.yaml` is committed; CI installs with `--frozen-lockfile`.
+- **SC-A4.1 MUST** Exact versions in `package.json` for every dependency (no `^` or `~`);
+  `pnpm-lock.yaml` is committed; CI installs with `--frozen-lockfile`. Enforced by
+  `src/supply-chain/exact-versions.test.ts`.
 - **SC-A4.2 MUST** GitHub Actions are pinned to a full commit SHA with a version comment (as
   `ci.yml` does today). Container images — the `Dockerfile` base and CI service containers — are
   pinned by digest. Tools fetched at build time (such as pnpm through corepack) are version- and
@@ -263,7 +264,6 @@ exception.
 | Rule | Gap |
 | --- | --- |
 | SC-B7.1 | Member IDs (`src/domain/patients/queries.ts`, `src/db/seed.ts`) and TOTP secrets (`src/auth/enrollment.ts`) are encrypted without AAD; only custom field values bind AAD. |
-| SC-A4.1 | Some existing ranges are not exact (`server-only`, `@types/*`, `eslint`, `tsx`, `typescript-eslint`). |
 | SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest, and pnpm is fetched without a hash check (`corepack enable` in the `Dockerfile`, `pnpm/action-setup` in CI; `packageManager` has no `+sha512`); CI's `postgres:16` service images are tag-only. |
 | SC-A4.3 | No release-age quarantine configured for pnpm, and no `cooldown` in `.github/dependabot.yml`. |
 | SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
