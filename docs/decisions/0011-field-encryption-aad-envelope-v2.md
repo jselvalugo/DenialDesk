@@ -15,7 +15,7 @@ rotation with keys held in Key Vault in production.
 `FIELD_ENCRYPTION_KEY`, `src/lib/env.ts`). ADR 0007 added an optional `aad` argument, but the
 format stays `v1` either way. So nothing in a stored value says whether it was sealed with AAD.
 
-Call-site inventory (2026-09-28, `grep encryptField|decryptField`):
+Call-site inventory (2026-09-29, `grep encryptField|decryptField`, after PR #102):
 
 | Call site | Op | Column | AAD today |
 |---|---|---|---|
@@ -24,12 +24,14 @@ Call-site inventory (2026-09-28, `grep encryptField|decryptField`):
 | `src/domain/patients/queries.ts:555` `revealPatientMemberIdFor` | decrypt | `patients.member_id_enc` | **No** |
 | `src/app/(app)/denials/[id]/actions.ts:185` `revealMemberId` | decrypt | `patients.member_id_enc` | **No** |
 | `src/app/(app)/appeals/[id]/actions.ts:210` `revealMemberId` | decrypt | `patients.member_id_enc` | **No** |
-| `src/db/seed.ts:256` `seedPractice` | encrypt | `patients.member_id_enc` | **No** |
-| `src/domain/integrations/sync.ts:538`, `:539` sync run `encrypt`/`decrypt` (PI2b part 1, PR #98; synced patients' Coverage member ID) | encrypt, decrypt | `patients.member_id_enc` | **No** |
+| `src/domain/claims/edi-837p.ts:253` 837P builder (PR #102; decrypts in memory to build the claim file) | decrypt | `patients.member_id_enc` | **No** |
+| `src/db/seed.ts:271` `seedPractice` | encrypt | `patients.member_id_enc` | **No** |
+| `src/domain/integrations/sync.ts:615`, `:616` sync run `encrypt`/`decrypt` (PI2b part 1, PR #98; synced patients' Coverage member ID) | encrypt, decrypt | `patients.member_id_enc` | **No** |
 | `src/auth/enrollment.ts:19`, `:23` `pendingEnrollmentSecret` (practice users and the operator) | decrypt, encrypt | `users.totp_secret_enc` | **No** |
 | `src/auth/credentials.ts:174` `claimTotp`, reached from practice sign-in (`src/auth/actions.ts:147`), operator sign-in (`src/auth/operator-actions.ts:193`), and step-up (`src/app/(app)/step-up/actions.ts:86`) | decrypt | `users.totp_secret_enc` | **No** |
 | `src/domain/custom-fields/values.ts:404`, `:505`, `:611`, `:670` | decrypt, encrypt | `custom_field_values.value_enc` (history rows are copied into `custom_field_value_versions.value_enc` unchanged, `:583`) | Yes, `tenant_id\|field_id\|record_id` |
 | `src/domain/custom-fields/list-values.ts:118` | decrypt | `custom_field_values.value_enc` | Yes (a duplicate `aadFor`) |
+| `src/lib/crypto/provider-tin.ts` `encryptProviderTin`/`decryptProviderTin` (PR #102), called by `src/db/seed.ts:248` (encrypt) and `src/domain/claims/edi-837p.ts:260` (decrypt) | encrypt, decrypt | `providers.tin_enc` | Yes, `tenant_id\|providers.tin_enc\|provider_id` |
 | `test/e2e/global-setup.ts:51`, `:72`, `:103` (operator) | encrypt | `users.totp_secret_enc` | No |
 | `test/integration/step-up-session.test.ts:157` | encrypt | `users.totp_secret_enc` | No |
 | `test/integration/patients.test.ts:100`, `:204` | decrypt | `patients.member_id_enc` | No |
@@ -104,8 +106,9 @@ Facts that shape the design (checked 2026-09-29):
     `v1` custom-field values are sealed under `k1` with `<tenant>|<field>|<record>`. Without the
     header in the AAD, a `v2.k1` custom value relabeled as `v1` would still open. With it, any
     relabel of the version or `kid` fails, for every column.
-- **Legacy `v1` AAD** is read-only: ADR 0007's `<tenant>|<field>|<record>` for custom fields, and
-  none for member IDs and TOTP secrets (section 3).
+- **Legacy `v1` AAD** is read-only: ADR 0007's `<tenant>|<field>|<record>` for custom fields,
+  `<tenant>|providers.tin_enc|<provider>` for provider TINs, and none for member IDs and TOTP
+  secrets (section 3).
 - **Canonical inputs.** `<scope>` is a lowercase canonical UUID (the tenant) or the literal
   `global`. `<record>` is a lowercase canonical UUID. `<field>` is a dotted built-in name or a
   custom-field UUID. The builders reject anything else, including `|`.
@@ -121,6 +124,7 @@ Facts that shape the design (checked 2026-09-29):
 | `patients.member_id_enc` | `tenant_id`, taken from the session or job tenant, not from the row | `patients.member_id` | `patients.id` |
 | `users.totp_secret_enc` (practice users **and** the platform operator) | literal `global` | `users.totp_secret` | `users.id` |
 | `custom_field_values.value_enc` and `custom_field_value_versions.value_enc` | `tenant_id` | `custom_fields.id` (ADR 0007) | the record's ID |
+| `providers.tin_enc` | `tenant_id`, taken from the session, not from the row | `providers.tin` | `providers.id` |
 
 - **Why TOTP uses the `global` scope.**
   - `users` is a global identity table with no `tenant_id` and no RLS.
@@ -153,6 +157,10 @@ value.
   - History rows are append-only (no UPDATE grant, plus an immutability trigger in `drizzle/0027`),
     so they are not rewritten.
   - How they are handled at key rotation is left to the rotation ADR.
+- **`providers.tin_enc`:** `v1` means sealed with `<tenant>|providers.tin_enc|<provider>` (PR #102,
+  `src/lib/crypto/provider-tin.ts`). Like custom fields, this already meets SC-B7.1 and stays
+  readable with no flag; new writes are `v2`. The job does not convert it, and the rotation ADR
+  decides how it is resealed.
 
 ### 4. Integrity failures are audited and committed
 - A reader that fails returns a typed failure. The caller then records
@@ -207,7 +215,7 @@ value.
    - **Synced patients.** `patients_synced_readonly` (`drizzle/0040`) forbids changing
      `member_id_enc` on `source = 'fhir'` rows outside a sync run.
      - The job excludes those rows in SQL. `--verify` counts them as `blocked`.
-     - PI2b part 1 (PR #98) already writes synced member IDs unbound (`sync.ts:538-539`). PR 2 and
+     - PI2b part 1 (PR #98) already writes synced member IDs unbound (`sync.ts:615-616`). PR 2 and
        PR 3 switch those `decrypt`/`encrypt` hooks to `openMemberId`/`sealMemberId` (the run knows
        the tenant and the patient row ID), and a sync run reseals a stored value that is not `v2`
        at the active `kid` even when the plaintext is unchanged. Existing synced rows are therefore
@@ -219,7 +227,7 @@ value.
    canonical AAD and counts `openFailed`. It reports counts and the active KCV only.
 5. **Cut-off (contract).**
    - Delete the no-AAD branch, `FIELD_LEGACY_V1_READ`, `LEGACY_V1_READ_EXPIRES`, and the old
-     `encryptField`/`decryptField` exports.
+     `encryptField`/`decryptField` exports (by then `provider-tin.ts` uses `sealField`/`openField`).
    - Add an allow-list CHECK (SC-B3.1) on `patients.member_id_enc` and `users.totp_secret_enc`:
      `CHECK (<col> IS NULL OR <col> ~ '^v2\.[a-z0-9]{1,16}\.')`. This migration fails if any other
      value remains, so the migration itself is the final gate.

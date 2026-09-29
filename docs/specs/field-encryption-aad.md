@@ -28,12 +28,13 @@ Design: ADR 0011. It covers the envelope, the AAD bytes, the legacy policy, and 
     one of `malformed`, `unknown_kid`, `legacy_refused`, or `auth_failed`.
   - The strict parser accepts an empty ciphertext part (`updatePatient` seals `""`).
   - `aad` is a branded `FieldAad`.
-- [ ] `src/lib/crypto/aad.ts` builds AAD for three fields and holds each column's `v1` policy.
-  - The builders are `memberIdAad(tenantId, patientId)`, `totpSecretAad(userId)`, and
-    `customFieldAad(tenantId, fieldId, recordId)`. The last replaces the two copies of `aadFor` in
-    `src/domain/custom-fields/`.
+- [ ] `src/lib/crypto/aad.ts` builds AAD for four fields and holds each column's `v1` policy.
+  - The builders are `memberIdAad(tenantId, patientId)`, `totpSecretAad(userId)`,
+    `customFieldAad(tenantId, fieldId, recordId)`, and `providerTinAad(tenantId, providerId)`.
+    `customFieldAad` replaces the two copies of `aadFor` in `src/domain/custom-fields/`.
   - `v2` AAD is `v2|<kid>|<scope>|<field>|<record>`. The `v1` custom-field AAD is ADR 0007's
-    `<tenant>|<field>|<record>`, for reading only.
+    `<tenant>|<field>|<record>`, and the `v1` provider TIN AAD is PR #102's
+    `<tenant>|providers.tin_enc|<provider>`, both for reading only.
   - The builders reject a non-canonical UUID (uppercase, braces, or no dashes), `|`, and any scope
     that is not a tenant UUID or the literal `global`.
 - [ ] `v1` without AAD opens only for `patients.member_id` and `users.totp_secret`, and only when
@@ -43,7 +44,7 @@ Design: ADR 0011. It covers the envelope, the AAD bytes, the legacy policy, and 
   - the date is before `LEGACY_V1_READ_EXPIRES` (`2026-12-31`, hard-coded in `aad.ts`).
 
   Otherwise the result is `legacy_refused`. `v1` custom field values still open with their ADR 0007
-  AAD.
+  AAD, and `v1` provider TINs with their PR #102 AAD.
 - [ ] `kid` handling.
   - The active `kid` is the constant `k1`. There is no `FIELD_ENCRYPTION_KEY_ID`.
   - The keyring is a `Map`. An unknown `kid`, including `constructor`, is refused.
@@ -67,6 +68,8 @@ Design: ADR 0011. It covers the envelope, the AAD bytes, the legacy policy, and 
   - `createPatient` (the patient ID is generated before the insert), `updatePatient`, and
     `revealPatientMemberIdFor`.
   - Both `revealMemberId` actions (denials and appeals).
+  - The 837P builder (`src/domain/claims/edi-837p.ts:253`). A failure stays a `no_member_id`
+    refusal, and the builder also audits `security.field_integrity_failed` in its transaction.
   - `seedPractice`.
 - [ ] The tenant in the AAD comes from the session (`actor.tenantId`), not from the row.
 
@@ -95,6 +98,15 @@ Design: ADR 0011. It covers the envelope, the AAD bytes, the legacy policy, and 
       `custom_field.value_integrity_failed`. That action stays in the union for historical rows.
       Changing which audit action a control emits is an audit-logging change: PR 2 asks the owner
       for R-15.9 sign-off.
+
+### Provider TINs
+- [ ] `src/lib/crypto/provider-tin.ts` keeps its two functions but builds them on `sealField` and
+      `openField` with `providerTinAad`: writes are `v2`, and `v1` opens with the PR #102 AAD.
+      Callers: `seedPractice` (`src/db/seed.ts:248`) and the 837P builder
+      (`src/domain/claims/edi-837p.ts:260`).
+- [ ] A failure stays a `billing_tin` refusal, and the builder audits
+      `security.field_integrity_failed` with `metadata.column` set to `providers.tin_enc`.
+- [ ] The re-encryption job does not touch `providers.tin_enc` (ADR 0011 §3).
 
 ### Re-encryption job
 - [ ] `src/domain/crypto/reencrypt.ts` exports `reencryptBatch({ column, tenantId?, limit, after,
@@ -273,7 +285,8 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
 **PR 2: `refactor(crypto): route every decrypt through AAD-aware readers [R-7.3.3, R-7.5.1]`** (about 400 lines)
 - New `src/domain/patients/member-id.ts` and `src/auth/totp-secret.ts`.
 - Switches every decrypt in the inventory: `queries.ts:555`, the denials and appeals actions,
-  `enrollment.ts:19`, `credentials.ts:174`, and the sync run's `decrypt` hook (`sync.ts:539`).
+  `enrollment.ts:19`, `credentials.ts:174`, the 837P builder (`edi-837p.ts:253`, `:260`), and the
+  sync run's `decrypt` hook (`sync.ts:616`).
   Integrity failures return typed results and are audited without being rolled back.
 - Switches custom fields to `openField` with `customFieldAad`, lowercases `recordId` at the entry
   points, and moves them to the single integrity event.
@@ -281,8 +294,8 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
 - Writers still write `v1`, so reverting is safe.
 
 **PR 3: `feat(crypto): write member IDs and TOTP secrets as v2 with AAD [R-7.3.3, R-7.2.4, R-15.9]`** (about 340 lines)
-- Switches every encrypt in the inventory: `queries.ts:346/421/423`, `seed.ts:256`,
-  `enrollment.ts:23`, `values.ts:505`, and the sync run's `encrypt` hook (`sync.ts:538`), which
+- Switches every encrypt in the inventory: `queries.ts:346/421/423`, `seed.ts:248/271`,
+  `enrollment.ts:23`, `values.ts:505`, and the sync run's `encrypt` hook (`sync.ts:615`), which
   also reseals a stored member ID that is not `v2` at the active `kid` even when it is unchanged.
 - Migration `drizzle/00NN_field_key_seal_counter.sql` with its Netlify mirror: the sequence and
   its `GRANT USAGE`. **R-15.9 human sign-off in the PR.**
@@ -345,7 +358,7 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
     scope there.
   - A new synced row needs its ID before it is inserted.
   - **Sync writer:** PI2b part 1 (PR #98) landed first and writes synced member IDs unbound
-    (`sync.ts:538-539`). PR 2/PR 3 switch its hooks; existing synced rows are converted by the next
+    (`sync.ts:615-616`). PR 2/PR 3 switch its hooks; existing synced rows are converted by the next
     sync run (the trigger allows writes inside a run) or by wipe and re-seed, never by the job.
     `spec-writer` should record this in PI2b.
 - **Cleared member IDs.** `updatePatient` seals `""` with `member_id_last4 = ""`. The parser accepts
