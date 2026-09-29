@@ -174,4 +174,150 @@ export const claims: Messages["claims"] = {
   // Erros da ação do servidor (app/(app)/claims/[id]/actions.ts)
   "action.error.forbiddenCorrect": "Seu perfil pode ver as reivindicações, mas não corrigi-las.",
   "action.error.reload": "Recarregue a página e tente novamente.",
+
+  // Importação de cobranças (app/(app)/claims/import, docs/specs/claims.md C2)
+  "detail.history.createdByImport": "Criada pela importação de cobranças",
+  "import.button": "Importar cobranças",
+  "import.title": "Importar cobranças",
+  "import.description":
+    "Envie um CSV de cobranças e o DenialDesk cria reivindicações em rascunho. Se alguma linha precisar de correção, nada é importado.",
+  "import.breadcrumbClaims": "Reivindicações",
+  "import.forbidden": "Seu perfil pode ver as reivindicações, mas não importar cobranças.",
+  "import.backToClaims": "Voltar às reivindicações",
+  "import.file.title": "Arquivo de cobranças",
+  "import.file.description":
+    "Um CSV de até {size} MB e {rows} linhas. É lido uma única vez e nunca é armazenado.",
+  "import.file.label": "Arquivo CSV",
+  "import.file.hint": "Uma linha por linha de reivindicação, com as colunas listadas abaixo.",
+  "import.defaults.title": "Prestador e local",
+  "import.defaults.description":
+    "Usados nas reivindicações cujas linhas não têm NPI do prestador nem local. Uma linha que informa seu próprio prestador ou local o mantém.",
+  "import.defaults.provider": "Prestador padrão",
+  "import.defaults.location": "Local padrão",
+  "import.defaults.choose": "Escolher",
+  "import.synthetic.title": "Confirmação",
+  "import.synthetic.description": "Este ambiente aceita apenas dados sintéticos.",
+  "import.synthetic.attestation":
+    "Confirmo que este arquivo contém apenas dados sintéticos. Os números de reivindicação começam com SYN- e os MRN com SYN.",
+  "import.submit": "Importar cobranças",
+  "import.submitting": "Importando…",
+  "import.auditNote": "Cada importação e cada reivindicação que ela cria é registrada no log de auditoria.",
+  "import.format.title": "Formato do arquivo",
+  "import.format.description":
+    "Linhas com o mesmo número de reivindicação são as linhas de uma só reivindicação; as colunas da reivindicação se repetem em cada linha e devem coincidir. Os códigos são guardados exatamente como escritos: a importação nunca altera, acrescenta nem corrige um código.",
+  "import.format.column": "Coluna",
+  "import.format.rule": "O que vai nela",
+  "import.format.required": "Obrigatória",
+  "import.format.optional": "Opcional",
+  "import.format.template": "Baixar o modelo (apenas a linha de cabeçalho)",
+  "import.format.tableCaption": "Colunas do arquivo de cobranças",
+  "import.column.claimNumber":
+    "O número de reivindicação ou de cobrança da sua própria prática: até 30 letras, dígitos, pontos, hifens ou sublinhados. Nunca um ID de beneficiário.",
+  "import.column.mrn":
+    "Número do prontuário de um paciente que já está no DenialDesk. A importação nunca cria nem altera pacientes.",
+  "import.column.payer": "Nome do pagador como aparece na lista de pagadores desta prática.",
+  "import.column.serviceDate": "AAAA-MM-DD ou M/D/AAAA, sem datas futuras.",
+  "import.column.diagnosisCodes": "De 1 a 12 códigos ICD-10-CM separados por espaços ou vírgulas.",
+  "import.column.procedureCode": "Código CPT ou HCPCS: cinco letras ou dígitos.",
+  "import.column.modifiers": "Até quatro modificadores de dois caracteres.",
+  "import.column.units": "Número inteiro de 1 a 999.",
+  "import.column.charge": "Cobrança total da linha em dólares, de $0.01 a $99,999.99.",
+  "import.column.providerNpi":
+    "NPI de dez dígitos de um prestador desta prática. Em branco usa o prestador padrão.",
+  "import.column.location": "Nome do local como aparece nesta prática. Em branco usa o local padrão.",
+
+  // Verificações do envio e falhas (retornadas pela ação de importação)
+  "import.error.chooseFile": "Escolha um arquivo CSV para importar.",
+  "import.error.notCsv": "O arquivo deve ser um arquivo .csv.",
+  "import.error.tooLarge": "O arquivo é maior que {size} MB.",
+  "import.error.confirmSynthetic": "Confirme que o arquivo contém apenas dados sintéticos.",
+  "import.error.notUtf8": "O arquivo não é texto UTF-8. Salve-o como CSV (UTF-8) e tente novamente.",
+  "import.error.forbidden": "Seu perfil pode ver as reivindicações, mas não importar cobranças.",
+  "import.error.defaults": "Escolha um prestador padrão e um local padrão desta prática.",
+  "import.error.notImported": "Nada foi importado. Corrija as linhas abaixo e envie o arquivo novamente.",
+  "import.error.conflict":
+    "Uma reivindicação com um destes números foi criada enquanto o arquivo era lido. Nada foi importado; tente novamente.",
+
+  // Relatório de problemas
+  "import.problems.aria": "Linhas a corrigir",
+  "import.problems.row": "Linha {row}: {message}",
+  "import.problems.showing": "Mostrando os primeiros {shown} de {total} problemas.",
+  "import.problems.download": "Baixar relatório (CSV)",
+  "import.problems.truncated":
+    "O relatório lista os primeiros {limit} problemas; {more} a mais não foram listados.",
+
+  // Problemas (domain/claims/charge-file.ts PROBLEM_MESSAGE_KEYS); nunca citam o valor de uma célula
+  "import.problem.noDataRows": "O arquivo tem cabeçalho, mas nenhuma linha de cobrança.",
+  "import.problem.missingColumns": "Faltam colunas obrigatórias no cabeçalho: {columns}.",
+  "import.problem.ambiguousColumns": "Mais de uma coluna corresponde a: {columns}. Mantenha só uma.",
+  "import.problem.csvTooManyColumns": "Uma linha tem mais de {max} colunas.",
+  "import.problem.csvTooManyRows": "O arquivo tem mais de {max} linhas.",
+  "import.problem.csvTextAfterQuote": "Há texto depois de aspas de fechamento.",
+  "import.problem.csvQuoteInField": "Há aspas dentro de um campo sem aspas.",
+  "import.problem.csvUnclosedQuote": "Um campo entre aspas nunca é fechado.",
+  "import.problem.alreadyImported":
+    "Todos os números de reivindicação deste arquivo já existem, então este arquivo parece já ter sido importado.",
+  "import.problem.tooLong": "{column} tem mais de {max} caracteres.",
+  "import.problem.claimNumberBlank": "O número da reivindicação está em branco.",
+  "import.problem.claimNumberFormat":
+    "O número da reivindicação deve ter de 1 a 30 letras, dígitos, pontos, hifens ou sublinhados.",
+  "import.problem.claimNumberNotSynthetic":
+    "Neste ambiente (somente dados sintéticos) o número da reivindicação deve começar com {prefix}.",
+  "import.problem.mrnBlank": "O MRN está em branco.",
+  "import.problem.mrnNotSynthetic":
+    "Neste ambiente (somente dados sintéticos) o MRN deve começar com {prefix}.",
+  "import.problem.payerBlank": "O pagador está em branco.",
+  "import.problem.serviceDateInvalid": "A data do serviço não é uma data real. Use AAAA-MM-DD ou M/D/AAAA.",
+  "import.problem.serviceDateTooOld": "A data do serviço é anterior a 2000-01-01.",
+  "import.problem.serviceDateFuture": "A data do serviço está no futuro.",
+  "import.problem.diagnosisBlank": "Os códigos de diagnóstico estão em branco.",
+  "import.problem.diagnosisFormat":
+    "Um código de diagnóstico não está no formato ICD-10-CM (por exemplo, E11.9). A importação nunca altera códigos.",
+  "import.problem.diagnosisTooMany": "Mais de {max} códigos de diagnóstico.",
+  "import.problem.procedureCodeFormat":
+    "O código do procedimento deve ter cinco letras ou dígitos (CPT/HCPCS). A importação nunca altera códigos.",
+  "import.problem.modifierFormat": "Um modificador deve ter duas letras ou dígitos.",
+  "import.problem.modifierTooMany": "Mais de {max} modificadores.",
+  "import.problem.unitsInvalid": "As unidades devem ser um número inteiro de 1 a 999.",
+  "import.problem.chargeInvalid": "A cobrança não é um valor em dólares válido.",
+  "import.problem.chargeRange": "A cobrança deve ser de $0.01 a $99,999.99 por linha.",
+  "import.problem.providerNpiFormat": "O NPI do prestador deve ter 10 dígitos.",
+  "import.problem.claimFieldsDiffer":
+    "{column} difere da primeira linha desta reivindicação. As colunas da reivindicação devem coincidir em todas as linhas.",
+  "import.problem.tooManyLines": "Uma reivindicação pode ter no máximo {max} linhas.",
+  "import.problem.patientNotFound":
+    "Nenhum paciente desta prática tem este MRN. A importação nunca cria pacientes.",
+  "import.problem.payerNotFound": "Nenhum pagador da lista desta prática tem este nome.",
+  "import.problem.payerAmbiguous": "Dois pagadores têm este nome e não podem ser distinguidos.",
+  "import.problem.providerNotFound": "Nenhum prestador desta prática tem este NPI.",
+  "import.problem.locationNotFound": "Nenhum local desta prática tem este nome.",
+  "import.problem.locationAmbiguous": "Mais de um local tem este nome.",
+  "import.problem.claimNumberExists":
+    "Já existe uma reivindicação com este número. Corrija as reivindicações existentes pela página da reivindicação.",
+  "import.problem.matchesExistingClaim":
+    "Uma reivindicação existente tem o mesmo paciente, pagador, data do serviço e um código de procedimento com os mesmos modificadores. Possível duplicidade.",
+  "import.problem.matchesClaimInFile":
+    "Outra reivindicação deste arquivo tem o mesmo paciente, pagador, data do serviço e um código de procedimento com os mesmos modificadores. Possível duplicidade.",
+
+  // Resultado
+  "import.result.title": "Importação concluída",
+  "import.result.summary":
+    "{claims, plural, one {# reivindicação em rascunho criada} other {# reivindicações em rascunho criadas}} a partir de {lines, plural, one {# linha} other {# linhas}}, {billed} faturados.",
+  "import.result.warningsTitle": "Vale a pena conferir",
+  "import.result.noWarnings": "Nenhum aviso.",
+  "import.result.pastDeadline":
+    "{count, plural, one {# reivindicação passou do prazo de envio} other {# reivindicações passaram do prazo de envio}}.",
+  "import.result.dueSoon":
+    "{count, plural, one {# reivindicação vence em até {days} dias} other {# reivindicações vencem em até {days} dias}}.",
+  "import.result.notConfigured":
+    "{count, plural, one {# reivindicação não tem regra de envio configurada para seu pagador} other {# reivindicações não têm regra de envio configurada para seu pagador}}.",
+  "import.result.payerUnverified":
+    "{count, plural, one {# reivindicação é de um pagador não verificado, por isso ainda não pode ser enviada} other {# reivindicações são de pagadores não verificados, por isso ainda não podem ser enviadas}}.",
+  "import.result.noCoverage":
+    "{count, plural, one {# reivindicação é de um paciente sem cobertura registrada} other {# reivindicações são de pacientes sem cobertura registrada}}.",
+  "import.result.patientInactive":
+    "{count, plural, one {# reivindicação é de um paciente marcado como inativo ou mesclado no registro de origem} other {# reivindicações são de pacientes marcados como inativos ou mesclados no registro de origem}}.",
+  "import.result.viewClaims": "Ver reivindicações não enviadas",
+  "import.result.viewPastDeadline": "Ver reivindicações fora do prazo",
+  "import.result.another": "Importar outro arquivo",
 };
