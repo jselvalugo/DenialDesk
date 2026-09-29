@@ -8,7 +8,7 @@ Requirement IDs: §11 (WCAG 2.1 AA), R-7.4.8 (no PHI in URLs or client storage),
 ## Goal
 The app feels like an ERP: a global header, a module switcher ("Go to") to move between modules,
 and a navigation bar with the current module's pages, around the existing DenialDesk brand (navy,
-teal, Playfair/Inter/Space Mono, unaltered logo). The structure is the common ERP convention; the
+teal, IBM Plex Sans/Mono, unaltered logo). The structure is the common ERP convention; the
 expression is DenialDesk's own and does not reproduce any vendor's shell (ADR 0005).
 
 ## User stories

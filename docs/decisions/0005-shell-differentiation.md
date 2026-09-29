@@ -15,7 +15,7 @@ advice; the owner's counsel review (open item in `PROJECT_STATE.md`) covers the 
 
 ## What we checked (2026-09-26)
 - **No vendor code or assets.** The repo contains no third-party design-system CSS, components,
-  icon sets, or fonts from any CRM/ERP vendor. Fonts are Inter, Playfair Display, and Space Mono
+  icon sets, or fonts from any CRM/ERP vendor. Fonts are IBM Plex Sans and IBM Plex Mono
   (SIL OFL 1.1, `src/app/fonts/LICENSE-*.txt`); icons are `lucide-react` (ISC, with
   Feather-derived icons under MIT); the switcher is a native `<dialog>`, and Radix UI (MIT) is
   planned for interactive primitives but is not yet a dependency (ADR 0004); tokens, components,

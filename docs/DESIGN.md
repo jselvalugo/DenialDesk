@@ -40,7 +40,7 @@ Bloomberg-terminal discipline with modern typography, not a consumer app.
 - Inconsistent capitalization. Sentence case everywhere except proper nouns and codes.
 
 ## 4. Brand
-DenialDesk's visual identity is navy chrome, a teal accent, serif page titles, and mono figures,
+DenialDesk's visual identity is navy chrome, a teal accent, bold sans page titles, and mono figures,
 around its own logo (`docs/assets/denialdesk-logo.png`),
 always shown unaltered on a white background (sign-in page, global header). Adopted 2026-09-26,
 ADR 0004 amendment; ERP shell (global header, tab bar, module switcher) 2026-09-26,
@@ -167,7 +167,7 @@ Rules: status is never shown by color alone — always a label or icon too (WCAG
     left-ruled `surface-muted` aside (no colored callout boxes), tables in the DataTable header
     style, legal values as mono number + unit + caption citation. Never imagery, never emoji.
 - **Page header:** white band (panel style) with the module tile, an uppercase "Module · Page"
-  eyebrow, the serif title, a one-line description, and actions on the right.
+  eyebrow, the page title, a one-line description, and actions on the right.
 - **Record pages and edit forms** follow one pattern (`specs/record-pages.md`,
   `src/components/records/`): breadcrumb (list / identifier / action), a `RecordHeader` band whose
   `h1` is the record's own name or number with its badges, a meta strip of labelled facts, and the
