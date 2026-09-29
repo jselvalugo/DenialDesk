@@ -265,6 +265,9 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
   the boot refusals (the flag or `SEED_TOKEN` under production, and a KCV mismatch).
 - Update `.env.example` and `docs/runbooks/netlify.md` (set `FIELD_LEGACY_V1_READ=on` and the KCV
   in pre-production).
+- `.github/workflows/ci.yml` (compute `FIELD_KEY_CHECK_K1` right after the throwaway
+  `FIELD_ENCRYPTION_KEY` is generated) and `playwright.config.ts`: the e2e "production" project boots
+  with `APP_ENV=production`, where a missing KCV refuses to boot.
 - Unit tests. There are no caller changes and no data changes, so reverting is always safe.
 
 **PR 2: `refactor(crypto): route every decrypt through AAD-aware readers [R-7.3.3, R-7.5.1]`** (about 400 lines)
