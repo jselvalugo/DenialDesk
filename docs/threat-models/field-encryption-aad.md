@@ -3,6 +3,8 @@
 Scope:
 - `src/lib/crypto/field.ts` and `aad.ts`
 - the member ID, TOTP, and custom-field readers and writers
+- the provider TIN reader and writers: `src/lib/crypto/provider-tin.ts`, called by the 837P
+  builder (`src/domain/claims/edi-837p.ts`, which also reads the member ID) and `seedPractice`
 - `src/domain/crypto/reencrypt.ts`
 - `scripts/reencrypt-fields.ts`
 - `POST /api/preview/reencrypt`
@@ -12,6 +14,7 @@ Design: ADR 0011. Spec: `docs/specs/field-encryption-aad.md`. Revised 2026-09-29
 
 Data:
 - Member IDs are Restricted PHI.
+- Provider TINs are Restricted: a sole proprietor's TIN can be an SSN (HC-7.3).
 - TOTP secrets are credentials (Secret).
 - Record IDs, cursors, and counts in command and endpoint output are Internal.
 - Audit rows take the audit log's classification and controls (HC-5.3, HC-5.4).
@@ -20,7 +23,8 @@ Data:
 **Write.** The domain code builds the AAD from the session tenant and the database record ID, then
 calls `sealField`. It counts the seal (`nextval`) and produces `v2.<kid>.…` with AAD
 `v2|<kid>|<scope>|<field>|<record>`. The row is written under RLS for patients and custom fields, or
-through `systemDb()` for users.
+through `systemDb()` for users. Provider TINs are written only by `seedPractice` today, with the
+seed's tenant.
 
 **Read.** The prefix picks the path: `v2` is opened with AAD, and `v1` is opened only under the
 column's legacy policy. A failure returns a typed result. The caller audits it in the same
@@ -31,8 +35,9 @@ message.
 1. An operator starts it with `--operator` and `--reason` (CLI), or through the endpoint with the
    same fields in the body.
 2. It lists tenant IDs.
-3. For each column and tenant, under RLS, it locks one bounded batch of rows after the cursor that
-   are not yet `v2` at the active key, excluding `source = 'fhir'`.
+3. For each column (member IDs and TOTP secrets only; never custom fields or provider TINs) and
+   tenant, under RLS, it locks one bounded batch of rows after the cursor that are not yet `v2` at
+   the active key, excluding `source = 'fhir'`.
 4. For each row it decrypts in memory, checks the last 4 characters for member IDs, reseals, and
    writes back with a compare-and-swap.
 5. It writes one audit event per batch, in the batch's transaction, with IDs only.
@@ -46,7 +51,7 @@ message.
 | S1 | Anyone holding `SEED_TOKEN` triggers the job | The endpoint returns `404` when `isProduction()`, and boot refuses `SEED_TOKEN` under `APP_ENV=production` whatever `onNetlify()` says. It is rate-limited, audited (`trigger: preview_endpoint`), and returns counts only. It can only reseal existing plaintext in place. | Pre-production only. The token is shared, as for the seed endpoint (`docs/runbooks/netlify.md`), so the `operator` it records is self-asserted. Gone if the owner chooses re-seed (spec, open question 2). |
 | S2 | `onNetlify()` (true when any of `NETLIFY`, `NETLIFY_DB_URL`, `DEPLOY_ID`, or `SITE_ID` is set) unlocks legacy reads or the endpoint under `APP_ENV=production` | Legacy reads, the endpoint, and the boot refusals test `isProduction()`, never `syntheticDataOnly()`. Tests set `SITE_ID` under production. | Low |
 | T1 | A ciphertext is copied to another row, patient, user, or tenant by someone with database write access | GCM with AAD `v2\|<kid>\|<scope>\|<field>\|<record>`. The tenant comes from the session, not the row; the record comes from the database row, lowercased. Decryption fails closed and is audited as `security.field_integrity_failed`. | Closed for `v2` values. |
-| T2 | Downgrade: a `v2` value is replaced with a `v1` ciphertext, or its header is relabeled | The header is inside the AAD, so a relabeled version or `kid` fails for every column, including custom fields and provider TINs, whose `v1` values use `k1` with AAD (ADR 0007; PR #102). Legacy reads need `FIELD_LEGACY_V1_READ=on`, a non-production `APP_ENV`, and a date before the hard-coded expiry. After the cut-off, an allow-list CHECK (`^v2\.[a-z0-9]{1,16}\.`) blocks every other value. There is no fallback. | Pre-production until PR 5, or the expiry date (synthetic data). |
+| T2 | Downgrade: a `v2` value is replaced with a `v1` ciphertext, or its header is relabeled | The header is inside the AAD, so a relabeled version or `kid` fails for every column, including custom fields and provider TINs, whose `v1` values use `k1` with AAD (ADR 0007; PR #102). Legacy reads need `FIELD_LEGACY_V1_READ=on`, a non-production `APP_ENV`, and a date before the hard-coded expiry. After the cut-off, an allow-list CHECK (`^v2\.[a-z0-9]{1,16}\.`) blocks every other value in `patients.member_id_enc` and `users.totp_secret_enc`. Custom-field and provider TIN `v1` values stay readable with their AAD, which stops a cross-row copy. There is no fallback. | Member IDs and TOTP: pre-production until PR 5, or the expiry date (synthetic data). Custom fields and provider TINs: a same-row rollback to an older `v1` value of that row is not detected. |
 | T3 | The job writes a wrong value, overwrites a concurrent edit, or launders a swapped value | The job reseals exactly the plaintext it decrypted. Batches use `FOR UPDATE SKIP LOCKED` plus a compare-and-swap on the old ciphertext. For member IDs, a plaintext whose last 4 characters differ from `member_id_last4` is not converted and is audited; this catches a ciphertext swapped on its own, not one swapped together with `member_id_last4`. Tests cover the round trip, a concurrent edit, and a swapped row. | TOTP secrets have no check value, so a swapped `v1` secret would be resealed under the victim's ID (pre-production only). Wipe and re-seed removes it (open question 2). |
 | T4 | The job bypasses the synced-patient read-only rule | The SQL selector excludes `source = 'fhir'` rows. `--verify` counts them as `blocked`. The `patients_synced_readonly` trigger is unchanged. | Low |
 | T5 | The key under `k1` is changed silently (the environment variable is replaced), so `k1` now labels a different key | No key-ID variable; `k1` is a constant. The boot check compares a per-`kid` key-check value and refuses on mismatch. | A missing KCV only warns outside production, until the operator sets it. |
@@ -67,8 +72,8 @@ message.
 - Key Vault keys, the retrieval model, separation of duties, where the key-check value lives, and
   the rotation runbook are set in the Azure cutover ADR. The same gap is listed in
   `custom-field-values.md`.
-- The cut-off (PR 5) has merged, and `--verify` shows zero `v1` rows in every environment that is
-  kept.
+- The cut-off (PR 5) has merged, and `--verify` shows zero `v1` member IDs and TOTP secrets, and
+  zero custom-field and provider TIN `openFailed`, in every environment that is kept.
 - **Job attribution in production.** Before any production run, the person who starts the job and
   their IP or device are captured and recorded with the run (HC-5.1), for example through the
   authenticated identity that starts the Azure worker. A self-asserted `--operator` is not enough.

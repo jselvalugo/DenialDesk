@@ -15,7 +15,8 @@ rotation with keys held in Key Vault in production.
 `FIELD_ENCRYPTION_KEY`, `src/lib/env.ts`). ADR 0007 added an optional `aad` argument, but the
 format stays `v1` either way. So nothing in a stored value says whether it was sealed with AAD.
 
-Call-site inventory (2026-09-29, `grep encryptField|decryptField`, after PR #102):
+Call-site inventory (2026-09-29, after PR #102;
+`grep encryptField|decryptField|encryptProviderTin|decryptProviderTin`):
 
 | Call site | Op | Column | AAD today |
 |---|---|---|---|
@@ -28,14 +29,19 @@ Call-site inventory (2026-09-29, `grep encryptField|decryptField`, after PR #102
 | `src/db/seed.ts:271` `seedPractice` | encrypt | `patients.member_id_enc` | **No** |
 | `src/domain/integrations/sync.ts:615`, `:616` sync run `encrypt`/`decrypt` (PI2b part 1, PR #98; synced patients' Coverage member ID) | encrypt, decrypt | `patients.member_id_enc` | **No** |
 | `src/auth/enrollment.ts:19`, `:23` `pendingEnrollmentSecret` (practice users and the operator) | decrypt, encrypt | `users.totp_secret_enc` | **No** |
-| `src/auth/credentials.ts:174` `claimTotp`, reached from practice sign-in (`src/auth/actions.ts:147`), operator sign-in (`src/auth/operator-actions.ts:193`), and step-up (`src/app/(app)/step-up/actions.ts:86`) | decrypt | `users.totp_secret_enc` | **No** |
+| `src/auth/credentials.ts:174` `claimTotp`, reached from practice sign-in (`src/auth/actions.ts:146`), operator sign-in (`src/auth/operator-actions.ts:192`), and step-up (`src/app/(app)/step-up/actions.ts:85`) | decrypt | `users.totp_secret_enc` | **No** |
 | `src/domain/custom-fields/values.ts:404`, `:505`, `:611`, `:670` | decrypt, encrypt | `custom_field_values.value_enc` (history rows are copied into `custom_field_value_versions.value_enc` unchanged, `:583`) | Yes, `tenant_id\|field_id\|record_id` |
 | `src/domain/custom-fields/list-values.ts:118` | decrypt | `custom_field_values.value_enc` | Yes (a duplicate `aadFor`) |
-| `src/lib/crypto/provider-tin.ts` `encryptProviderTin`/`decryptProviderTin` (PR #102), called by `src/db/seed.ts:248` (encrypt) and `src/domain/claims/edi-837p.ts:260` (decrypt) | encrypt, decrypt | `providers.tin_enc` | Yes, `tenant_id\|providers.tin_enc\|provider_id` |
+| `src/lib/crypto/provider-tin.ts:13-14` `encryptProviderTin`, `:17-23` `decryptProviderTin`, AAD `:8-10` (PR #102), called by `src/db/seed.ts:248` (encrypt) and `src/domain/claims/edi-837p.ts:260` (decrypt) | encrypt, decrypt | `providers.tin_enc` | Yes, `tenant_id\|providers.tin_enc\|provider_id` |
 | `test/e2e/global-setup.ts:51`, `:72`, `:103` (operator) | encrypt | `users.totp_secret_enc` | No |
 | `test/integration/step-up-session.test.ts:157` | encrypt | `users.totp_secret_enc` | No |
 | `test/integration/patients.test.ts:100`, `:204` | decrypt | `patients.member_id_enc` | No |
 | `test/integration/custom-field-values.test.ts:765`, `:810`, `:817` | both | custom field values | Yes |
+| `test/integration/sync-engine.test.ts:322`, `:499`, `:539` (encrypt); `:132`, `:151`, `:516`, `:613` (decrypt) | both | `patients.member_id_enc` | No |
+| `test/integration/claim-837p-fixtures.ts:89` `manualPatient`; `test/integration/claim-837p.test.ts:385`, `:402` | encrypt | `patients.member_id_enc` | No |
+| `test/integration/claim-837p-fixtures.ts:48` `seedBilling` | encrypt | `providers.tin_enc` | Yes (PR #102) |
+| `test/integration/claim-837p.test.ts:460` (asserts `startsWith("v1.")`), `:462-464` `decryptProviderTin`, `:466` `decryptField` without AAD (expects a throw) | decrypt | `providers.tin_enc` | Yes (`:466` No) |
+| `src/domain/claims/edi-837p.test.ts:20-25` (non-UUID IDs `"tenant-a"`, `"provider-a"`, which the canonical-UUID builders reject) | both | `providers.tin_enc` | Yes (PR #102) |
 
 Not field-encryption call sites, checked:
 - `src/auth/operator-account.ts:289` and `src/db/demo.ts:105` only set `totp_secret_enc` to NULL, which forces re-enrollment.
@@ -45,7 +51,7 @@ Not field-encryption call sites, checked:
 - No bank account or routing numbers are stored (`src/db/schema.ts`, the comments on the remittance
   and deposit tables). SSN and MBI are not stored: an MRN shaped like either is refused
   (`docs/specs/patient-integrations.md`).
-- `src/lib/rate-limit.ts:48` reuses `FIELD_ENCRYPTION_KEY` as a SHA-256 salt. This is key reuse
+- `src/lib/rate-limit.ts:61` reuses `FIELD_ENCRYPTION_KEY` as a SHA-256 salt. This is key reuse
   across purposes. It is not in scope here, but it matters for rotation (open question in the spec).
 - No code looks up, sorts, or enforces uniqueness on a member ID ciphertext, and there is no blind
   index. Patient search matches name and MRN only (`queries.ts:106-136`). `member_id_last4` is a
@@ -58,9 +64,9 @@ Facts that shape the design (checked 2026-09-29):
   (and route `[id]` params), which accepts uppercase. PostgreSQL returns `uuid` values in lowercase.
 - `syntheticDataOnly()` is `!isProduction() || onNetlify()`, and `onNetlify()` is true when any of
   `NETLIFY`, `NETLIFY_DB_URL`, `DEPLOY_ID`, or `SITE_ID` is set (`src/lib/env.ts:65-74`).
-- `auditSystem()` (`src/lib/audit.ts:185`) inserts through `systemDb()`, outside the caller's
-  transaction. `audit(tx, …)` (`:180`) inserts inside it. `audit_events` has no `principal` column
-  (`src/db/schema.ts:1355`); `metadata` is a flat JSON object.
+- `auditSystem()` (`src/lib/audit.ts:227`) inserts through `systemDb()`, outside the caller's
+  transaction. `audit(tx, …)` (`:213`) inserts inside it. `audit_events` has no `principal` column
+  (`src/db/schema.ts:1370`); `metadata` is a flat JSON object.
 
 ## Decision
 
@@ -113,7 +119,8 @@ Facts that shape the design (checked 2026-09-29):
   `global`. `<record>` is a lowercase canonical UUID. `<field>` is a dotted built-in name or a
   custom-field UUID. The builders reject anything else, including `|`.
 - **Where the IDs come from.**
-  - Tenant: the verified session or the job's tenant, never the row.
+  - Tenant: the verified session, the job's tenant, or (in `seedPractice`, which has no session) the
+    seed's tenant; never the row.
   - Member ID record: `patients.id` from the selected row, not the function argument.
   - Custom-field record: lowercased at the domain entry points (`loadValuesForRecord`,
     `saveValuesForRecord`, `revealCustomFieldValue`) after `z.uuid()`. `list-values.ts` already uses
@@ -121,10 +128,10 @@ Facts that shape the design (checked 2026-09-29):
 
 | Column | `<scope>` | `<field>` | `<record>` |
 |---|---|---|---|
-| `patients.member_id_enc` | `tenant_id`, taken from the session or job tenant, not from the row | `patients.member_id` | `patients.id` |
+| `patients.member_id_enc` | `tenant_id`, taken from the session, job, or seed tenant, not from the row | `patients.member_id` | `patients.id` |
 | `users.totp_secret_enc` (practice users **and** the platform operator) | literal `global` | `users.totp_secret` | `users.id` |
 | `custom_field_values.value_enc` and `custom_field_value_versions.value_enc` | `tenant_id` | `custom_fields.id` (ADR 0007) | the record's ID |
-| `providers.tin_enc` | `tenant_id`, taken from the session, not from the row | `providers.tin` | `providers.id` |
+| `providers.tin_enc` | `tenant_id`, taken from the session or seed tenant, not from the row | `providers.tin` | `providers.id` |
 
 - **Why TOTP uses the `global` scope.**
   - `users` is a global identity table with no `tenant_id` and no RLS.
@@ -166,7 +173,10 @@ value.
 - A reader that fails returns a typed failure. The caller then records
   `security.field_integrity_failed` (IDs, `column`, and `reason` only) and returns a generic message
   key. Nothing throws inside the transaction, so the event commits.
-  - Tenant reads (member ID reveal, custom fields) insert the event with `audit(tx, …)`.
+  - Tenant reads (member ID reveal, custom fields, and the 837P builder, which reads the member ID
+    and the provider TIN) insert the event with `audit(tx, …)`. For the 837P builder, the member ID
+    event comes from `openMemberId` and the TIN event from the builder itself (`decryptProviderTin`
+    has no transaction and does not audit).
   - Sign-in, operator sign-in, and step-up have no transaction. `claimTotp` returns
     `"integrity_failed"`, and the caller audits with `auditSystem()`, like its other sign-in events.
 - **One event name for every column.** Custom-field code switches from
@@ -223,8 +233,10 @@ value.
        never by the job. `blocked` must be 0 before the cut-off.
    - **Why not SQL.** This cannot be a SQL migration: the key must never reach the database (HC-7.4).
 4. **Verify.** `--verify` reports counts per column: `v1`, `v2` at the active `kid`, `v2` at other
-   keys, `blocked`, and `unparseable`. For custom fields it also opens every current value under the
-   canonical AAD and counts `openFailed`. It reports counts and the active KCV only.
+   keys, `blocked`, and `unparseable`. For custom fields and `providers.tin_enc` it also opens every
+   current value under the canonical AAD and counts `openFailed`. It reports counts and the active
+   KCV only. Their `v1` values are never converted, so `v1 = 0` and `blocked = 0` gate the cut-off
+   only for `patients.member_id_enc` and `users.totp_secret_enc`.
 5. **Cut-off (contract).**
    - Delete the no-AAD branch, `FIELD_LEGACY_V1_READ`, `LEGACY_V1_READ_EXPIRES`, and the old
      `encryptField`/`decryptField` exports (by then `provider-tin.ts` uses `sealField`/`openField`).
@@ -233,6 +245,8 @@ value.
      value remains, so the migration itself is the final gate.
    - After this, a `v1` member ID or TOTP secret is a hard failure: an audited integrity error, a
      generic message key, and fail-closed sign-in. It never silently falls back.
+   - Custom-field and provider TIN columns get no CHECK: their `v1` values stay readable with their
+     AAD (section 3).
 
 ### 6. Keys, usage, and retirement
 - **Usage limit.** NIST SP 800-38D §8.3 limits a key used with random 96-bit IVs to 2^32
@@ -295,5 +309,7 @@ value.
   - Wiping and re-seeding pre-production instead of converting removes this risk (spec, open
     question 2). This affects pre-production only (synthetic data). Production refuses `v1` from day
     one.
+  - Custom-field and provider TIN `v1` values stay readable after the cut-off. Their AAD stops a
+    cross-row copy, but not a same-row rollback to an older `v1` value of that row.
 - **Old ciphertexts in backups.** Pre-production backups and WAL keep old `v1` ciphertexts until
   they age out. So `k1` is retired decrypt-only, never destroyed, while they exist (section 6).
