@@ -236,7 +236,7 @@ export const appeals = {
   "letter.error.malformed":
     "A merge field is not closed properly near “{token}”. Each one looks like a name between double braces.",
   "letter.error.unknownField": "Unknown merge field: {names}. Use only the fields in the list.",
-  "letter.error.locked": "This appeal has been submitted, so the letter can't be changed or reviewed.",
+  "letter.error.locked": "This appeal has been submitted, so the letter can't be changed.",
   "letter.error.stale": "The letter was changed by someone else. Reload the page to see the latest version.",
   "letter.error.unchanged": "Nothing changed since the last saved version.",
   "letter.error.noLetter": "Save the letter before reviewing it.",

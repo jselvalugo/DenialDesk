@@ -12,6 +12,7 @@ import { SelectField } from "@/components/ui/SelectField";
 import { secondaryLinkButtonClass } from "@/components/ui/linkButton";
 import { denialCategoryEnum } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
+import { isSavedFlash } from "@/domain/appeals/letter/flash";
 import {
   MERGE_FIELDS,
   MERGE_FIELD_KEYS,
@@ -53,7 +54,9 @@ export default async function AppealLetterPage({
   const t = await getT("appeals");
   const tc = await getT("common");
   const f = await getFormat();
-  const requested = z.enum(denialCategoryEnum.enumValues).safeParse((await searchParams).template);
+  const query = await searchParams;
+  const requested = z.enum(denialCategoryEnum.enumValues).safeParse(query.template);
+  const justSaved = isSavedFlash(query.saved);
 
   const data = await withTenant(auth, async (tx) => {
     const target = await getLetterTarget(tx, id);
@@ -108,6 +111,14 @@ export default async function AppealLetterPage({
         <h1 className="font-serif text-display font-bold text-primary">{t("letter.page.title")}</h1>
         <p className="mt-0.5 max-w-3xl text-body text-muted">{t("letter.page.description")}</p>
       </header>
+      {justSaved && (
+        <p
+          role="status"
+          className="rounded-control border border-success-border bg-success-bg px-3 py-2 text-body text-success-fg"
+        >
+          {t("letter.editor.saved")}
+        </p>
+      )}
       {!canWork && (
         <p
           role="note"

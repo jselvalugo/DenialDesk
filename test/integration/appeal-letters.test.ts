@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { todayIn } from "@rules/calendar";
-import { closeDatabase } from "@/db/client";
+import { closeDatabase, systemDb } from "@/db/client";
 import {
   appealLetterAttestations,
   appealLetterTemplates,
@@ -448,21 +448,77 @@ describe("attestation and export refusals are audited with fixed reason codes", 
 });
 
 describe("template create race", () => {
-  it("two creators at once end as one row, one create and one update", async () => {
-    const results = await Promise.all([
-      withTenant(ctx, (tx) =>
-        saveTemplate(tx, ctx, { category: "bundling", body: "First {{claim.number}}" }),
-      ),
-      withTenant(ctx, (tx) =>
-        saveTemplate(tx, ctx, { category: "bundling", body: "Second {{claim.number}}" }),
-      ),
+  it("the loser of a real create race blocks on the winner's insert, then re-finds and updates", async () => {
+    // A inserts and stays open (uncommitted). B's find cannot see A's row, so B's insert blocks on the
+    // unique index; only when Postgres reports a waiting lock do we let A commit. B then gets zero rows from
+    // ON CONFLICT DO NOTHING and must take the re-find path.
+    let releaseFirst!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstInserted!: () => void;
+    const inserted = new Promise<void>((resolve) => {
+      firstInserted = resolve;
+    });
+    const first = withTenant(ctx, async (tx) => {
+      const result = await saveTemplate(tx, ctx, { category: "bundling", body: "First {{claim.number}}" });
+      firstInserted();
+      await gate; // commit only after the second transaction is waiting on us
+      return result;
+    });
+    await inserted;
+    const second = withTenant(ctx, (tx) =>
+      saveTemplate(tx, ctx, { category: "bundling", body: "Second {{claim.number}}" }),
+    );
+    const deadline = Date.now() + 10_000;
+    let waiting = false;
+    while (!waiting && Date.now() < deadline) {
+      const { rows } = await systemDb().execute(sql`select 1 from pg_locks where not granted limit 1`);
+      waiting = rows.length > 0;
+      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(waiting).toBe(true);
+    releaseFirst();
+    const results = await Promise.all([first, second]);
+
+    expect(results).toEqual([
+      { ok: true, created: true },
+      { ok: true, created: false },
     ]);
-    expect(results.every((r) => "ok" in r && r.ok)).toBe(true);
-    expect(results.filter((r) => "created" in r && r.created)).toHaveLength(1);
     const rows = await withTenant(ctx, (tx) =>
       tx.select().from(appealLetterTemplates).where(eq(appealLetterTemplates.category, "bundling")),
     );
     expect(rows).toHaveLength(1);
+    expect(rows[0]!.body).toBe("Second {{claim.number}}");
+  });
+});
+
+describe("attestation ordering", () => {
+  it("attested_at is the insert time, so rows in one transaction still order", async () => {
+    // Default is clock_timestamp() (migration 0048), not the transaction-start now(): two attesters that
+    // serialize on the appeal lock must not tie, or "newest" (export) could pick the older row.
+    const appealId = await newAppeal();
+    await save(appealId, GOOD_BODY, 0);
+    const rows = await withTenant(ctx, async (tx) => {
+      const values = (sha: string) => ({
+        tenantId: ctx.tenantId,
+        appealId,
+        version: 1,
+        renderedSha256: sha,
+        attestedBy: ctx.userId,
+      });
+      const [a] = await tx
+        .insert(appealLetterAttestations)
+        .values(values("a".repeat(64)))
+        .returning();
+      await tx.execute(sql`select pg_sleep(0.01)`);
+      const [b] = await tx
+        .insert(appealLetterAttestations)
+        .values(values("b".repeat(64)))
+        .returning();
+      return [a!, b!];
+    });
+    expect(rows[1]!.attestedAt.getTime()).toBeGreaterThan(rows[0]!.attestedAt.getTime());
   });
 });
 
@@ -474,6 +530,6 @@ describe("activity list", () => {
     const detail = await withTenant(ctx, (tx) => getAppeal(tx, appealId));
     const actions = detail!.activity.map((a) => a.action);
     expect(actions).toContain("appeal.letter_saved");
-    expect(actions.every((a) => APPEAL_ACTIVITY_ACTIONS.includes(a))).toBe(true);
+    expect(actions.every((a) => (APPEAL_ACTIVITY_ACTIONS as string[]).includes(a))).toBe(true);
   });
 });

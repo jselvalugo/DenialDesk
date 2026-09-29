@@ -243,7 +243,7 @@ export const appeals: Messages["appeals"] = {
   "letter.error.malformed":
     "Um campo de mesclagem não está fechado corretamente perto de “{token}”. Cada um é um nome entre chaves duplas.",
   "letter.error.unknownField": "Campo de mesclagem desconhecido: {names}. Use somente os campos da lista.",
-  "letter.error.locked": "Este recurso já foi enviado, então a carta não pode ser alterada nem revisada.",
+  "letter.error.locked": "Este recurso já foi enviado, então a carta não pode ser alterada.",
   "letter.error.stale": "Outra pessoa alterou a carta. Recarregue a página para ver a última versão.",
   "letter.error.unchanged": "Nada mudou desde a última versão salva.",
   "letter.error.noLetter": "Salve a carta antes de revisá-la.",

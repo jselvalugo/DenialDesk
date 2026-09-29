@@ -22,8 +22,9 @@ const nextConfig: NextConfig = {
     const staticCsp = [{ key: "Content-Security-Policy", value: STATIC_ASSET_CSP }];
     return [
       { source: "/:path*", headers: securityHeaders },
-      // A rendered appeal letter carries PHI: never stored by a browser or shared cache (HC-2.3).
-      { source: "/appeals/:id/letter/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
+      // No Cache-Control rule for the appeal letter pages (HC-2.3): Next overwrites Cache-Control on pages,
+      // so a rule here would not apply. `no-store` comes from dynamic rendering (requireAuth reads cookies);
+      // test/e2e/appeals.spec.ts asserts it on the letter and print routes.
       ...["/_next/static/:path*", "/_next/image", "/icon.png", "/brand/:path*"].map((source) => ({
         source,
         headers: staticCsp,

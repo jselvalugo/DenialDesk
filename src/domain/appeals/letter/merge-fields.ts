@@ -45,6 +45,18 @@ export function isMergeFieldKey(name: string): name is MergeFieldKey {
   return Object.hasOwn(MERGE_FIELDS, name);
 }
 
+/** Offset in `body` of the first `{` or `}` outside a well-formed token, or -1. */
+function firstStrayBrace(body: string): number {
+  let from = 0;
+  for (const match of body.matchAll(TOKEN)) {
+    const gap = body.slice(from, match.index).search(/[{}]/);
+    if (gap >= 0) return from + gap;
+    from = match.index + match[0].length;
+  }
+  const tail = body.slice(from).search(/[{}]/);
+  return tail >= 0 ? from + tail : -1;
+}
+
 export type BodyCheck =
   | { ok: true }
   | { ok: false; reason: "empty" | "too_long" }
@@ -64,11 +76,11 @@ export function checkBody(body: string): BodyCheck {
     if (!isMergeFieldKey(name) && !unknown.includes(name)) unknown.push(name);
   }
   if (unknown.length > 0) return { ok: false, reason: "unknown", unknown: unknown.slice(0, 5) };
-  const rest = body.replace(TOKEN, "");
-  const stray = rest.search(/[{}]/);
-  // Names the offending text (a short piece of what the user typed, shown back to them only).
+  const stray = firstStrayBrace(body);
+  // Names the offending text (a short piece of what the user typed, shown back to them only). The snippet
+  // is cut from the original body, so it reads as typed, not with the valid tokens removed.
   if (stray >= 0)
-    return { ok: false, reason: "malformed", token: rest.slice(stray, stray + 30).split("\n")[0]! };
+    return { ok: false, reason: "malformed", token: body.slice(stray, stray + 30).split("\n")[0]! };
   return { ok: true };
 }
 

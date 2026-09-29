@@ -932,7 +932,10 @@ export const appealLetterAttestations = pgTable(
     attestedBy: uuid("attested_by")
       .notNull()
       .references(() => users.id),
-    attestedAt: timestamp("attested_at", { withTimezone: true }).notNull().defaultNow(),
+    // clock_timestamp(), not now(): two attesters serialized on the appeal lock share a transaction-start now().
+    attestedAt: timestamp("attested_at", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
   },
   (t) => [
     // Not unique: a version is attested again after the claim or patient data changed (newest row wins).

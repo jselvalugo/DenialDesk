@@ -14,18 +14,22 @@ import {
 } from "@/db/schema";
 import { APPEAL_AWAITING_STATUSES, APPEAL_OPEN_STATUSES, type AppealStatus } from "@/domain/appeals/status";
 import type { AppealLevel } from "@/domain/appeals/types";
+import type { MessageKey } from "@/i18n/messages/types";
+import type { AuditAction } from "@/lib/audit";
 
 export const PAGE_SIZE = 25;
-/** The audit actions the appeal page's activity list shows (each has a message key on the page). */
-export const APPEAL_ACTIVITY_ACTIONS = [
-  "appeal.created",
-  "appeal.submission_recorded",
-  "appeal.decision_recorded",
-  "appeal.note_added",
-  "appeal.letter_saved",
-  "appeal.letter_attested",
-  "appeal.letter_exported",
-];
+/** The audit actions the appeal page's activity list shows, and the message key for each. */
+export const APPEAL_ACTIVITY_KEYS = {
+  "appeal.created": "activity.created",
+  "appeal.submission_recorded": "activity.submissionRecorded",
+  "appeal.decision_recorded": "activity.decisionRecorded",
+  "appeal.note_added": "activity.noteAdded",
+  "appeal.letter_saved": "activity.letterSaved",
+  "appeal.letter_attested": "activity.letterAttested",
+  "appeal.letter_exported": "activity.letterExported",
+} as const satisfies Partial<Record<AuditAction, MessageKey<"appeals">>>;
+/** Derived from the map above so the query filter and the page labels cannot drift apart. */
+export const APPEAL_ACTIVITY_ACTIONS = Object.keys(APPEAL_ACTIVITY_KEYS) as AuditAction[];
 /** Same display window as the denial queue (denials/queries.ts): a UI setting, not a legal value. */
 export const DUE_SOON_DAYS = 7;
 

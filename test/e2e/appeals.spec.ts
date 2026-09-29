@@ -47,6 +47,18 @@ test.describe("appeal lifecycle", () => {
     await expect(page.getByRole("region", { name: "Open appeal totals" })).toBeVisible();
   });
 
+  test("the appeal letter page is never cached (no-store from dynamic rendering, HC-2.3)", async ({
+    page,
+  }) => {
+    await page.goto("/appeals");
+    const link = page.locator("tbody a[href^='/appeals/']").first();
+    await expect(link).toBeVisible();
+    const href = await link.getAttribute("href");
+    const response = await page.goto(`${href}/letter`);
+    expect(response?.status()).toBe(200);
+    expect(response?.headers()["cache-control"]).toContain("no-store");
+  });
+
   test("appeals module is reachable from the switcher", async ({ page }) => {
     await page.goto("/overview");
     await page.getByRole("button", { name: /switch module/i }).click();
