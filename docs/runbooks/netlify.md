@@ -24,6 +24,8 @@ Site: https://denialdesk.netlify.app
   | `PLATFORM_OPERATOR_PASSWORD_HASH` | The operator's password hash from `pnpm operator:credential` (secret); the only way the operator account is created or reset |
   | `PLATFORM_OPERATOR_MFA` | `off`: the operator signs in with the password alone (ignored in production). Unset or `on`: two-step required |
   | `RATE_LIMIT_SIGNIN` / `RATE_LIMIT_MFA` | Optional overrides for per-network limits (defaults 30/15 min each) |
+  | `INTEGRATION_JOB_SECRET` | HMAC key for background sync jobs (secret, **Functions** scope, at least 32 bytes: `openssl rand -base64 48`). Unset: Sync now runs in the request as before, and the worker and the 15-minute scheduler refuse to run. Set but shorter than 32 bytes: Sync now refuses and the worker answers 503. See "Background sync jobs" below |
+  | `INTEGRATION_JOB_URL` | Optional, leave empty on Netlify (the deploy's own `DEPLOY_URL` is used). Only for a local `netlify dev` (`http://localhost:8888/.netlify/functions/integration-sync-background`) |
 
   If `APP_ENV` is missing the app still treats itself as non-production — safe by default.
 - **Access:** Netlify password protection is on for the whole site, in front of the app's own
@@ -135,6 +137,38 @@ Then sign in with `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` and set up two-step
 - `PLATFORM_OPERATOR_EMAIL` must never equal `SEED_ADMIN_EMAIL` (the seed refuses it). Mark
   `PLATFORM_OPERATOR_PASSWORD_HASH` secret, and keep two-step (ideally a security key) on the Netlify
   account: whoever can edit these values controls the console.
+
+## Background sync jobs (patient integrations, PI2b/PI3)
+
+Spec `docs/specs/patient-integrations.md` (PI2b Jobs, PI3); ADR 0012; threat model S5, S7, S8. Synthetic
+sandbox connections only (a real connection is refused by the sync engine).
+
+- **What runs where.** `netlify/functions/integration-sync-background.ts` is a Background Function (answers 202 at
+  once, runs up to ~15 minutes) that verifies a signed `{ runId }` job and runs the sync. `integration-sync-scheduler.ts`
+  is a Scheduled Function (`*/15 * * * *`) that queues a run for every due active connection and posts one signed job per
+  run. **Netlify runs scheduled functions on the published (production) deploy only**, not on deploy previews; on a
+  preview, Sync now is the way to run a sync.
+- **Sync now** queues a run and posts the same signed job to this deploy's own worker URL (`DEPLOY_URL`), then shows
+  "Sync queued"; the result is in Sync history (Settings › Integrations › the connection › Sync history). With
+  `INTEGRATION_JOB_SECRET` unset it runs in the request instead (the result appears on the page).
+- **Setting it up (owner, OA-084).** Generate the secret (`openssl rand -base64 48`), add it as a *secret* with the
+  **Functions** scope, redeploy (a value change reaches running functions only after a redeploy). Never commit it or paste it
+  elsewhere. Rotating: change the value and redeploy; a job in flight during the switch is refused and its run is retried by
+  the next tick after the 20-minute lease (a queued run nobody picked up is abandoned then).
+- **The migration is a privilege change (R-15.9).** `0044` creates the `denialdesk_jobs` role and two SECURITY DEFINER
+  functions and needs the owner's sign-off (OA-083) before Netlify applies it to the shared pre-production database.
+  It needs no new database credential: the app's own login is made a member of the role, as it is of `denialdesk_app`.
+- **Troubleshooting** (function log: *Logs → Functions*; every line is a code and, where one exists, a run ID):
+  | Log event and `status` | Meaning / fix |
+  |---|---|
+  | `integration.job_refused` `missing_secret` / `weak_secret` | `INTEGRATION_JOB_SECRET` isn't reaching the function (scope *Functions*, redeploy) or is under 32 bytes. |
+  | `integration.job_refused` `unsigned`, `bad_timestamp`, `stale`, `bad_signature` | Something posted to the worker without a valid signature, or the two sides' secrets differ (set in different contexts) or their clocks are more than 5 minutes apart. Unrelated internet noise is expected to show up here occasionally and does nothing. |
+  | `integration.job_refused` `not_claimable` (with a run ID) | The run is already running or finished (a replay or a second worker), was abandoned, or its connection is no longer active. Nothing to fix. |
+  | `integration.job_send_failed` `http_401` / `http_403` | The post to the worker was refused before it reached the function: check whether the site's **password protection** covers `/.netlify/functions/*` (OA-084). `http_404`: the deploy has no `netlify/functions` build. `network`: timeout or DNS. |
+  | `integration.schedule_refused` `no_worker_url` / `missing_secret` | The scheduler queued nothing because it could not send. |
+  | `integration.schedule_ran` | One line per tick: `count` runs queued, `status` `ok` or `partial` (some jobs not sent; those runs are retried after the lease). |
+- **A connection is in `error` with reason `repeated_failures`:** three runs in a row failed. Open Sync history for the
+  codes, fix the cause (the EHR endpoint, or for the sandbox nothing external), run **Test connection**, then **Resume**.
 
 ## Deploy preview fails with "migration … has been modified after being applied"
 

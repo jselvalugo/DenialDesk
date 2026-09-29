@@ -112,11 +112,47 @@ _Last updated: 2026-09-29_
   **re-derive pass that applies a saved payer mapping to patients whose payer mapping is newer than their
   `synced_at`** even at an unchanged `versionId`. Codes are a fixed allow-list (`sync-codes.ts`, documented
   in the spec; a minor is the neutral `review_required`). "Sync now" is an admin action that runs in the
-  request (jobs are the next slice). **Fails closed on real connections (PR #98 review):** any connection that is not
+  request (jobs are PI2c, below). **Fails closed on real connections (PR #98 review):** any connection that is not
   the synthetic sandbox is refused, in the run and in Sync now, with the code `population_scope_unenforced`, until PI4
-  can apply `population_scope` (see "PI4 blocker" under Deferred review findings). **Not built:** background jobs and
-  `integration_claim_run` (HMAC-signed `{runId}`), Coverage-only search and `_elements`, PI3, PI4. Owner: OA-077 to
-  OA-082 (OA-076 is resolved).
+  can apply `population_scope` (see "PI4 blocker" under Deferred review findings). **Not built:** Coverage-only
+  search and `_elements`, PI4 (background jobs, the scheduler and the three-failure rule are PI2c, below). Owner:
+  OA-077 to OA-082 (OA-076 is resolved).
+  **PI2c done: signed background jobs and the 15-minute scheduled sync** (branch `claude/vigilant-tesla-ps41e9-pi2c-jobs`,
+  from `claude/quirky-feynman-ufql5a`; migration `drizzle/0044_patient_integrations_jobs.sql`; ADR 0012 Proposed;
+  **R-15.9 owner sign-off required before it runs anywhere but a local or test database, OA-083**). Spec items ticked:
+  PI2b "Jobs", PI3 "Scheduled every 15 minutes", PI3 "Three consecutive failed runs -> error" (SIEM alerts stay
+  deferred to the Azure cutover). What it is: a job is a signed POST of `{ runId }` (HMAC-SHA256 over timestamp +
+  body, 5-minute window, constant-time compare, `INTEGRATION_JOB_SECRET` of at least 32 bytes, refused when missing
+  or short) handled by a platform-neutral worker (`src/integrations/jobs/`) that claims the run through
+  `integration_claim_run(run_id)` (read-only: a `queued` run of an `active` connection, returns tenant and
+  connection) and runs the existing `executeSyncRun` under `withTenantAsSystem`; `integration_enqueue_due_runs()`
+  queues a `scheduled` run per due active connection and returns run IDs; Sync now (`requestSync`) queues and posts the
+  same signed job when `INTEGRATION_JOB_SECRET` and a worker URL are set (audited `integration.sync_queued` with the
+  administrator's origin), otherwise runs inline as before (tests, local development); Netlify adapter =
+  `src/platform/netlify/` plus `netlify/functions/integration-sync-background.ts` (Background Function) and
+  `integration-sync-scheduler.ts` (Scheduled Function, `*/15 * * * *`, published deploy only); after a run fails,
+  three finished runs in a row failed move the connection to `error` with the allow-listed reason `repeated_failures`
+  (audited). L3 (PR #98 review): 0044 begins by verifying the service-principal row seeded by 0043 (exists, disabled,
+  password_hash '!', no membership) and raises otherwise; 0043 is not edited. The real-connection guard is kept: real
+  connections are refused by the engine, so only sandbox connections run where only synthetic data is allowed.
+  **Privilege statements in 0044 (R-15.9), verbatim:**
+  - `CREATE ROLE denialdesk_jobs NOLOGIN;` (inside `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'denialdesk_jobs') THEN ... END IF; END $$;`)
+  - `GRANT denialdesk_jobs TO CURRENT_USER;`
+  - `GRANT USAGE ON SCHEMA public TO denialdesk_jobs;`
+  - `CREATE FUNCTION integration_claim_run(p_run_id uuid) RETURNS TABLE (tenant_id uuid, connection_id uuid) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$ ... $$;`
+  - `REVOKE ALL ON FUNCTION integration_claim_run(uuid) FROM PUBLIC;`
+  - `GRANT EXECUTE ON FUNCTION integration_claim_run(uuid) TO denialdesk_jobs;`
+  - `CREATE FUNCTION integration_enqueue_due_runs() RETURNS SETOF uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$ ... $$;`
+  - `REVOKE ALL ON FUNCTION integration_enqueue_due_runs() FROM PUBLIC;`
+  - `GRANT EXECUTE ON FUNCTION integration_enqueue_due_runs() TO denialdesk_jobs;`
+  No table, column, policy or trigger changes; `denialdesk_app` gains nothing. Both functions walk the practices
+  (`app.tenant_id` set per practice and restored) because every integration table is FORCE ROW LEVEL SECURITY; a probe
+  owner test proves it for an owner that doesn't bypass it. **No new database credential:** `withJobsRole` uses
+  `SET LOCAL ROLE denialdesk_jobs` from the same login, which `GRANT denialdesk_jobs TO CURRENT_USER` makes a member,
+  as 0002 does for `denialdesk_app`. **Owner actions:** OA-083 (this sign-off), OA-084 (set `INTEGRATION_JOB_SECRET`
+  as a functions-only Netlify secret, and confirm site password protection doesn't block the worker's function URL;
+  until it is set Sync now keeps running in the request and the worker and scheduler refuse). Not verifiable outside
+  Netlify: the function bundle was checked with esbuild and smoke-run against a stub, not deployed.
   **Local development databases:** a database created before 0043 that holds a sandbox connection with
   `issuer = 'sandbox-client'` (0040's pin) cannot take 0043, whose replacement sandbox CHECK does not validate that
   row. Reset it: `docker compose down -v` (drops the `db-data` volume), `docker compose up -d db`, `pnpm db:migrate`,
@@ -399,6 +435,7 @@ _Last updated: 2026-09-29_
 | 2026-09-27 | University Wiki: articles are code (PR-reviewed, no per-tenant or user-edited content), legal values only through rule tokens, search by POST; sits beside the U1 courses under the same header, not in the switcher; further structure waits for the owner (OA-036) | `specs/university-wiki.md` |
 | 2026-09-27 | Roll-forward pending counsel (OA-034), option 1: the date conservative for the practice governs. Provider-side deadlines (timely filing, secondary payer, 35-day response, overpayment response, Medicare appeal levels, payer-contract appeal windows, patient refund) alert, sort, go "past deadline" and block on the UNROLLED date; payer-side prompt-pay milestones and interest start use the UNROLLED date (interest from the day after). The rolled date is computed and shown as "(pending counsel: date)" only. One switch: `ROLL_FORWARD_POLICY` in `rules/roll-forward.ts` (effective-dated, needs `confirmedBy`) plus rule attribute `side`. Applying rule-reading attributes to baseline versions was an engineering choice, pending owner/counsel acceptance (OA-034 item 7). | `specs/rules-engine-skeleton.md`, `rules/roll-forward.ts` |
 | 2026-09-27 | Patient Register is a synced, read-only copy of the practice EHR/PM (billing minimum only) over FHIR R4 / US Core + SMART Backend Services; data-source drop-down beside the Patients tab, Patients table only for now; manual entry kept only while no connection is active (OA-046) | ADR 0010, `specs/patient-integrations.md` |
+| 2026-09-29 | Background execution: signed `{ runId }` jobs, a read-only definer claim for a new `denialdesk_jobs` role (no table privilege), a 15-minute definer-queued schedule, platform-neutral core with a thin Netlify adapter, Sync now queues a job where a secret is configured; **Proposed, R-15.9 sign-off pending (OA-083)** | ADR 0012, PI2c |
 | 2026-09-28 | Record pattern P4: `DataTable` sorting is server-side via allow-listed `?sort=<key>&dir=asc\|desc` links, not TanStack Table (still deferred until a list needs client-side interactivity — column chooser, virtualized rows) | ADR 0004 addendum, `specs/record-pages.md` |
 
 The product owner delegated technical decisions to the implementing agent ("make the best
