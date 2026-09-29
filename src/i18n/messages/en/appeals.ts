@@ -110,6 +110,7 @@ export const appeals = {
   "field.mrn": "MRN",
   "field.memberId": "Member ID",
   "field.memberIdNone": "None on file",
+  "field.memberIdOtherPayer": "On file for a different payer",
   "field.addNote": "Add a note",
   "note.placeholder": "What you did, what's next, who you spoke with.",
   "action.saveNote": "Save note",
@@ -147,5 +148,6 @@ export const appeals = {
   "error.recoveredExceedsDenied": "The recovered amount can't exceed the denied amount.",
   "error.invalidRevealReason": "Choose a reason.",
   "error.revealNotFound": "Not found.",
+  "error.revealOtherPayer": "The member ID on file is for a different payer than this claim's.",
   "error.invalidNote": "Write a note of up to 4,000 characters.",
 } as const;

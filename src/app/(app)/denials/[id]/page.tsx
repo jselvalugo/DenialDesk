@@ -341,7 +341,9 @@ export default async function DenialPage({ params }: { params: Promise<{ id: str
                   {patient.mrn}
                 </Field>
                 <Field label={t("field.memberId")}>
-                  {!patient.memberIdLast4 ? (
+                  {patient.memberIdForOtherPayer ? (
+                    <span className="text-subtle">{t("field.memberIdOtherPayer")}</span>
+                  ) : !patient.memberIdLast4 ? (
                     <span className="text-subtle">{t("field.memberIdNone")}</span>
                   ) : canWork ? (
                     <MaskedMemberId

@@ -92,6 +92,7 @@ export const denials = {
   "field.mrn": "MRN",
   "field.memberId": "Member ID",
   "field.memberIdNone": "None on file",
+  "field.memberIdOtherPayer": "On file for a different payer",
   "field.addNote": "Add a note",
   "note.placeholder": "What you did, what's next, who you spoke with.",
   "panel.denial": "Denial",
@@ -140,6 +141,7 @@ export const denials = {
   "error.invalidNote": "Write a note of up to 4,000 characters.",
   "error.invalidRevealReason": "Choose a reason.",
   "error.revealNotFound": "Not found.",
+  "error.revealOtherPayer": "The member ID on file is for a different payer than this claim's.",
   "error.fieldsReload": "Reload the page and try again.",
 
   "action.editCustomFields": "Edit custom fields",

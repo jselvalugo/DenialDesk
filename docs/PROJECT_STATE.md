@@ -589,9 +589,10 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).
-- Member-ID reveal on a denial decrypts the patient's primary-payer member ID even when the claim was
-  billed to another payer (R-5.1.2); fix with coverage records (review §6.1), and until then reveal
-  only when the claim's payer is the patient's primary payer (2026-09-26 review, security).
+- Member-ID reveal on another payer's claim (R-5.1.2): **interim fix done 2026-09-29** — the claim,
+  denial, and appeal pages show and reveal the member ID only when the claim's payer is the patient's
+  primary payer ("On file for a different payer" otherwise; both reveal actions refuse server-side).
+  Still open: coverage records with one member ID per payer (review §6.1).
 - Claims C2 follow-up: nothing in the database forces a `claim_versions` version-1 row when a claim is
   INSERTed (the C1 triggers guard updates only). `createDraftClaims` (`src/domain/claims/versions.ts`) is the
   supported way to create a claim and writes version 1 and the `claim.created` audit event; a deferred

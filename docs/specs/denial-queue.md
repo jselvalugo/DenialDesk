@@ -17,6 +17,11 @@ Requirement IDs: §8.3, §8.4, R-3.1.1, R-3.1.2, R-4.2.1, R-5.1.2, R-7.3.3, R-7.
 - [x] Actions: change status, assign (only to team members), add note — each audited; the
       compliance role is read-only.
 - [x] Member ID reveal requires a reason and is audited.
+- [x] The member ID on file is the patient's primary payer's: the claim, denial, and appeal pages show
+      its last four and offer a reveal only when the claim's payer is that payer; otherwise they show
+      "On file for a different payer", and the reveal actions refuse without decrypting or auditing a
+      reveal (R-5.1.2; `src/domain/patients/member-id.ts`, `test/integration/member-id-reveal.test.ts`).
+      Interim until coverage records hold one member ID per payer.
 - [x] Every queue and detail view is audited.
 - [x] Overview page (`/overview`; `/` is the welcome page, `specs/welcome-page.md`) with real totals, next deadlines, and open denials by reason.
 

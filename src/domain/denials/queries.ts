@@ -17,6 +17,7 @@ import {
 import { ACTION_STATUSES, OPEN_STATUSES } from "@/domain/denial-status";
 import type { DenialCategory } from "@/domain/carc";
 import { isPayerVerified } from "@/domain/payers/verification";
+import { memberIdForOtherPayer, memberIdLast4ForClaim } from "@/domain/patients/member-id";
 import { assertNever } from "@/lib/assert-never";
 
 export const PAGE_SIZE = 25;
@@ -224,7 +225,9 @@ export async function getDenial(tx: TenantTx, denialId: string) {
         birthDate: patients.birthDate,
         mrn: patients.mrn,
         // Null on a synced patient without a mapped coverage (PI1a); shown the same as self-pay.
-        memberIdLast4: sql<string>`coalesce(${patients.memberIdLast4}, '')`,
+        // Only for the claim's own payer (R-5.1.2, `member-id.ts`).
+        memberIdLast4: memberIdLast4ForClaim,
+        memberIdForOtherPayer,
       },
       payer: payers,
       providerName: providers.name,

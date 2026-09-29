@@ -14,6 +14,7 @@ import {
 } from "@/db/schema";
 import { APPEAL_AWAITING_STATUSES, APPEAL_OPEN_STATUSES, type AppealStatus } from "@/domain/appeals/status";
 import type { AppealLevel } from "@/domain/appeals/types";
+import { memberIdForOtherPayer, memberIdLast4ForClaim } from "@/domain/patients/member-id";
 
 export const PAGE_SIZE = 25;
 /** Same display window as the denial queue (denials/queries.ts): a UI setting, not a legal value. */
@@ -126,7 +127,9 @@ export async function getAppeal(tx: TenantTx, appealId: string) {
         lastName: patients.lastName,
         mrn: patients.mrn,
         // Null on a synced patient without a mapped coverage (PI1a); shown the same as self-pay.
-        memberIdLast4: sql<string>`coalesce(${patients.memberIdLast4}, '')`,
+        // Only for the claim's own payer (R-5.1.2, `member-id.ts`).
+        memberIdLast4: memberIdLast4ForClaim,
+        memberIdForOtherPayer,
       },
       filedByName: users.displayName,
     })

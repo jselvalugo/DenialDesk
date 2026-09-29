@@ -97,6 +97,7 @@ export const claims: Messages["claims"] = {
   "detail.patient.mrn": "Número de expediente (MRN)",
   "detail.patient.memberId": "ID de miembro",
   "detail.patient.memberIdNone": "Ninguno en archivo",
+  "detail.patient.memberIdOtherPayer": "Registrado para otro pagador",
   "detail.payments.title": "Pagos",
   "detail.payments.none": "Ninguna remesa ha pagado ni denegado aún esta reclamación.",
   "detail.payments.paidOn": "pagado el {date}",

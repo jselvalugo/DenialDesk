@@ -11,6 +11,7 @@ import {
   payers,
   providers,
 } from "@/db/schema";
+import { memberIdForOtherPayer, memberIdLast4ForClaim } from "@/domain/patients/member-id";
 import { assertNever } from "@/lib/assert-never";
 import {
   filingStatus,
@@ -369,7 +370,9 @@ export async function getClaim(tx: TenantTx, claimId: string) {
         lastName: patients.lastName,
         birthDate: patients.birthDate,
         mrn: patients.mrn,
-        memberIdLast4: patients.memberIdLast4,
+        // Only for the claim's own payer (R-5.1.2, `member-id.ts`).
+        memberIdLast4: memberIdLast4ForClaim,
+        memberIdForOtherPayer,
       },
       payer: payers,
       providerName: providers.name,

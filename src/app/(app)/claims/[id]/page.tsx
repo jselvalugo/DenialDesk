@@ -198,7 +198,9 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                   {patient.mrn}
                 </Field>
                 <Field label={t("detail.patient.memberId")}>
-                  {patient.memberIdLast4 ? (
+                  {patient.memberIdForOtherPayer ? (
+                    <span className="text-subtle">{t("detail.patient.memberIdOtherPayer")}</span>
+                  ) : patient.memberIdLast4 ? (
                     <span className="font-mono">•••• {patient.memberIdLast4}</span>
                   ) : (
                     <span className="text-subtle">{t("detail.patient.memberIdNone")}</span>

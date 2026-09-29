@@ -113,6 +113,7 @@ export const appeals: Messages["appeals"] = {
   "field.mrn": "Número de prontuário",
   "field.memberId": "ID de associado",
   "field.memberIdNone": "Nenhum registrado",
+  "field.memberIdOtherPayer": "Registrado para outro pagador",
   "field.addNote": "Adicionar uma nota",
   "note.placeholder": "O que você fez, o que vem a seguir, com quem falou.",
   "action.saveNote": "Salvar nota",
@@ -152,5 +153,6 @@ export const appeals: Messages["appeals"] = {
   "error.recoveredExceedsDenied": "O valor recuperado não pode exceder o valor negado.",
   "error.invalidRevealReason": "Escolha um motivo.",
   "error.revealNotFound": "Não encontrado.",
+  "error.revealOtherPayer": "O ID de associado registrado é de um pagador diferente do desta reivindicação.",
   "error.invalidNote": "Escreva uma nota de até 4.000 caracteres.",
 };

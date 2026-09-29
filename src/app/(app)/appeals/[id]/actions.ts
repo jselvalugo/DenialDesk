@@ -10,6 +10,7 @@ import { appealNotes, appeals, appealSubmittedMethodEnum, claims, denials, patie
 import { withTenant } from "@/db/tenant";
 import { recordSubmission } from "@/domain/appeals/actions";
 import { denialStatusForDecision, isCloseOutcome } from "@/domain/appeals/status";
+import { memberIdBelongsToClaimPayer } from "@/domain/patients/member-id";
 import { getT } from "@/i18n/server";
 import { audit } from "@/lib/audit";
 import { decryptField } from "@/lib/crypto/field";
@@ -192,12 +193,21 @@ export async function revealMemberId(
   if (!parsed.success) return { error: t("error.invalidRevealReason") };
   return withTenant(auth, async (tx) => {
     const [row] = await tx
-      .select({ patientId: patients.id, memberIdEnc: patients.memberIdEnc })
+      .select({
+        patientId: patients.id,
+        memberIdEnc: patients.memberIdEnc,
+        primaryPayerId: patients.primaryPayerId,
+        claimPayerId: claims.payerId,
+      })
       .from(appeals)
       .innerJoin(claims, eq(claims.id, appeals.claimId))
       .innerJoin(patients, eq(patients.id, claims.patientId))
       .where(eq(appeals.id, parsed.data.appeal));
     if (!row || !row.memberIdEnc) return { error: t("error.revealNotFound") };
+    // The member ID on file is the primary payer's; never reveal it on another payer's claim (R-5.1.2).
+    if (!memberIdBelongsToClaimPayer(row.primaryPayerId, row.claimPayerId)) {
+      return { error: t("error.revealOtherPayer") };
+    }
     await audit(tx, {
       action: "patient.member_id_revealed",
       actorUserId: auth.userId,

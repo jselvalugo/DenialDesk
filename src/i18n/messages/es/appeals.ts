@@ -113,6 +113,7 @@ export const appeals: Messages["appeals"] = {
   "field.mrn": "Número de historia clínica",
   "field.memberId": "ID de miembro",
   "field.memberIdNone": "Ninguno en archivo",
+  "field.memberIdOtherPayer": "Registrado para otro pagador",
   "field.addNote": "Agregar una nota",
   "note.placeholder": "Qué hizo, qué sigue, con quién habló.",
   "action.saveNote": "Guardar nota",
@@ -155,5 +156,7 @@ export const appeals: Messages["appeals"] = {
   "error.recoveredExceedsDenied": "El monto recuperado no puede superar el monto denegado.",
   "error.invalidRevealReason": "Elija un motivo.",
   "error.revealNotFound": "No encontrado.",
+  "error.revealOtherPayer":
+    "El ID de miembro registrado corresponde a un pagador distinto al de esta reclamación.",
   "error.invalidNote": "Escriba una nota de hasta 4000 caracteres.",
 };

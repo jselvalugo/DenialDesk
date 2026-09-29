@@ -98,6 +98,7 @@ export const claims: Messages["claims"] = {
   "detail.patient.mrn": "Número de prontuário (MRN)",
   "detail.patient.memberId": "ID de associado",
   "detail.patient.memberIdNone": "Nenhum registrado",
+  "detail.patient.memberIdOtherPayer": "Registrado para outro pagador",
   "detail.payments.title": "Pagamentos",
   "detail.payments.none": "Nenhuma remessa pagou ou negou esta reivindicação ainda.",
   "detail.payments.paidOn": "pago em {date}",

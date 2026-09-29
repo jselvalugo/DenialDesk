@@ -271,7 +271,9 @@ export default async function AppealPage({ params }: { params: Promise<{ id: str
                 <span className="font-mono">{patient.mrn}</span>
               </Field>
               <Field label={t("field.memberId")}>
-                {!patient.memberIdLast4 ? (
+                {patient.memberIdForOtherPayer ? (
+                  <span className="text-subtle">{t("field.memberIdOtherPayer")}</span>
+                ) : !patient.memberIdLast4 ? (
                   <span className="text-subtle">{t("field.memberIdNone")}</span>
                 ) : canWork ? (
                   <MaskedMemberId
