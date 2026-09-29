@@ -11,9 +11,11 @@ import { Code } from "@/components/ui/Code";
 import { DeadlineIndicator } from "@/components/ui/DeadlineIndicator";
 import { Money } from "@/components/ui/Money";
 import { Panel } from "@/components/ui/Panel";
+import { secondaryLinkButtonClass } from "@/components/ui/linkButton";
 import { MaskedMemberId } from "@/components/patients/MaskedMemberId";
 import { withTenant } from "@/db/tenant";
 import { CARC, CATEGORY_LABEL_KEYS } from "@/domain/carc";
+import { getLetterSummary } from "@/domain/appeals/letter/queries";
 import { DUE_SOON_DAYS, getAppeal } from "@/domain/appeals/queries";
 import {
   APPEAL_DECISION_OUTCOME_LABEL_KEYS,
@@ -38,6 +40,9 @@ const ACTIVITY_KEYS: Record<string, MessageKey<"appeals">> = {
   "appeal.submission_recorded": "activity.submissionRecorded",
   "appeal.decision_recorded": "activity.decisionRecorded",
   "appeal.note_added": "activity.noteAdded",
+  "appeal.letter_saved": "activity.letterSaved",
+  "appeal.letter_attested": "activity.letterAttested",
+  "appeal.letter_exported": "activity.letterExported",
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -69,7 +74,8 @@ export default async function AppealPage({ params }: { params: Promise<{ id: str
       entityId: id,
       metadata: { denialId: row.denial.id },
     });
-    return row;
+    const letter = await getLetterSummary(tx, id);
+    return { ...row, letter };
   });
   if (!detail) notFound();
 
@@ -133,6 +139,24 @@ export default async function AppealPage({ params }: { params: Promise<{ id: str
                   : t("field.wholeClaim")}
               </Field>
             </dl>
+          </Panel>
+
+          <Panel title={t("letter.panel.title")}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {detail.letter.version === null ? (
+                <p className="text-body text-muted">{t("letter.panel.none")}</p>
+              ) : (
+                <p className="flex items-center gap-2 text-body text-text">
+                  {t("letter.panel.version", { version: detail.letter.version })}
+                  <Badge tone={detail.letter.attested ? "success" : "warning"}>
+                    {detail.letter.attested ? t("letter.panel.reviewed") : t("letter.panel.notReviewed")}
+                  </Badge>
+                </p>
+              )}
+              <Link href={`/appeals/${appeal.id}/letter`} className={secondaryLinkButtonClass}>
+                {canWork ? t("letter.panel.open") : t("letter.panel.view")}
+              </Link>
+            </div>
           </Panel>
 
           {canSubmit && (
@@ -294,7 +318,7 @@ export default async function AppealPage({ params }: { params: Promise<{ id: str
                   <li key={event.id} className="text-body">
                     <p className="text-text">
                       <span className="font-medium">{event.actor ?? t("activity.actorSystem")}</span>{" "}
-                      {ACTIVITY_KEYS[event.action] ? t(ACTIVITY_KEYS[event.action]!) : event.action}
+                      {ACTIVITY_KEYS[event.action] ? t(ACTIVITY_KEYS[event.action]!) : ""}
                     </p>
                     <p className="text-label text-muted">{f.dateTime(event.occurredAt)}</p>
                   </li>

@@ -856,6 +856,101 @@ export const appealNotes = pgTable(
 );
 
 /**
+ * Practice-editable appeal letter templates, one per denial category and language (docs/specs/appeals.md
+ * A2). Practice free text, so Restricted PHI (HC-1.2). Starter wording lives in code, not here: a
+ * category with no row falls back to it. English only for now (owner question OA-093).
+ */
+export const appealLetterTemplates = pgTable(
+  "appeal_letter_templates",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    category: denialCategoryEnum("category").notNull(),
+    language: text("language").notNull().default("en"),
+    body: text("body").notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    updatedBy: uuid("updated_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("appeal_letter_templates_key").on(t.tenantId, t.category, t.language),
+    check("appeal_letter_templates_language_en", sql`${t.language} = 'en'`),
+    check("appeal_letter_templates_body_size", sql`length(${t.body}) between 1 and 20000`),
+  ],
+);
+
+/**
+ * Append-only history of an appeal's letter (who and when; HC-6.1). The body keeps merge tokens
+ * (`{{claim.number}}`), never resolved patient values. The app role has no UPDATE or DELETE.
+ */
+export const appealLetterVersions = pgTable(
+  "appeal_letter_versions",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    appealId: uuid("appeal_id").notNull(),
+    version: integer("version").notNull(),
+    body: text("body").notNull(),
+    /** The category template this letter was started from (null when typed from scratch). */
+    sourceCategory: denialCategoryEnum("source_category"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // Also the target of the attestation's composite FK.
+    uniqueIndex("appeal_letter_versions_key").on(t.tenantId, t.appealId, t.version),
+    foreignKey({
+      name: "appeal_letter_versions_appeal_fk",
+      columns: [t.tenantId, t.appealId],
+      foreignColumns: [appeals.tenantId, appeals.id],
+    }),
+    check("appeal_letter_versions_version_positive", sql`${t.version} >= 1`),
+    check("appeal_letter_versions_body_size", sql`length(${t.body}) between 1 and 20000`),
+  ],
+);
+
+/**
+ * A named user's attestation that they reviewed one letter version (R-7.11.2). Append-only; a version can be attested again after the data it shows changed. The digest
+ * is a SHA-256 of the fully rendered letter at review time, so an export can tell that the claim or
+ * patient data changed since.
+ */
+export const appealLetterAttestations = pgTable(
+  "appeal_letter_attestations",
+  {
+    id: id(),
+    tenantId: tenantId(),
+    appealId: uuid("appeal_id").notNull(),
+    version: integer("version").notNull(),
+    renderedSha256: text("rendered_sha256").notNull(),
+    attestedBy: uuid("attested_by")
+      .notNull()
+      .references(() => users.id),
+    attestedAt: timestamp("attested_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Not unique: a version is attested again after the claim or patient data changed (newest row wins).
+    index("appeal_letter_attestations_lookup").on(t.tenantId, t.appealId, t.version, t.attestedAt),
+    foreignKey({
+      name: "appeal_letter_attestations_version_fk",
+      columns: [t.tenantId, t.appealId, t.version],
+      foreignColumns: [
+        appealLetterVersions.tenantId,
+        appealLetterVersions.appealId,
+        appealLetterVersions.version,
+      ],
+    }),
+    check("appeal_letter_attestations_digest_shape", sql`${t.renderedSha256} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
+
+/**
  * Small per-tenant key/value settings store (not `rules/`: nothing here is a legal deadline, rate,
  * or threshold). A1 uses it only for `appeal_follow_up_days`; a missing row means the built-in
  * default (`DEFAULT_APPEAL_FOLLOW_UP_DAYS`, src/domain/appeals/settings.ts) applies.

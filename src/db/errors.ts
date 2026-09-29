@@ -79,6 +79,7 @@ const SLOT_PATTERNS: Record<TriggerSlot, string> = {
 export const TRIGGER_MESSAGES: readonly { format: string; args: readonly TriggerSlot[] }[] = [
   { format: "audit_events is append-only", args: [] },
   { format: "claim_versions is append-only", args: [] },
+  { format: "appeal letter history is append-only", args: [] },
   { format: "remittance and prompt-pay history is append-only", args: [] },
   { format: "the recording user must be the current user", args: [] },
   { format: "an uploaded remittance starts as received", args: [] },

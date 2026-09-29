@@ -181,6 +181,32 @@ export const settings = {
 
   "error.notPayerEditor": "Only administrators and managers can change a payer's custom fields.",
   "error.recordNotFound": "Record not found.",
+
+  "tabs.appealLetters": "Appeal letters",
+  "appealTemplates.metaTitle": "Appeal letter templates",
+  "appealTemplates.panelTitle": "Appeal letter templates",
+  "appealTemplates.panelDescription":
+    "One template per denial category. A new appeal letter starts from the template for its denial's category.",
+  "appealTemplates.tableCaption": "Appeal letter templates by denial category",
+  "appealTemplates.source": "Wording",
+  "appealTemplates.sourcePractice": "Your template",
+  "appealTemplates.sourceStarter": "Starter wording",
+  "appealTemplates.lastEdited": "Last edited",
+  "appealTemplates.editAria": "Edit the {category} template",
+  "appealTemplates.viewAria": "View the {category} template",
+  "appealTemplates.breadcrumb": "Breadcrumb",
+  "appealTemplates.editTitle": "{category} template",
+  "appealTemplates.editMetaTitle": "Edit appeal letter template",
+  "appealTemplates.bodyLabel": "Template text",
+  "appealTemplates.bodyHint":
+    "Use merge fields such as {example}. Don't type patient details; they come from the record. Letters are written in English because the payer reads them.",
+  "appealTemplates.starterNote":
+    "This category has no template of your own yet, so letters start from the starter wording. It cites no payer policy or law; add citations only after checking them.",
+  "appealTemplates.useStarter": "Use the starter wording",
+  "appealTemplates.save": "Save template",
+  "appealTemplates.saved": "Template saved.",
+  "appealTemplates.readOnly": "Only administrators and managers can edit templates.",
+  "appealTemplates.fieldsTitle": "Available fields",
   // Billing details (docs/specs/claims.md C3a-S)
   "tabs.billing": "Billing",
   "billing.metaTitle": "Billing details",
