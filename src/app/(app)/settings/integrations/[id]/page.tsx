@@ -158,6 +158,16 @@ export default async function ConnectionPage({ params }: { params: Promise<{ id:
         </FieldList>
       </Panel>
 
+      {/* PI3: the engine stopped this connection after three failed syncs in a row (no failure detail here: Sync history has the codes). */}
+      {connection.status === "error" && connection.statusReason === "repeated_failures" && (
+        <p
+          role="status"
+          className="rounded-panel border border-warning-border bg-warning-bg p-3 text-body text-warning-fg"
+        >
+          {t("detail.repeatedFailuresNotice")}
+        </p>
+      )}
+
       {/* Once a connection can have synced (or has), where to see what it read and map its insurers. */}
       {(connection.hasSynced || ["active", "paused", "error", "revoked"].includes(connection.status)) && (
         <Panel title={t("detail.moreTitle")} description={t("detail.moreDescription")}>

@@ -5,7 +5,8 @@ import { closeDatabase, systemDb } from "@/db/client";
 import { integrationSyncRuns } from "@/db/schema";
 import { withTenant } from "@/db/tenant";
 import { IntegrationConnectionError, pauseConnection } from "@/domain/integrations/connections";
-import { requestSync } from "@/domain/integrations/sync";
+import { INTEGRATION_SERVICE_PRINCIPAL_ID } from "@/domain/integrations/principal";
+import { requestSync, SCHEDULED_SANDBOX_ONLY } from "@/domain/integrations/sync";
 import { enqueueDueRuns } from "@/domain/integrations/job-runs";
 import { httpJobSender } from "@/integrations/jobs/dispatch";
 import { runScheduledSync } from "@/integrations/jobs/scheduler";
@@ -254,6 +255,9 @@ describe("Sync now hands the run to the worker (requestSync)", () => {
   const pinClock = () => {
     h.clock.current = new Date(Math.floor(Date.now() / 60_000) * 60_000 + 10_000);
   };
+  const sending = (send: (runId: string) => Promise<boolean>) => ({ kind: "send", send }) as const;
+  const eventsOf = async (action: string) =>
+    (await auditRows(ctx.tenantId)).filter((event) => event.action === action);
 
   it("with a sender: returns `queued` at once, leaves the run queued for the worker, and audits who pressed it", async () => {
     pinClock();
@@ -261,10 +265,10 @@ describe("Sync now hands the run to the worker (requestSync)", () => {
     const sent: string[] = [];
     const result = await requestSync(runnerFor(ctx), adminActor(ctx), id, {
       ...h.deps,
-      enqueueJob: async (runId) => {
+      jobs: sending(async (runId) => {
         sent.push(runId);
         return true;
-      },
+      }),
     });
     expect(result).toMatchObject({ status: "queued" });
     const runId = (result as { runId: string }).runId;
@@ -275,9 +279,7 @@ describe("Sync now hands the run to the worker (requestSync)", () => {
       triggeredBy: ctx.userId,
     });
     expect(h.transport.to("Patient")).toEqual([]);
-    const events = (await auditRows(ctx.tenantId)).filter(
-      (event) => event.action === "integration.sync_queued",
-    );
+    const events = await eventsOf("integration.sync_queued");
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       actorUserId: ctx.userId,
@@ -289,22 +291,40 @@ describe("Sync now hands the run to the worker (requestSync)", () => {
     // A second press while it is queued is refused, and the worker then runs the one queued run.
     h.clock.current = new Date(h.clock.current.getTime() + 61_000);
     await expect(
-      requestSync(runnerFor(ctx), adminActor(ctx), id, { ...h.deps, enqueueJob: async () => true }),
+      requestSync(runnerFor(ctx), adminActor(ctx), id, { ...h.deps, jobs: sending(async () => true) }),
     ).rejects.toThrow("A sync is already running for this connection.");
     expect(await post(runId)).toEqual({ status: 200, code: "done", runStatus: "succeeded" });
   });
 
-  it("if the worker can't be reached, the run is abandoned at once and the press is refused (so it can be pressed again)", async () => {
+  it("the queued audit is committed with the run row, before the job is sent (review O2)", async () => {
     pinClock();
     const id = await activeSandbox(ctx, h);
-    for (const enqueueJob of [
+    let seenAtSend: { runs: number; queuedEvents: number } | undefined;
+    await requestSync(runnerFor(ctx), adminActor(ctx), id, {
+      ...h.deps,
+      jobs: sending(async (runId) => {
+        seenAtSend = {
+          runs: (await systemDb().select().from(integrationSyncRuns).where(eq(integrationSyncRuns.id, runId)))
+            .length,
+          queuedEvents: (await eventsOf("integration.sync_queued")).length,
+        };
+        return true;
+      }),
+    });
+    expect(seenAtSend).toEqual({ runs: 1, queuedEvents: 1 });
+  });
+
+  it("if the worker can't be reached, the run is abandoned at once and audited, and the press is refused (so it can be pressed again)", async () => {
+    pinClock();
+    const id = await activeSandbox(ctx, h);
+    for (const send of [
       async () => false,
       async () => {
         throw new Error("network down");
       },
     ]) {
       await expect(
-        requestSync(runnerFor(ctx), adminActor(ctx), id, { ...h.deps, enqueueJob }),
+        requestSync(runnerFor(ctx), adminActor(ctx), id, { ...h.deps, jobs: sending(send) }),
       ).rejects.toThrow(IntegrationConnectionError);
       const runs = await systemDb()
         .select()
@@ -314,31 +334,82 @@ describe("Sync now hands the run to the worker (requestSync)", () => {
       // Move past the once-a-minute window: the connection is free again.
       h.clock.current = new Date(h.clock.current.getTime() + 61_000);
     }
-    const failed = (await auditRows(ctx.tenantId)).filter(
-      (event) => event.action === "integration.sync_failed" && event.reason === "sync_now",
-    );
-    expect(failed.length).toBeGreaterThanOrEqual(2);
+    const failed = (await eventsOf("integration.sync_failed")).filter((event) => event.reason === "sync_now");
+    expect(failed).toHaveLength(2);
     expect(failed[0]!.metadata).toMatchObject({ code: "job_not_sent" });
   });
 
-  it("without a sender the run executes in the request, as before (tests, local development)", async () => {
+  it("a post that timed out after the worker had already claimed the run is still queued, not abandoned or refused (review O2)", async () => {
+    pinClock();
+    const id = await activeSandbox(ctx, h);
+    let claimedRun = "";
+    const result = await requestSync(runnerFor(ctx), adminActor(ctx), id, {
+      ...h.deps,
+      jobs: sending(async (runId) => {
+        // The worker got the job and started the run; only the response was lost.
+        claimedRun = runId;
+        await systemDb().transaction(async (tx) => {
+          await tx.execute(
+            sql`update integration_sync_runs set status = 'running', started_at = now(), heartbeat_at = now() where id = ${runId}::uuid`,
+          );
+        });
+        throw new Error("timed out waiting for the response");
+      }),
+    });
+    expect(result).toEqual({ runId: claimedRun, status: "queued" });
+    expect(await runRow(claimedRun)).toMatchObject({ status: "running" });
+    expect(await eventsOf("integration.sync_failed")).toEqual([]);
+    expect(await eventsOf("integration.sync_queued")).toHaveLength(1);
+  });
+
+  it("a secret that is too short refuses BEFORE anything is queued: no run row, no audit, and the once-a-minute allowance is not used (review O3)", async () => {
+    pinClock();
+    const id = await activeSandbox(ctx, h);
+    await expect(
+      requestSync(runnerFor(ctx), adminActor(ctx), id, { ...h.deps, jobs: { kind: "refused" } }),
+    ).rejects.toThrow("The sync couldn't be started. Try again in a moment.");
+    expect(
+      await systemDb().select().from(integrationSyncRuns).where(eq(integrationSyncRuns.connectionId, id)),
+    ).toEqual([]);
+    expect(await eventsOf("integration.sync_queued")).toEqual([]);
+    // Same minute, same connection: the press that follows is not rate limited by the refused one.
+    const result = await requestSync(runnerFor(ctx), adminActor(ctx), id, {
+      ...h.deps,
+      jobs: sending(async () => true),
+    });
+    expect(result).toMatchObject({ status: "queued" });
+  });
+
+  it("a refused press still answers 'only an administrator' to someone who isn't one", async () => {
+    pinClock();
+    const id = await activeSandbox(ctx, h);
+    await expect(
+      requestSync(runnerFor(ctx), { ...adminActor(ctx), role: "specialist" }, id, {
+        ...h.deps,
+        jobs: { kind: "refused" },
+      }),
+    ).rejects.toThrow("Only an administrator can manage integrations.");
+  });
+
+  it("without `jobs` the run executes in the request, as before (tests, local development)", async () => {
     pinClock();
     const id = await activeSandbox(ctx, h);
     const result = await requestSync(runnerFor(ctx), adminActor(ctx), id, h.deps);
     expect(result).toMatchObject({ status: "succeeded" });
     expect((await patientRows(ctx)).length).toBeGreaterThan(100);
+    expect(await eventsOf("integration.sync_queued")).toEqual([]);
   });
 
-  it("every refusal of Sync now still comes first, before a job is sent: not an admin, not active, real connection", async () => {
+  it("every refusal of Sync now still comes first, before a job is sent: not an admin, real connection", async () => {
     pinClock();
     const id = await activeSandbox(ctx, h);
     const sent: string[] = [];
     const deps = {
       ...h.deps,
-      enqueueJob: async (runId: string) => {
+      jobs: sending(async (runId: string) => {
         sent.push(runId);
         return true;
-      },
+      }),
     };
     await expect(
       requestSync(runnerFor(ctx), { ...adminActor(ctx), role: "specialist" }, id, deps),
@@ -354,40 +425,40 @@ describe("Sync now hands the run to the worker (requestSync)", () => {
 });
 
 describe("the scheduled tick end to end", () => {
+  /** The real database calls, narrowed to this test's practice (a shared test database holds other tests' leftover connections, whose runs are left alone). */
+  const ownTick = () => async () =>
+    (await enqueueDueRuns(true)).filter((row) => row.tenantId === ctx.tenantId);
+
+  /** The real sender, pointed at an in-process "worker" through a fetch stand-in: the signed request travels exactly as over HTTP. */
+  function inProcessWorker(
+    key: Buffer,
+    results: JobResponse[],
+    respond: (status: number) => number = (n) => n,
+  ) {
+    const fetchToWorker = (async (_url: string, init: RequestInit) => {
+      const headers = init.headers as Record<string, string>;
+      const response = await handleSyncJob(
+        { body: init.body as string, headers: headersOf(headers) },
+        { sync: h.deps, secret: () => key },
+      );
+      results.push(response);
+      return new Response(null, { status: respond(response.status === 200 ? 202 : response.status) });
+    }) as unknown as typeof fetch;
+    return httpJobSender({ url: "https://worker.example.test/w", secret: key, fetch: fetchToWorker });
+  }
+
+  const eventsOf = async (action: string) =>
+    (await auditRows(ctx.tenantId)).filter((event) => event.action === action);
+
   it("queues the due connection and posts a signed job that the worker accepts and runs", async () => {
     const id = await activeSandbox(ctx, h);
-    // Runs of other (leftover) connections in a shared test database aren't this test's: leave those queued.
-    const mine = new Set<string>();
     const results: JobResponse[] = [];
     const result = await runScheduledSync({
       secret: () => secret,
-      enqueue: async () => {
-        const all = await enqueueDueRuns();
-        const own = (
-          await systemDb()
-            .select()
-            .from(integrationSyncRuns)
-            .where(eq(integrationSyncRuns.tenantId, ctx.tenantId))
-        ).map((row) => row.id);
-        for (const runId of all.filter((runId) => own.includes(runId))) mine.add(runId);
-        return [...mine];
-      },
-      sender: (key) => {
-        // The real sender, pointed at an in-process "worker" through a fetch stand-in: the signed request
-        // travels exactly as it would over HTTP.
-        const fetchToWorker = (async (_url: string, init: RequestInit) => {
-          const headers = init.headers as Record<string, string>;
-          const response = await handleSyncJob(
-            { body: init.body as string, headers: headersOf(headers) },
-            { sync: h.deps, secret: () => key },
-          );
-          results.push(response);
-          return new Response(null, { status: response.status === 200 ? 202 : response.status });
-        }) as unknown as typeof fetch;
-        return httpJobSender({ url: "https://worker.example.test/w", secret: key, fetch: fetchToWorker });
-      },
+      enqueue: ownTick(),
+      sender: (key) => inProcessWorker(key, results),
     });
-    expect(result).toEqual({ status: "ok", queued: 1, sent: 1, failed: 0 });
+    expect(result).toEqual({ status: "ok", queued: 1, sent: 1, failed: 0, abandoned: 0, unsent: 0 });
     expect(results).toEqual([{ status: 200, code: "done", runStatus: "succeeded" }]);
     const [run] = await systemDb()
       .select()
@@ -400,25 +471,98 @@ describe("the scheduled tick end to end", () => {
       triggeredBy: null,
     });
     expect((await patientRows(ctx)).length).toBeGreaterThan(100);
-    const started = (await auditRows(ctx.tenantId)).filter(
-      (event) => event.action === "integration.sync_started",
-    );
+    const started = await eventsOf("integration.sync_started");
     expect(started[0]!.metadata).toMatchObject({ trigger: "scheduled", triggered_by: null });
   });
 
   it("the very next tick finds nothing due (the run is fresh)", async () => {
     await activeSandbox(ctx, h);
-    const first = await enqueueDueRuns();
-    const second = await enqueueDueRuns();
-    const own = new Set(
-      (
-        await systemDb()
-          .select()
-          .from(integrationSyncRuns)
-          .where(eq(integrationSyncRuns.tenantId, ctx.tenantId))
-      ).map((row) => row.id),
+    const first = await ownTick()();
+    const second = await ownTick()();
+    expect(first).toHaveLength(1);
+    expect(second).toEqual([]);
+  });
+
+  it("audits a run the database abandoned for going quiet past the lease (lease_expired) as the service principal, and runs a fresh one", async () => {
+    const id = await activeSandbox(ctx, h);
+    const [stale] = await systemDb()
+      .insert(integrationSyncRuns)
+      .values({
+        tenantId: ctx.tenantId,
+        connectionId: id,
+        trigger: "scheduled",
+        queuedAt: new Date(Date.now() - 25 * 60_000),
+      })
+      .returning({ id: integrationSyncRuns.id });
+    const results: JobResponse[] = [];
+    const result = await runScheduledSync({
+      secret: () => secret,
+      enqueue: ownTick(),
+      sender: (key) => inProcessWorker(key, results),
+    });
+    expect(result).toMatchObject({ status: "ok", queued: 1, sent: 1, abandoned: 1 });
+    expect(await runRow(stale!.id)).toMatchObject({ status: "abandoned" });
+    const events = await eventsOf("integration.sync_abandoned");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actorUserId: INTEGRATION_SERVICE_PRINCIPAL_ID,
+      entityId: id,
+      reason: "lease_expired",
+      metadata: expect.objectContaining({ run_id: stale!.id, reason_code: "lease_expired" }),
+    });
+    expect(results).toEqual([{ status: 200, code: "done", runStatus: "succeeded" }]);
+  });
+
+  it("a job that can't be posted abandons its run and audits it (job_not_sent), and the very next tick queues the connection again", async () => {
+    const id = await activeSandbox(ctx, h);
+    const first = await runScheduledSync({
+      secret: () => secret,
+      enqueue: ownTick(),
+      sender: () => async () => false,
+    });
+    expect(first).toMatchObject({ status: "ok", queued: 1, sent: 0, failed: 1 });
+    const [run] = await systemDb()
+      .select()
+      .from(integrationSyncRuns)
+      .where(eq(integrationSyncRuns.connectionId, id));
+    expect(run).toMatchObject({ status: "abandoned", startedAt: null });
+    const events = await eventsOf("integration.sync_abandoned");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      actorUserId: INTEGRATION_SERVICE_PRINCIPAL_ID,
+      reason: "job_not_sent",
+      metadata: expect.objectContaining({ run_id: run!.id }),
+    });
+    // Not blocked for 14 or 20 minutes: a run that never started isn't "recent".
+    const second = await ownTick()();
+    expect(second).toHaveLength(1);
+    expect(second[0]).toMatchObject({ outcome: "queued" });
+  });
+
+  it("a run the worker claimed although its post looked failed is not abandoned or audited", async () => {
+    const id = await activeSandbox(ctx, h);
+    const results: JobResponse[] = [];
+    // The worker runs the job, but the scheduler sees a 502 (the response was lost).
+    const result = await runScheduledSync({
+      secret: () => secret,
+      enqueue: ownTick(),
+      sender: (key) => inProcessWorker(key, results, () => 502),
+    });
+    expect(result).toMatchObject({ queued: 1, sent: 0, failed: 1 });
+    const [run] = await systemDb()
+      .select()
+      .from(integrationSyncRuns)
+      .where(eq(integrationSyncRuns.connectionId, id));
+    expect(run).toMatchObject({ status: "succeeded" });
+    expect(await eventsOf("integration.sync_abandoned")).toEqual([]);
+  });
+
+  it("only sandbox connections are queued: a real active connection is skipped, so it can't walk into a misleading error", async () => {
+    const real = await createTestTenant("Jobs worker scheduler real");
+    await activeRealConnection(real);
+    const rows = (await enqueueDueRuns(SCHEDULED_SANDBOX_ONLY)).filter(
+      (row) => row.tenantId === real.tenantId,
     );
-    expect(first.filter((runId) => own.has(runId))).toHaveLength(1);
-    expect(second.filter((runId) => own.has(runId))).toEqual([]);
+    expect(rows).toEqual([]);
   });
 });

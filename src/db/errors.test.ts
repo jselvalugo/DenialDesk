@@ -272,6 +272,9 @@ describe("migrations raise only listed, value-free trigger messages", () => {
     "0044_patient_integrations_jobs.sql": {
       principal_id: "uuid",
     },
+    "0045_patient_integrations_jobs_review.sql": {
+      principal_id: "uuid",
+    },
   };
 
   it("parses every RAISE strictly (no E'', quoted '' or USING forms slip past the checks)", () => {

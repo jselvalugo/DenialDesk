@@ -18,7 +18,7 @@ export async function syncJobFunction(request: Request): Promise<Response> {
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(declared) && declared > MAX_JOB_BODY_BYTES) return json({ error: "too_large" }, 413);
   const outcome: JobResponse = await handleSyncJob(
-    { body: await request.text(), headers: request.headers },
+    { body: request.body, headers: request.headers },
     { sync: productionSyncDeps() },
   );
   return json(

@@ -86,6 +86,8 @@ export const integrations: Messages["integrations"] = {
     "La sincronización está en pausa. Reanudarla la reinicia y requiere que antes verifique su identidad con su aplicación autenticadora.",
   "lifecycle.error":
     "DenialDesk dejó de sincronizar por un error. Cuando el administrador de su EHR/PM lo haya resuelto, ejecute Probar conexión y obtenga una prueba exitosa, y luego reanude. Reanudar también requiere que antes verifique su identidad con su aplicación autenticadora.",
+  "detail.repeatedFailuresNotice":
+    "Las últimas tres sincronizaciones seguidas fallaron, por lo que DenialDesk dejó de sincronizar esta conexión. Abra el Historial de sincronización para ver el motivo, corrija la causa, ejecute Probar conexión y obtenga una prueba exitosa, y luego reanude.",
   "lifecycle.pending_approval":
     "Esta conexión está esperando aprobación. Retirarla la devuelve a un borrador que puede editar y volver a enviar.",
   "pause.submit": "Pausar sincronización",
@@ -221,7 +223,7 @@ export const integrations: Messages["integrations"] = {
     "DenialDesk no aprobó esta conexión. DenialDesk se pondrá en contacto con usted para explicar el motivo. Cuando se resuelva, ejecute Probar conexión y envíela de nuevo.",
   "sync.title": "Sincronizar ahora",
   "sync.description":
-    "Trae ahora los últimos cambios de pacientes del EHR/PM conectado, y vuelve a hacerlo automáticamente cada 15 minutos. El resultado aparece aquí o, cuando la sincronización se ejecuta en segundo plano, en el historial de sincronización. Los pacientes son copias de solo lectura: corrija los datos demográficos en el EHR/PM.",
+    "Trae ahora los últimos cambios de pacientes del EHR/PM conectado. Cuando la sincronización en segundo plano está configurada en este entorno, también se ejecuta sola según un horario (aproximadamente cada 15 minutos). El resultado aparece aquí o, cuando la sincronización se ejecuta en segundo plano, en el historial de sincronización. Los pacientes son copias de solo lectura: corrija los datos demográficos en el EHR/PM.",
   "sync.submit": "Sincronizar ahora",
   "sync.pending": "Sincronizando…",
   "sync.resultOk": "Sincronización terminada",

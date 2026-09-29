@@ -6,7 +6,14 @@ import {
   type SyncRunResult,
 } from "@/domain/integrations/sync";
 import { log } from "@/lib/log";
-import { jobSecret, JobSecretError, verifyJob, type HeaderReader, type JobRefusal } from "./signature";
+import {
+  jobSecret,
+  JobSecretError,
+  MAX_JOB_BODY_BYTES,
+  verifyJob,
+  type HeaderReader,
+  type JobRefusal,
+} from "./signature";
 
 // The platform-neutral job worker (docs/specs/patient-integrations.md "PI2b" Jobs; ADR 0012; threat model
 // S5). Netlify's Background Function (src/platform/netlify) and, at the Azure cutover, a worker container
@@ -19,8 +26,39 @@ import { jobSecret, JobSecretError, verifyJob, type HeaderReader, type JobRefusa
 // known, its ID; a job carries nothing else, and nothing here reads a patient.
 
 export interface JobRequest {
-  body: string;
+  /**
+   * The raw body: a string already read, or the request's byte stream. A stream is read here, counting bytes and
+   * stopping at `MAX_JOB_BODY_BYTES + 1`, so an oversized or endless body is never buffered whatever
+   * `Content-Length` says (or omits): the cap lives in the platform-neutral worker, so Azure gets it too.
+   */
+  body: string | ReadableStream<Uint8Array> | null;
   headers: HeaderReader;
+}
+
+/** The body as text, or `null` if it is longer than `MAX_JOB_BODY_BYTES` (reading stops at the first byte over). */
+export async function readJobBody(body: JobRequest["body"]): Promise<string | null> {
+  if (body === null) return "";
+  if (typeof body === "string") {
+    return Buffer.byteLength(body, "utf8") > MAX_JOB_BODY_BYTES ? null : body;
+  }
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_JOB_BODY_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 /** What the worker answers. `code` is a fixed word; there is never a message, an ID, or a stack. */
@@ -70,22 +108,26 @@ export async function handleSyncJob(request: JobRequest, deps: JobWorkerDeps): P
     return { status: 503, code: "unavailable" };
   }
 
-  const verified = verifyJob(secret, request.body, request.headers, deps.now?.());
+  const body = await readJobBody(request.body);
+  if (body === null) {
+    log.warn("integration.job_refused", { status: "too_large" });
+    return refusalStatus.too_large;
+  }
+  const verified = verifyJob(secret, body, request.headers, deps.now?.());
   if (!verified.ok) {
     log.warn("integration.job_refused", { status: verified.refusal });
     return refusalStatus[verified.refusal];
   }
   const { runId } = verified;
 
-  const claimed = await (deps.claim ?? claimQueuedRun)(runId);
-  if (!claimed) {
-    // A made-up run ID, one already running or finished (a replay or a second worker), or a connection
-    // that is no longer active: indistinguishable to the caller and to an attacker holding a valid MAC.
-    log.warn("integration.job_refused", { status: "not_claimable", runId });
-    return { status: 409, code: "not_claimable" };
-  }
-
   try {
+    const claimed = await (deps.claim ?? claimQueuedRun)(runId);
+    if (!claimed) {
+      // A made-up run ID, one already running or finished (a replay or a second worker), or a connection
+      // that is no longer active: indistinguishable to the caller and to an attacker holding a valid MAC.
+      log.warn("integration.job_refused", { status: "not_claimable", runId });
+      return { status: 409, code: "not_claimable" };
+    }
     const result = await (deps.execute ?? executeSyncRun)({ tenantId: claimed.tenantId, runId }, deps.sync);
     return { status: 200, code: "done", runStatus: result.status };
   } catch (error) {

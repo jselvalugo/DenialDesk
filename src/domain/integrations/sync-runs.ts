@@ -84,3 +84,18 @@ export async function insertQueuedRun(
   `);
   return result.rows[0]!.id;
 }
+
+/**
+ * Abandons a run that is still `queued` (its job could not be sent) and says whether it did. `false` means
+ * the run is no longer queued: a worker has already claimed it, so there is nothing to abandon and the
+ * caller must treat the run as started, not failed. One statement with RETURNING, so the answer is exact
+ * even against a worker claiming at the same moment.
+ */
+export async function abandonIfQueued(tx: TenantTx, runId: string): Promise<boolean> {
+  const gone = await tx
+    .update(integrationSyncRuns)
+    .set({ status: "abandoned", finishedAt: sql`now()` })
+    .where(and(eq(integrationSyncRuns.id, runId), eq(integrationSyncRuns.status, "queued")))
+    .returning({ id: integrationSyncRuns.id });
+  return gone.length > 0;
+}

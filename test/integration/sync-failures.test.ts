@@ -7,13 +7,16 @@ import { CONNECTION_ERROR_REASONS } from "@/domain/integrations/sync-codes";
 import { executeSyncRun, type SyncRunResult } from "@/domain/integrations/sync";
 import { insertQueuedRun } from "@/domain/integrations/sync-runs";
 import { withTenant } from "@/db/tenant";
+import { revokeConnection } from "@/domain/integrations/connections";
 import type { TransportResponse } from "@/integrations/fhir/transport";
 import {
   activeSandbox,
+  adminActor,
   auditRows,
   connectionRow,
   harness,
   runRow,
+  stampOf,
   type Ctx,
   type Harness,
 } from "../support/sandbox-sync";
@@ -93,6 +96,7 @@ describe("three consecutive failed runs move the connection to error", () => {
         reason_code: "repeated_failures",
         previous_status: "active",
         failed_runs: 3,
+        last_failure_code: "unreachable",
       }),
     });
     // Nothing but codes, IDs and counts: no URL, no message.
@@ -209,5 +213,27 @@ describe("three consecutive failed runs move the connection to error", () => {
           ),
         ),
     ).toEqual([]);
+  });
+
+  it("another connection's failures in the SAME practice are not counted either (only one connection can be live, so the earlier one is revoked first)", async () => {
+    const h = harness();
+    const earlier = await activeSandbox(ctx, h);
+    failing(h);
+    await run(ctx, earlier, h);
+    await run(ctx, earlier, h);
+    expect((await connectionRow(earlier)).status).toBe("active");
+    await withTenant(ctx, async (tx) =>
+      revokeConnection(tx, adminActor(ctx), earlier, await stampOf(ctx, earlier), "no_longer_used"),
+    );
+
+    const later = await activeSandbox(ctx, h);
+    // If the practice's failures were counted together, the first failure here would be the third.
+    await run(ctx, later, h);
+    await run(ctx, later, h);
+    expect((await connectionRow(later)).status).toBe("active");
+    expect(await erroredEvents(ctx.tenantId)).toEqual([]);
+    await run(ctx, later, h);
+    expect(await connectionRow(later)).toMatchObject({ status: "error", statusReason: "repeated_failures" });
+    expect((await erroredEvents(ctx.tenantId)).map((event) => event.entityId)).toEqual([later]);
   });
 });

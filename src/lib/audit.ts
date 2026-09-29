@@ -129,6 +129,7 @@ export type AuditAction =
   | "integration.connection_errored"
   | "integration.sync_queued"
   | "integration.sync_started"
+  | "integration.sync_abandoned"
   | "integration.sync_completed"
   | "integration.sync_failed"
   | "patient.synced_created"

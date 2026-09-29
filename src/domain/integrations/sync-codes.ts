@@ -199,6 +199,6 @@ export const isConnectionErrorReason = (value: unknown): value is ConnectionErro
 
 /**
  * PI3: this many failed runs in a row (no success between them, since the connection last changed
- * state) move an active connection to `error`. A product rule (OA-056), not a legal value.
+ * state) move an active connection to `error`. A product rule from the spec's PI3 item ("Three consecutive failed runs -> error"), not a legal value; OA-056 is only the 15-minute interval.
  */
 export const CONSECUTIVE_FAILED_RUNS_LIMIT = 3;

@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SyncRunNotQueuedError, type SyncDeps, type SyncRunResult } from "@/domain/integrations/sync";
-import { JOB_SIGNATURE_HEADER, JOB_TIMESTAMP_HEADER, jobBodyFor, signJob } from "./signature";
-import { handleSyncJob, type JobWorkerDeps } from "./worker";
+import {
+  JOB_SIGNATURE_HEADER,
+  JOB_TIMESTAMP_HEADER,
+  jobBodyFor,
+  MAX_JOB_BODY_BYTES,
+  signJob,
+} from "./signature";
+import { handleSyncJob, readJobBody, type JobWorkerDeps } from "./worker";
 
 // docs/specs/patient-integrations.md PI2b "Jobs": the worker refuses an unsigned call, a stale timestamp, a
 // bad signature, a forged run ID, and an already-claimed run ID; the run only executes after all of that.
@@ -174,5 +180,83 @@ describe("the job worker runs", () => {
     expect(output).toContain('"errorName":"Error"');
     expect(output).not.toContain("Jane");
     expect(output).not.toContain("SYN-123");
+  });
+});
+
+describe("the body cap is enforced while reading (security review L1)", () => {
+  const streamOf = (chunks: string[], pulled?: { count: number }) => {
+    const encoder = new TextEncoder();
+    let index = 0;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (index >= chunks.length) return controller.close();
+        if (pulled) pulled.count += 1;
+        controller.enqueue(encoder.encode(chunks[index]!));
+        index += 1;
+      },
+    });
+  };
+
+  it("reads a valid job from a byte stream in several chunks", async () => {
+    const body = jobBodyFor(runId);
+    const { worker, claim } = deps();
+    const response = await handleSyncJob(
+      { body: streamOf([body.slice(0, 10), body.slice(10)]), headers: headersOf(signJob(secret, body, now)) },
+      worker,
+    );
+    expect(response).toEqual({ status: 200, code: "done", runStatus: "succeeded" });
+    expect(claim).toHaveBeenCalledWith(runId);
+  });
+
+  it("stops reading at the first byte over MAX_JOB_BODY_BYTES: 413, nothing claimed, and the rest of an endless stream is never pulled", async () => {
+    captureLog();
+    const pulled = { count: 0 };
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled.count += 1;
+        controller.enqueue(new Uint8Array(512).fill(97));
+      },
+    });
+    const { worker, claim, execute } = deps();
+    const response = await handleSyncJob({ body: endless, headers: headersOf({}) }, worker);
+    expect(response).toEqual({ status: 413, code: "too_large" });
+    // 1,024 bytes are allowed, so the third 512-byte chunk is the first over: reading stops there.
+    expect(pulled.count).toBeLessThanOrEqual(4);
+    expect(claim).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("allows exactly MAX_JOB_BODY_BYTES bytes and refuses one more, in a stream and in a string", async () => {
+    captureLog();
+    const { worker } = deps();
+    expect(await readJobBody(streamOf(["a".repeat(MAX_JOB_BODY_BYTES)]))).toHaveLength(MAX_JOB_BODY_BYTES);
+    expect(await readJobBody(streamOf(["a".repeat(MAX_JOB_BODY_BYTES), "a"]))).toBeNull();
+    expect(await readJobBody("a".repeat(MAX_JOB_BODY_BYTES))).toHaveLength(MAX_JOB_BODY_BYTES);
+    expect(await readJobBody("a".repeat(MAX_JOB_BODY_BYTES + 1))).toBeNull();
+    // Counted in bytes, not characters: 513 two-byte characters are over.
+    expect(await readJobBody("é".repeat(513))).toBeNull();
+    // A missing body is empty, which then fails as unsigned/bad payload, not as an error.
+    expect(await readJobBody(null)).toBe("");
+    expect(await handleSyncJob({ body: null, headers: headersOf({}) }, worker)).toEqual({
+      status: 401,
+      code: "unauthorized",
+    });
+  });
+});
+
+describe("an unexpected failure in the claim is a 500 with a class name only (review O4)", () => {
+  it("does not escape as an exception", async () => {
+    const lines = captureLog();
+    const { worker, execute } = deps({
+      claim: vi.fn(async () => {
+        throw new Error("connection to 203.0.113.9 refused for Jane Synthetic");
+      }),
+    });
+    expect(await handleSyncJob(signed(), worker)).toEqual({ status: 500, code: "internal_error" });
+    expect(execute).not.toHaveBeenCalled();
+    const output = lines.join("");
+    expect(output).toContain('"event":"integration.job_failed"');
+    expect(output).not.toContain("203.0.113.9");
+    expect(output).not.toContain("Jane");
   });
 });

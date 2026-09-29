@@ -1,4 +1,11 @@
-import { enqueueDueRuns } from "@/domain/integrations/job-runs";
+import { randomInt } from "node:crypto";
+import {
+  abandonUnsentRun,
+  auditLeaseAbandonedRun,
+  enqueueDueRuns,
+  type EnqueuedRun,
+} from "@/domain/integrations/job-runs";
+import { SCHEDULED_SANDBOX_ONLY } from "@/domain/integrations/sync";
 import { log } from "@/lib/log";
 import type { JobSender } from "./dispatch";
 import { jobSecret, JobSecretError } from "./signature";
@@ -6,27 +13,71 @@ import { jobSecret, JobSecretError } from "./signature";
 // The scheduled sync (docs/specs/patient-integrations.md "PI3", OA-056; ADR 0012). Platform-neutral: the
 // Netlify Scheduled Function every 15 minutes, or an Azure timer later, calls `runScheduledSync`. It asks the
 // database to queue a run for every due active connection (`integration_enqueue_due_runs`, which returns
-// run IDs and nothing else) and posts one signed job per run ID. It never opens a practice's data and
-// never executes a run itself: a scheduled function has about 30 seconds, a sync up to 12 minutes.
+// run IDs and what it did) and posts one signed job per queued run. It never opens a practice's data beyond
+// the audit rows below and never executes a run itself: a scheduled function has about 30 seconds, a sync up
+// to 12 minutes.
+//
+// What it audits (`integration.sync_abandoned`, as the integration service principal): a run the database gave up
+// on for going quiet past the lease (`lease_expired`), a run whose job could not be posted (`job_not_sent`),
+// and, if the tick runs out of time, the runs it did not get to (`deadline`).
+//
+// Time: the run IDs are shuffled (so the same practices are not always the ones left over on a slow tick) and
+// jobs go out `concurrency` at a time. When `deadlineMs` has passed the remaining runs are **abandoned and
+// audited** rather than left queued: a queued run nobody will send would block its connection until the
+// 20-minute lease ends, whereas an abandoned one that never started is not counted as recent, so the next tick
+// (15 minutes on) queues that connection again.
 
 export interface ScheduledSyncDeps {
   /** Defaults to `jobSecret()`; checked before anything is queued. */
   secret?: () => Buffer;
   /** Builds the sender for this tick (URL and secret); `null` when no worker URL is configured. */
   sender: (secret: Buffer) => JobSender | null;
-  enqueue?: () => Promise<string[]>;
-  /** How many jobs are in flight at once. */
+  /** Defaults to the database function, sandbox connections only until PI4 (`SCHEDULED_SANDBOX_ONLY`). */
+  enqueue?: () => Promise<EnqueuedRun[]>;
+  auditLeaseAbandoned?: (tenantId: string, runId: string) => Promise<void>;
+  abandonUnsent?: (tenantId: string, runId: string, reason: "job_not_sent" | "deadline") => Promise<boolean>;
+  /** How many jobs are in flight at once (at most; default 8). */
   concurrency?: number;
+  /** Stop sending this long after the tick started (default 25 s of the ~30 s a scheduled function has). */
+  deadlineMs?: number;
+  now?: () => number;
+  /** Test hook: the default is a uniform (Fisher-Yates) shuffle. */
+  shuffle?: <T>(items: T[]) => T[];
 }
 
 export interface ScheduledSyncResult {
   status: "ok" | "refused";
+  /** New scheduled runs queued this tick. */
   queued: number;
   sent: number;
+  /** Jobs that could not be posted (their runs were abandoned, so the next tick queues them again). */
   failed: number;
+  /** Runs the database gave up on for going quiet past the lease. */
+  abandoned: number;
+  /** Queued runs not sent before the deadline (abandoned). */
+  unsent: number;
 }
 
-const DEFAULT_CONCURRENCY = 8;
+export const DEFAULT_CONCURRENCY = 8;
+export const DEFAULT_DEADLINE_MS = 25_000;
+
+const refused = (): ScheduledSyncResult => ({
+  status: "refused",
+  queued: 0,
+  sent: 0,
+  failed: 0,
+  abandoned: 0,
+  unsent: 0,
+});
+
+function shuffled<T>(items: T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = randomInt(i + 1);
+    [copy[i], copy[j]] = [copy[j]!, copy[i]!];
+  }
+  return copy;
+}
 
 export async function runScheduledSync(deps: ScheduledSyncDeps): Promise<ScheduledSyncResult> {
   let secret: Buffer;
@@ -37,27 +88,64 @@ export async function runScheduledSync(deps: ScheduledSyncDeps): Promise<Schedul
     // Nothing is queued when nothing could be sent: a queued run nobody runs only blocks the connection
     // until its lease ends.
     log.error("integration.schedule_refused", { status: error.code });
-    return { status: "refused", queued: 0, sent: 0, failed: 0 };
+    return refused();
   }
   const send = deps.sender(secret);
   if (!send) {
     log.error("integration.schedule_refused", { status: "no_worker_url" });
-    return { status: "refused", queued: 0, sent: 0, failed: 0 };
+    return refused();
   }
 
-  const runIds = await (deps.enqueue ?? enqueueDueRuns)();
+  const now = deps.now ?? Date.now;
+  const startedAt = now();
+  const deadline = deps.deadlineMs ?? DEFAULT_DEADLINE_MS;
+  const width = Math.max(1, deps.concurrency ?? DEFAULT_CONCURRENCY);
+  const auditLease = deps.auditLeaseAbandoned ?? auditLeaseAbandonedRun;
+  const abandonUnsentRun_ = deps.abandonUnsent ?? abandonUnsentRun;
+
+  const touched = await (deps.enqueue ?? (() => enqueueDueRuns(SCHEDULED_SANDBOX_ONLY)))();
+  const gone = touched.filter((row) => row.outcome === "abandoned");
+  const queued = (deps.shuffle ?? shuffled)(touched.filter((row) => row.outcome === "queued"));
+
+  // A failure to write one audit row or abandon one run must not stop the tick (the run is retried by the lease).
+  const guarded = async <T>(work: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      return await work();
+    } catch {
+      log.error("integration.schedule_audit_failed", { status: "write" });
+      return undefined;
+    }
+  };
+
+  for (const row of gone) await guarded(() => auditLease(row.tenantId, row.runId));
+
   let sent = 0;
   let failed = 0;
-  const width = Math.max(1, deps.concurrency ?? DEFAULT_CONCURRENCY);
-  for (let start = 0; start < runIds.length; start += width) {
-    const outcomes = await Promise.all(runIds.slice(start, start + width).map((runId) => send(runId)));
+  let unsent = 0;
+  for (let start = 0; start < queued.length; start += width) {
+    const batch = queued.slice(start, start + width);
+    if (now() - startedAt >= deadline) {
+      for (const row of queued.slice(start))
+        await guarded(() => abandonUnsentRun_(row.tenantId, row.runId, "deadline"));
+      unsent = queued.length - start;
+      break;
+    }
+    const outcomes = await Promise.all(
+      batch.map(async (row) => {
+        const ok = await send(row.runId);
+        // A job that could not be posted frees its connection at once (nobody will ever claim that run).
+        if (!ok) await guarded(() => abandonUnsentRun_(row.tenantId, row.runId, "job_not_sent"));
+        return ok;
+      }),
+    );
     for (const ok of outcomes) {
       if (ok) sent += 1;
       else failed += 1;
     }
   }
-  // A run whose job was lost stays `queued` until the 20-minute lease ends; the next tick after that
-  // abandons it and queues a fresh one (drizzle/0044).
-  log.info("integration.schedule_ran", { count: runIds.length, status: failed === 0 ? "ok" : "partial" });
-  return { status: "ok", queued: runIds.length, sent, failed };
+  log.info("integration.schedule_ran", {
+    count: queued.length,
+    status: failed === 0 && unsent === 0 ? "ok" : "partial",
+  });
+  return { status: "ok", queued: queued.length, sent, failed, abandoned: gone.length, unsent };
 }

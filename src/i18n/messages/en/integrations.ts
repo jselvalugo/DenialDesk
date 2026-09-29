@@ -83,6 +83,8 @@ export const integrations = {
     "Sync is paused. Resuming restarts it, and needs you to verify your identity with your authenticator app first.",
   "lifecycle.error":
     "DenialDesk stopped syncing after an error. Once your EHR/PM administrator has fixed it, run Test connection and get a pass, then resume. Resuming also needs you to verify your identity with your authenticator app first.",
+  "detail.repeatedFailuresNotice":
+    "The last three syncs in a row failed, so DenialDesk stopped syncing this connection. Open Sync history to see why, fix the cause, run Test connection and get a pass, then resume.",
   "lifecycle.pending_approval":
     "This connection is waiting for approval. Withdrawing it returns it to a draft you can edit and submit again.",
   "pause.submit": "Pause sync",
@@ -214,7 +216,7 @@ export const integrations = {
     "DenialDesk did not approve this connection. DenialDesk will contact you about why. Once it is resolved, run Test connection and submit it again.",
   "sync.title": "Sync now",
   "sync.description":
-    "Pulls the latest patient changes from the connected EHR/PM now, and again automatically every 15 minutes. The result appears here or, when the sync runs in the background, in the sync history. Patients are read-only copies: fix demographics in the EHR/PM.",
+    "Pulls the latest patient changes from the connected EHR/PM now. When background sync is set up for this environment it also runs by itself on a schedule (about every 15 minutes). The result appears here or, when the sync runs in the background, in the sync history. Patients are read-only copies: fix demographics in the EHR/PM.",
   "sync.submit": "Sync now",
   "sync.pending": "Syncing…",
   "sync.resultOk": "Sync finished",

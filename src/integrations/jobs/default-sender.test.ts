@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { netlifyWorkerUrl, NETLIFY_WORKER_PATH } from "@/platform/netlify/jobs";
-import { scheduledSender, syncNowSender } from "./default-sender";
+import { jobsConfigProblem, logJobsConfigAtBoot, scheduledSender, syncNowJobs } from "./default-sender";
 
-// Which way Sync now sends a job in an environment (ADR 0012): in the request when no secret is set (local
-// development, tests), to the worker when one is, and refused when it is set but weak. Synthetic values only.
+// Which way Sync now sends a job in an environment (ADR 0012): in the request when jobs aren't set up and only
+// synthetic data is allowed (local development, tests), to the worker when they are, and refused when the secret
+// is set but weak or, where real data is allowed, when anything is missing. Synthetic values only.
 
 const secret = "synthetic".repeat(5);
 const netlify = {
@@ -11,6 +12,8 @@ const netlify = {
   DEPLOY_URL: "https://deploy-1--denialdesk.netlify.app",
   URL: "https://denialdesk.netlify.app",
 };
+const synthetic = () => true;
+const realDataAllowed = () => false;
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -36,25 +39,79 @@ describe("the worker URL on Netlify", () => {
   });
 });
 
-describe("syncNowSender", () => {
-  it("is none without a secret: Sync now runs in the request (local development, tests)", () => {
-    expect(syncNowSender({})).toBeNull();
-    expect(syncNowSender({ ...netlify })).toBeNull();
+describe("jobsConfigProblem", () => {
+  it("names what is wrong, never a value", () => {
+    expect(jobsConfigProblem({})).toBe("missing_secret");
+    expect(jobsConfigProblem({ INTEGRATION_JOB_SECRET: "short" })).toBe("weak_secret");
+    expect(jobsConfigProblem({ INTEGRATION_JOB_SECRET: secret })).toBe("no_worker_url");
+    expect(jobsConfigProblem({ ...netlify, INTEGRATION_JOB_SECRET: secret })).toBeNull();
+  });
+});
+
+describe("syncNowJobs where only synthetic data is allowed (tests, local development, pre-production)", () => {
+  it("runs in the request (undefined) without a secret, or with a secret but no worker URL", () => {
+    expect(syncNowJobs({}, synthetic)).toBeUndefined();
+    expect(syncNowJobs({ ...netlify }, synthetic)).toBeUndefined();
+    expect(syncNowJobs({ INTEGRATION_JOB_SECRET: secret }, synthetic)).toBeUndefined();
   });
 
-  it("is none with a secret but no worker URL (a developer's machine)", () => {
-    expect(syncNowSender({ INTEGRATION_JOB_SECRET: secret })).toBeNull();
+  it("sends a job when the secret and a worker URL are set", () => {
+    expect(syncNowJobs({ ...netlify, INTEGRATION_JOB_SECRET: secret }, synthetic)).toMatchObject({
+      kind: "send",
+    });
   });
 
-  it("is a sender with a secret and a worker URL", () => {
-    expect(typeof syncNowSender({ ...netlify, INTEGRATION_JOB_SECRET: secret })).toBe("function");
-  });
-
-  it("with a secret that is too short is a sender that sends nothing: never quietly in the request", async () => {
+  it("refuses, never quietly running in the request, when the secret is set but too short", () => {
     vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    const send = syncNowSender({ ...netlify, INTEGRATION_JOB_SECRET: "short" });
-    expect(send).not.toBeNull();
-    expect(await send!("3f2b8a7e-9c1d-4e5f-8a6b-7c8d9e0f1a2b")).toBe(false);
+    expect(syncNowJobs({ ...netlify, INTEGRATION_JOB_SECRET: "short" }, synthetic)).toEqual({
+      kind: "refused",
+    });
+  });
+});
+
+describe("syncNowJobs where real data is allowed (security review L4)", () => {
+  it("refuses instead of running in the request whenever jobs are not fully configured", () => {
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    expect(syncNowJobs({}, realDataAllowed)).toEqual({ kind: "refused" });
+    expect(syncNowJobs({ INTEGRATION_JOB_SECRET: secret }, realDataAllowed)).toEqual({ kind: "refused" });
+    expect(syncNowJobs({ ...netlify, INTEGRATION_JOB_SECRET: "short" }, realDataAllowed)).toEqual({
+      kind: "refused",
+    });
+  });
+
+  it("sends a job when fully configured", () => {
+    expect(syncNowJobs({ ...netlify, INTEGRATION_JOB_SECRET: secret }, realDataAllowed)).toMatchObject({
+      kind: "send",
+    });
+  });
+});
+
+describe("logJobsConfigAtBoot", () => {
+  function lines() {
+    const out: string[] = [];
+    vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+      out.push(String(chunk));
+      return true;
+    });
+    return out;
+  }
+
+  it("logs a code once where real data is allowed and jobs are not configured, and for a weak secret anywhere", () => {
+    const out = lines();
+    logJobsConfigAtBoot({}, realDataAllowed);
+    logJobsConfigAtBoot({ INTEGRATION_JOB_SECRET: "short" }, synthetic);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toContain('"event":"integrations.jobs_not_configured"');
+    expect(out[0]).toContain('"status":"missing_secret"');
+    expect(out[1]).toContain('"status":"weak_secret"');
+    expect(out.join("")).not.toContain("short");
+  });
+
+  it("is quiet for a synthetic-only environment that simply isn't set up, and for a complete setup", () => {
+    const out = lines();
+    logJobsConfigAtBoot({}, synthetic);
+    logJobsConfigAtBoot({ ...netlify, INTEGRATION_JOB_SECRET: secret }, realDataAllowed);
+    expect(out).toEqual([]);
   });
 });
 

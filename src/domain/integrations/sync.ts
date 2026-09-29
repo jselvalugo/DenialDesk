@@ -48,7 +48,13 @@ import {
   type ConnectionErrorReason,
   type SyncStoredCode,
 } from "./sync-codes";
-import { abandonStaleRuns, hasActiveRun, insertQueuedRun, isRunAlreadyActive } from "./sync-runs";
+import {
+  abandonIfQueued,
+  abandonStaleRuns,
+  hasActiveRun,
+  insertQueuedRun,
+  isRunAlreadyActive,
+} from "./sync-runs";
 import {
   commitPage,
   findRederiveCandidates,
@@ -90,12 +96,15 @@ export interface SyncDeps {
   encrypt?: (plaintext: string) => string;
   decrypt?: (ciphertext: string) => string;
   /**
-   * Hands a queued run to the background worker as a signed job (`src/integrations/jobs`); resolves
-   * `false` when it could not be sent. Absent: `requestSync` runs the run in the request (tests, local
-   * development, an environment without `INTEGRATION_JOB_SECRET`).
+   * How `requestSync` runs a press (`src/integrations/jobs/default-sender.ts` decides): `send` hands the queued
+   * run to the background worker as a signed job (resolves `false` when it could not be sent); `refused` refuses
+   * the press before anything is queued. Absent: the run executes in the request (tests, local development, a
+   * synthetic-only environment without `INTEGRATION_JOB_SECRET`).
    */
-  enqueueJob?: (runId: string) => Promise<boolean>;
+  jobs?: JobDispatch;
 }
+
+export type JobDispatch = { kind: "send"; send: (runId: string) => Promise<boolean> } | { kind: "refused" };
 
 export interface SyncCounts {
   created: number;
@@ -177,7 +186,7 @@ export interface RunOrigin {
   sessionId: string | null;
 }
 
-function systemAudit(
+export function systemAudit(
   tenantId: string,
   action: AuditEvent["action"],
   entityId: string,
@@ -395,7 +404,12 @@ async function finishFailed(
           run_id: input.runId,
           reason_code: errorReason,
           previous_status: "active",
-          ...(errorReason === "repeated_failures" ? { failed_runs: CONSECUTIVE_FAILED_RUNS_LIMIT } : {}),
+          ...(errorReason === "repeated_failures"
+            ? {
+                failed_runs: CONSECUTIVE_FAILED_RUNS_LIMIT,
+                last_failure_code: normalizeRunCodes([failure.code])[0] ?? "other",
+              }
+            : {}),
         }),
       );
     }
@@ -457,6 +471,15 @@ function assertRunEnvironment(connection: Started["connection"], synthetic: bool
   if (synthetic) throw new SyncFailure("environment_refused");
   throw new SyncFailure("population_scope_unenforced");
 }
+
+/**
+ * The scheduler queues runs for the built-in sandbox connections only (`integration_enqueue_due_runs(true)`).
+ * Beside `assertRunEnvironment` on purpose: it is the same fail-closed rule seen from the scheduler, and it
+ * lifts with it. Until PI4 can apply a real connection's population scope the engine refuses every real run,
+ * so queueing one each tick would only walk the connection into `error` with a misleading `repeated_failures`.
+ * PI4 sets this to `false` in the same change that removes the `population_scope_unenforced` refusal.
+ */
+export const SCHEDULED_SANDBOX_ONLY = true;
 
 type CommitResult = { stopped: true } | { stopped: false };
 
@@ -840,6 +863,7 @@ async function queueSyncRun(
   connectionId: string,
   deps: SyncDeps,
   t: IntegrationsT,
+  options: { auditQueued: boolean } = { auditQueued: false },
 ): Promise<{ runId: string; origin: RunOrigin }> {
   if (!canManageIntegrations(actor.role)) refuse(t, "error.notAdmin");
   const connection = await run(async (tx) => {
@@ -882,6 +906,12 @@ async function queueSyncRun(
     refuse(t, "sync.error.populationScopeUnenforced");
   }
 
+  const context = await requestContext();
+  const origin: RunOrigin = {
+    ip: context.ip,
+    userAgent: context.userAgent,
+    sessionId: actor.sessionId ?? null,
+  };
   let runId: string;
   try {
     runId = await run(async (tx) => {
@@ -894,22 +924,34 @@ async function queueSyncRun(
       if (locked?.status !== "active") refuse(t, "sync.error.notActive");
       await abandonStaleRuns(tx, actor.tenantId, connectionId);
       if (await hasActiveRun(tx, actor.tenantId, connectionId)) refuse(t, "sync.error.alreadyRunning");
-      return insertQueuedRun(tx, {
+      const queued = await insertQueuedRun(tx, {
         tenantId: actor.tenantId,
         connectionId,
         trigger: "manual",
         triggeredBy: actor.userId,
       });
+      // In the same transaction as the run row (review O2): a queued run handed to the worker always has
+      // its "who pressed it, from where" record, and one can't exist without the other.
+      if (options.auditQueued) {
+        await audit(tx, {
+          action: "integration.sync_queued",
+          actorUserId: actor.userId,
+          tenantId: actor.tenantId,
+          entityType: "integration_connection",
+          entityId: connectionId,
+          reason: "sync_now",
+          ipAddress: origin.ip,
+          userAgent: origin.userAgent,
+          metadata: { run_id: queued, session_id: origin.sessionId },
+        });
+      }
+      return queued;
     });
   } catch (error) {
     if (isRunAlreadyActive(error)) refuse(t, "sync.error.alreadyRunning");
     throw error;
   }
-  const context = await requestContext();
-  return {
-    runId,
-    origin: { ip: context.ip, userAgent: context.userAgent, sessionId: actor.sessionId ?? null },
-  };
+  return { runId, origin };
 }
 
 /**
@@ -929,13 +971,19 @@ export async function syncNow(
 }
 
 /**
- * Sync now as the product runs it: with `deps.enqueueJob` (Netlify and Azure, where `INTEGRATION_JOB_SECRET`
- * is set) the queued run is handed to the background worker as a signed `{ runId }` job and this returns
- * at once with `queued`; without it the run executes in this request exactly as `syncNow` does (ADR 0012).
- * The press is audited as `integration.sync_queued` with the administrator's network origin, because the
- * job carries only the run ID and the worker's `integration.sync_started` therefore cannot say who pressed
- * the button. If the worker can't be reached the run is abandoned at once (so the administrator can press
- * again) and the press is refused, not left queued.
+ * Sync now as the product runs it (ADR 0012). With `deps.jobs` of kind `send` (Netlify and Azure, where
+ * `INTEGRATION_JOB_SECRET` and a worker URL are set) the queued run is handed to the background worker as a
+ * signed `{ runId }` job and this returns at once with `queued`. With `deps.jobs` absent the run executes in
+ * this request exactly as `syncNow` does (tests, local development, synthetic pre-production not yet set up).
+ * With kind `refused` (the secret is too short, or, where real data is allowed, jobs are not fully configured)
+ * the press is refused **before anything is queued**: no run row, no rate-limit use.
+ *
+ * The press is audited as `integration.sync_queued`, in the same transaction as the run row, with the
+ * administrator's network origin: the job carries only the run ID, so the worker's `integration.sync_started`
+ * cannot say who pressed the button. If the worker can't be reached the run is abandoned at once (so the
+ * administrator can press again) and audited `job_not_sent`, and the press is refused, unless the worker
+ * already claimed the run (a post that timed out after the worker started): then nothing is abandoned and the
+ * press counts as queued.
  */
 export async function requestSync(
   run: TxRunner,
@@ -944,46 +992,40 @@ export async function requestSync(
   deps: SyncDeps,
   t: IntegrationsT = englishT,
 ): Promise<SyncRunResult | SyncQueuedResult> {
-  const { runId, origin } = await queueSyncRun(run, actor, connectionId, deps, t);
-  if (!deps.enqueueJob) return executeSyncRun({ tenantId: actor.tenantId, runId, origin }, deps);
+  if (!canManageIntegrations(actor.role)) refuse(t, "error.notAdmin");
+  if (deps.jobs?.kind === "refused") refuse(t, "sync.error.notQueued");
+  const send = deps.jobs?.kind === "send" ? deps.jobs.send : null;
+  const { runId, origin } = await queueSyncRun(run, actor, connectionId, deps, t, {
+    auditQueued: send !== null,
+  });
+  if (!send) return executeSyncRun({ tenantId: actor.tenantId, runId, origin }, deps);
 
   let sent = false;
   try {
-    sent = await deps.enqueueJob(runId);
+    sent = await send(runId);
   } catch {
-    // The dispatcher reports its own failure as a code in the log; nothing it threw is kept.
+    // The sender reports its own failure as a code in the log; nothing it threw is kept.
   }
   if (!sent) {
-    await run(async (tx) => {
-      await tx
-        .update(integrationSyncRuns)
-        .set({ status: "abandoned", finishedAt: sql`now()` })
-        .where(and(eq(integrationSyncRuns.id, runId), eq(integrationSyncRuns.status, "queued")));
-      await audit(tx, {
-        action: "integration.sync_failed",
-        actorUserId: actor.userId,
-        tenantId: actor.tenantId,
-        entityType: "integration_connection",
-        entityId: connectionId,
-        reason: "sync_now",
-        metadata: { code: "job_not_sent", run_id: runId, session_id: actor.sessionId ?? null },
-      });
+    const abandoned = await run(async (tx) => {
+      const gone = await abandonIfQueued(tx, runId);
+      if (gone) {
+        await audit(tx, {
+          action: "integration.sync_failed",
+          actorUserId: actor.userId,
+          tenantId: actor.tenantId,
+          entityType: "integration_connection",
+          entityId: connectionId,
+          reason: "sync_now",
+          ipAddress: origin.ip,
+          userAgent: origin.userAgent,
+          metadata: { code: "job_not_sent", run_id: runId, session_id: origin.sessionId },
+        });
+      }
+      return gone;
     });
-    refuse(t, "sync.error.notQueued");
+    if (abandoned) refuse(t, "sync.error.notQueued");
   }
-  await run((tx) =>
-    audit(tx, {
-      action: "integration.sync_queued",
-      actorUserId: actor.userId,
-      tenantId: actor.tenantId,
-      entityType: "integration_connection",
-      entityId: connectionId,
-      reason: "sync_now",
-      ipAddress: origin.ip,
-      userAgent: origin.userAgent,
-      metadata: { run_id: runId, session_id: origin.sessionId },
-    }),
-  );
   return { runId, status: "queued" };
 }
 

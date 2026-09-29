@@ -37,7 +37,7 @@ import {
   type SyncNowState,
   type TestConnectionState,
 } from "./form-state";
-import { syncNowSender } from "@/integrations/jobs/default-sender";
+import { syncNowJobs } from "@/integrations/jobs/default-sender";
 import { connectionTestDeps } from "./test-deps";
 
 // Settings › Integrations (docs/specs/patient-integrations.md PI1b-2). Every action re-checks the
@@ -164,7 +164,7 @@ export async function syncNowAction(_: SyncNowState, formData: FormData): Promis
       (fn) => withTenant(auth, fn),
       actor,
       id.data,
-      { ...connectionTestDeps(), enqueueJob: syncNowSender() ?? undefined },
+      { ...connectionTestDeps(), jobs: syncNowJobs() },
       t,
     );
     // The page and the tab-bar drop-down show the last sync time and the state.

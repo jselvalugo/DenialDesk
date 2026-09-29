@@ -7,21 +7,29 @@ import { withJobsRole, withTenant, type TenantTx } from "@/db/tenant";
 import { claimQueuedRun, enqueueDueRuns } from "@/domain/integrations/job-runs";
 import { RUN_LEASE_MS } from "@/domain/integrations/sync-runs";
 import { INTEGRATION_SERVICE_PRINCIPAL_ID } from "@/domain/integrations/principal";
-import { activeSandbox, harness, queueRun, runRow, type Ctx, type Harness } from "../support/sandbox-sync";
+import {
+  activeRealConnection,
+  activeSandbox,
+  harness,
+  queueRun,
+  runRow,
+  type Ctx,
+  type Harness,
+} from "../support/sandbox-sync";
 import { createTestTenant, expectDbError } from "./helpers";
 
-// docs/specs/patient-integrations.md PI2b "Jobs" and PI3 (drizzle/0044): the `denialdesk_jobs` role, the two
+// docs/specs/patient-integrations.md PI2b "Jobs" and PI3 (drizzle/0044 and 0045): the `denialdesk_jobs` role, the two
 // SECURITY DEFINER functions, who can call them, what they return, what they change. CI runs Postgres as a
 // superuser, so every grant is proved by SET ROLE to the role in question, and the functions' behavior under
 // row-level security for an owner that does NOT bypass it is proved with a probe owner (see "walk the tenants").
 
-const migration = readFileSync(
-  new URL("../../drizzle/0044_patient_integrations_jobs.sql", import.meta.url),
-  "utf8",
-);
-const statements = migration.split("--> statement-breakpoint");
-const statementWith = (fragment: string) => {
-  const found = statements.filter((statement) => statement.includes(fragment));
+const statementsOf = (file: string) =>
+  readFileSync(new URL(`../../drizzle/${file}`, import.meta.url), "utf8").split("--> statement-breakpoint");
+/** 0044: the role, the claim function, the first service-principal check. 0045: the scheduler function and its wider check. */
+const statements44 = statementsOf("0044_patient_integrations_jobs.sql");
+const statements45 = statementsOf("0045_patient_integrations_jobs_review.sql");
+const statementWith = (fragment: string, from = statements44) => {
+  const found = from.filter((statement) => statement.includes(fragment));
   if (found.length !== 1) throw new Error(`expected one statement with "${fragment}", found ${found.length}`);
   return found[0]!;
 };
@@ -118,10 +126,10 @@ describe("the denialdesk_jobs role and who may call the job functions", () => {
       select f as fn,
              has_function_privilege('denialdesk_jobs', f, 'execute') as jobs,
              has_function_privilege('denialdesk_app', f, 'execute') as app
-        from unnest(array['integration_claim_run(uuid)', 'integration_enqueue_due_runs()']) as f`);
+        from unnest(array['integration_claim_run(uuid)', 'integration_enqueue_due_runs(boolean)']) as f`);
     expect(rows).toEqual([
       { fn: "integration_claim_run(uuid)", jobs: true, app: false },
-      { fn: "integration_enqueue_due_runs()", jobs: true, app: false },
+      { fn: "integration_enqueue_due_runs(boolean)", jobs: true, app: false },
     ]);
   });
 
@@ -131,7 +139,7 @@ describe("the denialdesk_jobs role and who may call the job functions", () => {
       /permission denied/,
     );
     await expectDbError(
-      withTenant(ctx, (tx) => tx.execute(sql`select integration_enqueue_due_runs()`)),
+      withTenant(ctx, (tx) => tx.execute(sql`select * from integration_enqueue_due_runs(true)`)),
       /permission denied/,
     );
   });
@@ -163,7 +171,16 @@ describe("the denialdesk_jobs role and who may call the job functions", () => {
     );
   });
 
-  it("the functions expose no column beyond tenant and connection (claim) and run IDs (enqueue)", async () => {
+  it("the zero-argument scheduler function of 0044 is gone: one integration_enqueue_due_runs exists, and it takes the sandbox flag", async () => {
+    const { rows } = await systemDb().execute<{ args: string; old_signature: string | null }>(sql`
+      select pg_get_function_identity_arguments(oid) as args,
+             to_regprocedure('public.integration_enqueue_due_runs()')::text as old_signature
+        from pg_proc
+       where proname = 'integration_enqueue_due_runs' and pronamespace = 'public'::regnamespace`);
+    expect(rows).toEqual([{ args: "p_sandbox_only boolean", old_signature: null }]);
+  });
+
+  it("the functions expose no column beyond tenant and connection (claim) and tenant, run and outcome (enqueue)", async () => {
     const { rows } = await systemDb().execute<{ name: string; result: string; returns_set: boolean }>(sql`
       select proname as name, pg_get_function_result(oid) as result, proretset as returns_set
         from pg_proc
@@ -175,7 +192,11 @@ describe("the denialdesk_jobs role and who may call the job functions", () => {
         result: "TABLE(tenant_id uuid, connection_id uuid)",
         returns_set: true,
       },
-      { name: "integration_enqueue_due_runs", result: "SETOF uuid", returns_set: true },
+      {
+        name: "integration_enqueue_due_runs",
+        result: "TABLE(tenant_id uuid, run_id uuid, outcome text)",
+        returns_set: true,
+      },
     ]);
   });
 });
@@ -285,30 +306,33 @@ describe("integration_claim_run", () => {
   });
 });
 
-describe("integration_enqueue_due_runs", () => {
-  /** Calls the function as the jobs role inside the transaction and returns only this test's practice's new runs. */
-  async function enqueueFor(tx: TenantTx, tenantId: string) {
-    await asJobs(tx);
-    const called = await tx.execute<{ run_id: string }>(sql`select integration_enqueue_due_runs() as run_id`);
-    await asOwner(tx);
-    const ids = new Set(called.rows.map((row) => row.run_id));
-    return (await runsOf(tx, tenantId)).filter((row) => ids.has(row.id));
-  }
+describe("integration_enqueue_due_runs(p_sandbox_only)", () => {
+  type Row = { tenant_id: string; run_id: string; outcome: string };
 
-  it("queues one `scheduled` run for a due active connection, returns the run ID alone, and sets nothing else on it", async () => {
+  /** Calls the function as the jobs role inside the transaction; returns this practice's rows and, separately, its runs. */
+  async function enqueueFor(tx: TenantTx, tenantId: string, sandboxOnly = true) {
+    await asJobs(tx);
+    const called = await tx.execute<Row>(
+      sql`select tenant_id, run_id, outcome from integration_enqueue_due_runs(${sandboxOnly}::boolean)`,
+    );
+    await asOwner(tx);
+    return called.rows.filter((row) => row.tenant_id === tenantId);
+  }
+  const queued = (rows: Row[]) => rows.filter((row) => row.outcome === "queued");
+  const abandoned = (rows: Row[]) => rows.filter((row) => row.outcome === "abandoned");
+
+  it("queues one `scheduled` run for a due active connection, returns tenant, run and outcome only, and sets nothing else on it", async () => {
     const id = await activeSandbox(ctx, h);
     await inRolledBackTransaction(async (tx) => {
       await asJobs(tx);
-      const called = await tx.execute(sql`select integration_enqueue_due_runs()`);
-      // One column, named for the function, holding a UUID: no tenant, no connection, no status.
-      expect(called.fields.map((field) => field.name)).toEqual(["integration_enqueue_due_runs"]);
+      const called = await tx.execute<Row>(sql`select * from integration_enqueue_due_runs(true)`);
+      expect(called.fields.map((field) => field.name)).toEqual(["tenant_id", "run_id", "outcome"]);
       await asOwner(tx);
-      const mine = (await runsOf(tx, ctx.tenantId)).filter((row) =>
-        called.rows.some((row2) => Object.values(row2)[0] === row.id),
-      );
-      expect(mine).toEqual([
+      const mine = called.rows.filter((row) => row.tenant_id === ctx.tenantId);
+      expect(mine).toEqual([{ tenant_id: ctx.tenantId, run_id: expect.any(String), outcome: "queued" }]);
+      expect(await runsOf(tx, ctx.tenantId)).toEqual([
         {
-          id: expect.any(String),
+          id: mine[0]!.run_id,
           connection_id: id,
           status: "queued",
           trigger: "scheduled",
@@ -338,29 +362,45 @@ describe("integration_enqueue_due_runs", () => {
     });
   });
 
+  it("p_sandbox_only: true skips a real connection (which the engine would only refuse), false includes it", async () => {
+    const real = await createTestTenant("Jobs db real");
+    const realId = await activeRealConnection(real);
+    await activeSandbox(ctx, h);
+    await inRolledBackTransaction(async (tx) => {
+      await asJobs(tx);
+      const called = await tx.execute<Row>(sql`select * from integration_enqueue_due_runs(true)`);
+      await asOwner(tx);
+      expect(called.rows.filter((row) => row.tenant_id === real.tenantId)).toEqual([]);
+      expect(queued(called.rows.filter((row) => row.tenant_id === ctx.tenantId))).toHaveLength(1);
+      expect(await runsOf(tx, real.tenantId)).toEqual([]);
+    });
+    await inRolledBackTransaction(async (tx) => {
+      const rows = await enqueueFor(tx, real.tenantId, false);
+      expect(queued(rows)).toHaveLength(1);
+      expect((await runsOf(tx, real.tenantId))[0]).toMatchObject({
+        connection_id: realId,
+        trigger: "scheduled",
+      });
+    });
+  });
+
   it("every practice with a due connection gets its run (the function walks the tenants)", async () => {
     const other = await createTestTenant("Jobs db second");
     await activeSandbox(ctx, h);
     await activeSandbox(other, h);
     await inRolledBackTransaction(async (tx) => {
-      expect(await enqueueFor(tx, ctx.tenantId)).toHaveLength(1);
-    });
-    await inRolledBackTransaction(async (tx) => {
       await asJobs(tx);
-      const called = await tx.execute<{ run_id: string }>(
-        sql`select integration_enqueue_due_runs() as run_id`,
-      );
-      await asOwner(tx);
-      const ids = new Set(called.rows.map((row) => row.run_id));
-      const both = [...(await runsOf(tx, ctx.tenantId)), ...(await runsOf(tx, other.tenantId))];
-      expect(both.filter((row) => ids.has(row.id))).toHaveLength(2);
+      const called = await tx.execute<Row>(sql`select * from integration_enqueue_due_runs(true)`);
+      const tenants = called.rows.filter((row) => row.outcome === "queued").map((row) => row.tenant_id);
+      expect(tenants).toContain(ctx.tenantId);
+      expect(tenants).toContain(other.tenantId);
     });
   });
 
   it("is idempotent: a connection with a queued or running run is not queued again, and neither is one that ran a minute ago", async () => {
     const id = await activeSandbox(ctx, h);
     await inRolledBackTransaction(async (tx) => {
-      expect(await enqueueFor(tx, ctx.tenantId)).toHaveLength(1);
+      expect(queued(await enqueueFor(tx, ctx.tenantId))).toHaveLength(1);
       // Second tick, run still queued.
       expect(await enqueueFor(tx, ctx.tenantId)).toEqual([]);
       // The run is now running (fresh heartbeat): still not due.
@@ -389,26 +429,51 @@ describe("integration_enqueue_due_runs", () => {
       await tx.execute(
         sql`update integration_sync_runs set queued_at = now() - interval '15 minutes' where tenant_id = ${ctx.tenantId}::uuid`,
       );
-      expect(await enqueueFor(tx, ctx.tenantId)).toHaveLength(1);
+      expect(queued(await enqueueFor(tx, ctx.tenantId))).toHaveLength(1);
     });
   });
 
-  it(`abandons a run that went quiet for the ${RUN_LEASE_MS / 60_000}-minute lease and queues a fresh one; leaves a fresh one alone`, async () => {
+  it("a run abandoned before it ever started (a lost job, a deadline) doesn't count as recent: the next tick queues the connection again; one that ran and was abandoned does", async () => {
+    const id = await activeSandbox(ctx, h);
+    await inRolledBackTransaction(async (tx) => {
+      await withoutTriggers(tx);
+      await tx.execute(
+        sql`insert into integration_sync_runs (tenant_id, connection_id, trigger, status, queued_at, finished_at)
+            values (${ctx.tenantId}::uuid, ${id}::uuid, 'scheduled', 'abandoned', now() - interval '2 minutes', now() - interval '1 minute')`,
+      );
+      expect(queued(await enqueueFor(tx, ctx.tenantId))).toHaveLength(1);
+    });
+    await inRolledBackTransaction(async (tx) => {
+      await withoutTriggers(tx);
+      await tx.execute(
+        sql`insert into integration_sync_runs (tenant_id, connection_id, trigger, status, queued_at, started_at, finished_at)
+            values (${ctx.tenantId}::uuid, ${id}::uuid, 'scheduled', 'abandoned', now() - interval '3 minutes', now() - interval '3 minutes', now() - interval '1 minute')`,
+      );
+      expect(await enqueueFor(tx, ctx.tenantId)).toEqual([]);
+    });
+  });
+
+  it(`abandons a run that went quiet for the ${RUN_LEASE_MS / 60_000}-minute lease, reports it as abandoned, and queues a fresh one; leaves a fresh one alone`, async () => {
     const id = await activeSandbox(ctx, h);
     expect(RUN_LEASE_MS).toBe(20 * 60 * 1000); // the SQL says 20 minutes: keep the two in step
     // A queued run nobody picked up (a lost job), 21 minutes old.
     await inRolledBackTransaction(async (tx) => {
       await withoutTriggers(tx);
-      await tx.execute(
+      const { rows: old } = await tx.execute<{ id: string }>(
         sql`insert into integration_sync_runs (tenant_id, connection_id, trigger, queued_at)
-            values (${ctx.tenantId}::uuid, ${id}::uuid, 'scheduled', now() - interval '21 minutes')`,
+            values (${ctx.tenantId}::uuid, ${id}::uuid, 'scheduled', now() - interval '21 minutes') returning id`,
       );
-      const fresh = await enqueueFor(tx, ctx.tenantId);
-      expect(fresh).toHaveLength(1);
-      const all = await runsOf(tx, ctx.tenantId);
-      expect(all.map((row) => row.status).sort()).toEqual(["abandoned", "queued"]);
+      const rows = await enqueueFor(tx, ctx.tenantId);
+      expect(abandoned(rows)).toEqual([
+        { tenant_id: ctx.tenantId, run_id: old[0]!.id, outcome: "abandoned" },
+      ]);
+      expect(queued(rows)).toHaveLength(1);
+      expect((await runsOf(tx, ctx.tenantId)).map((row) => row.status).sort()).toEqual([
+        "abandoned",
+        "queued",
+      ]);
     });
-    // The same at 19 minutes: still leased, nothing new.
+    // The same at 19 minutes: still leased, nothing new, nothing abandoned.
     await inRolledBackTransaction(async (tx) => {
       await withoutTriggers(tx);
       await tx.execute(
@@ -425,12 +490,81 @@ describe("integration_enqueue_due_runs", () => {
         sql`insert into integration_sync_runs (tenant_id, connection_id, trigger, status, queued_at, started_at, heartbeat_at)
             values (${ctx.tenantId}::uuid, ${id}::uuid, 'scheduled', 'running', now() - interval '30 minutes', now() - interval '30 minutes', now() - interval '21 minutes')`,
       );
-      expect(await enqueueFor(tx, ctx.tenantId)).toHaveLength(1);
+      const rows = await enqueueFor(tx, ctx.tenantId);
+      expect(abandoned(rows)).toHaveLength(1);
+      expect(queued(rows)).toHaveLength(1);
       expect((await runsOf(tx, ctx.tenantId)).map((row) => row.status).sort()).toEqual([
         "abandoned",
         "queued",
       ]);
     });
+  });
+
+  it("a connection that a concurrent transaction holds for update (a Pause in flight) is skipped, and picked up once it is released", async () => {
+    const id = await activeSandbox(ctx, h);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let locked!: () => void;
+    const isLocked = new Promise<void>((resolve) => {
+      locked = resolve;
+    });
+    const pause = systemDb().transaction(async (tx) => {
+      await tx.execute(sql`select 1 from integration_connections where id = ${id}::uuid for no key update`);
+      locked();
+      await held;
+    });
+    await isLocked;
+    try {
+      const during = (await enqueueDueRuns(true)).filter((row) => row.tenantId === ctx.tenantId);
+      expect(during).toEqual([]);
+    } finally {
+      release();
+      await pause;
+    }
+    const after = (await enqueueDueRuns(true)).filter((row) => row.tenantId === ctx.tenantId);
+    expect(after).toHaveLength(1);
+    expect(after[0]!.outcome).toBe("queued");
+  });
+
+  it("once the function holds a due connection, a Pause waits for it (and then abandons the run it queued), so a paused connection can't keep a queued run", async () => {
+    const id = await activeSandbox(ctx, h);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let queuedRun!: (runId: string) => void;
+    const hasQueued = new Promise<string>((resolve) => {
+      queuedRun = resolve;
+    });
+    const enqueuer = systemDb().transaction(async (tx) => {
+      await asJobs(tx);
+      const called = await tx.execute<Row>(sql`select * from integration_enqueue_due_runs(true)`);
+      await asOwner(tx);
+      const mine = called.rows.find((row) => row.tenant_id === ctx.tenantId && row.outcome === "queued");
+      queuedRun(mine!.run_id);
+      await held; // the transaction (and the FOR SHARE lock on the connection) stays open
+    });
+    const runId = await hasQueued;
+    try {
+      // A Pause now can't take the row: it would wait.
+      await expectDbError(
+        systemDb().transaction(async (tx) => {
+          await tx.execute(sql`set local lock_timeout = '300ms'`);
+          await tx.execute(sql`update integration_connections set status = 'paused' where id = ${id}::uuid`);
+        }),
+        /55P03|lock timeout/,
+      );
+    } finally {
+      release();
+      await enqueuer;
+    }
+    // With the enqueue committed, the Pause goes through and its trigger abandons the run that was queued.
+    await withTenant(ctx, (tx) =>
+      tx.execute(sql`update integration_connections set status = 'paused' where id = ${id}::uuid`),
+    );
+    expect((await runRow(runId)).status).toBe("abandoned");
   });
 
   it("leaves app.tenant_id as it found it, and the work is through the practice's own policy", async () => {
@@ -439,7 +573,7 @@ describe("integration_enqueue_due_runs", () => {
     await inRolledBackTransaction(async (tx) => {
       await tx.execute(sql`select set_config('app.tenant_id', ${before}, true)`);
       await asJobs(tx);
-      await tx.execute(sql`select integration_enqueue_due_runs()`);
+      await tx.execute(sql`select * from integration_enqueue_due_runs(true)`);
       const after = await tx.execute<{ value: string | null }>(
         sql`select current_setting('app.tenant_id', true) as value`,
       );
@@ -447,17 +581,13 @@ describe("integration_enqueue_due_runs", () => {
     });
   });
 
-  it("`enqueueDueRuns` returns run IDs the claim function then accepts", async () => {
+  it("`enqueueDueRuns` returns rows the claim function then accepts", async () => {
     const id = await activeSandbox(ctx, h);
-    const ids = await enqueueDueRuns();
-    const mine = [];
-    for (const runId of ids) {
-      const claimed = await claimQueuedRun(runId);
-      if (claimed?.tenantId === ctx.tenantId) mine.push({ runId, claimed });
-    }
-    expect(mine).toHaveLength(1);
-    expect(mine[0]!.claimed).toEqual({ tenantId: ctx.tenantId, connectionId: id });
-    expect(await runRow(mine[0]!.runId)).toMatchObject({
+    const rows = (await enqueueDueRuns(true)).filter((row) => row.tenantId === ctx.tenantId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ outcome: "queued" });
+    expect(await claimQueuedRun(rows[0]!.runId)).toEqual({ tenantId: ctx.tenantId, connectionId: id });
+    expect(await runRow(rows[0]!.runId)).toMatchObject({
       status: "queued",
       trigger: "scheduled",
       triggeredBy: null,
@@ -467,7 +597,7 @@ describe("integration_enqueue_due_runs", () => {
 
 describe("the functions walk the tenants, so they work for an owner that does not bypass row-level security", () => {
   // CI's database user is a superuser, which ignores every policy, so the tenant loop would go untested. A
-  // probe copy of each function is created (from the migration's own text) by a role with neither SUPERUSER nor
+  // probe copy of each function is created (from the migrations' own text) by a role with neither SUPERUSER nor
   // BYPASSRLS that is not the tables' owner, so the tenant_isolation policies apply to it exactly as they
   // would to a managed database's non-bypass owner, and called by that same role. All of it is rolled back.
   // (The tenant list is the exception, as for the real owner: see the policy below.)
@@ -475,7 +605,8 @@ describe("the functions walk the tenants, so they work for an owner that does no
     await inRolledBackTransaction(async (tx) => {
       await tx.execute(sql`create role jobs_probe_owner nologin nosuperuser nobypassrls`);
       await tx.execute(sql`grant usage, create on schema public to jobs_probe_owner`);
-      await tx.execute(sql`grant select on tenants, integration_connections to jobs_probe_owner`);
+      await tx.execute(sql`grant select, update on integration_connections to jobs_probe_owner`);
+      await tx.execute(sql`grant select on tenants to jobs_probe_owner`);
       await tx.execute(sql`grant select, insert, update on integration_sync_runs to jobs_probe_owner`);
       await tx.execute(sql`grant execute on function app_current_tenant() to jobs_probe_owner`);
       // `tenants` has row-level security enabled but not forced, so its real owner sees every practice; the
@@ -494,7 +625,7 @@ describe("the functions walk the tenants, so they work for an owner that does no
       );
       await tx.execute(
         sql.raw(
-          statementWith("CREATE FUNCTION integration_enqueue_due_runs(").replace(
+          statementWith("CREATE FUNCTION integration_enqueue_due_runs(", statements45).replace(
             "CREATE FUNCTION integration_enqueue_due_runs(",
             "CREATE FUNCTION probe_enqueue_due_runs(",
           ),
@@ -534,43 +665,64 @@ describe("the functions walk the tenants, so they work for an owner that does no
     });
   });
 
-  it("enqueue queues for each practice with a due connection, through the practice's own policy", async () => {
+  it("enqueue queues for each practice with a due connection, and reports a lapsed run, through the practice's own policy and with the connection locks it needs", async () => {
     const other = await createTestTenant("Jobs db probe enqueue");
+    const otherId = await activeSandbox(other, h);
     await activeSandbox(ctx, h);
-    await activeSandbox(other, h);
-    await withProbeOwner(async (tx) => {
-      const { rows } = await tx.execute<{ run_id: string }>(sql`select probe_enqueue_due_runs() as run_id`);
-      const ids = new Set(rows.map((row) => row.run_id));
-      await tx.execute(sql`reset role`);
-      const queued = [...(await runsOf(tx, ctx.tenantId)), ...(await runsOf(tx, other.tenantId))].filter(
-        (row) => ids.has(row.id),
+    // `other` has a run that went quiet 25 minutes ago.
+    await systemDb().transaction(async (tx) => {
+      await withoutTriggers(tx);
+      await tx.execute(
+        sql`insert into integration_sync_runs (tenant_id, connection_id, trigger, queued_at)
+            values (${other.tenantId}::uuid, ${otherId}::uuid, 'scheduled', now() - interval '25 minutes')`,
       );
-      expect(queued).toHaveLength(2);
-      expect(queued.every((row) => row.status === "queued" && row.trigger === "scheduled")).toBe(true);
+    });
+    await withProbeOwner(async (tx) => {
+      const { rows } = await tx.execute<{ tenant_id: string; run_id: string; outcome: string }>(
+        sql`select tenant_id, run_id, outcome from probe_enqueue_due_runs(true)`,
+      );
+      const mine = rows.filter((row) => row.tenant_id === ctx.tenantId || row.tenant_id === other.tenantId);
+      expect(
+        mine
+          .filter((row) => row.outcome === "queued")
+          .map((row) => row.tenant_id)
+          .sort(),
+      ).toEqual([ctx.tenantId, other.tenantId].sort());
+      expect(mine.filter((row) => row.outcome === "abandoned").map((row) => row.tenant_id)).toEqual([
+        other.tenantId,
+      ]);
     });
   });
 });
 
-describe("security review L3: the migration verifies the integration service principal", () => {
-  const check = statementWith("principal_id CONSTANT uuid");
+describe("the migrations verify the integration service principal (security review L3, O8)", () => {
+  const check44 = statementWith("principal_id CONSTANT uuid");
+  const check45 = statementWith("principal_id CONSTANT uuid", statements45);
+  const checks = [
+    ["0044", check44],
+    ["0045", check45],
+  ] as const;
 
-  it("passes for the row 0043 seeded", async () => {
+  it.each(checks)("%s passes for the row 0043 seeded", async (_, check) => {
     await inRolledBackTransaction(async (tx) => {
       await tx.execute(sql.raw(check));
     });
   });
 
-  it("raises if the row is missing (0043's `ON CONFLICT DO NOTHING` could have skipped it)", async () => {
-    const missing = randomUUID();
-    await expectDbError(
-      systemDb().transaction((tx) =>
-        tx.execute(sql.raw(check.replace("d3a7c0de-5a1c-4e11-8a0c-0000000d0d01", missing))),
-      ),
-      /integration service principal [0-9a-f-]{36} is missing/,
-    );
-  });
+  it.each(checks)(
+    "%s raises if the row is missing (0043's `ON CONFLICT DO NOTHING` could have skipped it)",
+    async (_, check) => {
+      const missing = randomUUID();
+      await expectDbError(
+        systemDb().transaction((tx) =>
+          tx.execute(sql.raw(check.replace("d3a7c0de-5a1c-4e11-8a0c-0000000d0d01", missing))),
+        ),
+        /integration service principal [0-9a-f-]{36} is missing/,
+      );
+    },
+  );
 
-  it.each([
+  const tamperings = [
     [
       "it is enabled",
       sql`update users set disabled_at = null where id = ${INTEGRATION_SERVICE_PRINCIPAL_ID}::uuid`,
@@ -586,36 +738,61 @@ describe("security review L3: the migration verifies the integration service pri
       sql`update users set password_hash = '' where id = ${INTEGRATION_SERVICE_PRINCIPAL_ID}::uuid`,
       /non-hash password marker/,
     ],
-  ])("raises if %s", async (_, tamper, message) => {
-    await expectDbError(
-      systemDb().transaction(async (tx) => {
-        await tx.execute(tamper);
-        await tx.execute(sql.raw(check));
-      }),
-      message,
-    );
-  });
+  ] as const;
+  for (const [name, check] of checks) {
+    it.each(tamperings)(`${name} raises if %s`, async (_, tamper, message) => {
+      await expectDbError(
+        systemDb().transaction(async (tx) => {
+          await tx.execute(tamper);
+          await tx.execute(sql.raw(check));
+        }),
+        message,
+      );
+    });
 
-  it("raises if it has a membership in any practice", async () => {
+    it(`${name} raises if it has a membership in any practice`, async () => {
+      await expectDbError(
+        systemDb().transaction(async (tx) => {
+          await tx.execute(
+            sql`insert into memberships (tenant_id, user_id, role) values (${ctx.tenantId}::uuid, ${INTEGRATION_SERVICE_PRINCIPAL_ID}::uuid, 'specialist')`,
+          );
+          await tx.execute(sql.raw(check));
+        }),
+        /no membership in any practice/,
+      );
+    });
+  }
+
+  it("0045 also raises if it has a second-factor secret or a different address (O8)", async () => {
     await expectDbError(
       systemDb().transaction(async (tx) => {
         await tx.execute(
-          sql`insert into memberships (tenant_id, user_id, role) values (${ctx.tenantId}::uuid, ${INTEGRATION_SERVICE_PRINCIPAL_ID}::uuid, 'specialist')`,
+          sql`update users set totp_secret_enc = 'synthetic-not-a-secret' where id = ${INTEGRATION_SERVICE_PRINCIPAL_ID}::uuid`,
         );
-        await tx.execute(sql.raw(check));
+        await tx.execute(sql.raw(check45));
       }),
-      /no membership in any practice/,
+      /no second-factor secret/,
+    );
+    await expectDbError(
+      systemDb().transaction(async (tx) => {
+        await tx.execute(
+          sql`update users set email = 'someone-else@synthetic.test' where id = ${INTEGRATION_SERVICE_PRINCIPAL_ID}::uuid`,
+        );
+        await tx.execute(sql.raw(check45));
+      }),
+      /reserved address/,
     );
   });
 
-  it("is the first statement after the header, so a failure stops the migration before any privilege is granted", () => {
+  it("each check is the first statement of its migration, so a failure stops it before any privilege is granted or dropped", () => {
     const code = (text: string) =>
       text
         .split("\n")
         .filter((line) => !line.trim().startsWith("--"))
         .join("\n");
-    const first = code(statements[0]!);
-    expect(first).toContain("principal_id CONSTANT uuid");
-    expect(first).not.toMatch(/GRANT|CREATE ROLE|CREATE FUNCTION/);
+    for (const first of [code(statements44[0]!), code(statements45[0]!)]) {
+      expect(first).toContain("principal_id CONSTANT uuid");
+      expect(first).not.toMatch(/GRANT|REVOKE|DROP|CREATE ROLE|CREATE FUNCTION/);
+    }
   });
 });

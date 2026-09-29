@@ -262,6 +262,25 @@ describe("syncNowAction with a background worker configured (ADR 0012)", () => {
       .where(eq(integrationSyncRuns.connectionId, id));
     expect(runs.map((row) => row.status)).toEqual(["abandoned"]);
     expect(await patientRows(ctx)).toEqual([]);
+    // The failed post is audited with who pressed the button and from where (review O2).
+    const failed = (await auditRows(ctx.tenantId)).find(
+      (event) => event.action === "integration.sync_failed" && event.reason === "sync_now",
+    )!;
+    expect(failed.metadata).toMatchObject({ code: "job_not_sent" });
+    expect(failed.ipAddress).toBe("203.0.113.7");
+    expect(failed.userAgent).toBe("Synthetic-Test-Browser/1.0");
+  });
+
+  it("where real data is allowed (production, off Netlify) and jobs are not configured, refuses instead of running in the request (security review L4)", async () => {
+    vi.stubEnv("APP_ENV", "production");
+    for (const name of ["NETLIFY", "NETLIFY_DB_URL", "DEPLOY_ID", "SITE_ID"]) vi.stubEnv(name, "");
+    vi.stubEnv("INTEGRATION_JOB_SECRET", "");
+    expect(await press()).toEqual({ error: "The sync couldn't be started. Try again in a moment." });
+    expect(sent).toEqual([]);
+    expect(await patientRows(ctx)).toEqual([]);
+    expect(
+      await systemDb().select().from(integrationSyncRuns).where(eq(integrationSyncRuns.connectionId, id)),
+    ).toEqual([]);
   });
 
   it("refuses, and never runs quietly in the request, when the secret is set but too short", async () => {

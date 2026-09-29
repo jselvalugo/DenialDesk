@@ -85,6 +85,8 @@ export const integrations: Messages["integrations"] = {
     "A sincronização está pausada. Retomá-la a reinicia e exige que você verifique sua identidade com o aplicativo autenticador antes.",
   "lifecycle.error":
     "O DenialDesk parou de sincronizar por causa de um erro. Depois que o administrador do seu EHR/PM resolver, execute Testar conexão e obtenha uma aprovação, e então retome. Retomar também exige que você verifique sua identidade com o aplicativo autenticador antes.",
+  "detail.repeatedFailuresNotice":
+    "As últimas três sincronizações seguidas falharam, então o DenialDesk parou de sincronizar esta conexão. Abra o Histórico de sincronização para ver o motivo, corrija a causa, execute Testar conexão e obtenha uma aprovação, e depois retome.",
   "lifecycle.pending_approval":
     "Esta conexão está aguardando aprovação. Retirá-la a devolve a um rascunho que você pode editar e enviar de novo.",
   "pause.submit": "Pausar sincronização",
@@ -220,7 +222,7 @@ export const integrations: Messages["integrations"] = {
     "O DenialDesk não aprovou esta conexão. O DenialDesk entrará em contato para explicar o motivo. Depois de resolvido, execute Testar conexão e envie novamente.",
   "sync.title": "Sincronizar agora",
   "sync.description":
-    "Busca agora as últimas alterações de pacientes do EHR/PM conectado e repete isso automaticamente a cada 15 minutos. O resultado aparece aqui ou, quando a sincronização é executada em segundo plano, no histórico de sincronização. Os pacientes são cópias somente leitura: corrija os dados demográficos no EHR/PM.",
+    "Busca agora as últimas alterações de pacientes do EHR/PM conectado. Quando a sincronização em segundo plano está configurada neste ambiente, ela também é executada sozinha em um horário (cerca de a cada 15 minutos). O resultado aparece aqui ou, quando a sincronização é executada em segundo plano, no histórico de sincronização. Os pacientes são cópias somente leitura: corrija os dados demográficos no EHR/PM.",
   "sync.submit": "Sincronizar agora",
   "sync.pending": "Sincronizando…",
   "sync.resultOk": "Sincronização concluída",
