@@ -354,12 +354,26 @@ _Last updated: 2026-09-29_
   **Migration 0046** adds nullable `providers.first_name/last_name/address_line1/city/state/postal_code/tin_type/tin_enc`
   (TIN field-encrypted, AAD-bound) and `locations.place_of_service`; the schema held none of these. **Synthetic-only:** ISA15
   is `T` and the submitter and receiver identifiers are fixed synthetic constants, so production refuses
-  (`not_synthetic_environment`) until C3b. **Not built:** a settings page to enter a provider's billing details and a
-  location's place of service (until then: the synthetic seed, or the platform operator in the database), so a real practice
-  cannot yet generate; **blockers before C3b and any real claim** (spec C3a, OA-091): sensitive diagnoses (sensitivity tags, Part 2 consent) on outgoing claims, persisting and auditing the diagnosis-pointer choice, the hard-coded CLM06 to CLM09 attestations, and clearinghouse status / real downloads; group billing (type 2 NPI) with a rendering provider, dependents, secondary payers, several claims per
+  (`not_synthetic_environment`) until C3b. **Follow-up C3a-S (below)** adds the settings page for a provider's billing details and a
+  location's place of service; **blockers before C3b and any real claim** (spec C3a, OA-091): sensitive diagnoses (sensitivity tags, Part 2 consent) on outgoing claims, persisting and auditing the diagnosis-pointer choice, the hard-coded CLM06 to CLM09 attestations, and clearinghouse status / real downloads; group billing (type 2 NPI) with a rendering provider, dependents, secondary payers, several claims per
   file, frequency 7/8. Regimes `medicare_advantage`, `erisa_self_funded`, `smmc`, `pip` are refused (no confirmed SBR09).
   Mapping is from the specialist's knowledge of the guide, not the licensed guide: every ⚠️ VERIFY row in the spec must be
   cleared before a `P` file (OA-089). Integration tests (`claim-837p.test.ts`, `claim-837p-action.test.ts`) pass in CI (PR #102).
+- **Claims C3a-S — Provider billing details** (`specs/claims.md` C3a-S, approved by delegated technical authority
+  2026-09-29; branch `claude/vigilant-tesla-ps41e9-billing-settings`; **no migration, no GRANT**: migration 0046 already holds
+  the columns and CHECKs and `providers`/`locations` carry the 0002 table grants). **Settings > Billing** (admin only) lists
+  the practice's providers and locations with what is missing; `/settings/billing/providers/[id]` edits the billing name,
+  address, and TIN, `/settings/billing/locations/[id]` the place of service. **TIN:** write-only (masked input, always empty,
+  the page shows only "ends in 1234"), encrypted on write with `encryptProviderTin` (AAD tenant, column, provider), needs a
+  fresh step-up MFA to set or change (also to change its type), never cleared, never logged. **Audit** (same transaction):
+  `settings.provider_billing_updated` / `settings.location_pos_updated` carry column names only; `settings.provider_billing_viewed`
+  marks the one decrypt (last four). Text is upper-cased, accent-stripped, and must be X12-safe (`A-Z 0-9 space & ' ( ) , . - / #`)
+  or is refused naming the field; a P.O. box is refused; a five-digit ZIP saves but the 837P billing loop still needs nine.
+  **POS is format only (two digits), ⚠️ VERIFY against the CMS POS code set (OA-092).** Code: `src/domain/settings/billing.ts`,
+  `src/app/(app)/settings/billing/`; step-up `returnTo` now allows `/settings/billing/providers/<id>` (`step-up-target.ts`,
+  `safe-path.ts` allow-list). **Status:** unit tests pass; `test/integration/billing-settings.test.ts` (roles, step-up, RLS
+  isolation, audit, TIN round trip, and provider-configured-by-the-page generates an 837P) awaits a CI run (no database in the
+  authoring session). Not built: creating or deleting providers and locations, editing NPI/taxonomy, clearing a TIN.
 - UI shell is ERP-style: global header with a "Go to" field (Ctrl/⌘ K), navy tab bar whose first
   control is the current module's name, and a grouped module switcher (`specs/erp-shell.md`).
   Deliberately not a copy of any vendor's shell: no grid icon, no "app launcher", tinted module
@@ -515,8 +529,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    migrations (item 8).
 2. 835 ERA ingestion → real denial capture (edi-x12-specialist).
 3. Payer setup screen (appeal windows from contracts) and practice/provider setup.
-4. Claims C3b–C4 (`specs/claims.md`): clearinghouse stub submission (R-7.9.5) with the timely-filing block and the
-   provider billing-details settings page; 999/277CA capture. (C2 and C3a are built; run their integration tests in CI first.)
+4. Claims C3b–C4 (`specs/claims.md`): clearinghouse stub submission (R-7.9.5) with the timely-filing block;
+   999/277CA capture. (C2, C3a, and the C3a-S billing settings page are built; run their integration tests in CI first.)
 5. Appeal letter templates (human review before export).
 6. Custom field values on records, settings S2 (MVP): PR 1 storage (#53), PR 2 patients (#68) and
    PR 3 claims/denials (#73) merged; PR 4 payers (a minimal read-only payer record under Settings ›

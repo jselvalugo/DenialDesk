@@ -31,7 +31,7 @@ const auditMetadata = (target: StepUpTarget) => ({ route: target.route, route_id
  * Step-up re-verification (R-7.2.2): the same TOTP check as sign-in, on an already signed-in
  * session. Success records a fresh `mfa_verified_at`, rotates the session token and cookie
  * (`completeStepUpMfa`), and sends the browser back to `returnTo` (only ever one of the
- * integrations pages, length-capped and checked by `stepUpTarget`), where the gated action can be
+ * integrations pages or a provider's billing page, length-capped and checked by `stepUpTarget`), where the gated action can be
  * retried.
  *
  * It shares the sign-in attempt counter (`reserveStepUpAttempt`), so codes can't be guessed here
