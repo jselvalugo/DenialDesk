@@ -6,7 +6,7 @@
 // Only the path is checked against the allow-list. A query string on an allowed path is kept
 // as given, so any consumer that reads it must validate its own parameters (this function says
 // nothing about what the query string means or contains).
-const ALLOWED_PREFIXES = ["/settings/integrations", "/patients", "/"];
+const ALLOWED_PREFIXES = ["/settings/integrations", "/settings/billing", "/patients", "/"];
 
 function hasControlOrWhitespace(value: string): boolean {
   for (let i = 0; i < value.length; i += 1) {

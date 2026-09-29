@@ -18,7 +18,7 @@ export interface StepUpTarget {
   path: string;
   /** The page's route template, for the audit log (`/settings/integrations/[id]`, `.../[id]/payers`). */
   route: string;
-  /** The connection's UUID (lowercased) when the page is one connection's, else null. */
+  /** The connection's (or provider's) UUID (lowercased) when the page is one record's, else null. */
   routeId: string | null;
 }
 
@@ -50,6 +50,16 @@ export function stepUpTarget(value: unknown): StepUpTarget {
     return {
       path: `${STEP_UP_DEFAULT_PATH}/${id}${sub}`,
       route: `${STEP_UP_DEFAULT_PATH}/[id]${sub}`,
+      routeId: id,
+    };
+  }
+  // Provider billing details (docs/specs/claims.md C3a-S): setting a TIN needs a step-up.
+  const billing = /^\/settings\/billing\/providers\/([^/]+)$/.exec(pathname);
+  if (billing && UUID.test(billing[1]!)) {
+    const id = billing[1]!.toLowerCase();
+    return {
+      path: `/settings/billing/providers/${id}`,
+      route: "/settings/billing/providers/[id]",
       routeId: id,
     };
   }

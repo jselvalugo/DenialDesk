@@ -84,6 +84,9 @@ export type AuditAction =
   | "settings.custom_field_updated"
   | "settings.custom_field_deactivated"
   | "settings.custom_field_reactivated"
+  | "settings.provider_billing_viewed"
+  | "settings.provider_billing_updated"
+  | "settings.location_pos_updated"
   | "insight.report_viewed"
   | "insight.report_exported"
   | "appeal.list_viewed"
@@ -176,7 +179,9 @@ export interface AuditEvent {
     | "university_access"
     | "integration_connection"
     | "integration_payer_mapping"
-    | "integration_sync_run";
+    | "integration_sync_run"
+    | "provider"
+    | "location";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;

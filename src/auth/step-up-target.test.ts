@@ -72,3 +72,23 @@ describe("stepUpTarget", () => {
     expect(stepUpTarget(atCap).routeId).toBe(ID);
   });
 });
+
+describe("stepUpTarget for provider billing (claims C3a-S)", () => {
+  it("keeps a provider's billing page, describing it by route template plus its UUID", () => {
+    expect(stepUpTarget(`/settings/billing/providers/${ID.toUpperCase()}?x=1`)).toEqual({
+      path: `/settings/billing/providers/${ID}`,
+      route: "/settings/billing/providers/[id]",
+      routeId: ID,
+    });
+  });
+
+  it.each([
+    "/settings/billing",
+    "/settings/billing/providers/not-a-uuid",
+    `/settings/billing/providers/${ID}/extra`,
+    `/settings/billing/locations/${ID}`,
+    "/settings/billing/providers/Jane%20Doe",
+  ])("falls back to the default for %s", (value) => {
+    expect(stepUpTarget(value)).toEqual(DEFAULT);
+  });
+});
