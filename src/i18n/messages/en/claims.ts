@@ -318,4 +318,77 @@ export const claims = {
   "import.result.viewClaims": "View unsubmitted claims",
   "import.result.viewPastDeadline": "View past-deadline claims",
   "import.result.another": "Import another file",
+
+  // 837P generation (claims C3a): app/(app)/claims/[id]/Claim837Panel.tsx
+  "edi.title": "Electronic claim (837P)",
+  "edi.description":
+    "Builds this claim as an X12 837P file that you can preview and download. Nothing is sent to a payer or a clearinghouse.",
+  "edi.testNotice":
+    "Test file only. This environment holds synthetic data only, so the file is marked as a test and uses placeholder submitter and receiver identifiers.",
+  "edi.pointers.title": "Diagnosis pointers",
+  "edi.pointers.description":
+    "This claim has more than one diagnosis. For each line, choose the diagnoses that support it, up to four. Nothing is chosen for you.",
+  "edi.pointers.line": "Line {line}: {code}",
+  "edi.pointers.option": "{position}. {code}",
+  "edi.generate": "Generate 837P",
+  "edi.generating": "Generating…",
+  "edi.result.summary":
+    "File {controlNumber} generated: {segments} segments, {lines, plural, one {# service line} other {# service lines}}.",
+  "edi.result.testFile": "Test file (ISA15 = T). It is not sent anywhere.",
+  "edi.result.previewLabel": "837P preview with the member ID and tax ID masked",
+  "edi.result.masked": "The member ID and tax ID are masked here. The downloaded file has them in full.",
+  "edi.result.download": "Download file",
+  "edi.result.pastDeadline":
+    "This claim is past its filing deadline. Check the deadline panel before this file goes anywhere.",
+  "edi.error.forbidden": "Your role can view claims but not generate claim files.",
+  "edi.error.rateLimited": "Too many files were generated in a short time. Wait a few minutes and try again.",
+  "edi.error.notFound": "This claim could not be found.",
+  "edi.error.reload": "Reload the page and try again.",
+  "edi.error.notGenerated": "The 837P was not generated. Fix the items below and try again.",
+  "edi.issue.status_not_generatable": "Only draft or rejected claims can be generated.",
+  "edi.issue.not_synthetic_environment":
+    "Claim files can't be generated in production yet: the submitter and receiver identifiers for real submission are not set up.",
+  "edi.issue.no_member_id": "No payer coverage is on file for this patient. Add or map the member ID first.",
+  "edi.issue.coverage_payer_mismatch":
+    "This claim's payer is not the patient's primary payer, the payer the member ID on file belongs to.",
+  "edi.issue.payer_not_verified": "The payer has no verified EDI payer ID or regime yet.",
+  "edi.issue.claim_filing_indicator_unmapped":
+    "The claim filing indicator for this payer type is not confirmed yet, so a file can't be built.",
+  "edi.issue.billing_npi": "The provider's NPI is missing or is not a valid NPI.",
+  "edi.issue.billing_name": "The provider's first and last name for billing are missing.",
+  "edi.issue.billing_taxonomy": "The provider's taxonomy code is missing or is not in the right format.",
+  "edi.issue.billing_tin": "The provider's tax ID or its type is missing, or the tax ID is not nine digits.",
+  "edi.issue.billing_address":
+    "The provider's billing address is incomplete: it needs a street, city, state, and nine-digit ZIP code.",
+  "edi.issue.billing_address_po_box": "The billing address must be a street address, not a P.O. box.",
+  "edi.issue.subscriber_name": "The patient's first and last name are missing.",
+  "edi.issue.subscriber_birth_date": "The patient's birth date is missing or is not a real date.",
+  "edi.issue.subscriber_address":
+    "The patient's address is incomplete: it needs a street, city, state, and ZIP code.",
+  "edi.issue.missing_place_of_service": "The claim's location has no place of service code.",
+  "edi.issue.diagnosis_invalid": "The claim needs one to twelve diagnosis codes in ICD-10-CM format.",
+  "edi.issue.diagnosis_pointers_required": "Line {line}: choose which diagnoses support this line.",
+  "edi.issue.diagnosis_pointer_invalid":
+    "Line {line}: choose one to four different diagnoses from this claim.",
+  "edi.issue.lines_missing": "The claim has no service lines.",
+  "edi.issue.lines_too_many": "The claim has more than {max} service lines.",
+  "edi.issue.line_invalid":
+    "Line {line}: the procedure code, modifiers, units, or charge are not in the expected format.",
+  "edi.issue.line_invalid_general": "The service lines have a repeated line number.",
+  "edi.issue.billed_mismatch": "The billed amount is not the sum of the line charges.",
+  "edi.issue.claim_number_invalid": "The claim number can't be used as the patient control number.",
+  "edi.issue.service_date_invalid": "The date of service is not a real date.",
+  "edi.issue.invalid_character": "The {field} has a character, or a length, that an 837P can't carry.",
+  "edi.issue.control_number_exhausted": "The practice's control numbers are used up. Contact support.",
+  "edi.field.billing_last_name": "provider's last name",
+  "edi.field.billing_first_name": "provider's first name",
+  "edi.field.billing_address": "provider's street address",
+  "edi.field.billing_city": "provider's city",
+  "edi.field.subscriber_last_name": "patient's last name",
+  "edi.field.subscriber_first_name": "patient's first name",
+  "edi.field.subscriber_address": "patient's street address",
+  "edi.field.subscriber_city": "patient's city",
+  "edi.field.subscriber_member_id": "member ID",
+  "edi.field.payer_name": "payer's name",
+  "edi.result.title": "Generated file",
 } as const;

@@ -331,4 +331,87 @@ export const claims: Messages["claims"] = {
   "import.result.viewClaims": "Ver reclamaciones sin enviar",
   "import.result.viewPastDeadline": "Ver reclamaciones fuera de plazo",
   "import.result.another": "Importar otro archivo",
+
+  // 837P generation (claims C3a): app/(app)/claims/[id]/Claim837Panel.tsx
+  "edi.title": "Reclamación electrónica (837P)",
+  "edi.description":
+    "Genera esta reclamación como un archivo X12 837P que puede ver y descargar. No se envía nada a un pagador ni a una cámara de compensación.",
+  "edi.testNotice":
+    "Solo archivo de prueba. Este entorno solo contiene datos sintéticos, así que el archivo se marca como prueba y usa identificadores de remitente y receptor de marcador de posición.",
+  "edi.pointers.title": "Punteros de diagnóstico",
+  "edi.pointers.description":
+    "Esta reclamación tiene más de un diagnóstico. Para cada línea, elija los diagnósticos que la respaldan, hasta cuatro. No se elige nada por usted.",
+  "edi.pointers.line": "Línea {line}: {code}",
+  "edi.pointers.option": "{position}. {code}",
+  "edi.generate": "Generar 837P",
+  "edi.generating": "Generando…",
+  "edi.result.summary":
+    "Archivo {controlNumber} generado: {segments} segmentos, {lines, plural, one {# línea de servicio} other {# líneas de servicio}}.",
+  "edi.result.testFile": "Archivo de prueba (ISA15 = T). No se envía a ningún lugar.",
+  "edi.result.previewLabel": "Vista previa del 837P con el ID de miembro y el ID fiscal enmascarados",
+  "edi.result.masked":
+    "El ID de miembro y el ID fiscal están enmascarados aquí. El archivo descargado los contiene completos.",
+  "edi.result.download": "Descargar archivo",
+  "edi.result.pastDeadline":
+    "Esta reclamación está fuera de su plazo de presentación. Revise el panel de plazos antes de enviar este archivo a cualquier parte.",
+  "edi.error.forbidden": "Su rol puede ver las reclamaciones, pero no generar archivos de reclamación.",
+  "edi.error.rateLimited":
+    "Se generaron demasiados archivos en poco tiempo. Espere unos minutos e inténtelo de nuevo.",
+  "edi.error.notFound": "No se encontró esta reclamación.",
+  "edi.error.reload": "Recargue la página e inténtelo de nuevo.",
+  "edi.error.notGenerated": "No se generó el 837P. Corrija los puntos siguientes e inténtelo de nuevo.",
+  "edi.issue.status_not_generatable": "Solo se pueden generar reclamaciones en borrador o rechazadas.",
+  "edi.issue.not_synthetic_environment":
+    "Todavía no se pueden generar archivos de reclamación en producción: los identificadores de remitente y receptor para el envío real no están configurados.",
+  "edi.issue.no_member_id":
+    "No hay cobertura de pagador registrada para este paciente. Agregue o asigne primero el ID de miembro.",
+  "edi.issue.coverage_payer_mismatch":
+    "El pagador de esta reclamación no es el pagador principal del paciente, al que pertenece el ID de miembro registrado.",
+  "edi.issue.payer_not_verified": "El pagador aún no tiene un ID de pagador EDI ni un régimen verificados.",
+  "edi.issue.claim_filing_indicator_unmapped":
+    "El indicador de presentación de reclamaciones para este tipo de pagador aún no está confirmado, así que no se puede generar un archivo.",
+  "edi.issue.billing_npi": "Falta el NPI del proveedor o no es un NPI válido.",
+  "edi.issue.billing_name": "Faltan el nombre y el apellido del proveedor para la facturación.",
+  "edi.issue.billing_taxonomy": "Falta el código de taxonomía del proveedor o no tiene el formato correcto.",
+  "edi.issue.billing_tin":
+    "Falta el ID fiscal del proveedor o su tipo, o el ID fiscal no tiene nueve dígitos.",
+  "edi.issue.billing_address":
+    "La dirección de facturación del proveedor está incompleta: necesita calle, ciudad, estado y código postal de nueve dígitos.",
+  "edi.issue.billing_address_po_box":
+    "La dirección de facturación debe ser una dirección física, no un apartado postal.",
+  "edi.issue.subscriber_name": "Faltan el nombre y el apellido del paciente.",
+  "edi.issue.subscriber_birth_date": "Falta la fecha de nacimiento del paciente o no es una fecha real.",
+  "edi.issue.subscriber_address":
+    "La dirección del paciente está incompleta: necesita calle, ciudad, estado y código postal.",
+  "edi.issue.missing_place_of_service":
+    "La ubicación de la reclamación no tiene código de lugar de servicio.",
+  "edi.issue.diagnosis_invalid":
+    "La reclamación necesita de uno a doce códigos de diagnóstico en formato ICD-10-CM.",
+  "edi.issue.diagnosis_pointers_required": "Línea {line}: elija qué diagnósticos respaldan esta línea.",
+  "edi.issue.diagnosis_pointer_invalid":
+    "Línea {line}: elija de uno a cuatro diagnósticos distintos de esta reclamación.",
+  "edi.issue.lines_missing": "La reclamación no tiene líneas de servicio.",
+  "edi.issue.lines_too_many": "La reclamación tiene más de {max} líneas de servicio.",
+  "edi.issue.line_invalid":
+    "Línea {line}: el código de procedimiento, los modificadores, las unidades o el cargo no tienen el formato esperado.",
+  "edi.issue.line_invalid_general": "Las líneas de servicio tienen un número de línea repetido.",
+  "edi.issue.billed_mismatch": "El importe facturado no es la suma de los cargos de las líneas.",
+  "edi.issue.claim_number_invalid":
+    "El número de reclamación no se puede usar como número de control del paciente.",
+  "edi.issue.service_date_invalid": "La fecha de servicio no es una fecha real.",
+  "edi.issue.invalid_character":
+    "{field}: tiene un carácter, o una longitud, que un 837P no puede transportar.",
+  "edi.issue.control_number_exhausted":
+    "Se agotaron los números de control de la práctica. Comuníquese con soporte.",
+  "edi.field.billing_last_name": "Apellido del proveedor",
+  "edi.field.billing_first_name": "Nombre del proveedor",
+  "edi.field.billing_address": "Dirección del proveedor",
+  "edi.field.billing_city": "Ciudad del proveedor",
+  "edi.field.subscriber_last_name": "Apellido del paciente",
+  "edi.field.subscriber_first_name": "Nombre del paciente",
+  "edi.field.subscriber_address": "Dirección del paciente",
+  "edi.field.subscriber_city": "Ciudad del paciente",
+  "edi.field.subscriber_member_id": "ID de miembro",
+  "edi.field.payer_name": "Nombre del pagador",
+  "edi.result.title": "Archivo generado",
 };

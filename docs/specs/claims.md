@@ -389,23 +389,27 @@ URL, title, or log, and each press consumes one control number.
 ### Acceptance criteria (C3a)
 Approved by delegated technical authority (2026-09-29).
 
-- [ ] **Pure generator.** `src/edi/x12/837p.ts` builds one 837P (one ST, one 2000A, one 2000B, one 2300, up
+Ticked items have passing unit tests. Unticked items have their tests written (`test/integration/claim-837p.test.ts`,
+`claim-837p-action.test.ts`) but not yet run: the agent that built C3a had no database access, so they wait for the
+CI run of `pnpm test:integration`.
+
+- [x] **Pure generator.** `src/edi/x12/837p.ts` builds one 837P (one ST, one 2000A, one 2000B, one 2300, up
       to 50 2400 loops) from plain data with no I/O and no clock (the time and control number are inputs), and
       `validate837P` returns every refusal in the table above with a code, never a value. Same tokenizer and
       conventions as the 835 (`src/edi/x12/segments.ts`, CCYYMMDD dates, integer cents to a decimal string with no
       floating point).
-- [ ] **Structure round trip.** A test tokenizes the output and checks `SE01` equals the number of segments from
+- [x] **Structure round trip.** A test tokenizes the output and checks `SE01` equals the number of segments from
       `ST` to `SE` inclusive, `SE02 = ST02`, `GE02 = GS06`, `IEA02 = ISA13`, ISA is exactly 106 characters with the
       terminator at position 105, and the HL hierarchy (`HL01` 1 and 2, `HL02` parent 1, `HL03` 20 and 22, `HL04`
       1 and 0), for one to 50 lines, with and without modifiers, with one to 12 diagnoses.
-- [ ] **Golden file.** `test/fixtures/synthetic/x12/837p-golden.x12` is the exact output for one fully synthetic
+- [x] **Golden file.** `test/fixtures/synthetic/x12/837p-golden.x12` is the exact output for one fully synthetic
       claim (synthetic names, `SYN` identifiers, an address on a synthetic street, a test NPI with a valid check
       digit, a TIN in a made-up range), compared byte for byte, with a fixed time and control number.
-- [ ] **Codes untouched.** For every fixture diagnosis, procedure code, and modifier the output contains it
+- [x] **Codes untouched.** For every fixture diagnosis, procedure code, and modifier the output contains it
       unchanged (diagnosis without the decimal only), order preserved, none added or dropped;
       `restoreIcd10Decimal` reverses the only change; a lower-case, padded, or malformed code is refused, never
       repaired.
-- [ ] **Refusals.** One unit test per refusal code, including all problems reported together, the boundary cases
+- [x] **Refusals.** One unit test per refusal code, including all problems reported together, the boundary cases
       (12 and 13 diagnoses, 50 and 51 lines, 4 and 5 modifiers, ZIP of nine digits, with a hyphen, and short, NPI
       check digit), and that no refusal holds a name, ID, code, date, or amount.
 - [ ] **Coverage guard.** A patient with a null or empty member ID, a synced patient whose `coverage_status` is
@@ -432,9 +436,9 @@ Approved by delegated technical authority (2026-09-29).
       same event (R-7.5.1).
 - [ ] **Tenant isolation.** Integration: another practice's claim, patient, provider, payer, and control number
       are invisible to the service (a claim ID from practice B in practice A's session is "not found").
-- [ ] **i18n.** Every string on the panel and every refusal sentence is a key in English, Spanish, and Portuguese.
+- [x] **i18n.** Every string on the panel and every refusal sentence is a key in English, Spanish, and Portuguese.
       The Spanish and Portuguese are agent-written and unreviewed by a native speaker (OA-041).
-- [ ] **Docs.** This spec, `docs/PROJECT_STATE.md`, `src/edi/README.md`, and owner rows OA-085 and OA-086.
+- [x] **Docs.** This spec, `docs/PROJECT_STATE.md`, `src/edi/README.md`, and owner rows OA-085 and OA-086.
       `docs/data-sources.xlsx` is unchanged (no integration is added in C3a; DS-03 stays "Needed").
 
 ### Data / API changes (C3a)
