@@ -43,7 +43,7 @@ Resources and tokens exist only in memory.
 | R1 | Who connected, attested, approved, synced, linked, revoked | `integration.*` with old/new base URL, token endpoint host + path, client ID; `operator.integration_approved|rejected` with verification method; sync audits by a fixed service-principal UUID with `triggeredBy`, reason `ehr_sync`, runtime "where"; per-patient events; run-level `sync_completed` records receipt of unchanged/skipped resources | Low |
 | I1 | PHI, tokens, URLs in logs, errors, audit, run rows | Codes only; URL paths redacted from errors; ZodErrors mapped to codes, never logged; `diagnostics` never stored; IssueType codes validated; log-capture test; DB errors sanitized (ADR 0006) | Low |
 | I2 | Over-collection: fields beyond the billing minimum | Mapper allow-list; `_elements` when supported; scopes Patient/Coverage/Organization read-search only; granted-scope check | Low |
-| I3 | Over-collection: patients outside the practice (minimum necessary, R-5.1.2) | Production accepts only a practice-scoped population (Group export or operator-verified filter), recorded at approval | **Blocking before real data** (OA-050, OA-051) |
+| I3 | Over-collection: patients outside the practice (minimum necessary, R-5.1.2) | Production accepts only a practice-scoped population, recorded at approval. **Only a Group export is approvable today**: Approve refuses an operator-verified filter until the filter itself can be recorded (structured value, no grant to the app role) and the sync applies exactly that recorded filter (spec PI1c, security review M2) | **Blocking before real data** (OA-050, OA-051) |
 | I4 | Sensitive patients shown unmasked (HIV, SUD/Part 2, behavioral, minors) | `R`/`V`, ActCode sensitivity codes, and any unrecognized label mark the patient restricted; minors suggested for the tag | **Blocking before real data** with patients P4 masking (R-3.5.1, R-4.5.1; OA-052) |
 | I5 | Identifier misuse: SSN, MBI, DL as MRN | Identifier systems for SSN/MBI/Medicare/DL/passport refused; SSN- and MBI-shaped values skipped (9 digits allowed only if operator-verified) | Lists ⚠️ VERIFY |
 | I6 | PHI processed outside the U.S. (§ 408.051(3)) | Audited admin attestation (U.S. only; stricter than the statute's continental U.S., territories, Canada); DenialDesk runs in U.S. Azure (ADR 0002) | Attestation-level; vendor screening R-3.3.6 and offshore access R-3.3.3 (OA-045) |
@@ -61,7 +61,7 @@ Resources and tokens exist only in memory.
 | E3 | Deletion to hide history | `source_status` instead of deletes; `revoked` terminal; no DELETE grants; retention per §9.2 | Owner DB role (open decision) |
 
 ## Blocking before real data
-- Practice-scoped population (I3): Bulk Data Group export or operator-verified filter.
+- Practice-scoped population (I3): Bulk Data Group export (the only scope Approve accepts today); an operator-verified filter only once it can be recorded and applied.
 - Sensitivity masking for restricted-in-source patients (I4), and the Part 2 program question.
 - Key Vault per-connection keys, rotation and compromise runbooks, JWKS rotation test (S3).
 - Owner/counsel answers: residency and vendor screening (I6), customer BAA covers the EHR pull

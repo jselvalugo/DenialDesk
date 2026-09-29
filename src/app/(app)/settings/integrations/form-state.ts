@@ -28,7 +28,10 @@ export interface ConnectionFormState {
  * from the session's own `mfa_verified_at` (R-7.2.2), with an injectable clock for tests.
  */
 export function integrationActor(
-  auth: Pick<AuthContext, "tenantId" | "userId" | "role"> & { mfaVerifiedAt?: Date | null },
+  auth: Pick<AuthContext, "tenantId" | "userId" | "role"> & {
+    mfaVerifiedAt?: Date | null;
+    sessionId?: string;
+  },
   synthetic: () => boolean = syntheticDataOnly,
   now: Date = new Date(),
 ): IntegrationActor {
@@ -39,6 +42,7 @@ export function integrationActor(
     syntheticOnly: synthetic(),
     recentMfa: hasRecentMfa(auth.mfaVerifiedAt ?? null, now),
     stepUpVerifiedAt: auth.mfaVerifiedAt?.toISOString() ?? null,
+    sessionId: auth.sessionId ?? null,
   };
 }
 
