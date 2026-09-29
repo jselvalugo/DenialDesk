@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { todayIn } from "@rules/calendar";
@@ -19,6 +20,7 @@ import { decodeUpload } from "@/domain/revenue-cycle/monthly-file";
 import { getT } from "@/i18n/server";
 import { auditSystem } from "@/lib/audit";
 import { syntheticDataOnly } from "@/lib/env";
+import { hit } from "@/lib/rate-limit";
 
 export interface ImportProblemRow {
   row: number;
@@ -39,7 +41,8 @@ export interface ImportState {
 const formSchema = z.object({ providerId: z.uuid(), locationId: z.uuid() });
 
 /** IDs and counts only: never a row value, a code, or the file's name (docs/specs/claims.md C2). */
-type RejectReason = "forbidden" | "upload_check" | "encoding" | "validation" | "duplicate" | "conflict";
+type RejectReason =
+  "forbidden" | "upload_check" | "encoding" | "validation" | "duplicate" | "conflict" | "error";
 
 /**
  * Imports one charge CSV as draft claims (docs/specs/claims.md C2). The file is read in memory as
@@ -49,12 +52,15 @@ type RejectReason = "forbidden" | "upload_check" | "encoding" | "validation" | "
 export async function importCharges(_: ImportState, formData: FormData): Promise<ImportState> {
   const auth = await requireAuth();
   const t = await getT("claims");
+  // Names this attempt in the audit log: the batch ID of a completed import, the entity ID of a refused one.
+  const attemptId = randomUUID();
   const rejected = (reason: RejectReason, counts: { rows?: number; problems?: number } = {}) =>
     auditSystem({
       action: "claim.import_rejected",
       actorUserId: auth.userId,
       tenantId: auth.tenantId,
       entityType: "claim_import",
+      entityId: attemptId,
       reason,
       metadata: { rows: counts.rows ?? 0, problems: counts.problems ?? 0 },
     });
@@ -62,6 +68,21 @@ export async function importCharges(_: ImportState, formData: FormData): Promise
   if (!canImportCharges(auth.role)) {
     await rejected("forbidden");
     return { error: t("import.error.forbidden") };
+  }
+  // Per practice, so one practice's imports can't crowd out another's and a stream of large files can't
+  // hold the practice's import lock (docs/threat-models/charge-import.md).
+  const limited = await hit("import_charges", `practice:${auth.tenantId}`);
+  if (!limited.allowed) {
+    await auditSystem({
+      action: "security.rate_limited",
+      actorUserId: auth.userId,
+      tenantId: auth.tenantId,
+      entityType: "claim_import",
+      entityId: attemptId,
+      reason: "import_charges",
+      metadata: { bucket: "import_charges" },
+    });
+    return { error: t("import.error.rateLimited") };
   }
   const file = formData.get("file");
   const syntheticOnly = syntheticDataOnly();
@@ -103,7 +124,7 @@ export async function importCharges(_: ImportState, formData: FormData): Promise
     })),
   });
   if (!parsed.ok) {
-    await rejected("validation", { problems: parsed.total });
+    await rejected("validation", { rows: parsed.rowCount, problems: parsed.total });
     return refusal(parsed.problems, parsed.total);
   }
 
@@ -116,6 +137,7 @@ export async function importCharges(_: ImportState, formData: FormData): Promise
         { rowCount: parsed.rowCount, claims: parsed.claims },
         ids.data,
         today,
+        attemptId,
       ),
     );
   } catch (error) {
@@ -124,6 +146,9 @@ export async function importCharges(_: ImportState, formData: FormData): Promise
       await rejected("conflict", { rows: parsed.rowCount });
       return { error: t("import.error.conflict") };
     }
+    // Anything else (a database failure) is not the user's file: audit the refusal with a fixed reason and
+    // counts only, then let it surface. The transaction has rolled back, so no claim was created.
+    await rejected("error", { rows: parsed.rowCount });
     throw error;
   }
   if (!outcome.ok) {

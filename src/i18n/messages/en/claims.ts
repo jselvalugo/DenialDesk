@@ -288,6 +288,15 @@ export const claims = {
   "import.problem.matchesClaimInFile":
     "Another claim in this file has the same patient, payer, date of service, and a procedure code with the same modifiers. Possible duplicate.",
 
+  "import.problem.duplicateLine":
+    "This line repeats an earlier line of the same claim (same procedure code and modifiers). If the file was pasted twice, remove the copy.",
+  "import.problem.claimRowsNotContiguous":
+    "The lines of one claim must be next to each other, but this claim number appears again after other claims.",
+  "import.error.rateLimited":
+    "Too many imports in a short time for this practice. Wait a few minutes and try again.",
+  "import.file.claimNumberNotice":
+    "The claim number is stored without field-level encryption. Never put a member ID, Social Security number, or any other identifier in it.",
+
   // Result
   "import.result.title": "Import complete",
   "import.result.summary":

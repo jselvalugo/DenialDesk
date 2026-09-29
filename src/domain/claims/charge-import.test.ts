@@ -171,18 +171,21 @@ describe("createDraftClaims refuses malformed input before touching the database
   const tx = {} as TenantTx;
 
   it("needs a line", async () => {
-    await expect(createDraftClaims(tx, actor, [{ ...draft, lines: [] }])).rejects.toThrow(
-      /at least one line/,
-    );
+    await expect(
+      createDraftClaims(tx, actor, [{ ...draft, lines: [] }], { reason: "charge_import" }),
+    ).rejects.toThrow(/at least one line/);
   });
 
   it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 2])(
     "refuses a charge of %s cents",
     async (cents) => {
       await expect(
-        createDraftClaims(tx, actor, [
-          { ...draft, lines: [{ procedureCode: "99213", modifiers: [], units: 1, chargeCents: cents }] },
-        ]),
+        createDraftClaims(
+          tx,
+          actor,
+          [{ ...draft, lines: [{ procedureCode: "99213", modifiers: [], units: 1, chargeCents: cents }] }],
+          { reason: "charge_import" },
+        ),
       ).rejects.toThrow(/whole-cent/);
     },
   );

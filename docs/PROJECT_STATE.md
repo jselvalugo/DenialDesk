@@ -277,11 +277,12 @@ _Last updated: 2026-09-29_
   + code with the same modifiers as any existing claim or another claim in the file, and a whole file already
   imported. Timely filing (C1 `filingStatus`) only warns; counts are shown after the import. Synthetic-only
   environments need the attestation, `SYN-` claim numbers, and `SYN` MRNs. Audit: `claim.created` per claim,
-  `claim.import_completed` per import (batch ID, counts), `claim.import_rejected` (fixed reason, counts); no
-  row value anywhere. Error report: first 20 rows on the page, CSV download (row, column, code, message) built
-  in the browser. Parse and match logic is in `charge-file.ts` (pure) and `charge-import.ts`. **Status:** unit
-  tests, lint, typecheck, format and build pass; `test/integration/claim-charge-import.test.ts` was written
-  without database access and **has not been run** (needs a CI run). Owner: OA-083 (a `claim_imports` table
+  `claim.import_completed` per import (batch ID, counts), `claim.import_rejected` (fixed reason, counts, attempt ID);
+  a per-practice `import_charges` rate limit (10 per 10 minutes); repeated or non-contiguous lines are refused so a
+  file pasted twice can't double a claim; no row value anywhere. Error report: first 20 rows on the page, CSV download (row, column, code, message) built
+  in the browser. Parse and match logic is in `charge-file.ts` (pure) and `charge-import.ts`. **Status:** CI ran the first
+  integration file green; the fix-round tests (`claim-import-actions.test.ts`, the synced-patient and
+  repeated-line cases, shared fixtures now in `test/integration/helpers.ts`) await a CI run. Owner: OA-083 (a `claim_imports` table
   needs a GRANT, R-15.9), OA-084 (biller roles, duplicate override, encounter split, PM export source).
 - UI shell is ERP-style: global header with a "Go to" field (Ctrl/⌘ K), navy tab bar whose first
   control is the current module's name, and a grouped module switcher (`specs/erp-shell.md`).
@@ -591,6 +592,11 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 - Member-ID reveal on a denial decrypts the patient's primary-payer member ID even when the claim was
   billed to another payer (R-5.1.2); fix with coverage records (review §6.1), and until then reveal
   only when the claim's payer is the patient's primary payer (2026-09-26 review, security).
+- Claims C2 follow-up: nothing in the database forces a `claim_versions` version-1 row when a claim is
+  INSERTed (the C1 triggers guard updates only). `createDraftClaims` (`src/domain/claims/versions.ts`) is the
+  supported way to create a claim and writes version 1 and the `claim.created` audit event; a deferred
+  constraint trigger requiring version 1 at commit should land with C3 (no other code path inserts claims
+  today except the seed, which writes its own version 1).
 - `claims.status` / `paid_cents` are not covered by the version trigger, and no DB CHECK enforces
   0 ≤ paid ≤ billed, 0 < denied ≤ billed, charges ≥ 0; must land with C3 / 835 posting, before the
   Azure cutover (2026-09-26 review, security; owner decision §8.4).

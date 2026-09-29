@@ -299,6 +299,15 @@ export const claims: Messages["claims"] = {
   "import.problem.matchesClaimInFile":
     "Outra reivindicação deste arquivo tem o mesmo paciente, pagador, data do serviço e um código de procedimento com os mesmos modificadores. Possível duplicidade.",
 
+  "import.problem.duplicateLine":
+    "Esta linha repete uma linha anterior da mesma reivindicação (mesmo código de procedimento e modificadores). Se o arquivo foi colado duas vezes, remova a cópia.",
+  "import.problem.claimRowsNotContiguous":
+    "As linhas de uma reivindicação devem ficar juntas, mas este número de reivindicação aparece de novo depois de outras reivindicações.",
+  "import.error.rateLimited":
+    "Importações demais em pouco tempo para esta prática. Aguarde alguns minutos e tente novamente.",
+  "import.file.claimNumberNotice":
+    "O número da reivindicação é guardado sem criptografia em nível de campo. Nunca coloque nele um ID de beneficiário, um número de Seguro Social ou qualquer outro identificador.",
+
   // Resultado
   "import.result.title": "Importação concluída",
   "import.result.summary":

@@ -4,7 +4,7 @@ import type { TenantTx } from "@/db/tenant";
 import { claimLines, claims, claimVersions, users } from "@/db/schema";
 import type { MessageKey } from "@/i18n/messages/types";
 import type { Params } from "@/i18n/translate";
-import { audit } from "@/lib/audit";
+import { audit, auditBatch } from "@/lib/audit";
 import { changedFields, snapshotOf, type Correction } from "./correction";
 import { isUnsubmitted } from "./status";
 import { en } from "@/i18n/messages/en";
@@ -181,13 +181,21 @@ const INSERT_CHUNK = 500;
  * Creates draft claims with their lines and version 1 of their history (R-3.10.3), in the caller's
  * transaction: the claim row, then its lines, then the snapshot, so the C1 triggers accept them (a
  * claim created in this transaction needs no earlier version). `billed_cents` is the exact sum of the
- * lines' integer cents. Callers audit; this writes only claims, lines, and versions.
+ * lines' integer cents.
+ *
+ * Contract: the caller supplies the version-1 `reason` (there is no default: a version always says why
+ * it exists) and, optionally, a `batchId` that ties the claims to the operation that created them. This
+ * function audits `claim.created` once per claim (IDs and counts only: batch ID, line count, version 1),
+ * so no caller can create a claim without its PHI-write event; the caller audits the surrounding
+ * operation (for the charge import, `claim.import_completed`). Nothing in the database forces a
+ * version-1 row when a claim is inserted (the C1 triggers guard updates), so this function is the only
+ * supported way to create a claim: see docs/PROJECT_STATE.md follow-ups.
  */
 export async function createDraftClaims(
   tx: TenantTx,
   actor: { tenantId: string; userId: string },
   drafts: readonly DraftClaimInput[],
-  reason: string = CHARGE_IMPORT_REASON,
+  options: { reason: string; batchId?: string },
 ): Promise<{ id: string; claimNumber: string; lineCount: number }[]> {
   const created = drafts.map((draft) => {
     const cents = draft.lines.map((l) => l.chargeCents);
@@ -248,8 +256,26 @@ export async function createDraftClaims(
           draft.lines.map((line, n) => ({ lineNumber: n + 1, ...line })),
         ),
         changedFields: [],
-        reason,
+        reason: options.reason,
         changedBy: actor.userId,
+      })),
+    );
+  }
+  for (let i = 0; i < created.length; i += INSERT_CHUNK) {
+    await auditBatch(
+      tx,
+      created.slice(i, i + INSERT_CHUNK).map(({ id, draft }) => ({
+        action: "claim.created" as const,
+        actorUserId: actor.userId,
+        tenantId: actor.tenantId,
+        entityType: "claim" as const,
+        entityId: id,
+        reason: options.reason,
+        metadata: {
+          ...(options.batchId ? { batchId: options.batchId } : {}),
+          lines: draft.lines.length,
+          version: 1,
+        },
       })),
     );
   }

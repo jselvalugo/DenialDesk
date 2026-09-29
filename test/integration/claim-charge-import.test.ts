@@ -22,7 +22,14 @@ import {
 import { importChargeClaims, type ChargeImportResult } from "@/domain/claims/charge-import";
 import { getClaim } from "@/domain/claims/queries";
 import { correctClaim } from "@/domain/claims/versions";
-import { createTestTenant } from "./helpers";
+import {
+  createTestTenant,
+  insertSyncedPatient,
+  makeActiveConnection,
+  makeRunningRun,
+  seedChargeImportPractice,
+  type ChargeImportPractice,
+} from "./helpers";
 
 // docs/specs/claims.md C2 (charge capture via CSV import). No new table: these tests cover the import
 // against the existing claims tables, their row-level security, and the C1 version triggers.
@@ -31,13 +38,7 @@ import { createTestTenant } from "./helpers";
 const TODAY = "2026-09-29";
 type Ctx = { tenantId: string; userId: string };
 
-interface Practice extends Ctx {
-  providerId: string;
-  locationId: string;
-  otherProviderId: string;
-  otherProviderNpi: string;
-  otherLocationName: string;
-}
+type Practice = ChargeImportPractice;
 let a: Practice;
 let b: Practice;
 
@@ -47,66 +48,7 @@ const FIXTURE = readFileSync(
 );
 
 async function practice(label: string, extras: { onlyHere?: boolean } = {}): Promise<Practice> {
-  const ctx = await createTestTenant(label);
-  const db = systemDb();
-  const [provider] = await db
-    .insert(providers)
-    .values({ tenantId: ctx.tenantId, name: "Dr. Synthetic One", npi: "1111111111", taxonomy: "207Q00000X" })
-    .returning({ id: providers.id });
-  const [other] = await db
-    .insert(providers)
-    .values({ tenantId: ctx.tenantId, name: "Dr. Synthetic Two", npi: "2222222222", taxonomy: "207R00000X" })
-    .returning({ id: providers.id });
-  const [location] = await db
-    .insert(locations)
-    .values({ tenantId: ctx.tenantId, name: "Bayshore Clinic (synthetic)", city: "Tampa" })
-    .returning({ id: locations.id });
-  await db
-    .insert(locations)
-    .values({ tenantId: ctx.tenantId, name: "Lake Clinic (synthetic)", city: "Orlando" });
-  await db.insert(payers).values([
-    {
-      tenantId: ctx.tenantId,
-      name: "Gulf Coast Mutual (synthetic)",
-      ediPayerId: "SYNTH01",
-      regime: "fl_insurer",
-    },
-    {
-      tenantId: ctx.tenantId,
-      name: "Medicare Part B (synthetic)",
-      ediPayerId: "SYNTH02",
-      regime: "medicare",
-    },
-    { tenantId: ctx.tenantId, name: "Sunward HMO (synthetic)", ediPayerId: "SYNTH03", regime: "fl_hmo" },
-    { tenantId: ctx.tenantId, name: "Unverified Health (synthetic)" },
-  ]);
-  if (extras.onlyHere) {
-    await db.insert(payers).values({
-      tenantId: ctx.tenantId,
-      name: "Only In Practice B (synthetic)",
-      ediPayerId: "SYNTH09",
-      regime: "fl_insurer",
-    });
-  }
-  await db.insert(patients).values(
-    ["SYN-901001", "SYN-901002", "SYN-901003", "SYN-901004", "SYN-901005"].map((mrn, i) => ({
-      tenantId: ctx.tenantId,
-      mrn,
-      firstName: `Synthia${i}`,
-      lastName: "Testpatient",
-      birthDate: "1980-01-01",
-      memberIdEnc: "not-a-real-ciphertext",
-      memberIdLast4: "0000",
-    })),
-  );
-  return {
-    ...ctx,
-    providerId: provider!.id,
-    locationId: location!.id,
-    otherProviderId: other!.id,
-    otherProviderNpi: "2222222222",
-    otherLocationName: "Lake Clinic (synthetic)",
-  };
+  return seedChargeImportPractice(await createTestTenant(label), extras);
 }
 
 beforeAll(async () => {
@@ -332,7 +274,9 @@ describe("importing the synthetic sample file", () => {
       noCoverage: 0,
       patientInactive: 0,
     });
-    const text = JSON.stringify(events);
+    // Only what an event says: its action, entity type, reason, and metadata. (Not the row IDs, which are
+    // random and could contain any digits.)
+    const text = JSON.stringify(events.map((e) => [e.action, e.entityType, e.reason, e.metadata]));
     for (const secret of [
       "SYN-901001",
       "SYN-CHG-0001",
@@ -584,6 +528,74 @@ describe("timely filing warns and never blocks (R-3.1.5)", () => {
     const ctx = await practice(`Charge import filing ${today}`);
     const result = await run(ctx, csv({ "Service date": "2026-03-31" }), { today });
     expect(result).toMatchObject({ ok: true, claims: 1, warnings: expected });
+  });
+});
+
+describe("a patient synced from an EHR (R-5.1.2, patient-integrations PI1a)", () => {
+  it("is matched only: the import counts its warnings and leaves the row byte for byte unchanged", async () => {
+    // A real synced row: source 'fhir', coverage 'none' (so no member ID), inactive at the source. It can
+    // only be inserted by a running sync run of an active connection, as in the sync tests.
+    const { ctx, connId } = await makeActiveConnection("Charge import synced");
+    const practiceOfSynced = await seedChargeImportPractice(ctx);
+    const runId = await makeRunningRun(ctx, connId);
+    const mrn = "SYN-FHIR-CI000001";
+    const patientId = await insertSyncedPatient(ctx, connId, runId, { mrn, sourceStatus: "inactive" });
+    const snapshot = () => systemDb().select().from(patients).where(eq(patients.id, patientId));
+    const before = await snapshot();
+    expect(before[0]).toMatchObject({
+      source: "fhir",
+      coverageStatus: "none",
+      sourceStatus: "inactive",
+      memberIdEnc: null,
+    });
+    const patientCount = async () =>
+      (await withTenant(ctx, (tx) => tx.select({ n: sql<number>`count(*)::int` }).from(patients)))[0]!.n;
+    const countBefore = await patientCount();
+
+    const result = await run(practiceOfSynced, csv({ "Claim number": "SYN-SY-1", MRN: mrn }));
+
+    expect(result).toMatchObject({
+      ok: true,
+      claims: 1,
+      warnings: { noCoverage: 1, patientInactive: 1, payerUnverified: 0 },
+    });
+    expect(await snapshot()).toEqual(before);
+    expect(await patientCount()).toBe(countBefore);
+    // The claim points at the synced patient; nothing else about it changed.
+    const [claim] = await withTenant(ctx, (tx) =>
+      tx.select({ patientId: claims.patientId }).from(claims).where(eq(claims.claimNumber, "SYN-SY-1")),
+    );
+    expect(claim!.patientId).toBe(patientId);
+  });
+
+  it("is never created by the import: an MRN that only the source would know is a row error", async () => {
+    const { ctx } = await makeActiveConnection("Charge import synced-missing");
+    const p = await seedChargeImportPractice(ctx);
+    const result = await run(p, csv({ MRN: "SYN-FHIR-NOTSYNCED" }));
+    expect(problemCodes(result)).toEqual(["patient_not_found"]);
+  });
+});
+
+describe("lines that repeat (a file pasted twice or two overlapping exports)", () => {
+  it("refuses at the parser, before any claim is created", () => {
+    const [header, ...body] = FIXTURE.trim().split("\n");
+    const doubled = parseChargeFile([header, ...body, ...body].join("\n"), {
+      syntheticOnly: true,
+      today: TODAY,
+    });
+    expect(doubled.ok).toBe(false);
+    if (doubled.ok) return;
+    const codes = new Set(doubled.problems.map((p) => p.code));
+    expect(codes.has("duplicate_line")).toBe(true);
+    expect(codes.has("claim_rows_not_contiguous")).toBe(true);
+  });
+
+  it("creates nothing when an import would otherwise add the same lines again to a claim", async () => {
+    const ctx = await practice("Charge import doubled lines");
+    // The same claim, twice in the file: refused by the parser, so the import is never reached.
+    const text = csv({ "Claim number": "SYN-D-1" }, { "Claim number": "SYN-D-1" });
+    expect(parseChargeFile(text, { syntheticOnly: true, today: TODAY }).ok).toBe(false);
+    expect(await claimCount(ctx)).toBe(0);
   });
 });
 

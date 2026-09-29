@@ -20,6 +20,10 @@ import { CPT_HCPCS, ICD10CM, MAX_DIAGNOSES, MAX_MODIFIERS, MIN_SERVICE_DATE, MOD
  */
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 export const MAX_IMPORT_ROWS = 5_000;
+/**
+ * ⚠️ VERIFY (edi-x12-specialist, before C3): the 837P professional service-line limit per claim. 50 is
+ * carried from the spec (docs/specs/claims.md C2) and is not confirmed against the implementation guide.
+ */
 export const MAX_LINES_PER_CLAIM = 50;
 /** Problems returned to the page and the downloadable report; the rest are only counted. */
 export const MAX_REPORT_PROBLEMS = 1_000;
@@ -117,6 +121,8 @@ export const PROBLEM_MESSAGE_KEYS = {
   charge_range: "import.problem.chargeRange",
   provider_npi_format: "import.problem.providerNpiFormat",
   claim_fields_differ: "import.problem.claimFieldsDiffer",
+  duplicate_line: "import.problem.duplicateLine",
+  claim_rows_not_contiguous: "import.problem.claimRowsNotContiguous",
   too_many_lines: "import.problem.tooManyLines",
   // Matching against the practice's records
   patient_not_found: "import.problem.patientNotFound",
@@ -181,7 +187,16 @@ export interface ChargeClaim {
 
 export type ChargeParseResult =
   | { ok: true; rowCount: number; claims: ChargeClaim[] }
-  | { ok: false; problems: ChargeProblem[]; total: number };
+  | { ok: false; problems: ChargeProblem[]; total: number; rowCount: number };
+
+/**
+ * The identity of a service line for duplicate comparison: procedure code plus modifiers. Modifiers are
+ * compared sorted, so the same modifiers in another order are the same service; only the comparison sorts,
+ * nothing stored is reordered. (A claim has one date of service, so the date isn't part of a line's key.)
+ */
+export function lineServiceKey(procedureCode: string, modifiers: readonly string[]): string {
+  return `${procedureCode}|${[...modifiers].sort().join(",")}`;
+}
 
 /** "E11.9, I10  Z00.00" to codes exactly as written; empty pieces dropped. Nothing is upper-cased or fixed. */
 export function splitAsGiven(text: string): string[] {
@@ -212,12 +227,15 @@ export function parseChargeFile(text: string, options: ParseOptions): ChargePars
       return {
         ok: false,
         total: 1,
+        rowCount: 0,
         problems: [{ row: error.row, code: CSV_CODES[error.code], params: error.params }],
       };
     }
     throw error;
   }
-  if (rows.length < 2) return { ok: false, total: 1, problems: [{ row: 1, code: "no_data_rows" }] };
+  if (rows.length < 2) {
+    return { ok: false, total: 1, rowCount: 0, problems: [{ row: 1, code: "no_data_rows" }] };
+  }
 
   const headerRow = rows[0]!;
   const header = headerRow.cells.map(normalizeHeader);
@@ -237,6 +255,7 @@ export function parseChargeFile(text: string, options: ParseOptions): ChargePars
     return {
       ok: false,
       total: 1,
+      rowCount: rows.length - 1,
       problems: [{ row: headerRow.line, code: "missing_columns", params: { columns: missing.join(", ") } }],
     };
   }
@@ -244,6 +263,7 @@ export function parseChargeFile(text: string, options: ParseOptions): ChargePars
     return {
       ok: false,
       total: 1,
+      rowCount: rows.length - 1,
       problems: [
         { row: headerRow.line, code: "ambiguous_columns", params: { columns: ambiguous.join(", ") } },
       ],
@@ -270,6 +290,11 @@ export function parseChargeFile(text: string, options: ParseOptions): ChargePars
   };
 
   const claims = new Map<string, ChargeClaim>();
+  // A claim's lines must sit together and must not repeat: rows are merged by claim number, so a file
+  // pasted twice, or two overlapping exports, would otherwise double the lines and the billed amount.
+  const lineKeys = new Map<string, Set<string>>();
+  const notContiguous = new Set<string>();
+  let previousKey: string | null = null;
   // A bad claim number or MRN is reported once, on its first row, not once per line.
   const reportedNumbers = new Set<string>();
   for (let r = 1; r < rows.length; r++) {
@@ -293,6 +318,12 @@ export function parseChargeFile(text: string, options: ParseOptions): ChargePars
     } else groupKey = claimNumber;
 
     const existing = groupKey ? claims.get(groupKey) : undefined;
+    const previous = previousKey;
+    previousKey = groupKey;
+    if (groupKey && existing && previous !== groupKey && !notContiguous.has(groupKey)) {
+      notContiguous.add(groupKey);
+      add(line, "claim_rows_not_contiguous", "claimNumber");
+    }
 
     // -- Claim-level columns: validated on the claim's first line, compared on the others --------
     const mrn = cell("mrn");
@@ -356,7 +387,15 @@ export function parseChargeFile(text: string, options: ParseOptions): ChargePars
       units,
       chargeCents: chargeCents ?? 0,
     };
+    const key = lineServiceKey(procedureCode, modifiers);
     if (existing) {
+      const seen = lineKeys.get(groupKey)!;
+      if (seen.has(key)) {
+        // Not merged: a repeated line is refused, never added twice.
+        add(line, "duplicate_line", "procedureCode");
+        continue;
+      }
+      seen.add(key);
       if (existing.lines.length >= MAX_LINES_PER_CLAIM) {
         if (existing.lines.length === MAX_LINES_PER_CLAIM) {
           add(line, "too_many_lines", "claimNumber", { max: MAX_LINES_PER_CLAIM });
@@ -365,6 +404,7 @@ export function parseChargeFile(text: string, options: ParseOptions): ChargePars
         }
       } else existing.lines.push(chargeLine);
     } else {
+      lineKeys.set(groupKey, new Set([key]));
       claims.set(groupKey, {
         claimNumber,
         mrn,
@@ -378,7 +418,7 @@ export function parseChargeFile(text: string, options: ParseOptions): ChargePars
       });
     }
   }
-  if (total > 0) return { ok: false, problems, total };
+  if (total > 0) return { ok: false, problems, total, rowCount: rows.length - 1 };
   return { ok: true, rowCount: rows.length - 1, claims: [...claims.values()] };
 }
 

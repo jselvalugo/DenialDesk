@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Regime } from "@rules/types";
 import { canImportCharges } from "@/auth/permissions";
 import { claimLines, claims, locations, patients, payers, providers } from "@/db/schema";
 import type { TenantTx } from "@/db/tenant";
 import { resolvePayerByName, type PayerOption } from "@/domain/payers/resolve";
 import { isPayerVerified } from "@/domain/payers/verification";
-import { audit, auditBatch } from "@/lib/audit";
+import { audit } from "@/lib/audit";
 import {
   columnLabel,
+  DUPLICATE_CODES,
+  lineServiceKey,
   MAX_REPORT_PROBLEMS,
   type ChargeClaim,
   type ChargeColumnKey,
@@ -16,7 +18,7 @@ import {
   type ChargeProblemCode,
 } from "./charge-file";
 import { filingStatus } from "./status";
-import { createDraftClaims, type DraftClaimInput } from "./versions";
+import { CHARGE_IMPORT_REASON, createDraftClaims, type DraftClaimInput } from "./versions";
 
 /**
  * Charge capture import (docs/specs/claims.md C2): matches an already-parsed file against the
@@ -137,7 +139,7 @@ export function matchPayer(options: PayerOption[], text: string): PayerMatch {
  * nothing stored is reordered.
  */
 export function serviceKeys(lines: { procedureCode: string; modifiers: string[] }[]): Set<string> {
-  return new Set(lines.map((l) => `${l.procedureCode}|${[...l.modifiers].sort().join(",")}`));
+  return new Set(lines.map((l) => lineServiceKey(l.procedureCode, l.modifiers)));
 }
 
 export interface ServiceIdentity {
@@ -168,6 +170,8 @@ export async function importChargeClaims(
   parsed: { rowCount: number; claims: readonly ChargeClaim[] },
   defaults: ImportDefaults,
   today: string,
+  /** Names this import in the audit log (the action also uses it for a refused attempt). */
+  batchId: string = randomUUID(),
 ): Promise<ChargeImportResult> {
   const refused = (
     reason: "forbidden" | "defaults" | "validation" | "duplicate",
@@ -177,7 +181,10 @@ export async function importChargeClaims(
   if (!canImportCharges(actor.role)) return refused("forbidden");
   if (parsed.claims.length === 0) return refused("validation");
 
-  // One import per practice at a time, so the duplicate checks below hold until this commits.
+  // One import per practice at a time, so the duplicate checks below hold until this commits. The lock is
+  // advisory and per practice: it doesn't touch claim rows, so it can't deadlock with `correctClaim`, which
+  // locks one existing claim row (`FOR UPDATE`) and never takes this lock; an import only inserts new claims.
+  // Rate-limited per practice (`import_charges`) so a held lock can't be used to stall imports.
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`claim_import:${actor.tenantId}`}))`);
 
   // Practice reference data (RLS limits every read to this practice; FKs bypass RLS, so the form's
@@ -243,8 +250,10 @@ export async function importChargeClaims(
 
   const problems: ChargeProblem[] = [];
   let total = 0;
+  let nonDuplicate = false;
   const add = (claim: ChargeClaim, code: ChargeProblemCode, column?: ChargeColumnKey) => {
     total++;
+    if (!DUPLICATE_CODES.includes(code)) nonDuplicate = true;
     if (problems.length < MAX_REPORT_PROBLEMS) {
       problems.push({ row: claim.firstRow, code, ...(column ? { column: columnLabel(column) } : {}) });
     }
@@ -280,7 +289,8 @@ export async function importChargeClaims(
   // A row that matches an existing claim (any status) or another claim in this file.
   if (resolved.length > 0) {
     const patientIds = [...new Set(resolved.map((r) => r.patientId))];
-    const dates = resolved.map((r) => r.claim.serviceDate).sort();
+    // Only the file's own dates of service, not the whole range between them.
+    const dates = [...new Set(resolved.map((r) => r.claim.serviceDate))];
     const existingByPatient = new Map<string, Map<string, ServiceIdentity>>();
     for (const part of chunks(patientIds)) {
       const rows = await tx
@@ -294,13 +304,7 @@ export async function importChargeClaims(
         })
         .from(claims)
         .innerJoin(claimLines, eq(claimLines.claimId, claims.id))
-        .where(
-          and(
-            inArray(claims.patientId, part),
-            gte(claims.serviceDate, dates[0]!),
-            lte(claims.serviceDate, dates.at(-1)!),
-          ),
-        );
+        .where(and(inArray(claims.patientId, part), inArray(claims.serviceDate, dates)));
       for (const row of rows) {
         const byClaim = existingByPatient.get(row.patientId) ?? new Map<string, ServiceIdentity>();
         const identity = byClaim.get(row.claimId) ?? {
@@ -314,7 +318,8 @@ export async function importChargeClaims(
         existingByPatient.set(row.patientId, byClaim);
       }
     }
-    const seenInFile: ServiceIdentity[] = [];
+    // Bucketed by patient, payer, and date, so a 5,000-claim file compares within a bucket, not against every claim.
+    const seenInFile = new Map<string, ServiceIdentity[]>();
     for (const r of resolved) {
       const identity: ServiceIdentity = {
         patientId: r.patientId,
@@ -327,16 +332,15 @@ export async function importChargeClaims(
         const others = [...(existingByPatient.get(r.patientId)?.values() ?? [])];
         if (others.some((other) => isSameService(identity, other))) add(r.claim, "matches_existing_claim");
       }
-      if (seenInFile.some((other) => isSameService(identity, other))) add(r.claim, "matches_claim_in_file");
-      seenInFile.push(identity);
+      const bucket = `${r.patientId}|${r.payerId}|${r.claim.serviceDate}`;
+      const earlier = seenInFile.get(bucket) ?? [];
+      if (earlier.some((other) => isSameService(identity, other))) add(r.claim, "matches_claim_in_file");
+      seenInFile.set(bucket, [...earlier, identity]);
     }
   }
 
   if (total > 0) {
-    const duplicateOnly = problems.every((p) =>
-      ["claim_number_exists", "matches_existing_claim", "matches_claim_in_file"].includes(p.code),
-    );
-    return refused(duplicateOnly ? "duplicate" : "validation", problems, total);
+    return refused(nonDuplicate ? "validation" : "duplicate", problems, total);
   }
 
   // Everything matched: create the drafts, then audit, all in the caller's transaction.
@@ -355,7 +359,8 @@ export async function importChargeClaims(
       chargeCents: l.chargeCents,
     })),
   }));
-  const created = await createDraftClaims(tx, actor, drafts);
+  // Writes the claims, lines, and version 1, and audits `claim.created` once per claim (batch ID, counts).
+  const created = await createDraftClaims(tx, actor, drafts, { reason: CHARGE_IMPORT_REASON, batchId });
 
   const warnings = emptyWarnings();
   for (const r of resolved) {
@@ -371,32 +376,19 @@ export async function importChargeClaims(
     });
   }
 
-  const batchId = randomUUID();
   const lineTotal = created.reduce((sum, c) => sum + c.lineCount, 0);
   const billedCents = drafts.reduce(
     (sum, d) => sum + d.lines.reduce((lineSum, l) => lineSum + l.chargeCents, 0),
     0,
   );
-  // One event per claim (a PHI write) and one for the import; IDs and counts only.
-  await auditBatch(
-    tx,
-    created.map((c) => ({
-      action: "claim.created" as const,
-      actorUserId: actor.userId,
-      tenantId: actor.tenantId,
-      entityType: "claim" as const,
-      entityId: c.id,
-      reason: "charge_import",
-      metadata: { batchId, lines: c.lineCount, version: 1 },
-    })),
-  );
+  // One event for the import; the per-claim events were written with the claims. IDs and counts only.
   await audit(tx, {
     action: "claim.import_completed",
     actorUserId: actor.userId,
     tenantId: actor.tenantId,
     entityType: "claim_import",
     entityId: batchId,
-    reason: "charge_import",
+    reason: CHARGE_IMPORT_REASON,
     metadata: { rows: parsed.rowCount, claims: created.length, lines: lineTotal, ...warnings },
   });
   return { ok: true, batchId, claims: created.length, lines: lineTotal, billedCents, warnings };

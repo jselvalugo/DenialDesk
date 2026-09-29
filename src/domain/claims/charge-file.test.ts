@@ -282,12 +282,12 @@ describe("charge file: dates of service", () => {
 });
 
 describe("charge file: claims of several lines", () => {
-  it("groups lines by claim number wherever they appear and numbers them in file order", () => {
+  it("groups the lines of a claim and keeps them in file order", () => {
     const result = parseChargeFile(
       file(
         line({ "Procedure code": "99213" }),
-        line({ "Claim number": "SYN-T-2", MRN: "SYN-200" }),
         line({ "Procedure code": "36415", Modifiers: "59" }),
+        line({ "Claim number": "SYN-T-2", MRN: "SYN-200" }),
       ),
       open,
     );
@@ -296,8 +296,9 @@ describe("charge file: claims of several lines", () => {
     expect(result.claims).toHaveLength(2);
     expect(result.claims[0]!.lines.map((l) => [l.rowNumber, l.procedureCode])).toEqual([
       [2, "99213"],
-      [4, "36415"],
+      [3, "36415"],
     ]);
+    expect(result.claims[1]!.firstRow).toBe(4);
   });
 
   it("requires claim-level columns to match on every line, naming the column", () => {
@@ -309,7 +310,10 @@ describe("charge file: claims of several lines", () => {
       ["Provider NPI", "1234567890"],
       ["Location", "Somewhere"],
     ] as const) {
-      const result = parseChargeFile(file(line(), line({ [column]: value })), open);
+      const result = parseChargeFile(
+        file(line(), line({ [column]: value, "Procedure code": "36415" })),
+        open,
+      );
       expect(result, column).toMatchObject({
         ok: false,
         problems: [{ row: 3, code: "claim_fields_differ", column }],
@@ -318,15 +322,81 @@ describe("charge file: claims of several lines", () => {
   });
 
   it("treats the payer text case-insensitively when comparing lines", () => {
-    const result = parseChargeFile(file(line(), line({ Payer: "GULF COAST MUTUAL (SYNTHETIC)" })), open);
+    const result = parseChargeFile(
+      file(line(), line({ Payer: "GULF COAST MUTUAL (SYNTHETIC)", "Procedure code": "36415" })),
+      open,
+    );
     expect(result.ok).toBe(true);
   });
 
   it("limits a claim to 50 lines, reporting once", () => {
-    const lines = Array.from({ length: MAX_LINES_PER_CLAIM + 3 }, () => line());
+    const lines = Array.from({ length: MAX_LINES_PER_CLAIM + 3 }, (_, i) =>
+      line({ "Procedure code": `99${200 + i}` }),
+    );
     const result = parseChargeFile(file(...lines), open);
     expect(codesOf(result)).toEqual(["too_many_lines"]);
     expect(parseChargeFile(file(...lines.slice(0, MAX_LINES_PER_CLAIM)), open).ok).toBe(true);
+  });
+
+  it("refuses a line that repeats an earlier line of the claim, instead of merging it (a file pasted twice)", () => {
+    const result = parseChargeFile(
+      file(
+        line({ "Procedure code": "99213", Modifiers: "25" }),
+        line({ "Procedure code": "36415" }),
+        line({ "Procedure code": "99213", Modifiers: "25" }),
+      ),
+      open,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      problems: [{ row: 4, code: "duplicate_line", column: "Procedure code" }],
+    });
+  });
+
+  it("compares a line by procedure code and modifiers, in any order, not by units or charge", () => {
+    const differentModifier = parseChargeFile(
+      file(line({ Modifiers: "25" }), line({ Modifiers: "59" }), line({ Modifiers: "" })),
+      open,
+    );
+    expect(differentModifier.ok).toBe(true);
+    const reordered = parseChargeFile(
+      file(line({ Modifiers: "59 25" }), line({ Modifiers: "25 59", Units: "2", Charge: "999.00" })),
+      open,
+    );
+    expect(codesOf(reordered)).toEqual(["duplicate_line"]);
+  });
+
+  it("refuses a claim number that comes back after other claims, naming the row once", () => {
+    const result = parseChargeFile(
+      file(
+        line({ "Procedure code": "99213" }),
+        line({ "Claim number": "SYN-T-2", MRN: "SYN-200" }),
+        line({ "Procedure code": "36415" }),
+        line({ "Procedure code": "93000" }),
+      ),
+      open,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      total: 1,
+      problems: [{ row: 4, code: "claim_rows_not_contiguous", column: "Claim number" }],
+    });
+  });
+
+  it("refuses the same file body pasted twice: nothing is merged or doubled", () => {
+    const body = [
+      line({ "Claim number": "SYN-T-1", "Procedure code": "99213" }),
+      line({ "Claim number": "SYN-T-1", "Procedure code": "36415" }),
+      line({ "Claim number": "SYN-T-2", MRN: "SYN-200", "Procedure code": "99396" }),
+    ];
+    const result = parseChargeFile(file(...body, ...body), open);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(new Set(result.problems.map((p) => p.code))).toEqual(
+      new Set(["claim_rows_not_contiguous", "duplicate_line"]),
+    );
+    // Every repeated line is named: rows 5 and 6 are the second copy of claim 1, row 7 of claim 2.
+    expect(result.problems.filter((p) => p.code === "duplicate_line").map((p) => p.row)).toEqual([5, 6, 7]);
   });
 
   it("reports a bad claim number once, not once per line", () => {
@@ -378,6 +448,29 @@ describe("charge file: limits on what is reported", () => {
     if (result.ok) return;
     expect(result.problems).toHaveLength(MAX_REPORT_PROBLEMS);
     expect(result.total).toBe(MAX_REPORT_PROBLEMS + 200);
+  });
+});
+
+describe("charge file: encoding of the file itself", () => {
+  it("reads a UTF-8 byte-order mark and CRLF line endings, reporting the physical line", () => {
+    const text = `\uFEFF${[HEADER, line(), line({ "Claim number": "SYN-T-2", Units: "0" })].join("\r\n")}\r\n`;
+    const result = parseChargeFile(text, open);
+    expect(result).toMatchObject({ ok: false, problems: [{ row: 3, code: "units_invalid" }] });
+    const good = parseChargeFile(`\uFEFF${[HEADER, line()].join("\r\n")}\r\n`, open);
+    expect(good.ok).toBe(true);
+    if (good.ok) expect(good.claims[0]!.claimNumber).toBe("SYN-T-1");
+  });
+});
+
+describe("failed parses carry the data-row count (for the audit event)", () => {
+  it("counts rows whether the problem is in a row, the header, or nowhere but the count", () => {
+    const rows = [line(), line({ "Claim number": "SYN-T-2", Units: "0" })];
+    expect(parseChargeFile(file(...rows), open)).toMatchObject({ ok: false, rowCount: 2 });
+    expect(parseChargeFile("Claim number,MRN\nSYN-A-1,SYN-1\nSYN-A-2,SYN-2", open)).toMatchObject({
+      ok: false,
+      rowCount: 2,
+    });
+    expect(parseChargeFile(HEADER, open)).toMatchObject({ ok: false, rowCount: 0 });
   });
 });
 

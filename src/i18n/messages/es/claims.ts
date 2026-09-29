@@ -301,6 +301,15 @@ export const claims: Messages["claims"] = {
   "import.problem.matchesClaimInFile":
     "Otra reclamación de este archivo tiene el mismo paciente, pagador, fecha de servicio y un código de procedimiento con los mismos modificadores. Posible duplicado.",
 
+  "import.problem.duplicateLine":
+    "Esta línea repite una línea anterior de la misma reclamación (mismo código de procedimiento y modificadores). Si el archivo se pegó dos veces, elimine la copia.",
+  "import.problem.claimRowsNotContiguous":
+    "Las líneas de una reclamación deben estar juntas, pero este número de reclamación aparece de nuevo después de otras reclamaciones.",
+  "import.error.rateLimited":
+    "Demasiadas importaciones en poco tiempo para esta práctica. Espere unos minutos e inténtelo de nuevo.",
+  "import.file.claimNumberNotice":
+    "El número de reclamación se guarda sin cifrado a nivel de campo. Nunca escriba en él un ID de miembro, un número de Seguro Social ni ningún otro identificador.",
+
   // Resultado
   "import.result.title": "Importación completa",
   "import.result.summary":

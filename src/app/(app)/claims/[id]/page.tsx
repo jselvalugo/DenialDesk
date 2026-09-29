@@ -349,7 +349,7 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
                     · {f.dateTime(entry.createdAt)}
                   </p>
                   <p className="mt-1 text-body whitespace-pre-wrap text-text">
-                    {entry.reason === CHARGE_IMPORT_REASON
+                    {entry.version === 1 && entry.reason === CHARGE_IMPORT_REASON
                       ? t("detail.history.createdByImport")
                       : entry.reason}
                   </p>

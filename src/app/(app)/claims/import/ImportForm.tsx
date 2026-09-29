@@ -27,20 +27,25 @@ export interface ImportLimits {
 }
 
 /** Report of what to fix: row numbers, header names, codes, and fixed sentences; never a cell value. */
-function reportCsv(problems: ImportProblemRow[]): string {
+function reportCsv(problems: ImportProblemRow[], moreNote?: string): string {
   const lines = ["Row,Column,Code,Message"];
   for (const p of problems) lines.push([p.row, p.column, p.code, p.message].map(csvCell).join(","));
+  // Beyond the report limit: one last line says how many problems were not listed.
+  if (moreNote) lines.push(["", "", "", moreNote].map(csvCell).join(","));
   // The byte-order mark lets spreadsheets read the Spanish and Portuguese messages as UTF-8.
   return `﻿${lines.join("\r\n")}\r\n`;
 }
 
-function downloadReport(problems: ImportProblemRow[]) {
-  const url = URL.createObjectURL(new Blob([reportCsv(problems)], { type: "text/csv;charset=utf-8" }));
+function downloadReport(problems: ImportProblemRow[], moreNote?: string) {
+  const url = URL.createObjectURL(
+    new Blob([reportCsv(problems, moreNote)], { type: "text/csv;charset=utf-8" }),
+  );
   const link = document.createElement("a");
   link.href = url;
   link.download = "charge-import-report.csv";
   link.click();
-  URL.revokeObjectURL(url);
+  // Revoked after the browser has started the download, not in the same tick.
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 export function ImportForm(props: {
@@ -147,7 +152,17 @@ function ImportFormBody({
             <div>
               <button
                 type="button"
-                onClick={() => downloadReport(problems)}
+                onClick={() =>
+                  downloadReport(
+                    problems,
+                    total > limits.reportProblems
+                      ? t("import.problems.truncated", {
+                          limit: f.number(limits.reportProblems),
+                          more: f.number(total - limits.reportProblems),
+                        })
+                      : undefined,
+                  )
+                }
                 className="inline-flex h-8 items-center rounded-control border border-border-strong bg-surface px-3 text-body font-medium text-text hover:bg-surface-muted"
               >
                 {t("import.problems.download")}
@@ -184,6 +199,7 @@ function ImportFormBody({
           <p id="file-hint" className="text-label text-muted">
             {t("import.file.hint")}
           </p>
+          <p className="text-label text-muted">{t("import.file.claimNumberNotice")}</p>
         </div>
       </FormSection>
       <FormSection title={t("import.defaults.title")} description={t("import.defaults.description")}>

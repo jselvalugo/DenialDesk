@@ -98,7 +98,8 @@ no payer receipt date and no payment. A claim can have at most 50 lines (⚠️ 
 `edi-x12-specialist`: the 837P professional service-line limit; needed before C3).
 
 ### Acceptance criteria (C2)
-- [x] **Upload page.** `/claims/import` (breadcrumb Claims / Import charges; an "Import charges"
+- [x] **Upload page.** (It says that the claim number is stored without field-level encryption and
+      must never hold a member ID, SSN, or other identifier; the parser can't enforce that.) `/claims/import` (breadcrumb Claims / Import charges; an "Import charges"
       button in the `/claims` header for roles that may import) shows the column contract, a
       header-only template download, the default provider and default location (required), the
       synthetic attestation checkbox (synthetic-only environments), and the file input. Without
@@ -108,13 +109,19 @@ no payer receipt date and no payment. A claim can have at most 50 lines (⚠️ 
       as `canCorrectClaims`) can import; `compliance` reviews only. Enforced in the server action, not
       only by hiding the button; a refused attempt is audited.
 
+- [x] **Rate limit.** `import_charges`, per practice: 10 attempts per 10 minutes (`src/lib/rate-limit.ts`).
+      Each import parses up to 5,000 rows, reads the practice's patients and claims, and holds the
+      practice's import lock while it writes; the limit bounds that, and the refusal is a plain message.
 - [x] **Upload limits and checks.** CSV only, at most 2 MB, 5,000 data rows, and 100 columns; UTF-8
       only; parsed in memory by `src/lib/csv/parse.ts`; never written to disk or object storage. An
       empty, mis-named, oversize, or non-UTF-8 file is refused before anything is read, with a plain
       message. (No attachment malware scan: the file is never stored or opened by another program;
       R-7.4.6.)
 
-- [x] **Synthetic-only guard.** Wherever `syntheticDataOnly()` is true (everything but production off
+- [x] **Synthetic-only guard** (the marker rule is `SYN-` for claim numbers, as for account numbers in
+      the monthly file; the synthetic data generator's own claim numbers start `CLM-SYN-`, so a file built
+      from generator output must use `SYN-` claim numbers, and the message says so. Accepting both
+      prefixes would put a second English word into every translated message; not done). Wherever `syntheticDataOnly()` is true (everything but production off
       Netlify) the attestation checkbox is required, every `Claim number` must start `SYN-`, and every
       `MRN` must start `SYN`; a row that doesn't is a row error and nothing is imported.
 
@@ -122,6 +129,14 @@ no payer receipt date and no payment. A claim can have at most 50 lines (⚠️ 
       **all or nothing**: if any row has an error, no claim is created. Errors carry a stable code,
       the physical line number (as in a spreadsheet or editor), and the column name; messages never
       quote a cell value.
+- [x] **Lines are never merged twice.** Rows are grouped by claim number, so the parser refuses what
+      would silently double a claim: a line whose procedure code and modifiers (compared sorted, as in
+      the duplicate rule below) already appear on the same claim is `duplicate_line`, and a claim
+      number that returns after other claims is `claim_rows_not_contiguous` (reported once per claim).
+      A file pasted twice, or two overlapping exports, is therefore refused whole; nothing is merged or
+      summed. A claim has one date of service, so the date is not part of a line's key. A legitimate
+      repeat service on one claim (the same code and modifiers twice) can't be imported yet; whether it
+      needs an override is the existing owner question OA-084.
 
 - [x] **Patient match.** By MRN within the practice (RLS-scoped read). A patient synced from an EHR
       (`patients.source = 'fhir'`) is matched only: the import never inserts, updates, links, or
@@ -180,9 +195,11 @@ no payer receipt date and no payment. A claim can have at most 50 lines (⚠️ 
 - [x] **Audit.** `claim.import_completed` once per import (entity type `claim_import`, entity ID a
       batch ID that is also in each claim's event): counts only, namely rows, claims, lines, and warnings
       by kind. `claim.created` once per claim (entity = the claim ID; metadata: batch ID, line count,
-      version 1). A refused import writes `claim.import_rejected` with a fixed reason code (`forbidden`,
-      `upload_check`, `encoding`, `validation`, `duplicate`, `conflict`) and the counts of rows and
-      problems. Audit metadata and logs never hold an MRN, claim number, code, date, amount, patient or
+      version 1); the function that creates the claims writes it, so no caller can create a claim without
+      it. A refused import writes `claim.import_rejected` with a fixed reason code (`forbidden`,
+      `upload_check`, `encoding`, `validation`, `duplicate`, `conflict`, `error`), the counts of rows and
+      problems, and an attempt ID as the entity ID (`error` is any other database failure, written before it
+      is rethrown). A rate-limited attempt writes `security.rate_limited` instead. Audit metadata and logs never hold an MRN, claim number, code, date, amount, patient or
       payer name, or file name. The patient read used for matching is covered by the import event.
 
 - [x] **No PHI in logs, URLs, or titles.** The import is a POST (server action) with the file in the
@@ -206,9 +223,11 @@ no payer receipt date and no payment. A claim can have at most 50 lines (⚠️ 
       claims with version 1 and audit; all-or-nothing on one bad row; a synced patient is never created
       or changed; another practice's patients, payers, providers, and claims are invisible to the import
       (tenant isolation); duplicate cases; the same file twice; audit rows hold no row content.
-      Status: unit tests pass (charge-file, charge-import, permissions, i18n); the integration file
-      `test/integration/claim-charge-import.test.ts` is written but has **not been run** (the authoring
-      session had no Postgres access), so this box stays open until CI runs `pnpm test:integration`.
+      Also (fix round): duplicate and non-contiguous lines, a synced patient (`source = 'fhir'`, coverage
+      `none`, inactive at the source: warnings counted, row unchanged), the server action (refused attempts
+      audited, conflict, database error, rate limit), and the rate-limit bucket.
+      Status: CI ran the first integration file green; the fix-round tests await a CI run, and the
+      coordinator confirms this box.
 
 - [x] Every new string is a key in English, Spanish, and Portuguese. The Spanish and Portuguese are
       agent-written and unreviewed by a native speaker (OA-041).
@@ -240,6 +259,9 @@ Only through C1's `filingStatus`: `fl.timely_filing.initial` and `medicare.timel
   choice), rendering-provider taxonomy checks, place of service, NDC, and prior-authorization numbers.
 - XLSX/ODS uploads (needs a vetted parser dependency), EHR-fed charge capture (HL7 v2 / FHIR), and
   manual claim entry.
+- X12 formatting (C3): the 837P writes ICD-10 diagnosis codes without the decimal point. That is a
+  change of representation, not a change of the code, and must stay a pure, reversible formatting step in
+  the builder that never alters which code is billed (R-3.10.1).
 - Charge validation against a fee schedule or contract (a later underpayment item) and scrubbing rules
   (NCCI, MUE, LCD/NCD): nothing here changes or "fixes" a code.
 
