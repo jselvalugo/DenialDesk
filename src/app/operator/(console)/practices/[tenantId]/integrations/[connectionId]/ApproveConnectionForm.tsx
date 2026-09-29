@@ -93,11 +93,12 @@ export function ApproveConnectionForm({
           choose,
           ...POPULATION_SCOPES.map((scope) => ({
             value: scope,
-            // Only a Group export can be approved for now; the server refuses the other.
+            // Only a Group export can be approved for now; the server refuses the other. Each label
+            // is one whole message (a fragment spliced into another string would not translate).
             label:
               scope === "group_export"
                 ? t(POPULATION_SCOPE_LABEL_KEYS[scope])
-                : `${t(POPULATION_SCOPE_LABEL_KEYS[scope])} (${t("integrations.scope.notYet")})`,
+                : t("integrations.scope.verified_filter_unavailable"),
           })),
         ]}
       />
