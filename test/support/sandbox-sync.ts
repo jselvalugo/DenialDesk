@@ -169,6 +169,11 @@ export async function activeRealConnection(ctx: Ctx): Promise<string> {
       clientId: "client-synthetic-real",
       mrnIdentifierSystem: `https://${host}/mrn`,
       status: "active",
+      // integration_connections_approved_when_live (0039): a live real connection carries the operator's
+      // approval, its method and the population scope, together.
+      approvedBy: ctx.userId,
+      approvedAt: new Date(),
+      approvalMethod: "video_call",
       populationScope: "group_export",
       createdBy: ctx.userId,
       updatedBy: ctx.userId,

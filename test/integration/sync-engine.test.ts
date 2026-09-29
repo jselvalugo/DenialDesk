@@ -1111,6 +1111,63 @@ describe("record limits (patients CHECKs, drizzle/0018)", () => {
     expect(JSON.stringify(issues)).not.toContain("AAAA");
   });
 
+  it("a CHECK the mapper can't foresee skips that one record (record_rejected): the page commits and the run succeeds, with a warning that names the constraint only", async () => {
+    const h = harness();
+    const id = await activeSandbox(ctx, h);
+    edit(h, 40, (resource) => {
+      (resource.name as { family: string }[])[0]!.family = "Zzrejectme";
+    });
+    const writes: string[] = [];
+    const capture = ((chunk: unknown) => {
+      writes.push(String(chunk));
+      return true;
+    }) as never;
+    const err = vi.spyOn(process.stderr, "write").mockImplementation(capture);
+    // A stand-in for a future mismatch between the mapper and the schema: a CHECK only this test adds, and drops.
+    await systemDb().execute(
+      sql.raw(
+        `alter table patients add constraint patients_test_reject check (last_name <> 'Zzrejectme') not valid`,
+      ),
+    );
+    let outcome: Awaited<ReturnType<typeof runSync>>;
+    try {
+      outcome = await runSync(ctx, id, h);
+    } finally {
+      err.mockRestore();
+      await systemDb().execute(
+        sql.raw(`alter table patients drop constraint if exists patients_test_reject`),
+      );
+    }
+    expect(outcome.result).toMatchObject({ status: "succeeded", created: EXPECTED_STORED - 1, skipped: 3 });
+    expect(await byExternalId(40)).toBeUndefined();
+    expect(await byExternalId(39)).toBeDefined();
+    expect(await byExternalId(41)).toBeDefined();
+    expect((await issueRows(outcome.runId)).map((issue) => issue.code)).toContain("record_rejected");
+    expect((await runRow(outcome.runId)).issueCodes).toContain("record_rejected");
+    const warning = writes.filter((line) => line.includes("integration.record_rejected"));
+    expect(warning).toHaveLength(1);
+    expect(warning[0]).toContain("patients_test_reject");
+    expect(warning[0]).not.toContain("Zzrejectme");
+  });
+
+  it("uses the practice's date, not the UTC date: at 23:30 Eastern a birth date of the UTC 'today' is in the future", async () => {
+    const h = harness();
+    const id = await activeSandbox(ctx, h);
+    // 23:30 Eastern on 2026-09-28 is 03:30 UTC on 2026-09-29 (set after the setup, which signs with the real clock).
+    h.clock.current = new Date("2026-09-29T03:30:00.000Z");
+    edit(h, 40, (resource) => {
+      resource.birthDate = "2026-09-29";
+    });
+    edit(h, 41, (resource) => {
+      resource.birthDate = "2026-09-28";
+    });
+    const { runId, result } = await runSync(ctx, id, h);
+    expect(result).toMatchObject({ status: "succeeded", created: EXPECTED_STORED - 1, skipped: 3 });
+    expect(await byExternalId(40)).toBeUndefined();
+    expect((await byExternalId(41))!.birthDate).toBe("2026-09-28");
+    expect((await issueRows(runId)).map((issue) => issue.code)).toContain("birthdate_invalid");
+  });
+
   it("skips a record whose name is over 60 characters (name_invalid) and the run still succeeds", async () => {
     const h = harness();
     const id = await activeSandbox(ctx, h);

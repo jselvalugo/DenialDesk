@@ -10,11 +10,13 @@ export type MrnShapeCode = "mrn_looks_like_ssn" | "mrn_looks_like_mbi";
 
 /** Separators a vendor may put between the groups of an SSN or an MBI: dash, dot, space, underscore, slash. */
 const SEP = "[-. _/]";
+/** Every separator, stripped before the value is judged again: an SSN or MBI split at odd places is still one. */
+const SEPARATORS = /[-. _/]/g;
 /** `ddd-dd-dddd` with any separator, anywhere in the value but not inside a longer digit run. */
-const SSN_SEPARATED = new RegExp(`(?<!\\d)\\d{3}${SEP}\\d{2}${SEP}\\d{4}(?!\\d)`);
+const SSN_SEPARATED = new RegExp(`(?<!\\d)\\d{3}${SEP}+\\d{2}${SEP}+\\d{4}(?!\\d)`);
 /**
  * Any run of exactly nine digits, wherever it sits in the value (`A123456789`, `MRN 123456789`).
- * Allowed only when the operator recorded "MRNs are 9 digits".
+ * Allowed only when the operator recorded "MRNs contain a nine-digit number".
  */
 const SSN_NINE_DIGITS = /(?<!\d)\d{9}(?!\d)/;
 
@@ -35,21 +37,28 @@ const MBI_GROUPED = new RegExp(`(?<![A-Z0-9])[A-Z0-9]{4}${SEP}[A-Z0-9]{3}${SEP}[
 function looksLikeMbi(value: string): boolean {
   const upper = value.toUpperCase();
   if (MBI_COMPACT.test(upper)) return true;
-  return [...upper.matchAll(MBI_GROUPED)].some((match) => MBI_EXACT.test(match[0].replace(/[-. _/]/g, "")));
+  if (MBI_COMPACT.test(upper.replace(SEPARATORS, ""))) return true;
+  return [...upper.matchAll(MBI_GROUPED)].some((match) => MBI_EXACT.test(match[0].replace(SEPARATORS, "")));
 }
 
 /**
  * The refusal code for an SSN- or MBI-shaped MRN value, or null. Judged on the whole value, wherever the
  * shape sits (a `SYN-` marker or a vendor prefix doesn't hide it): a nine-digit run is refused unless
  * `nineDigitsVerified` (the operator confirmed at approval that this practice's MRNs really are nine
- * digits, `mrn_nine_digits_verified`); an SSN grouped 3-2-4 with any separator, and an MBI, are refused always.
+ * digits, `mrn_nine_digits_verified`), also when separators split the run; an SSN grouped 3-2-4 with any
+ * separator, and an MBI (also split by separators), are refused always.
  */
 export function mrnShapeProblem(
   value: string,
   options: { nineDigitsVerified: boolean },
 ): MrnShapeCode | null {
   if (SSN_SEPARATED.test(value)) return "mrn_looks_like_ssn";
-  if (SSN_NINE_DIGITS.test(value) && !options.nineDigitsVerified) return "mrn_looks_like_ssn";
+  // Judged as written and with every separator removed, so `123-456789`, `12345-6789` and `123--45--6789`
+  // are the nine digits they hide (security review Low).
+  const stripped = value.replace(SEPARATORS, "");
+  if (!options.nineDigitsVerified && (SSN_NINE_DIGITS.test(value) || SSN_NINE_DIGITS.test(stripped))) {
+    return "mrn_looks_like_ssn";
+  }
   if (looksLikeMbi(value)) return "mrn_looks_like_mbi";
   return null;
 }

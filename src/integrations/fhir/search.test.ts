@@ -488,6 +488,25 @@ describe("PatientSearch", () => {
     );
     expect(await p(nearly).search.coverageFor(["pat-a"])).toHaveLength(19);
   });
+
+  it("exactly 20 pages is fine (boundary), a 21st page is too_large", async () => {
+    const pages = (total: number) => {
+      let n = 0;
+      return new Scripted(() =>
+        ok(
+          bundle(++n < total ? { link: [{ relation: "next", url: `${BASE}/Coverage?page=${n}` }] } : {}, [
+            cov(`c${n}`, "pat-a"),
+          ]),
+        ),
+      );
+    };
+    const exactly = pages(MAX_COVERAGE_PAGES_PER_CHUNK);
+    expect(await p(exactly).search.coverageFor(["pat-a"])).toHaveLength(MAX_COVERAGE_PAGES_PER_CHUNK);
+    expect(exactly.requests).toHaveLength(MAX_COVERAGE_PAGES_PER_CHUNK);
+    await expect(
+      p(pages(MAX_COVERAGE_PAGES_PER_CHUNK + 1)).search.coverageFor(["pat-a"]),
+    ).rejects.toMatchObject({ code: "too_large" });
+  });
 });
 
 describe("createTokenSource", () => {

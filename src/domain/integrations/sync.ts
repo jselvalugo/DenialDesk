@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
 import { and, eq, sql } from "drizzle-orm";
-import { todayIn } from "@rules/calendar";
+import { PRACTICE_TIME_ZONE, todayIn } from "@rules/calendar";
 import { canManageIntegrations } from "@/auth/permissions";
 import { integrationConnections, integrationSyncRuns } from "@/db/schema";
 import { withTenantAsSystem, type TenantTx } from "@/db/tenant";
@@ -469,6 +469,9 @@ async function pipeline(
   // pinned, and a missing pin counts as a change (fail closed), as in Test connection.
   const discovery = await discover(transport, connection.baseUrl, { sandbox: connection.isSandbox });
   if (!discovery.algs.includes(signer.alg)) throw new SyncFailure("smart_config_invalid");
+  // Unreachable today: a real connection is refused before this point (`population_scope_unenforced`, or
+  // `environment_refused` where only synthetic data is allowed). Kept as defense in depth for when PI4 lifts
+  // that guard: in a synthetic-only environment a non-sandbox connection may only talk to a reviewed vendor sandbox.
   if (
     synthetic &&
     !connection.isSandbox &&
@@ -503,7 +506,7 @@ async function pipeline(
     mrnSystem: connection.mrnIdentifierSystem,
     nineDigitsVerified: connection.mrnNineDigitsVerified,
     now: startedAt,
-    today: todayIn("America/New_York", startedAt),
+    today: todayIn(PRACTICE_TIME_ZONE, startedAt),
   };
 
   // Where only synthetic data is allowed, the first page is requested with `_count=1` and every raw
@@ -531,7 +534,7 @@ async function pipeline(
       mrnSystem: mapping.mrnSystem,
       nineDigitsVerified: mapping.nineDigitsVerified,
       now: pageNow,
-      today: todayIn("America/New_York", pageNow),
+      today: todayIn(PRACTICE_TIME_ZONE, pageNow),
       encrypt: deps.encrypt ?? ((plaintext) => encryptField(plaintext)),
       decrypt: deps.decrypt ?? ((ciphertext) => decryptField(ciphertext)),
       runtime: runtimeWhere(),
@@ -792,12 +795,7 @@ export async function syncNow(
     return row;
   });
   assertEnvironmentAllows(connection.isSandbox, actor, t);
-  if (!connection.isSandbox) {
-    // Fail closed (compliance B1, security M1): a real connection can't sync until the population scope
-    // can be applied (PI4). Nothing is queued, nothing is dialed; the refusal is audited.
-    await auditRefusedRealSync(actor, connectionId, run);
-    refuse(t, "sync.error.populationScopeUnenforced");
-  }
+  // Not active (draft, paused, error, awaiting approval) is answered first, whatever the connection kind.
   if (connection.status !== "active") refuse(t, "sync.error.notActive");
 
   const limited = await hit("integration_sync_now", `connection:${connectionId}`, deps.now?.());
@@ -814,6 +812,14 @@ export async function syncNow(
       }),
     );
     refuse(t, "sync.error.rateLimited");
+  }
+
+  if (!connection.isSandbox) {
+    // Fail closed (compliance B1, security M1): a real connection can't sync until the population scope
+    // can be applied (PI4). Nothing is queued, nothing is dialed. The press has already counted against the
+    // once-a-minute limit, so repeated presses can't pile up refusal audit rows (security review Low).
+    await auditRefusedRealSync(actor, connectionId, run);
+    refuse(t, "sync.error.populationScopeUnenforced");
   }
 
   let runId: string;
@@ -862,7 +868,11 @@ async function auditRefusedRealSync(
       entityType: "integration_connection",
       entityId: connectionId,
       reason: "sync_now",
-      metadata: { code: "population_scope_unenforced", sandbox: false },
+      metadata: {
+        code: "population_scope_unenforced",
+        sandbox: false,
+        session_id: actor.sessionId ?? null,
+      },
     }),
   );
 }

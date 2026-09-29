@@ -312,7 +312,7 @@ or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `ap
       a **method code** (`phone_callback`, `video_call`, `written_confirmation`, `vendor_portal`), the
       **date**, and the **contact's role at the practice** (`ehr_administrator`,
       `practice_administrator`, `it_contact`, `vendor_representative`, `other`; never a name), the
-      **population scope**, optionally "MRNs are 9 digits (verified)", and **the operator's
+      **population scope**, optionally "MRNs contain a nine-digit number (verified)", and **the operator's
       confirmation, required, that the practice owns the `client_id`, verified outside the app**
       (pre-production signs every connection with one shared key (coordinator decision pending owner
       confirmation, OA-065), so the key alone doesn't tie a client registration to a practice). The
@@ -861,10 +861,11 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       (v2-0203 SS, MB, MC, DL, PPN).
       **Built** (`src/integrations/fhir/mrn-shapes.ts`, `map-patient.ts`; security review M2): judged on the whole value,
       wherever the shape sits (a `SYN-` marker or a vendor prefix does not hide it). An SSN grouped 3-2-4 with any
-      one separator (`-`, `.`, space, `_`, `/`, so `123.45.6789` too) is refused always; any standalone run of
-      exactly nine digits (`A123456789`, `MRN 123456789`) is refused unless the operator recorded "MRNs are 9
-      digits" (`mrn_nine_digits_verified`); the CMS MBI format (⚠️ VERIFY) is refused as a token anywhere in the
-      value, compact or grouped 4-3-4 with any separator. `Identifier.type` SS, MB, MC, DL, PPN →
+      one or more separators (`-`, `.`, space, `_`, `/`, so `123.45.6789` and `123--45--6789` too) is refused always;
+      any standalone run of exactly nine digits (`A123456789`, `MRN 123456789`), also when separators split it
+      (`123-456789`, `12345-6789`), is refused unless the operator recorded "MRNs contain a nine-digit number"
+      (`mrn_nine_digits_verified`); the CMS MBI format (⚠️ VERIFY) is refused as a token anywhere in the value,
+      compact, grouped 4-3-4 or split at other places by separators (`1EG4TE5-MK73`). `Identifier.type` SS, MB, MC, DL, PPN →
       `mrn_government_identifier`. Tests: `mrn-shapes.test.ts`, `map-patient.test.ts`.
 - [ ] Jobs: payload `{ runId }` only, with an HMAC-SHA256 header (body + timestamp, 5-min window)
       keyed by `INTEGRATION_JOB_SECRET`. The worker claims the run with SECURITY DEFINER
@@ -1112,6 +1113,9 @@ written by the engine today (a 400 at the token endpoint is `auth_refused`).
 - [ ] **Lift the `population_scope_unenforced` refusal** (`assertRunEnvironment`, `syncNow`) only together with the
       code that applies `population_scope` (the practice's Group export, or the operator-verified filter), and a test
       that a real connection syncs that population and nothing else. Until then no real connection can sync.
+- [ ] ⚠️ VERIFY (Coverage page cap): PI2b caps a Coverage chunk at 20 pages (`too_large`). A server that ignores `_count`
+      and returns a huge single page, or one that pages Coverage far below the requested size, could hit that cap for a
+      large practice; check each vendor's behavior before the first real connection and revisit the cap with PI4.
 - [ ] `Group/<practice group>/$export?_type=Patient,Coverage,Organization&_since=…`; the status URL
       and every output URL pass the URL rules and address guard; the bearer token is sent only to
       the FHIR origin (`requiresAccessToken=true` files must be on it); other output hosts are
@@ -1125,7 +1129,7 @@ Must-support (MS) notes ⚠️ VERIFY against the published StructureDefinitions
 |---|---|---|---|
 | `external_id` | `Patient.id` | — | Required; FHIR `id` syntax, ≤ 64 chars |
 | `source_version_id`, `source_last_updated` | `Patient.meta.versionId`, `.lastUpdated` | not MS | Clamped; no-regression rule |
-| `mrn` | `Patient.identifier` whose `system` = the connection's MRN system | `identifier` 1..*, MS `system`, `value` | Exactly one, else `mrn_missing`/`mrn_ambiguous`; visible ASCII, 1 to 40 characters (the `patients` CHECK), else `mrn_invalid`. `ddd-dd-dddd` → `mrn_looks_like_ssn`; bare 9 digits too unless the operator recorded "MRNs are 9 digits"; MBI-shaped (CMS format, ⚠️ VERIFY) → `mrn_looks_like_mbi` |
+| `mrn` | `Patient.identifier` whose `system` = the connection's MRN system | `identifier` 1..*, MS `system`, `value` | Exactly one, else `mrn_missing`/`mrn_ambiguous`; visible ASCII, 1 to 40 characters (the `patients` CHECK), else `mrn_invalid`. `ddd-dd-dddd` → `mrn_looks_like_ssn`; any standalone run of exactly nine digits (also when separators split it) too, unless the operator recorded "MRNs contain a nine-digit number"; MBI-shaped (CMS format, ⚠️ VERIFY) → `mrn_looks_like_mbi` |
 | `first_name`, `last_name` | `Patient.name` (official, else usual, else the only one): `given[0]`, `family` | MS | Missing → `name_incomplete`; each name at most 60 characters (the `patients` CHECK), else `name_invalid` |
 | `birth_date` | `Patient.birthDate` | MS | Full date, 1900..today; partial → `birthdate_incomplete`. Under 18 (on the practice's calendar date, `America/New_York`) → the new patient gets the neutral history note `review_required`; nothing is tagged, restricted or named "minor" automatically (OA-081) |
 | `sex` | `Patient.gender` | 1..1 | female → F, male → M, other/unknown → U (837P DMG03) |

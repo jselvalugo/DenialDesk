@@ -177,8 +177,10 @@ export interface AuditEvent {
   /**
    * Written by a system actor (the integration sync engine). The request's client IP and user agent
    * belong to whoever triggered the work (an administrator pressing Sync now), not to the actor, so
-   * they are not recorded; "where" is the runtime function id and host, which the caller puts in
-   * `metadata` (docs/specs/patient-integrations.md "PI2b").
+   * by default they are not recorded; "where" is the runtime function id and host, which the caller puts in
+   * `metadata` (docs/specs/patient-integrations.md "PI2b"). One exception: `integration.sync_started` of a
+   * manual run passes the administrator's `ipAddress`/`userAgent` (and `session_id` in `metadata`) explicitly,
+   * so that event answers "who pressed the button, from where".
    */
   system?: boolean;
   metadata?: Record<string, string | number | boolean | null>;

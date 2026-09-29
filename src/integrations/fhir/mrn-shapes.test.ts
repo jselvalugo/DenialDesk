@@ -28,7 +28,7 @@ describe("mrnShapeProblem — SSN shapes", () => {
     expect(mrnShapeProblem("syn_123-45-6789", strict)).toBe("mrn_looks_like_ssn");
   });
 
-  it.each(["0012345", "SYN-0000012", "A1234567", "12345678", "1234567890", "1234-56-7890", "12-345-6789"])(
+  it.each(["0012345", "SYN-0000012", "A1234567", "12345678", "1234567890", "1234-56-7890"])(
     "allows the ordinary MRN %s",
     (value) => {
       expect(mrnShapeProblem(value, strict)).toBeNull();
@@ -98,5 +98,39 @@ describe("mrnShapeProblem — separators and position (security review M2)", () 
   it("does not take a piece of a longer alphanumeric run for an MBI", () => {
     expect(mrnShapeProblem("A1EG4TE5MK73", strict)).toBeNull();
     expect(mrnShapeProblem("1EG4TE5MK73B", strict)).toBeNull();
+  });
+});
+
+describe("mrnShapeProblem — partly grouped identifiers (security review Low)", () => {
+  it.each(["123-456789", "12345-6789", "123--45--6789", "12-345-6789"])(
+    "refuses the nine digits hidden by separators in %s unless verified",
+    (value) => {
+      expect(mrnShapeProblem(value, strict)).toBe("mrn_looks_like_ssn");
+    },
+  );
+
+  it.each(["123-456789", "12345-6789"])(
+    "%s is allowed once the operator recorded nine-digit MRNs",
+    (value) => {
+      expect(mrnShapeProblem(value, verified)).toBeNull();
+    },
+  );
+
+  it("refuses 123--45--6789 always: stripped or not, it is the 3-2-4 SSN shape", () => {
+    expect(mrnShapeProblem("123--45--6789", verified)).toBe("mrn_looks_like_ssn");
+  });
+
+  it.each(["1EG4TE5-MK73", "1EG4-TE5MK73"])(
+    "refuses the MBI %s split at odd places, verified or not",
+    (value) => {
+      expect(mrnShapeProblem(value, strict)).toBe("mrn_looks_like_mbi");
+      expect(mrnShapeProblem(value, verified)).toBe("mrn_looks_like_mbi");
+    },
+  );
+
+  it("still allows ordinary synthetic MRNs", () => {
+    for (const value of ["SYN-0000001", "SYN-0000123", "1234-56-7890"]) {
+      expect(mrnShapeProblem(value, strict)).toBeNull();
+    }
   });
 });

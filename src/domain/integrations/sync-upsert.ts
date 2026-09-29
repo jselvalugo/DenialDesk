@@ -9,6 +9,7 @@ import {
 import { mapPatient, type MappedPatient } from "@/integrations/fhir/map-patient";
 import { coverageResourceSchema } from "@/integrations/fhir/types";
 import { auditBatch, type AuditEvent } from "@/lib/audit";
+import { log } from "@/lib/log";
 import { INTEGRATION_SERVICE_PRINCIPAL_ID } from "./principal";
 import { normalizeIssueCode, type SyncIssueCode, type SyncStoredCode } from "./sync-codes";
 
@@ -292,9 +293,12 @@ function isMrnConflict(error: unknown): boolean {
  * A CHECK constraint refused the row (SQLSTATE 23514). The mapper already holds every value to the
  * database's limits, so this is a defense for a future mismatch between the two: one record is skipped
  * (`record_rejected`), the page still commits, and the watermark can't be wedged by a single record.
+ * The warning names the constraint (a schema identifier) and the run, never a value.
  */
-function isCheckViolation(error: unknown): boolean {
-  return isDatabaseError(error) && error.code === "23514";
+function rejectedByCheck(error: unknown, ctx: PageContext): boolean {
+  if (!isDatabaseError(error) || error.code !== "23514") return false;
+  log.warn("integration.record_rejected", { runId: ctx.runId, constraint: error.constraint ?? "unknown" });
+  return true;
 }
 
 /**
@@ -351,7 +355,7 @@ async function upsertOne(
           .where(and(eq(patients.tenantId, ctx.tenantId), eq(patients.id, existing.id)));
       });
     } catch (error) {
-      if (isCheckViolation(error)) return { kind: "rejected", patientId: existing.id };
+      if (rejectedByCheck(error, ctx)) return { kind: "rejected", patientId: existing.id };
       if (!isMrnConflict(error)) throw error;
       return { kind: "conflict", holderId: (await holderOfMrn(tx, ctx, desired.mrn))?.id ?? null };
     }
@@ -376,7 +380,7 @@ async function upsertOne(
             .where(and(eq(patients.tenantId, ctx.tenantId), eq(patients.id, holder.id)));
         });
       } catch (error) {
-        if (isCheckViolation(error)) return { kind: "rejected", patientId: holder.id };
+        if (rejectedByCheck(error, ctx)) return { kind: "rejected", patientId: holder.id };
         throw error;
       }
       return { kind: "linked", patientId: holder.id, changed, wrote: true };
@@ -401,7 +405,7 @@ async function upsertOne(
     });
     return { kind: "created", patientId: inserted.id, changed: [], wrote: true };
   } catch (error) {
-    if (isCheckViolation(error)) return { kind: "rejected", patientId: null };
+    if (rejectedByCheck(error, ctx)) return { kind: "rejected", patientId: null };
     if (!isMrnConflict(error)) throw error;
     return { kind: "conflict", holderId: (await holderOfMrn(tx, ctx, desired.mrn))?.id ?? null };
   }

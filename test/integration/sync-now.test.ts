@@ -168,6 +168,40 @@ describe("syncNow — refusals before anything is queued", () => {
     expect(refused[0]).toMatchObject({ entityId: id, actorUserId: ctx.userId, reason: "sync_now" });
     expect(refused[0]!.metadata).toMatchObject({ code: "population_scope_unenforced" });
   });
+
+  it("the real-connection refusal counts against the once-a-minute limit, so repeated presses can't pile up audit rows (security review Low)", async () => {
+    const h = harness();
+    pinClock(h);
+    const id = await activeRealConnection(ctx);
+    const sessionId = "6f1c7a52-3f0e-4c1a-9a5e-0000000000a1";
+    const actor = { ...adminActor(ctx, { synthetic: false }), sessionId };
+    const press = () => syncNow(runnerFor(ctx), actor, id, h.deps);
+    expect((await refusal(press())).message).toMatch(/Real EHR\/PM connections can't sync yet/);
+    for (let i = 0; i < 3; i += 1) {
+      expect((await refusal(press())).message).toBe(
+        "Sync now can run once a minute. Wait a moment and try again.",
+      );
+    }
+    const events = await auditRows(ctx.tenantId);
+    const failed = events.filter((event) => event.action === "integration.sync_failed");
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.metadata).toMatchObject({ code: "population_scope_unenforced", session_id: sessionId });
+    expect(events.filter((event) => event.action === "security.rate_limited")).toHaveLength(3);
+  });
+
+  it("a real connection that is not active gets the not-active message, not the population-scope one", async () => {
+    const h = harness();
+    const id = await activeRealConnection(ctx);
+    await withTenant(ctx, (tx) =>
+      tx.execute(sql`update integration_connections set status = 'paused' where id = ${id}::uuid`),
+    );
+    expect((await refusal(sync(ctx, id, h, adminActor(ctx, { synthetic: false })))).message).toBe(
+      "Only an active connection can sync. Resume it first.",
+    );
+    expect(
+      (await auditRows(ctx.tenantId)).filter((event) => event.action === "integration.sync_failed"),
+    ).toEqual([]);
+  });
 });
 
 describe("syncNow — a run", () => {
