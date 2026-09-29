@@ -118,6 +118,9 @@ export type AuditAction =
   | "integration.connection_resumed"
   | "integration.connection_revoked"
   | "integration.connection_tested"
+  | "integration.payer_mapping_changed"
+  | "integration.payer_mappings_viewed"
+  | "integration.sync_run_viewed"
   | "integration.transport_refused"
   | "security.env_signing_key_in_production";
 
@@ -154,7 +157,9 @@ export interface AuditEvent {
     | "prompt_pay_response"
     | "university_lesson"
     | "university_access"
-    | "integration_connection";
+    | "integration_connection"
+    | "integration_payer_mapping"
+    | "integration_sync_run";
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;

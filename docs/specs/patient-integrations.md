@@ -304,7 +304,8 @@ or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `ap
       approval), the practice's BAA status, the submission time and the residency confirmation time —
       configuration only, no PHI, no key reference. `getPendingApproval` finds a connection only under
       its own practice. Viewing the queue and a review page is audited `operator.integration_viewed`
-      (operator, and for a review the practice and connection IDs; configuration only, not PHI).
+      (operator, the operator's `session_id`, and for the queue the count, for a review the practice
+      and connection IDs; configuration only, not PHI; `auditIntegrationViewed`).
 - [x] Approve (`approveConnection`) records how it was verified with the practice's EHR administrator:
       a **method code** (`phone_callback`, `video_call`, `written_confirmation`, `vendor_portal`), the
       **date**, and the **contact's role at the practice** (`ehr_administrator`,
@@ -318,16 +319,24 @@ or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `ap
       recorded in the audit event (there is no column for them; a column would need a migration, no
       privilege change; retention of that evidence is OA-070). One UPDATE moves
       `pending_approval → active` with `approved_by` and a fresh `approved_at` on the database clock
-      (0040), `status_reason` cleared. Refusals, in order: not the operator; not a real environment
-      (**the environment rule**: where `syntheticDataOnly()` a real connection is never made live,
-      as on the practice-side transitions); a code outside the fixed vocabularies; **a scope other
-      than `group_export`** (below); a date that is malformed, in the future (by the Florida date), or
-      **before the Florida date of the submission** (`submitted_at`; the form's `min`/`max` say the same);
-      no ownership confirmation; unknown or suspended practice (the row is read `FOR SHARE`, so a
-      suspension can't race the check); a sandbox or a connection missing, not awaiting approval, or
-      changed since the page loaded (`updated_at`); **no Business Associate Agreement in force for the
-      practice** (`agreementStatus` active or expiring; the review page shows the status and the reason);
-      a registry entry that doesn't match this connection's endpoint, token endpoint, and client ID.
+      (0040), `status_reason` cleared. Refusals, in order (this is the order of the code, and the
+      first that applies wins): **before the transaction**, on the request alone: not the operator
+      (**also refused when `users.disabled_at` is set**); not a real environment (**the environment
+      rule**: where `syntheticDataOnly()` a real connection is never made live, as on the
+      practice-side transitions); a code outside the fixed vocabularies; **a scope other than
+      `group_export`** (below); a date that is malformed or in the future (by the Florida date); no
+      ownership confirmation. **Then, in the one platform transaction:** an unknown practice or a
+      suspended one (the row is read `FOR SHARE`, so a suspension can't race the check); a sandbox or
+      a connection missing, not awaiting approval, or changed since the page loaded (`updated_at`),
+      found under that practice with the row locked `FOR UPDATE`; **a date before the Florida date of
+      the submission** (`submitted_at`, which needs the locked row, so **this check comes after the
+      lock**; the form's `min`/`max` say the same); **no Business Associate Agreement in force for the
+      practice** (`agreementStatus` active or expiring, over the practice's `kind = 'baa'` agreements
+      read through this transaction `FOR SHARE`, so a concurrent void is waited for and can't be
+      missed; the review page shows the status and the reason); a registry entry that doesn't match
+      this connection's endpoint, token endpoint, and client ID. The audit write is in the same
+      transaction: if it fails, the decision rolls back whole (the row stays pending with its stamps
+      unchanged and the registry claim kept; a regression test for approve and for reject).
       Audited `operator.integration_approved` (reason = the method code; metadata: previous status,
       method, `verified_on`, `contact_role`, `population_scope`, `mrn_nine_digits_verified`,
       `client_id_ownership_verified`, `registry_verified`, `session_id` (the operator's session), and the
@@ -363,7 +372,10 @@ or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `ap
 - [ ] **Population scope: capture a `verified_filter` as a structured value** (security review M2).
       `population_scope` is a code with nowhere to record the filter itself, so approving
       `verified_filter` would record a claim and no filter: **Approve refuses it now** (`errors.approvalScopeUnsupported`;
-      the form labels the option "not available yet") and only `group_export` can be approved.
+      the form labels the option with one whole message, "Verified search filter (not available
+      yet)", `integrations.scope.verified_filter_unavailable`) and only `group_export` can be
+      approved. **Until the filter can be recorded, only a group export is approvable** (threat model
+      I3), and the sync must apply exactly the recorded scope.
       Needed: a structured filter value (for example the Patient search parameters the sync will use,
       validated against an allow-list, and shown in the review page and the audit event) in a future
       migration that adds a column with **no grant** to `denialdesk_app`, and the sync (PI2b/PI4)
@@ -373,7 +385,7 @@ or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `ap
       (the practice-side Submit and Resume need a step-up within 5 minutes). Needed: an operator-realm
       step-up (the operator session's `mfa_verified_at` within the window, separate from the practice
       realm) gating Approve, with `step_up_verified_at` recorded in `operator.integration_approved`.
-      Reject stays ungated (the safe direction). Not built now, by decision.
+      Reject stays ungated (the safe direction). Not built: pending owner decision OA-073.
 - [ ] **Operator-side revoke** (compliance review; OA-071; before the first real connection). The
       lifecycle says any state → `revoked` by "admin or operator", but only a practice administrator can
       revoke today (`revokeConnection` is admin-only). The operator needs a revoke action for a live
@@ -544,7 +556,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `auth.step_up_verified|failed` (session, tenant, and the page as a route template plus the
       connection UUID, e.g. `/settings/integrations/[id]`: never the raw path, so free text in a
       crafted `returnTo` can't reach the log; `returnTo` is capped at 256 characters and must be one
-      of the integrations pages with a UUID id segment, else it resolves to the default page). A
+      of the integrations pages with a UUID id segment (a connection page or, from PI2b, its `/payers` page), else it resolves to the default page). A
       step-up that finds its session revoked meanwhile (`completeStepUpMfa` returns false) audits
       nothing as verified and sends the browser to sign in. `hasRecentMfa` also refuses a
       verification more than 30 s in the future (clock skew between instances is tolerated up to
@@ -576,7 +588,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       direction and the emergency stop for a suspected compromise; OA-063). Wired into the
       connection page as one action per state (Settings › Integrations › connection), every string
       in en/es/pt.
-- [ ] Payer mapping also requires step-up (ships with payer mapping, PI2b; call `requireStepUp`).
+- [x] Payer mapping also requires step-up (ships with payer mapping, PI2b; `savePayerMappings` calls `requireStepUp`, so the rule and its message are the ones Resume and Submit use).
 - [x] Revoke records a reason code from a fixed vocabulary (`no_longer_used`, `switching_systems`,
       `configured_in_error`, `security_concern`, `other`; `src/domain/integrations/revoke-reasons.ts`)
       as the audit event's `reason` and the connection's `status_reason`; required on the form and
@@ -850,10 +862,91 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `queued`/`running`); no heartbeat for 20 min → `abandoned`. Sync now once a minute.
 - [ ] Sync never writes `claims` or claim versions; the 837P builder (claims C3) snapshots patient
       demographics into the claim version at submission (R-3.10.3).
-- [ ] Payer mapping page (step-up): payor keys (`Organization/<id>`, Organization name) → practice
-      payer or unmapped; one audited update of affected patients.
-- [ ] Sync history (`/settings/integrations/[id]/runs`, admin): counts and codes; issue rows link
-      to DenialDesk patient IDs.
+- [x] Payer mapping page (step-up), `/settings/integrations/[id]/payers` (PI2b UI slice; no migration,
+      no GRANT: `integration_payer_mappings` grants SELECT/INSERT/UPDATE to the app role and has tenant
+      RLS; `src/domain/integrations/payer-mappings.ts`): payor keys (`Organization/<id>`, with the
+      Organization name when the sync recorded one) → a payer of this practice, or not mapped. The page
+      lists every key a synced patient of the connection carries (with a patient count) plus every key
+      that already has a mapping row, with one select of the practice's payers per key. **Counts are of
+      live patients only** (`source_status IS NULL`, so not inactive, merged, or gone; decided
+      2026-09-28), while any stored key still counts as reported: a key carried only by patients who are no
+      longer live is listed with 0 and can be mapped, and `affected_patient_count` in the audit event
+      counts the same live patients. A stored key that fails the save rules (over 256 characters, or
+      containing control, zero-width, or bidi characters) is listed **read-only, marked and cut, with a
+      note**, never submitted and never a reason to refuse the rest of the form. Administrators
+      only (any other role gets a 404 on the page and `error.notAdmin` from the action and the domain).
+      **Saving needs an MFA step-up in the last five minutes** (`requireStepUp`, checked before any
+      line is validated or written; the page shows the step-up link and `/step-up` returns to this page, which
+      `stepUpTarget` now allows). Refusals, in order: not an administrator; no recent step-up; a
+      malformed form (fixed shape, at most 500 lines, no duplicate key, payer empty or a UUID); a
+      connection that isn't the practice's (not found) or is revoked; an insurer the connection never
+      reported (no mapping row and no patient carries the key: keys can't be planted); a payer that isn't
+      the practice's own; a line whose mapping changed since the page was opened (each line carries the
+      mapping's `updated_at`, checked under a row lock). Only lines that change something are written
+      (a payer set, changed, or cleared to "not mapped"). **Each written line is one
+      `integration.payer_mapping_changed` event in the same transaction** (entity = the mapping row's
+      own ID; metadata: `connection_id`, `payer_id`, `previous_payer_id`, `change` =
+      `mapped|changed|cleared`, `affected_patient_count`, `step_up_verified_at`, `session_id`; the audit
+      `reason` is the fixed code `payer_mapping`; **never the payor key,
+      the name, or a patient**, since a payor key is Restricted PHI on the patient row it comes from), so
+      a failed audit write rolls the whole save back. Viewing the page is audited
+      `integration.payer_mappings_viewed` (connection ID, insurer and patient counts, `session_id`, reason
+      `payer_mapping`). The page says a saved mapping applies to a patient when the sync next updates that
+      patient's coverage (see the open item below). Every string is
+      an en/es/pt key. Tests: `test/integration/integration-payer-mapping.test.ts` (isolation, non-admin
+      refused, step-up required at 4:55 / 6:00 / from-the-future, foreign connection and foreign payer,
+      planted key, a key reported only by another connection of the same practice, stale page and a
+      first-decision race, audit atomicity, PHI-free audit, live-only counts, more than 500 insurers, an
+      unsavable stored key, the page and the action, a revoked connection read-only).
+- [ ] **The sync mapper enforces the payor-key rules on write** (PI2b sync engine): a payor key stored in
+      `patients.coverage_payor_key` or `integration_payer_mappings.payor_key` is 1 to 256 characters
+      and contains no control, zero-width, or bidi character (the same rules `isSavablePayorKey` applies
+      when a save is read); a key that fails is not stored, and the resource is skipped with a code.
+      Test: a Coverage whose payor reference is over-long or has an invisible character is skipped and
+      writes neither a patient key nor a mapping row. Until then the page lists such a stored key
+      read-only.
+- [ ] **Apply a saved mapping to the patients that carry the key** (the second half of the spec's
+      "one audited update of affected patients"; **open, by design of the database**). A synced patient's
+      `primary_payer_id`, `coverage_status`, and member ID are read-only outside a running sync run
+      (trigger `patients_synced_readonly`), and the run's own context (`withTenantAsSystem`) belongs to the
+      sync engine, so the mapping page saves the decision and records how many patients it concerns
+      (`affected_patient_count`) but does not touch a patient. The sync must re-derive coverage for every
+      patient whose payor key has a mapping newer than the patient's `synced_at`, even when the
+      resource's `versionId` is unchanged ("same `versionId` = unchanged" would otherwise never apply a
+      new mapping), and audit that update once per run (`patient.synced_updated`, changed field names).
+      Until then the page says what a mapping is for, not that it has been applied.
+- [x] Sync history (`/settings/integrations/[id]/runs`, admin; PI2b UI slice,
+      `src/domain/integrations/sync-history.ts`): every run of the connection, newest first (25 a page),
+      as counts (created, updated, linked, skipped), status, queued and finished times, who started it as
+      "Sync now" or "Schedule" (never a user ID or name), the run's issue codes, and its HTTP status; one
+      run's issue rows (`?run=<uuid>`, at most 200) list a code and, when the record became a patient, a
+      link to that patient by DenialDesk ID (the link text is "Open patient": no name and no visible
+      identifier). The selects name their columns, so nothing else can reach the page: no resource,
+      external ID, MRN, name, URL, watermark, or `diagnostics` (a test walks the page's element tree for a
+      synced patient's name, MRN, external ID, and payor key). **A stored code is shown only through the
+      fixed allow-list in `src/domain/integrations/sync-codes.ts`** (`SYNC_RUN_CODES`,
+      `SYNC_ISSUE_CODES`, with type guards), as a translated label (`runs.code.<code>`, en/es/pt);
+      **anything not listed shows as "Other", never as the stored string** (the database CHECK only
+      bounds the shape, so the page can't trust a stored code to be PHI-free). The lists start from the
+      codes this spec names and contain no sensitivity, restriction, minor, or Part 2 code (a unit test
+      refuses any list entry containing such a word). A page past the last is clamped to the last page,
+      and the "no sync has run yet" message shows only when the connection has no runs. A run ID that
+      isn't this connection's (another connection's or practice's) is a message, never listed.
+      Administrators only (404 otherwise). The run list (counts and codes) is not audited; **opening one
+      run's issue rows is** (`integration.sync_run_viewed`: entity = the run, metadata `connection_id`,
+      `row_count`, `session_id`, reason `sync_history`; IDs and a count only). Tests:
+      `test/integration/integration-sync-history.test.ts`, `src/domain/integrations/sync-codes.test.ts`.
+- [ ] **The sync engine writes codes only from `sync-codes.ts`, and keeps them PHI-free** (PI2b sync
+      engine; the engine's own module path is reconciled with `src/domain/integrations/sync-codes.ts`
+      at merge). Every value written to `integration_sync_runs.issue_codes` and
+      `integration_sync_issues.code` is a member of `SYNC_RUN_CODES` or `SYNC_ISSUE_CODES` (an R4
+      `OperationOutcome.issue.code` outside the list is stored as `unknown`). **A code on a row linked to
+      a patient must not reveal what the EHR says about the patient beyond a data-quality defect:**
+      never a sensitivity label (HIV, psychiatric, substance use, 42 CFR Part 2, ethnicity, domestic
+      violence), a restriction (R/V), minor status, a diagnosis, or a program. Test: for every skip and
+      link path of the mapper, and with restricted, sensitive, and minor synthetic patients, the stored
+      codes are all on the allow-list and none is derived from `meta.security`, `birthDate`, or a
+      clinical resource.
 - [ ] Synthetic sandbox (base URL `https://sandbox.fhir.denialdesk.invalid/r4`, in-process
       `SandboxTransport`, only when `syntheticDataOnly()`): token endpoint verifies the assertion
       (signature, alg allow-list, `aud`, `exp`, `jti` remembered until `exp`); deterministic
@@ -944,15 +1037,22 @@ Migration numbers: next free at build time (today 0039+).
 Restricted PHI (identifiers never logged or audited); `source_restricted`/`source_sensitivity` —
 Restricted-Sensitive PHI; connections, registry, mappings — Confidential configuration; runs and
 issues — Internal; JWKS — Public; private signing keys and the job secret — **Secret** (credentials;
-outside the §9.1 data classes, R-7.3.5).
+outside the §9.1 data classes, R-7.3.5). ⚠️ **Open (OA-075): is a payor key detached from any
+patient's PHI?** A payor key (`Organization/<id>`) names an insurer, not a person, but it sits on the
+patient row (`coverage_payor_key`, Restricted PHI above) and the mapping rows repeat it
+(`integration_payer_mappings`, classified Confidential above). The owner's answer decides whether the
+mapping table is reclassified from Confidential to Restricted; until then the pages that show keys are
+audited and no audit event or log carries a key.
 
-**Audit events** (never MRNs, names, external ids, tokens, query strings):
+**Audit events** (never MRNs, names, external ids, tokens, query strings; the payer mapping and sync
+history reads and writes of PI2b are listed with their items):
 `integration.connection_created|updated|submitted|tested|activated|paused|resumed|withdrawn|errored|revoked`
 with old/new base URL, token endpoint host + path, and client ID — always the normalized value
 with no query string or fragment (configuration, not PHI);
 `integration.transport_refused` (`address_refused`, `tls_failed`, `redirect_refused`; connection ID
 and the code only), `security.env_signing_key_in_production`,
-`integration.registry_conflict`, `integration.payer_mapping_changed`,
+`integration.registry_conflict`, `integration.payer_mapping_changed` (one per changed mapping: mapping,
+connection, and payer IDs, counts, never a payor key or name), `integration.payer_mappings_viewed`, `integration.sync_run_viewed`,
 `operator.integration_approved|rejected`, `integration.sync_started|completed|failed` (counts; the
 run-level `sync_completed` is the record of receipt for unchanged and skipped resources),
 `patient.synced_created|synced_updated|linked_to_source|source_inactivated|source_merged|source_gone`
@@ -997,7 +1097,7 @@ real vendor endpoints in pre-production.
   they stay unusable until the owner decides how their synthetic origin is proven.
 - **OA-050** Bulk Data (PI4) before the first real practice.
 - **OA-051** Who at the practice confirms the population scope at approval.
-- **OA-066** Approval method and contact-role lists. **OA-067** R-15.9 sign-off for the registry-conflict operator alert. **OA-068** Whether Reject clears the attestation. **OA-069** Notifications spec (activation notice). **OA-070** Retention of approval evidence. **OA-071** Operator-side revoke. **OA-072** Single-person approval and the operator account. **OA-073** Operator step-up before Approve.
+- **OA-066** Approval method and contact-role lists. **OA-067** R-15.9 sign-off for the registry-conflict operator alert. **OA-068** Whether Reject clears the attestation. **OA-069** Notifications spec (activation notice). **OA-070** Retention of approval evidence. **OA-071** Operator-side revoke. **OA-072** Single-person approval and the operator account. **OA-073** Operator step-up before Approve. **OA-074** CI runs as a superuser, so FORCE RLS on owner and platform paths is never exercised: a non-superuser, NOBYPASSRLS owner role in CI (R-15.9). **OA-075** Is a payor key detached from any patient PHI? (Decides whether `integration_payer_mappings` is Confidential or Restricted.)
 - **OA-052** Restricted-in-source patients until patients P4 masking; whether any practice is a
   42 CFR Part 2 program (human decision).
 - **OA-053** MRN conflicts: EHR-only fix or an admin tool.
@@ -1019,7 +1119,7 @@ PI1b: offboarding a connection.
 - `drizzle/00NN_*.sql` (+ Netlify mirror, `src/db/schema.ts`); `src/db/tenant.ts`
   (`withTenantAsSystem`).
 - `src/domain/integrations/`: `connections.ts` (lifecycle, zod allow-list, audit), `registry.ts`,
-  `approval.ts` (operator), `payer-mappings.ts`, `sync-runs.ts`, `sync.ts`, `principal.ts`.
+  `approval.ts` (operator), `payer-mappings.ts`, `sync-history.ts`, `sync-runs.ts`, `sync.ts`, `principal.ts`.
 - `src/integrations/fhir/`: `transport.ts`, `address-guard.ts`, `url-rules.ts`, `discovery.ts`,
   `auth.ts`, `search.ts`, `map-patient.ts`, `map-coverage.ts`, `identifier-rules.ts`,
   `security-labels.ts`, `types.ts`, `vendor-sandboxes.ts`, `sandbox/`.
@@ -1051,3 +1151,16 @@ PI1b: offboarding a connection.
 - `app.sync_*` settings and the owner-role connection remain settable by a compromised app
   (separate DB roles: open project decision).
 - Operator approval is manual and single-person (single-administrator risk already open).
+- **Test infrastructure gap (open; needs a CI change and the owner's decision; raised 2026-09-28,
+  after PR #89).** CI connects to PostgreSQL as a superuser, which ignores row-level security even
+  on `FORCE` tables, so the integration suite never exercises FORCE RLS on the **owner and platform
+  paths** (`withTenantAsPlatform`, which the operator's Approve and Reject, BAAs, and University
+  access use, and the owner-role `systemDb()` reads in tests). Only the practice path
+  (`set local role denialdesk_app`) runs under the policy. A missing `app.tenant_id` or a policy
+  that hides rows from the owner would pass CI and surface at the first non-superuser deploy
+  (Netlify preview, Azure). **Proposed:** run migrations and `pnpm test:integration` as a
+  non-superuser, `NOBYPASSRLS` schema-owner role (setup that must bypass policies, such as
+  `createTestTenant`, keeps a separate superuser connection), and add a test asserting the test
+  connection's role has neither `rolsuper` nor `rolbypassrls`. Not changed here: it touches the CI
+  workflow and `docker-compose.yml`. Owner action item **OA-074** (an R-15.9 decision);
+  recorded in `docs/PROJECT_STATE.md` (open questions).

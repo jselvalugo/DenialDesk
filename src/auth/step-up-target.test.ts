@@ -19,6 +19,19 @@ describe("stepUpTarget", () => {
     });
   });
 
+  it("keeps the payer mapping page (PI2b), described by its route template plus the connection UUID", () => {
+    expect(stepUpTarget(`/settings/integrations/${ID}/payers`)).toEqual({
+      path: `/settings/integrations/${ID}/payers`,
+      route: "/settings/integrations/[id]/payers",
+      routeId: ID,
+    });
+    expect(stepUpTarget(`/settings/integrations/${ID.toUpperCase()}/payers?x=1`)).toEqual({
+      path: `/settings/integrations/${ID}/payers`,
+      route: "/settings/integrations/[id]/payers",
+      routeId: ID,
+    });
+  });
+
   it("lowercases the UUID and drops a query string", () => {
     expect(stepUpTarget(`/settings/integrations/${ID.toUpperCase()}?tab=history`)).toEqual({
       path: `/settings/integrations/${ID}`,
@@ -31,6 +44,10 @@ describe("stepUpTarget", () => {
     "/settings/integrations/not-a-uuid",
     "/settings/integrations/Jane%20Doe%201990-01-01",
     `/settings/integrations/${ID}/edit`,
+    `/settings/integrations/${ID}/runs`,
+    `/settings/integrations/${ID}/payers/extra`,
+    `/settings/integrations/not-a-uuid/payers`,
+    `/settings/integrations/${ID}/payers/`,
     `/settings/integrations/${ID}x`,
     "/patients",
     "/patients/abc",

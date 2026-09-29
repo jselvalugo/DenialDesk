@@ -34,7 +34,13 @@ describe("integrationActor (PI1b-2)", () => {
       syntheticOnly: false,
       recentMfa: false,
       stepUpVerifiedAt: null,
+      sessionId: null,
     });
+  });
+
+  it("carries the session row's ID for the audit events that record it", () => {
+    const sessionId = "6b1f4e0a-7c1e-4d52-9d0e-3f7a1a2b3c4d";
+    expect(integrationActor({ ...auth, sessionId }).sessionId).toBe(sessionId);
   });
 });
 
