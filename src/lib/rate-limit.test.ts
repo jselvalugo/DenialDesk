@@ -63,6 +63,12 @@ describe("jwks bucket policy", () => {
   });
 });
 
+describe("import_charges bucket policy", () => {
+  it("is its own per-practice bucket: 10 imports per 10 minutes", () => {
+    expect(limitFor("import_charges")).toEqual({ limit: 10, windowSeconds: 600 });
+  });
+});
+
 describe("integration_submit bucket policy", () => {
   it("is its own per-practice bucket: 10 attempts per 10 minutes, separate from Test connection", () => {
     expect(limitFor("integration_submit")).toEqual({ limit: 10, windowSeconds: 600 });
