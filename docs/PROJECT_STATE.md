@@ -419,7 +419,8 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    missing threat models, CI license check, SAST/DAST/SBOM, signed commits; WebAuthn, JIT and
    break-glass access, WORM audit + SIEM, mTLS, Key Vault, legal hold, disclosure-accounting export,
    and the written HIPAA policy set.
-   Closed: SC-A4.3 (7-day release quarantine: pnpm `minimumReleaseAge`, Dependabot `cooldown`).
+   Mostly closed: SC-A4.3 (7-day hold in pnpm `minimumReleaseAge` and Dependabot `cooldown`; still
+   open: a CI check on lockfile entries a PR adds).
 
 ## Open questions for humans
 

@@ -93,7 +93,9 @@ Recorded in the PR's "New dependencies" section and, for runtime dependencies, i
   security advisory (defends against hijacked publishes); pnpm and Dependabot are both configured
   to hold new releases for 7 days (`minimumReleaseAge` in `pnpm-workspace.yaml`, `cooldown` in
   `.github/dependabot.yml`, enforced by `src/supply-chain/release-age.test.ts`). The advisory
-  exception is a `minimumReleaseAgeExclude` entry added in that PR, naming the advisory.
+  exception is a `minimumReleaseAgeExclude` entry added in that PR, naming the advisory, and removed
+  once the release is 7 days old. pnpm checks release age only when it resolves a version;
+  `--frozen-lockfile` installs do not re-check the lockfile.
 - **SC-A4.4 MUST** Advisories are fixed within the REQUIREMENTS §7.6 SLAs: Critical in 15 days (7
   days if actively exploited), High in 30, Medium in 90. `pnpm audit --audit-level=high` stays a failing CI gate.
 - **SC-A4.5 MUST** Quarterly, remove unused dependencies and re-check A2.2–A2.3 for every direct
@@ -263,6 +265,7 @@ exception.
 | SC-B7.1 | Member IDs (`src/domain/patients/queries.ts`, `src/db/seed.ts`) and TOTP secrets (`src/auth/enrollment.ts`) are encrypted without AAD; only custom field values bind AAD. |
 | SC-A4.1 | Some existing ranges are not exact (`server-only`, `@types/*`, `eslint`, `tsx`, `typescript-eslint`). |
 | SC-A4.2, SC-B12.3 | `Dockerfile` pins `node:24-alpine` by tag, not digest, and pnpm is fetched without a hash check (`corepack enable` in the `Dockerfile`, `pnpm/action-setup` in CI; `packageManager` has no `+sha512`); CI's `postgres:16` service images are tag-only. |
+| SC-A4.3 | pnpm checks release age only when it resolves a version, so nothing in CI checks the entries a PR adds to `pnpm-lock.yaml` (a hand-edited lockfile, or one written by pnpm older than 10.16, would pass). Some locked packages were under 7 days old when this rule arrived (for example `@types/node` 24.19.0, published 2026-09-25); they predate the rule. |
 | SC-A2.3 | `exceljs` and `qrcode` have no release in the last 12 months and no written reason yet (register above). |
 | SC-A2.5 | The lockfile also carries native binaries not on list (a): `@rolldown/binding-*` (Vitest → Vite → Rolldown) and `fsevents` (tsx, Vite, macOS only). Adding them needs human sign-off (OA-077). |
 | SC-A2.2 | No automated license check in CI. |

@@ -11,6 +11,10 @@ describe("release-age quarantine (SC-A4.3)", () => {
     expect(minutes).toBeGreaterThanOrEqual(SEVEN_DAYS_IN_MINUTES);
   });
 
+  it("the image build installs with the same pnpm settings", () => {
+    expect(readFileSync("Dockerfile", "utf8")).toMatch(/^COPY .*pnpm-workspace\.yaml/m);
+  });
+
   it("every Dependabot ecosystem has a cooldown of at least 7 days", () => {
     const config = readFileSync(".github/dependabot.yml", "utf8");
     const ecosystems = config.split(/^ {2}- package-ecosystem:/m).slice(1);
