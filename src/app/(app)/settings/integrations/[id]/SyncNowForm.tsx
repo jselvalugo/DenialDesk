@@ -10,7 +10,8 @@ import type { SyncNowState } from "../form-state";
 
 /**
  * Sync now (docs/specs/patient-integrations.md PI2b): a server action (POST), never a link. The
- * result is the run's translated sentence (counts, or why it stopped) shown as text with a badge,
+ * result is the run's translated sentence (counts, why it stopped, or that it was queued for the background
+ * worker) shown as text with a badge,
  * never colour alone; a refusal (rate limit, not active) shows as an alert.
  */
 export function SyncNowForm({ id }: { id: string }) {
@@ -29,8 +30,14 @@ export function SyncNowForm({ id }: { id: string }) {
       <FormAlert message={state.error} id="sync-error" />
       {state.status && state.message && (
         <div role="status" className="flex flex-col items-start gap-2 text-body text-text">
-          <Badge tone={state.status === "succeeded" ? "success" : "danger"}>
-            {state.status === "succeeded" ? t("sync.resultOk") : t("sync.resultFailed")}
+          <Badge
+            tone={state.status === "succeeded" ? "success" : state.status === "queued" ? "info" : "danger"}
+          >
+            {state.status === "succeeded"
+              ? t("sync.resultOk")
+              : state.status === "queued"
+                ? t("sync.resultQueued")
+                : t("sync.resultFailed")}
           </Badge>
           <p>{state.message}</p>
         </div>
