@@ -403,4 +403,10 @@ export const integrations = {
   "runs.code.other": "Other",
   "payers.keyUnsupported":
     "This insurer's key is too long or contains hidden characters, so it can't be mapped here.",
+  "runs.code.record_rejected": "A record was refused by the data store's own limits",
+  "runs.code.population_scope_unenforced": "The patients to sync can't yet be limited to your practice",
+  "sync.failure.population_scope_unenforced":
+    "Nothing was synced. DenialDesk can't yet limit a real EHR/PM connection to your practice's own patients, so real connections don't sync until it can. Nothing was requested from the EHR/PM.",
+  "sync.error.populationScopeUnenforced":
+    "Real EHR/PM connections can't sync yet: DenialDesk can't yet limit them to your practice's own patients. Nothing was requested.",
 } as const;

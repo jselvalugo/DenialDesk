@@ -205,6 +205,8 @@ describe("the integration service principal (0043)", () => {
     expect(principal!.mfaEnrolledAt).toBeNull();
     expect(principal!.mustChangePassword).toBe(false);
     // Not a hash `verifyPassword` accepts: no password, including the empty one, matches it.
+    // Pinned to exactly the seeded value (drizzle/0043 stores `!`): a changed hash or a re-enabled row fails here.
+    expect(principal!.passwordHash).toBe("!");
     expect(principal!.passwordHash).not.toMatch(/^scrypt\$/);
     for (const attempt of ["", "!", "password", principal!.passwordHash]) {
       expect(await verifyPassword(attempt, principal!.passwordHash)).toBe(false);

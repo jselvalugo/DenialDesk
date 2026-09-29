@@ -153,7 +153,13 @@ function coverage(n: number, patientId: string, lastUpdated: Date, overrides: Fh
   };
 }
 
-function buildPatient(n: number, random: () => number): SandboxPatient {
+/**
+ * The minor fixture's birth date, relative to `now` so the fixture stays a minor (about ten) however long
+ * the code lives: ten years before the current year, 1 March. Not part of the seeded random sequence.
+ */
+export const sandboxMinorBirthDate = (now: Date): string => `${now.getUTCFullYear() - 10}-03-01`;
+
+function buildPatient(n: number, random: () => number, now: Date): SandboxPatient {
   const id = sandboxPatientId(n);
   const lastUpdated = new Date(SANDBOX_EPOCH.getTime() + n * 60_000);
   const pick = <T>(list: readonly T[]) => list[Math.floor(random() * list.length)]!;
@@ -187,7 +193,7 @@ function buildPatient(n: number, random: () => number): SandboxPatient {
       n === F.partialBirthDate
         ? "1985-04"
         : n === F.minor
-          ? "2015-03-01"
+          ? sandboxMinorBirthDate(now)
           : `${year}-${pad(month, 2)}-${pad(day, 2)}`,
     address: [
       {
@@ -260,9 +266,9 @@ function buildPatient(n: number, random: () => number): SandboxPatient {
 export class SandboxDataset {
   readonly patients: SandboxPatient[];
 
-  constructor(count: number = SANDBOX_PATIENT_COUNT) {
+  constructor(count: number = SANDBOX_PATIENT_COUNT, now: Date = new Date()) {
     const random = prng(20260928);
-    this.patients = Array.from({ length: count }, (_, index) => buildPatient(index + 1, random));
+    this.patients = Array.from({ length: count }, (_, index) => buildPatient(index + 1, random, now));
   }
 
   patient(id: string): SandboxPatient | undefined {

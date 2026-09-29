@@ -172,6 +172,8 @@ export interface AuditEvent {
   entityId?: string | null;
   reason?: string | null;
   ipAddress?: string | null;
+  /** The client's user agent, for a system-written event that records who pressed the button (Sync now). */
+  userAgent?: string | null;
   /**
    * Written by a system actor (the integration sync engine). The request's client IP and user agent
    * belong to whoever triggered the work (an administrator pressing Sync now), not to the actor, so
@@ -192,7 +194,7 @@ async function row(event: AuditEvent) {
     entityId: event.entityId ?? null,
     reason: event.reason ?? null,
     ipAddress: event.ipAddress ?? context.ip,
-    userAgent: context.userAgent,
+    userAgent: event.userAgent ?? context.userAgent,
     metadata: event.metadata ?? null,
   };
 }

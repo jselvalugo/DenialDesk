@@ -11,6 +11,7 @@ import {
   SANDBOX_PATIENT_COUNT,
   SANDBOX_SYNTHETIC_TAG,
   SandboxDataset,
+  sandboxMinorBirthDate,
   sandboxPatientId,
 } from "./dataset";
 import { SandboxNotPermittedError, SandboxState, SandboxTransport } from "./transport";
@@ -258,6 +259,48 @@ describe("SandboxTransport — the token endpoint verifies the assertion", () =>
     expect(state.jtis.size).toBe(1);
   });
 
+  it("prunes expired access tokens when it issues a new one, so the token map stays bounded (PR #98 review)", async () => {
+    const state = new SandboxState();
+    const transport = new SandboxTransport({
+      publicKeys: () => store.publicJwks(),
+      synthetic: () => true,
+      now: () => clock,
+      state,
+    });
+    const start = clock;
+    try {
+      const first = await tokenFor(transport);
+      expect(state.tokens.has(first)).toBe(true);
+      clock = new Date(start.getTime() + 301_000);
+      // The expired token is refused and dropped on use.
+      expect((await fhirGet(transport, url("/Patient"), first)).status).toBe(401);
+      expect(state.tokens.has(first)).toBe(false);
+      const second = await tokenFor(transport);
+      clock = new Date(start.getTime() + 700_000);
+      await tokenFor(transport);
+      expect(state.tokens.has(second)).toBe(false);
+      expect(state.tokens.size).toBe(1);
+    } finally {
+      clock = start;
+    }
+  });
+
+  it("binds an access token to the key set that obtained it: another key set gets 401 (PR #98 review)", async () => {
+    const state = new SandboxState();
+    const otherKey = generateKeyPairSync("ec", { namedCurve: "secp384r1" }).privateKey;
+    const otherStore = new EnvSharedKeyStore(() => true, pem(otherKey));
+    const options = { synthetic: () => true, now: () => clock, state };
+    const one = new SandboxTransport({ ...options, publicKeys: () => store.publicJwks() });
+    const two = new SandboxTransport({ ...options, publicKeys: () => otherStore.publicJwks() });
+    const token = await tokenFor(one);
+    expect((await fhirGet(one, url("/Patient"), token)).status).toBe(200);
+    // Same shared state, same token string, different key set: refused.
+    expect((await fhirGet(two, url("/Patient"), token)).status).toBe(401);
+    // And a key that has been rotated out of the set no longer opens the token.
+    const rotated = new SandboxTransport({ ...options, publicKeys: async () => [] });
+    expect((await fhirGet(rotated, url("/Patient"), token)).status).toBe(401);
+  });
+
   it("does not remember the jti of an assertion that failed another check", async () => {
     const transport = build();
     const jti = "failed-first";
@@ -464,7 +507,14 @@ describe("SandboxDataset — deterministic, synthetic", () => {
     expect(JSON.stringify(at(SANDBOX_FIXTURES.restrictedLabel).resource.meta)).toContain('"code":"R"');
     expect(JSON.stringify(at(SANDBOX_FIXTURES.hivLabel).resource.meta)).toContain('"code":"HIV"');
     expect(JSON.stringify(at(SANDBOX_FIXTURES.unknownLabel).resource.meta)).toContain("X-SYNTHETIC");
-    expect(at(SANDBOX_FIXTURES.minor).resource.birthDate).toBe("2015-03-01");
+    // Relative to now, so the fixture is always a minor (PR #98 review).
+    expect(at(SANDBOX_FIXTURES.minor).resource.birthDate).toBe(sandboxMinorBirthDate(new Date()));
+    expect(
+      new Date().getUTCFullYear() - Number(String(at(SANDBOX_FIXTURES.minor).resource.birthDate).slice(0, 4)),
+    ).toBe(10);
+    expect(new SandboxDataset(12, new Date("2040-06-01T00:00:00Z")).patients[10]!.resource.birthDate).toBe(
+      "2030-03-01",
+    );
     expect(JSON.stringify(at(SANDBOX_FIXTURES.ssnShapedMrn).resource.identifier)).toContain(
       "SYN-123-45-6789",
     );

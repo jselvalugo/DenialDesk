@@ -1,4 +1,4 @@
-import { createPublicKey, randomBytes, verify as cryptoVerify } from "node:crypto";
+import { createHash, createPublicKey, randomBytes, verify as cryptoVerify } from "node:crypto";
 import { syntheticDataOnly } from "@/lib/env";
 import { isJwtAlg } from "@/lib/crypto/jwt-sign";
 import { CLIENT_ASSERTION_TYPE } from "../auth";
@@ -52,7 +52,13 @@ const DEFAULT_PAGE = 20;
  */
 export class SandboxState {
   readonly jtis = new Map<string, number>();
-  readonly tokens = new Map<string, { expiresAtMs: number; scope: string }>();
+  /** Issued access tokens; each is bound to the key set that obtained it (`keyFingerprint`). */
+  readonly tokens = new Map<string, { expiresAtMs: number; scope: string; keyFingerprint: string }>();
+
+  /** Drops expired tokens: the map holds only live ones, whatever the traffic. */
+  pruneTokens(nowMs: number): void {
+    for (const [token, entry] of this.tokens) if (entry.expiresAtMs <= nowMs) this.tokens.delete(token);
+  }
 
   /** Records a `jti` until `expSeconds`; false if it was already seen (a replay). */
   rememberJti(jti: string, expSeconds: number, nowMs: number): boolean {
@@ -64,6 +70,13 @@ export class SandboxState {
 }
 
 const sharedState = new SandboxState();
+
+/** A stable digest of a public key's material: what a token is bound to. Never the key itself. */
+function keyFingerprint(key: PublicJwk): string {
+  return createHash("sha256")
+    .update([key.kty, key.crv ?? "", key.x ?? "", key.y ?? "", key.n ?? "", key.e ?? ""].join("|"))
+    .digest("hex");
+}
 
 export interface SandboxTransportOptions {
   /**
@@ -151,7 +164,7 @@ export class SandboxTransport implements Transport {
     if (resource === ".well-known/smart-configuration" && init.method === "GET") {
       return ok(JSON_CONTENT, this.smartConfiguration());
     }
-    const scope = this.authorize(init);
+    const scope = await this.authorize(init);
     if (scope === null) return empty(401);
     if (resource === "Patient" && init.method === "GET") return this.searchPatients(url, scope);
     if (resource === "Coverage" && init.method === "GET") return this.searchCoverage(url.searchParams, scope);
@@ -218,8 +231,8 @@ export class SandboxTransport implements Transport {
     const form = new URLSearchParams(init.body ?? "");
     if (form.get("grant_type") !== "client_credentials") return empty(400);
     if (form.get("client_assertion_type") !== CLIENT_ASSERTION_TYPE) return empty(401);
-    const claims = await this.verifiedClaims(form.get("client_assertion") ?? "");
-    if (!claims) return empty(401);
+    const verified = await this.verifiedClaims(form.get("client_assertion") ?? "");
+    if (!verified) return empty(401);
 
     const allowed = new Set([...SCOPES_BY_STYLE.v2.split(" "), ...SCOPES_BY_STYLE.v1.split(" ")]);
     const scope = (form.get("scope") ?? "")
@@ -227,9 +240,12 @@ export class SandboxTransport implements Transport {
       .filter((requested) => allowed.has(requested))
       .join(" ");
     const accessToken = `sandbox-token-${randomBytes(24).toString("base64url")}`;
+    const nowMs = this.now().getTime();
+    this.state.pruneTokens(nowMs);
     this.state.tokens.set(accessToken, {
-      expiresAtMs: this.now().getTime() + SANDBOX_TOKEN_TTL_SECONDS * 1000,
+      expiresAtMs: nowMs + SANDBOX_TOKEN_TTL_SECONDS * 1000,
       scope,
+      keyFingerprint: keyFingerprint(verified.key),
     });
     return ok(JSON_CONTENT, {
       access_token: accessToken,
@@ -239,8 +255,10 @@ export class SandboxTransport implements Transport {
     });
   }
 
-  /** The assertion's claims if it is a valid, unreplayed assertion from the sandbox client; else null. */
-  private async verifiedClaims(assertion: string): Promise<Record<string, unknown> | null> {
+  /** The claims and the verifying key of a valid, unreplayed assertion from the sandbox client; else null. */
+  private async verifiedClaims(
+    assertion: string,
+  ): Promise<{ claims: Record<string, unknown>; key: PublicJwk } | null> {
     const parts = assertion.split(".");
     if (parts.length !== 3 || parts.some((part) => part === "")) return null;
     const [headerPart, payloadPart, signaturePart] = parts as [string, string, string];
@@ -287,15 +305,25 @@ export class SandboxTransport implements Transport {
       return null;
     }
     if (!this.state.rememberJti(jti, exp, this.now().getTime())) return null;
-    return claims;
+    return { claims, key };
   }
 
-  /** The scope of a valid bearer token, or null (missing, unknown, or expired). */
-  private authorize(init: TransportRequestInit): string | null {
+  /**
+   * The scope of a valid bearer token, or null (missing, unknown, expired, or obtained with a key this
+   * transport's key set no longer holds: a token from one connection's key never opens another's).
+   */
+  private async authorize(init: TransportRequestInit): Promise<string | null> {
     const header = init.headers?.authorization ?? init.headers?.Authorization;
     const token = /^Bearer (\S+)$/.exec(header ?? "")?.[1];
     const entry = token ? this.state.tokens.get(token) : undefined;
-    if (!entry || entry.expiresAtMs <= this.now().getTime()) return null;
+    if (!entry) return null;
+    const nowMs = this.now().getTime();
+    if (entry.expiresAtMs <= nowMs) {
+      this.state.tokens.delete(token!);
+      return null;
+    }
+    const keys = await this.options.publicKeys();
+    if (!keys.some((candidate) => keyFingerprint(candidate) === entry.keyFingerprint)) return null;
     return entry.scope;
   }
 

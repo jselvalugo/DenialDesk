@@ -1,8 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import { closeDatabase } from "@/db/client";
 import type { TransportResponse } from "@/integrations/fhir/transport";
 import {
   activeSandbox,
+  auditRows,
   connectionRow,
   harness,
   patientRows,
@@ -16,7 +18,13 @@ import { createTestTenant } from "./helpers";
 // (the real in-process sandbox, as `connectionTestDeps` builds it).
 
 type Role = "admin" | "manager" | "specialist" | "compliance";
-let auth: { tenantId: string; userId: string; role: Role; mfaVerifiedAt?: Date | null };
+let auth: {
+  tenantId: string;
+  userId: string;
+  role: Role;
+  mfaVerifiedAt?: Date | null;
+  sessionId?: string;
+};
 let language = "en";
 const wiring = vi.hoisted(() => ({ deps: undefined as unknown }));
 const revalidated = vi.hoisted(() => ({ paths: [] as string[] }));
@@ -24,7 +32,12 @@ const revalidated = vi.hoisted(() => ({ paths: [] as string[] }));
 vi.mock("@/auth/session", () => ({ requireAuth: async () => auth }));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => undefined }),
-  headers: async () => new Headers({ "accept-language": language }),
+  headers: async () =>
+    new Headers({
+      "accept-language": language,
+      "x-forwarded-for": "203.0.113.7",
+      "user-agent": "Synthetic-Test-Browser/1.0",
+    }),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: (path: string) => revalidated.paths.push(path) }));
 vi.mock("next/navigation", () => ({
@@ -69,6 +82,28 @@ describe("syncNowAction", () => {
     expect(await patientRows(ctx)).toHaveLength(123);
     // The drop-down in the signed-in layout shows the state and the last sync time.
     expect(revalidated.paths).toContain("/");
+  });
+
+  it("records who pressed the button on sync_started: admin IP, user agent, and session id (PR #98 review)", async () => {
+    const sessionId = randomUUID();
+    auth = { ...auth, sessionId };
+    await press();
+    const started = (await auditRows(ctx.tenantId)).find(
+      (event) => event.action === "integration.sync_started",
+    )!;
+    expect(started.ipAddress).toBe("203.0.113.7");
+    expect(started.userAgent).toBe("Synthetic-Test-Browser/1.0");
+    expect(started.metadata).toMatchObject({
+      trigger: "manual",
+      triggered_by: ctx.userId,
+      session_id: sessionId,
+    });
+    // The rest of the run's events stay the service principal's: no request facts of the administrator.
+    const completed = (await auditRows(ctx.tenantId)).find(
+      (event) => event.action === "integration.sync_completed",
+    )!;
+    expect(completed.ipAddress).toBeNull();
+    expect(completed.userAgent).toBeNull();
   });
 
   it("answers in Spanish and Portuguese too", async () => {

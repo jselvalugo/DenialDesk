@@ -3,6 +3,7 @@ import { mapPatient } from "@/integrations/fhir/map-patient";
 import { operationOutcomeCodes } from "@/integrations/fhir/types";
 import {
   CONFLICT_CODES,
+  STORE_REFUSAL_CODES,
   NOTE_CODES,
   OTHER_CODE,
   R4_ISSUE_TYPE_RUN_CODES,
@@ -44,7 +45,7 @@ describe("the engine's additions to the allow-lists", () => {
 
 describe("every code the engine can write is in the list", () => {
   it("skip, note, conflict, notice, and failure codes", () => {
-    for (const code of [...SKIP_CODES, ...NOTE_CODES, ...CONFLICT_CODES])
+    for (const code of [...SKIP_CODES, ...NOTE_CODES, ...CONFLICT_CODES, ...STORE_REFUSAL_CODES])
       expect(isSyncIssueCode(code)).toBe(true);
     for (const code of [...RUN_NOTICE_CODES, ...RUN_FAILURE_CODES, ...R4_ISSUE_TYPE_RUN_CODES, OTHER_CODE]) {
       expect(isSyncRunCode(code), code).toBe(true);
@@ -53,7 +54,12 @@ describe("every code the engine can write is in the list", () => {
 
   it("every code the mapper returns for a skipped record, and for a note", () => {
     const system = "https://ehr.example.test/mrn";
-    const ctx = { mrnSystem: system, nineDigitsVerified: false, now: new Date("2026-09-28T12:00:00Z") };
+    const ctx = {
+      mrnSystem: system,
+      nineDigitsVerified: false,
+      now: new Date("2026-09-28T12:00:00Z"),
+      today: "2026-09-28",
+    };
     const base = {
       resourceType: "Patient",
       id: "syn-1",
@@ -159,6 +165,13 @@ describe("every code the engine can write is in the list", () => {
     }
     expect(toSyncFailure(new Error("boom with PHI: Jane Test")).code).toBe("internal_error");
     expect(toSyncFailure(new FhirConnectError("auth_refused")).connectionError).toBe(true);
+    expect(
+      toSyncFailure(new FhirConnectError("auth_refused", undefined, undefined, { httpStatus: 401 })),
+    ).toMatchObject({ code: "auth_refused", httpStatus: 401, connectionError: true });
+    expect(
+      toSyncFailure(new FhirConnectError("unreachable", undefined, undefined, { httpStatus: 503 }))
+        .httpStatus,
+    ).toBe(503);
     expect(toSyncFailure(new FhirConnectError("unreachable", "timeout")).code).toBe("timeout");
     expect(toSyncFailure(new FhirConnectError("unreachable")).code).toBe("unreachable");
     expect(toSyncFailure(new FhirConnectError("smart_config_invalid", "content_type_refused")).code).toBe(

@@ -16,6 +16,7 @@ import {
   BASE_BACKOFF_MS,
   createTokenSource,
   FhirClient,
+  MAX_COVERAGE_PAGES_PER_CHUNK,
   isSyncFailure,
   PatientSearch,
   RETRY_AFTER_CAP_SECONDS,
@@ -39,6 +40,12 @@ function bundle(overrides: Record<string, unknown> = {}, entries: unknown[] = []
     ...overrides,
   };
 }
+/** A Coverage for `patient`, as a search returns it. */
+const cov = (id: string, patient: string) => ({
+  resourceType: "Coverage",
+  id,
+  beneficiary: { reference: `Patient/${patient}` },
+});
 const ok = (body: unknown): TransportResponse => ({
   status: 200,
   contentType: "application/fhir+json",
@@ -360,10 +367,10 @@ describe("PatientSearch", () => {
   });
 
   it("searches Coverage by POST _search, keeping FHIR ids out of the URL", async () => {
-    const transport = queue(ok(bundle({}, [{ resourceType: "Coverage", id: "c1" }])));
+    const transport = queue(ok(bundle({}, [cov("c1", "pat-a")])));
     const { search } = p(transport);
     const found = await search.coverageFor(["pat-a", "pat-b"]);
-    expect(found).toEqual([{ resourceType: "Coverage", id: "c1" }]);
+    expect(found).toEqual([cov("c1", "pat-a")]);
     const [request] = transport.requests;
     expect(request!.method).toBe("POST");
     expect(request!.url.href).toBe(`${BASE}/Coverage/_search`);
@@ -384,7 +391,9 @@ describe("PatientSearch", () => {
 
   it("falls back to GET (shorter chunks) for a server that doesn't support POST search, and remembers it", async () => {
     const transport = new Scripted((init) =>
-      init.method === "POST" ? status(405) : ok(bundle({}, [{ resourceType: "Coverage", id: "c" }])),
+      init.method === "POST"
+        ? status(405)
+        : ok(bundle({}, [cov("c", new URL(init.url).searchParams.get("patient")!.split(",")[0]!)])),
     );
     const { search } = p(transport);
     const found = await search.coverageFor(Array.from({ length: 25 }, (_, i) => `pat-${i}`));
@@ -401,10 +410,10 @@ describe("PatientSearch", () => {
     const transport = queue(
       ok(
         bundle({ link: [{ relation: "next", url: `${BASE}/Coverage?patient=pat-a&_offset=100` }] }, [
-          { id: "c1" },
+          cov("c1", "pat-a"),
         ]),
       ),
-      ok(bundle({}, [{ id: "c2" }])),
+      ok(bundle({}, [cov("c2", "pat-a")])),
     );
     const { search } = p(transport);
     expect(await search.coverageFor(["pat-a"])).toHaveLength(2);
@@ -422,13 +431,62 @@ describe("PatientSearch", () => {
         resourceType: "Bundle",
         entry: [
           { resource: { resourceType: "OperationOutcome" }, search: { mode: "outcome" } },
-          { resource: { resourceType: "Coverage", id: "c1" }, search: { mode: "match" } },
+          { resource: cov("c1", "pat-a"), search: { mode: "match" } },
         ],
       }),
     );
-    expect(await p(transport).search.coverageFor(["pat-a"])).toEqual([
-      { resourceType: "Coverage", id: "c1" },
-    ]);
+    expect(await p(transport).search.coverageFor(["pat-a"])).toEqual([cov("c1", "pat-a")]);
+  });
+
+  it("drops Coverage whose beneficiary isn't one of the patients asked for in that chunk", async () => {
+    const transport = queue(
+      ok(
+        bundle({}, [
+          cov("mine", "pat-a"),
+          cov("stranger", "pat-z"),
+          { resourceType: "Coverage", id: "no-beneficiary" },
+          { resourceType: "Coverage", id: "org", beneficiary: { reference: "Organization/pat-a" } },
+          { resourceType: "Patient", id: "pat-a" },
+          "junk",
+        ]),
+      ),
+    );
+    expect(await p(transport).search.coverageFor(["pat-a", "pat-b"])).toEqual([cov("mine", "pat-a")]);
+  });
+
+  it("stops a chunk that keeps returning pages: at most 20, then too_large", async () => {
+    let n = 0;
+    const endless = new Scripted(() =>
+      ok(bundle({ link: [{ relation: "next", url: `${BASE}/Coverage?page=${++n}` }] }, [cov("c", "pat-a")])),
+    );
+    await expect(p(endless).search.coverageFor(["pat-a"])).rejects.toMatchObject({ code: "too_large" });
+    expect(endless.requests).toHaveLength(MAX_COVERAGE_PAGES_PER_CHUNK);
+
+    // The same by GET (a server without POST search).
+    let m = 0;
+    const getOnly = new Scripted((init) =>
+      init.method === "POST"
+        ? status(405)
+        : ok(
+            bundle({ link: [{ relation: "next", url: `${BASE}/Coverage?page=${++m}` }] }, [
+              cov("c", "pat-a"),
+            ]),
+          ),
+    );
+    await expect(p(getOnly).search.coverageFor(["pat-a"])).rejects.toMatchObject({ code: "too_large" });
+    expect(getOnly.requests.filter((r) => r.method === "GET")).toHaveLength(MAX_COVERAGE_PAGES_PER_CHUNK);
+  });
+
+  it("19 pages is fine", async () => {
+    let n = 0;
+    const nearly = new Scripted(() =>
+      ok(
+        bundle(n++ < 18 ? { link: [{ relation: "next", url: `${BASE}/Coverage?page=${n}` }] } : {}, [
+          cov("c", "pat-a"),
+        ]),
+      ),
+    );
+    expect(await p(nearly).search.coverageFor(["pat-a"])).toHaveLength(19);
   });
 });
 
@@ -491,5 +549,32 @@ describe("createTokenSource", () => {
     const { source, sleeps } = build(transport);
     await expect(source.get()).rejects.toMatchObject({ outcome: "unreachable" });
     expect(sleeps).toEqual([1000, 2000, 4000]);
+  });
+
+  it("honors Retry-After on a throttled token endpoint, capped at 60 seconds (PR #98 review)", async () => {
+    const answers = [
+      { ...statusOnly(429), retryAfterSeconds: 7 },
+      { ...statusOnly(429), retryAfterSeconds: 3600 },
+    ];
+    let calls = 0;
+    const transport = new FakeFhirTransport({
+      [`POST ${FAKE_TOKEN_ENDPOINT}`]: () => answers[calls++] ?? tokenResponse(),
+    });
+    const { source, sleeps } = build(transport);
+    await source.get();
+    expect(sleeps).toEqual([7000, 60_000]);
+  });
+
+  it("carries the HTTP status of a refused or failed token request, and no body", async () => {
+    const refused = build(new FakeFhirTransport({ [`POST ${FAKE_TOKEN_ENDPOINT}`]: statusOnly(403) }));
+    await expect(refused.source.get()).rejects.toMatchObject({
+      outcome: "auth_refused",
+      response: { httpStatus: 403 },
+    });
+    const down = build(new FakeFhirTransport({ [`POST ${FAKE_TOKEN_ENDPOINT}`]: statusOnly(503) }));
+    await expect(down.source.get()).rejects.toMatchObject({
+      outcome: "unreachable",
+      response: { httpStatus: 503 },
+    });
   });
 });

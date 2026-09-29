@@ -62,3 +62,41 @@ describe("mrnShapeProblem — MBI shapes (CMS format, ⚠️ VERIFY)", () => {
     expect(mrnShapeProblem(value, strict)).toBeNull();
   });
 });
+
+describe("mrnShapeProblem — separators and position (security review M2)", () => {
+  it.each(["123.45.6789", "123_45_6789", "123/45/6789", "123 45-6789", "MRN:123.45.6789", "A123 45 6789Z"])(
+    "refuses the SSN grouped 3-2-4 with any separator: %s",
+    (value) => {
+      expect(mrnShapeProblem(value, strict)).toBe("mrn_looks_like_ssn");
+      expect(mrnShapeProblem(value, verified)).toBe("mrn_looks_like_ssn");
+    },
+  );
+
+  it.each(["A123456789", "MRN 123456789", "123456789-01", "PT123456789X"])(
+    "refuses a standalone nine-digit run anywhere in the value unless verified: %s",
+    (value) => {
+      expect(mrnShapeProblem(value, strict)).toBe("mrn_looks_like_ssn");
+      expect(mrnShapeProblem(value, verified)).toBeNull();
+    },
+  );
+
+  it.each(["12345678", "1234567890", "A12345678", "12345-678901", "1234.5678"])(
+    "allows digit runs that are not nine long: %s",
+    (value) => {
+      expect(mrnShapeProblem(value, strict)).toBeNull();
+    },
+  );
+
+  it.each(["PT-1EG4TE5MK73", "1EG4TE5MK73-01", "MBI 1EG4.TE5.MK73", "x 1eg4 te5 mk73 y", "1EG4_TE5_MK73"])(
+    "refuses an MBI token anywhere, compact or grouped with any separator: %s",
+    (value) => {
+      expect(mrnShapeProblem(value, strict)).toBe("mrn_looks_like_mbi");
+      expect(mrnShapeProblem(value, verified)).toBe("mrn_looks_like_mbi");
+    },
+  );
+
+  it("does not take a piece of a longer alphanumeric run for an MBI", () => {
+    expect(mrnShapeProblem("A1EG4TE5MK73", strict)).toBeNull();
+    expect(mrnShapeProblem("1EG4TE5MK73B", strict)).toBeNull();
+  });
+});

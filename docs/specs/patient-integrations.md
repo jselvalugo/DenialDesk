@@ -77,7 +77,9 @@ production only a practice-scoped population is accepted (see Environment and po
   fails the run (`not_synthetic`). No prefixing on ingest.
 - **Population (production):** only a practice-scoped population: Bulk Data export of the
   practice's Group (PI4), or a search filter the operator verified at approval. Blocking before
-  real data.
+  real data. **Until PI4 can apply `population_scope`, the sync fails closed:** any run whose connection is
+  not the synthetic sandbox is refused (`population_scope_unenforced`) before a transport is asked for, and
+  Sync now refuses it with a message before anything is queued (compliance B1, security M1).
 
 ## Connection lifecycle
 `draft` → (admin **Submit**: passing test in the last 24 h, residency attested, MFA step-up) →
@@ -839,12 +841,31 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `syncNow` refuse a sandbox where real data is allowed (`environment_refused` before any transport is asked
       for) and a real connection where only synthetic data is. Test (`APP_ENV=production` on Netlify:
       `test-deps.test.ts`; the run itself: `sync-engine.test.ts`, `sync-now.test.ts`).
+- [x] **Fail closed on real connections** (PR #98 review, blocking): `assertRunEnvironment` (run) and `syncNow`
+      refuse every connection that is not the synthetic sandbox until PI4 applies `population_scope`: the run ends
+      `failed` with the allow-listed code `population_scope_unenforced` (a real connection where only synthetic data is
+      allowed stays `environment_refused`), no transport is asked for, no request leaves the process, no patient row is
+      written; Sync now queues nothing, audits the refusal (`integration.sync_failed`, reason `sync_now`) and shows
+      `sync.error.populationScopeUnenforced` in en/es/pt. Tests: `sync-engine.test.ts`, `sync-now.test.ts`. Recorded as
+      an open PI4 blocker in `docs/PROJECT_STATE.md`; the PI4 item below lifts it.
+- [x] **Review round hardening** (PR #98): the practice's calendar date (`todayIn("America/New_York")`, not UTC) is used
+      for coverage periods, address periods and the minor check, with boundary tests at 23:30 Eastern; the mapper holds
+      MRN to 40 and names to 60 characters and a `23514` from the database skips one record (`record_rejected`) instead
+      of failing the page; Coverage entries whose beneficiary is not in the chunk are dropped and a chunk is capped at 20
+      pages; the token request honours `Retry-After` (60 s cap) and records `http_status`; a sandbox access token is
+      bound to the key set that obtained it and expired tokens are pruned; a manual run's `integration.sync_started`
+      carries the administrator's IP, user agent and `session_id`; a Pause between queueing and claiming a run is an
+      `abandoned` result, not an error.
 - [x] Refuse SSN- and MBI-shaped MRN values at ingest, whatever the identifier system (security
       review M-1: a deny-list can't know a vendor's local SSN OID); also check `Identifier.type`
       (v2-0203 SS, MB, MC, DL, PPN).
-      **Built** (`src/integrations/fhir/mrn-shapes.ts`, `map-patient.ts`): `ddd-dd-dddd`, bare nine digits unless the
-      operator recorded "MRNs are 9 digits", and the CMS MBI format (⚠️ VERIFY), each judged after stripping a
-      synthetic `SYN-` marker; `Identifier.type` SS, MB, MC, DL, PPN → `mrn_government_identifier`.
+      **Built** (`src/integrations/fhir/mrn-shapes.ts`, `map-patient.ts`; security review M2): judged on the whole value,
+      wherever the shape sits (a `SYN-` marker or a vendor prefix does not hide it). An SSN grouped 3-2-4 with any
+      one separator (`-`, `.`, space, `_`, `/`, so `123.45.6789` too) is refused always; any standalone run of
+      exactly nine digits (`A123456789`, `MRN 123456789`) is refused unless the operator recorded "MRNs are 9
+      digits" (`mrn_nine_digits_verified`); the CMS MBI format (⚠️ VERIFY) is refused as a token anywhere in the
+      value, compact or grouped 4-3-4 with any separator. `Identifier.type` SS, MB, MC, DL, PPN →
+      `mrn_government_identifier`. Tests: `mrn-shapes.test.ts`, `map-patient.test.ts`.
 - [ ] Jobs: payload `{ runId }` only, with an HMAC-SHA256 header (body + timestamp, 5-min window)
       keyed by `INTEGRATION_JOB_SECRET`. The worker claims the run with SECURITY DEFINER
       `integration_claim_run(run_id)` (only a `queued` run; returns `tenant_id, connection_id`;
@@ -853,8 +874,8 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       stale timestamp, and forged or already-claimed `runId` refused.
 - [x] All sync reads and writes run as `denialdesk_app` under a new
       `withTenantAsSystem(tenantId, runId)` (sets tenant, run, and connection settings; never
-      `withTenantAsPlatform` or `systemDb`). Audit actor: a fixed per-environment integration
-      service-principal UUID in reviewed code, seeded by migration as a `users` row that cannot
+      `withTenantAsPlatform` or `systemDb`). Audit actor: one fixed integration
+      service-principal UUID (the same in every environment) in reviewed code, seeded by migration as a `users` row that cannot
       sign in, has no memberships and no roles (keeps the `audit_events.actor_user_id` FK; a test
       asserts the FK stays); the admin who pressed Sync now in
       `metadata.triggeredBy`; reason `ehr_sync`; "where" = runtime function id and host.
@@ -863,7 +884,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `is_local = false`/session-level: a pooled connection reused by another request afterwards
       must not inherit a stale run/connection setting that `patients_synced_readonly` would then
       trust.
-      **Built** (`src/db/tenant.ts` `withTenantAsSystem(tenantId, runId, fn)`, `src/domain/integrations/principal.ts`
+      **Built** (`src/db/tenant.ts` `withTenantAsSystem(tenantId, runId, fn)`, `src/db/integration-principal.ts` (re-exported by `src/domain/integrations/principal.ts`)
       `INTEGRATION_SERVICE_PRINCIPAL_ID = d3a7c0de-5a1c-4e11-8a0c-0000000d0d01`, seeded by 0043 as a disabled `users`
       row whose password hash is not a hash: no sign-in, no membership, no session, no second factor). Settings are
       `set_config(..., true)` only; a test checks nothing is left on the pooled connection, that another practice's or a
@@ -898,14 +919,14 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
 - [x] Mapping as in the table below; a record failing a required rule is skipped with a code, never
       partially guessed. Server timestamps are clamped (future beyond 5 min skew → our now; the
       watermark never exceeds our clock). `OperationOutcome.issue.code` kept only if it is an R4
-      IssueType code, else `unknown`; `diagnostics` never stored.
+      IssueType code, else `other`; `diagnostics` never stored.
       **Built** (`map-patient.ts`, `map-coverage.ts`, `security-labels.ts`). Source status (`inactive`, `merged`) is
       mapped too, although the table assigns it to PI3; `gone` and the weekly reconciliation stay PI3. An R4
       `OperationOutcome.issue.code` is mapped onto our own vocabulary (see "Sync run and issue codes"): the R4
       IssueType codes with hyphens as underscores, **anything else `other`** (not `unknown`, which is itself an R4
       code); `diagnostics` is never read.
 - [x] Upsert keyed by `(tenant_id, source_connection_id, external_id)`; no regression on
-      `meta.lastUpdated`; same `versionId` = unchanged. Linking: MRN **and** birth date equal to a
+      `meta.lastUpdated` (and, when that is missing or equal, on a numeric `meta.versionId`: `isOlderCopy`); same `versionId` = unchanged. Linking: MRN **and** birth date equal to a
       manual patient → linked (`patient.linked_to_source`); MRN equal, birth date different →
       `mrn_conflict` with the manual patient's ID; otherwise a new row. No fuzzy matching.
       **Built** (`src/domain/integrations/sync-upsert.ts`): the update writes only the columns that differ (member ID
@@ -1017,7 +1038,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       engine; the engine's own module path is reconciled with `src/domain/integrations/sync-codes.ts`
       at merge). Every value written to `integration_sync_runs.issue_codes` and
       `integration_sync_issues.code` is a member of `SYNC_RUN_CODES` or `SYNC_ISSUE_CODES` (an R4
-      `OperationOutcome.issue.code` outside the list is stored as `unknown`). **A code on a row linked to
+      `OperationOutcome.issue.code` outside the list is stored as `other`). **A code on a row linked to
       a patient must not reveal what the EHR says about the patient beyond a data-quality defect:**
       never a sensitivity label (HIV, psychiatric, substance use, 42 CFR Part 2, ethnicity, domestic
       violence), a restriction (R/V), minor status, a diagnosis, or a program. Test: for every skip and
@@ -1076,7 +1097,6 @@ sensitivity, restriction, minor or Part 2 category.
 written by the engine today (a 400 at the token endpoint is `auth_refused`).
 
 ### PI3 — scheduled sync and source-state hardening
-      **Built**: DS-12.
 - [ ] Scheduled every 15 minutes (OA-056): SECURITY DEFINER `integration_enqueue_due_runs()`
       (EXECUTE: `denialdesk_jobs`) inserts `queued` runs for due `active` connections and returns run
       IDs only; the scheduled function posts one signed job per run ID. Isolation test: the
@@ -1089,6 +1109,9 @@ written by the engine today (a 400 at the token endpoint is `auth_refused`).
       failures, unusually large runs.
 
 ### PI4 — Bulk Data (before the first real practice; OA-050)
+- [ ] **Lift the `population_scope_unenforced` refusal** (`assertRunEnvironment`, `syncNow`) only together with the
+      code that applies `population_scope` (the practice's Group export, or the operator-verified filter), and a test
+      that a real connection syncs that population and nothing else. Until then no real connection can sync.
 - [ ] `Group/<practice group>/$export?_type=Patient,Coverage,Organization&_since=…`; the status URL
       and every output URL pass the URL rules and address guard; the bearer token is sent only to
       the FHIR origin (`requiresAccessToken=true` files must be on it); other output hosts are
@@ -1102,14 +1125,14 @@ Must-support (MS) notes ⚠️ VERIFY against the published StructureDefinitions
 |---|---|---|---|
 | `external_id` | `Patient.id` | — | Required; FHIR `id` syntax, ≤ 64 chars |
 | `source_version_id`, `source_last_updated` | `Patient.meta.versionId`, `.lastUpdated` | not MS | Clamped; no-regression rule |
-| `mrn` | `Patient.identifier` whose `system` = the connection's MRN system | `identifier` 1..*, MS `system`, `value` | Exactly one, else `mrn_missing`/`mrn_ambiguous`. `ddd-dd-dddd` → `mrn_looks_like_ssn`; bare 9 digits too unless the operator recorded "MRNs are 9 digits"; MBI-shaped (CMS format, ⚠️ VERIFY) → `mrn_looks_like_mbi` |
-| `first_name`, `last_name` | `Patient.name` (official, else usual, else the only one): `given[0]`, `family` | MS | Missing → `name_incomplete` |
-| `birth_date` | `Patient.birthDate` | MS | Full date, 1900..today; partial → `birthdate_incomplete`. Under 18 → "minor" tag **suggested** to administrators, never set automatically |
+| `mrn` | `Patient.identifier` whose `system` = the connection's MRN system | `identifier` 1..*, MS `system`, `value` | Exactly one, else `mrn_missing`/`mrn_ambiguous`; visible ASCII, 1 to 40 characters (the `patients` CHECK), else `mrn_invalid`. `ddd-dd-dddd` → `mrn_looks_like_ssn`; bare 9 digits too unless the operator recorded "MRNs are 9 digits"; MBI-shaped (CMS format, ⚠️ VERIFY) → `mrn_looks_like_mbi` |
+| `first_name`, `last_name` | `Patient.name` (official, else usual, else the only one): `given[0]`, `family` | MS | Missing → `name_incomplete`; each name at most 60 characters (the `patients` CHECK), else `name_invalid` |
+| `birth_date` | `Patient.birthDate` | MS | Full date, 1900..today; partial → `birthdate_incomplete`. Under 18 (on the practice's calendar date, `America/New_York`) → the new patient gets the neutral history note `review_required`; nothing is tagged, restricted or named "minor" automatically (OA-081) |
 | `sex` | `Patient.gender` | 1..1 | female → F, male → M, other/unknown → U (837P DMG03) |
 | `address_line1`, `city`, `state`, `postal_code` | `Patient.address` (home or no use, current) | MS | Invalid → all four null + `address_incomplete` |
 | `source_status` | `Patient.active`, `Patient.link` `replaced-by` | not MS | PI3 |
 | `source_restricted`, `source_sensitivity` | `Patient.meta.security` | — | Restricted if confidentiality `R`/`V`, an ActCode sensitivity code (`HIV`, `PSY`, `ETH`, `SDV`, `42CFRPart2`; ⚠️ VERIFY), or **any unrecognized label**. Codes stored as a fixed vocabulary (`unknown` for unrecognized) |
-| `primary_payer_id`, `coverage_payor_key` | primary Coverage `payor` | 1..1 MS | Must reference `Organization`, else `needs_review`; payer only by explicit mapping (CLAUDE.md #9) |
+| `primary_payer_id`, `coverage_payor_key` | primary Coverage `payor` | 1..1 MS | Must reference `Organization`, else `needs_review`; payer only by explicit mapping (CLAUDE.md #9). The payor name is the reference's own `display`; PI2b fetches no `Organization` resource (the scope is requested for a later lookup) |
 | `member_id_enc`, `member_id_last4` | primary Coverage `identifier` type MB, else `subscriberId` | MS | Encrypted (R-7.3.3); null unless coverage is `mapped`/`unmapped` |
 | `coverage_status` | primary Coverage selection | — | `none` / `mapped` / `unmapped` / `needs_review` |
 | `phone` | not synced (null) | — | OA-047 |
@@ -1217,7 +1240,7 @@ real vendor endpoints in pre-production.
   they stay unusable until the owner decides how their synthetic origin is proven.
 - **OA-050** Bulk Data (PI4) before the first real practice.
 - **OA-051** Who at the practice confirms the population scope at approval.
-- **OA-066** Approval method and contact-role lists. **OA-067** R-15.9 sign-off for the registry-conflict operator alert. **OA-068** Whether Reject clears the attestation. **OA-069** Notifications spec (activation notice). **OA-070** Retention of approval evidence. **OA-071** Operator-side revoke. **OA-072** Single-person approval and the operator account. **OA-073** Operator step-up before Approve. **OA-074** CI runs as a superuser, so FORCE RLS on owner and platform paths is never exercised: a non-superuser, NOBYPASSRLS owner role in CI (R-15.9). **OA-075** Is a payor key detached from any patient PHI? (Decides whether `integration_payer_mappings` is Confidential or Restricted.)
+- **OA-066** Approval method and contact-role lists. **OA-067** R-15.9 sign-off for the registry-conflict operator alert. **OA-068** Whether Reject clears the attestation. **OA-069** Notifications spec (activation notice). **OA-070** Retention of approval evidence. **OA-071** Operator-side revoke. **OA-072** Single-person approval and the operator account. **OA-073** Operator step-up before Approve. **OA-074** CI runs as a superuser, so FORCE RLS on owner and platform paths is never exercised: a non-superuser, NOBYPASSRLS owner role in CI (R-15.9). **OA-075** Is a payor key detached from any patient PHI? (Decides whether `integration_payer_mappings` is Confidential or Restricted.) **OA-076** Migration 0043 (the service-principal identity): **resolved, approved by the owner 2026-09-29** (R-15.9). **OA-077** Three small sync decisions: (a) Sync now in-request until jobs ship; (b) the neutral `review_required` note for a new minor, chosen so the unaudited history page never names a minor or a sensitivity category (the audited patient page is where a person can see why); (c) Coverage-only change search. **OA-078** Member-ID field encryption has no AAD binding to record or practice, app-wide (needs an ADR and a re-encryption migration). **OA-079** Linking a synced patient overwrites a manually entered patient with the same MRN (and birth date): confirm that is wanted. **OA-080** Store the source's sensitivity category, or only the `source_restricted` flag. **OA-081** Should minors be restricted by default. **OA-082** Restricted patients are visible to every role until patients P4 masking: accept the interim?
 - **OA-052** Restricted-in-source patients until patients P4 masking; whether any practice is a
   42 CFR Part 2 program (human decision).
 - **OA-053** MRN conflicts: EHR-only fix or an admin tool.

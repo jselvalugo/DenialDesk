@@ -32,6 +32,8 @@ export interface PageContext {
   mrnSystem: string;
   nineDigitsVerified: boolean;
   now: Date;
+  /** The practice date (America/New_York), `YYYY-MM-DD`: what "today" means for periods and ages. */
+  today: string;
   /** Field-level encryption of the member ID (R-7.3.3). */
   encrypt: (plaintext: string) => string;
   decrypt: (ciphertext: string) => string;
@@ -82,6 +84,11 @@ interface Desired {
   sourceStatus: "inactive" | "merged" | null;
   sourceRestricted: boolean;
   sourceSensitivity: string[];
+  /**
+   * The source's `meta.versionId` / `meta.lastUpdated` stamps. They are recorded as the source states them and
+   * can be stale or reset by the source (a restore, a vendor migration): they order two copies of a record
+   * (`isOlderCopy`) and decide nothing else. A stamp that goes backwards is ignored, never "corrected".
+   */
   sourceVersionId: string | null;
   sourceLastUpdated: Date | null;
 }
@@ -273,11 +280,52 @@ type Result =
       changed: string[];
       wrote: boolean;
     }
-  | { kind: "conflict"; holderId: string | null };
+  | { kind: "conflict"; holderId: string | null }
+  | { kind: "rejected"; patientId: string | null };
 
 /** The unique index on (tenant, mrn) was hit: an MRN conflict, not a failure of the run. */
 function isMrnConflict(error: unknown): boolean {
   return isDatabaseError(error) && error.code === "23505" && error.constraint === "patients_tenant_mrn_key";
+}
+
+/**
+ * A CHECK constraint refused the row (SQLSTATE 23514). The mapper already holds every value to the
+ * database's limits, so this is a defense for a future mismatch between the two: one record is skipped
+ * (`record_rejected`), the page still commits, and the watermark can't be wedged by a single record.
+ */
+function isCheckViolation(error: unknown): boolean {
+  return isDatabaseError(error) && error.code === "23514";
+}
+
+/**
+ * Whether the incoming copy of a record is provably older than the stored one. `meta.lastUpdated` is
+ * the primary stamp; a server that omits it (or a record stamped equal) falls back to `meta.versionId`,
+ * compared only when both are all-digit strings (FHIR says a version id is opaque; a purely numeric one
+ * is the common counter, and anything else can't be ordered, so it is not judged older). Both stamps are
+ * only as trustworthy as the source server: a server that resets its version counter after a restore
+ * looks "older" here until its `lastUpdated` moves forward, which is why `lastUpdated` wins when present
+ * on both sides. Never guesses: an unordered pair is accepted, as before.
+ */
+export function isOlderCopy(
+  existing: Pick<Existing, "sourceLastUpdated" | "sourceVersionId">,
+  mapped: Pick<MappedPatient, "sourceLastUpdated" | "sourceVersionId">,
+): boolean {
+  if (existing.sourceLastUpdated && mapped.sourceLastUpdated) {
+    const incoming = mapped.sourceLastUpdated.getTime();
+    const stored = existing.sourceLastUpdated.getTime();
+    if (incoming !== stored) return incoming < stored;
+  }
+  const incomingVersion = mapped.sourceVersionId;
+  const storedVersion = existing.sourceVersionId;
+  if (
+    incomingVersion &&
+    storedVersion &&
+    /^\d{1,15}$/.test(incomingVersion) &&
+    /^\d{1,15}$/.test(storedVersion)
+  ) {
+    return Number(incomingVersion) < Number(storedVersion);
+  }
+  return false;
 }
 
 async function upsertOne(
@@ -289,11 +337,7 @@ async function upsertOne(
   const existing = await existingByExternalId(tx, ctx, mapped.externalId);
   if (existing) {
     // No regression (threat model T4): an older copy of a record never overwrites a newer one.
-    if (
-      existing.sourceLastUpdated &&
-      mapped.sourceLastUpdated &&
-      mapped.sourceLastUpdated.getTime() < existing.sourceLastUpdated.getTime()
-    ) {
+    if (isOlderCopy(existing, mapped)) {
       return { kind: "unchanged", patientId: existing.id, changed: [], wrote: false };
     }
     const changed = differences(existing, desired, ctx);
@@ -307,6 +351,7 @@ async function upsertOne(
           .where(and(eq(patients.tenantId, ctx.tenantId), eq(patients.id, existing.id)));
       });
     } catch (error) {
+      if (isCheckViolation(error)) return { kind: "rejected", patientId: existing.id };
       if (!isMrnConflict(error)) throw error;
       return { kind: "conflict", holderId: (await holderOfMrn(tx, ctx, desired.mrn))?.id ?? null };
     }
@@ -318,17 +363,22 @@ async function upsertOne(
     // Linking: MRN **and** birth date equal to a manual patient. Nothing else: no fuzzy matching.
     if (holder.source === "manual" && holder.birthDate === desired.birthDate) {
       const changed = differences(holder, desired, ctx);
-      await tx.transaction(async (savepoint) => {
-        await savepoint
-          .update(patients)
-          .set({
-            ...columnsFor(desired, holder, ctx),
-            source: "fhir",
-            sourceConnectionId: ctx.connectionId,
-            externalId: mapped.externalId,
-          })
-          .where(and(eq(patients.tenantId, ctx.tenantId), eq(patients.id, holder.id)));
-      });
+      try {
+        await tx.transaction(async (savepoint) => {
+          await savepoint
+            .update(patients)
+            .set({
+              ...columnsFor(desired, holder, ctx),
+              source: "fhir",
+              sourceConnectionId: ctx.connectionId,
+              externalId: mapped.externalId,
+            })
+            .where(and(eq(patients.tenantId, ctx.tenantId), eq(patients.id, holder.id)));
+        });
+      } catch (error) {
+        if (isCheckViolation(error)) return { kind: "rejected", patientId: holder.id };
+        throw error;
+      }
       return { kind: "linked", patientId: holder.id, changed, wrote: true };
     }
     // MRN equal, birth date different (or the holder is another synced row): nothing merged.
@@ -351,6 +401,7 @@ async function upsertOne(
     });
     return { kind: "created", patientId: inserted.id, changed: [], wrote: true };
   } catch (error) {
+    if (isCheckViolation(error)) return { kind: "rejected", patientId: null };
     if (!isMrnConflict(error)) throw error;
     return { kind: "conflict", holderId: (await holderOfMrn(tx, ctx, desired.mrn))?.id ?? null };
   }
@@ -382,7 +433,6 @@ export async function commitPage(
   const events: AuditEvent[] = [];
   const payerByKey = await loadPayerMappings(tx, ctx);
   const seenPayors = new Map<string, string | null>();
-  const today = ctx.now.toISOString().slice(0, 10);
 
   for (const raw of rawPatients) {
     const mapped = mapPatient(raw, ctx);
@@ -397,7 +447,7 @@ export async function commitPage(
     const selection = selectPrimaryCoverage(
       coverage.get(mapped.patient.externalId) ?? [],
       mapped.patient.externalId,
-      today,
+      ctx.today,
     );
     const desired = desiredFor(mapped.patient, selection, payerByKey);
     if (selection.payorKey && selection.status === "unmapped") {
@@ -410,6 +460,12 @@ export async function commitPage(
       outcome.conflicts += 1;
       outcome.codes.add("mrn_conflict");
       issues.push({ code: "mrn_conflict", patientId: result.holderId });
+      continue;
+    }
+    if (result.kind === "rejected") {
+      outcome.skipped += 1;
+      outcome.codes.add("record_rejected");
+      issues.push({ code: "record_rejected", patientId: result.patientId });
       continue;
     }
     outcome[result.kind] += 1;
@@ -584,14 +640,13 @@ export async function rederiveCoverage(
   const payerByKey = await loadPayerMappings(tx, ctx);
   const seenPayors = new Map<string, string | null>();
   const events: AuditEvent[] = [];
-  const today = ctx.now.toISOString().slice(0, 10);
 
   for (const existing of rows) {
     if (existing.externalId === null) continue;
     const selection = selectPrimaryCoverage(
       coverage.get(existing.externalId) ?? [],
       existing.externalId,
-      today,
+      ctx.today,
     );
     if (selection.payorKey && selection.status === "unmapped")
       seenPayors.set(selection.payorKey, selection.payorName);

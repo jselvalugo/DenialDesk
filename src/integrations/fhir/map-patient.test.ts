@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { todayIn } from "@rules/calendar";
 import { mapPatient, type MapPatientContext } from "./map-patient";
 import { SKIP_CODES } from "./sync-codes";
 
@@ -7,7 +8,8 @@ import { SKIP_CODES } from "./sync-codes";
 
 const MRN_SYSTEM = "https://ehr.example.test/mrn";
 const NOW = new Date("2026-09-28T12:00:00.000Z");
-const ctx: MapPatientContext = { mrnSystem: MRN_SYSTEM, nineDigitsVerified: false, now: NOW };
+const TODAY = "2026-09-28";
+const ctx: MapPatientContext = { mrnSystem: MRN_SYSTEM, nineDigitsVerified: false, now: NOW, today: TODAY };
 
 function patient(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -142,7 +144,9 @@ describe("mapPatient — required rules skip with a code", () => {
     expect(skipped(withValue("123456789"))).toBe("mrn_looks_like_ssn");
     expect(skipped(withValue("1EG4-TE5-MK73"))).toBe("mrn_looks_like_mbi");
     expect(skipped(withValue("has space"))).toBe("mrn_invalid");
-    expect(skipped(withValue("x".repeat(65)))).toBe("mrn_invalid");
+    // The database allows 1 to 40 characters (patients_mrn_present): 41 would fail the INSERT.
+    expect(skipped(withValue("x".repeat(41)))).toBe("mrn_invalid");
+    expect(skipped(withValue("x".repeat(40)))).toBe("mapped");
   });
 
   it("MRN: nine digits are allowed once the operator has recorded that the practice's MRNs are nine digits", () => {
@@ -177,7 +181,10 @@ describe("mapPatient — required rules skip with a code", () => {
     expect(skipped({ name: [{ given: ["NoFamily"] }] })).toBe("name_incomplete");
     expect(skipped({ name: [] })).toBe("name_incomplete");
     expect(skipped({ name: [{ family: "Ba​d", given: ["Name"] }] })).toBe("name_invalid");
-    expect(skipped({ name: [{ family: "x".repeat(101), given: ["Name"] }] })).toBe("name_invalid");
+    // patients_names_present: 1 to 60 characters each.
+    expect(skipped({ name: [{ family: "x".repeat(61), given: ["Name"] }] })).toBe("name_invalid");
+    expect(skipped({ name: [{ family: "Family", given: ["x".repeat(61)] }] })).toBe("name_invalid");
+    expect(skipped({ name: [{ family: "x".repeat(60), given: ["y".repeat(60)] }] })).toBe("mapped");
   });
 
   it("birth date: a full, real date from 1900 to today; partial or missing is incomplete", () => {
@@ -330,5 +337,50 @@ describe("mapPatient — minors, status, labels, timestamps", () => {
   it("keeps versionId only when it is FHIR id syntax", () => {
     expect(mapped({ meta: { versionId: "7" } }).patient.sourceVersionId).toBe("7");
     expect(mapped({ meta: { versionId: "not ok!" } }).patient.sourceVersionId).toBeNull();
+  });
+});
+
+describe('mapPatient — "today" is the practice date, not the UTC date', () => {
+  // 23:30 Eastern on 2026-09-28 is 03:30 UTC on 2026-09-29 (EDT is UTC-4).
+  const lateEvening = new Date("2026-09-29T03:30:00.000Z");
+  const late: MapPatientContext = {
+    ...ctx,
+    now: lateEvening,
+    today: todayIn("America/New_York", lateEvening),
+  };
+  const mapLate = (overrides: Record<string, unknown>) => mapPatient(patient(overrides), late);
+
+  it("the helper used by the sync gives the Eastern date (the UTC date would be a day ahead)", () => {
+    expect(late.today).toBe("2026-09-28");
+    expect(lateEvening.toISOString().slice(0, 10)).toBe("2026-09-29");
+  });
+
+  it("18th birthday: tomorrow is still a minor; today is not (day before, of, after)", () => {
+    const notes = (birthDate: string) => {
+      const result = mapLate({ birthDate });
+      return result.ok ? result.notes : [`skipped:${result.code}`];
+    };
+    expect(notes("2008-09-29")).toContain("review_required");
+    expect(notes("2008-09-28")).not.toContain("review_required");
+    expect(notes("2008-09-27")).not.toContain("review_required");
+  });
+
+  it("a birth date of today is valid, of tomorrow is not (the UTC date would allow tomorrow)", () => {
+    expect(mapLate({ birthDate: "2026-09-28" }).ok).toBe(true);
+    expect(mapLate({ birthDate: "2026-09-29" })).toMatchObject({ ok: false, code: "birthdate_invalid" });
+  });
+
+  it("an address period ending today is current, one ending yesterday is not, one starting tomorrow is not", () => {
+    const withPeriod = (period: Record<string, string>) =>
+      mapLate({
+        address: [
+          { use: "home", line: ["1 Palm Way"], city: "Tampa", state: "FL", postalCode: "33601", period },
+        ],
+      });
+    const city = (result: ReturnType<typeof mapLate>) => (result.ok ? result.patient.city : "skipped");
+    expect(city(withPeriod({ end: "2026-09-28" }))).toBe("Tampa");
+    expect(city(withPeriod({ end: "2026-09-27" }))).toBeNull();
+    expect(city(withPeriod({ start: "2026-09-28" }))).toBe("Tampa");
+    expect(city(withPeriod({ start: "2026-09-29" }))).toBeNull();
   });
 });

@@ -38,6 +38,9 @@ export const NOTE_CODES = ["address_incomplete", "review_required"] as const;
 /** Matching found something that stops a record being stored (an issue row naming the other patient). */
 export const CONFLICT_CODES = ["mrn_conflict"] as const;
 
+/** The database's own CHECK refused a record the mapper let through (a defense; the page still commits). */
+export const STORE_REFUSAL_CODES = ["record_rejected"] as const;
+
 /** Run-level notices that are not about one record. */
 export const RUN_NOTICE_CODES = ["issues_truncated"] as const;
 
@@ -68,6 +71,7 @@ export const RUN_FAILURE_CODES = [
   "token_endpoint_changed",
   "not_synthetic",
   "environment_refused",
+  "population_scope_unenforced",
   "signing_key_unavailable",
   "connection_not_active",
   "internal_error",

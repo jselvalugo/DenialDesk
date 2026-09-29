@@ -39,6 +39,7 @@ export const SYNC_ISSUE_CODES = [
   "name_invalid",
   "birthdate_invalid",
   "review_required",
+  "record_rejected",
   "other",
 ] as const;
 export type SyncIssueCode = (typeof SYNC_ISSUE_CODES)[number];
@@ -69,6 +70,7 @@ export const SYNC_RUN_CODES = [
   "bad_response",
   "not_fhir",
   "environment_refused",
+  "population_scope_unenforced",
   "signing_key_unavailable",
   "connection_not_active",
   "issues_truncated",

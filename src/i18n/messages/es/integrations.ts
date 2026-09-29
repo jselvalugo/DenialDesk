@@ -416,4 +416,11 @@ export const integrations: Messages["integrations"] = {
   "runs.code.other": "Otro",
   "payers.keyUnsupported":
     "La clave de esta aseguradora es demasiado larga o contiene caracteres ocultos, por lo que no se puede asignar aquí.",
+  "runs.code.record_rejected": "Los propios límites del almacén de datos rechazaron un registro",
+  "runs.code.population_scope_unenforced":
+    "Todavía no se puede limitar la sincronización a los pacientes de su clínica",
+  "sync.failure.population_scope_unenforced":
+    "No se sincronizó nada. DenialDesk todavía no puede limitar una conexión real de EHR/PM a los pacientes de su clínica, por lo que las conexiones reales no sincronizan hasta que pueda. No se solicitó nada al EHR/PM.",
+  "sync.error.populationScopeUnenforced":
+    "Las conexiones reales de EHR/PM todavía no pueden sincronizar: DenialDesk todavía no puede limitarlas a los pacientes de su clínica. No se solicitó nada.",
 };

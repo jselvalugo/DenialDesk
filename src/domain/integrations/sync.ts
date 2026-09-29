@@ -1,5 +1,6 @@
 import { hostname } from "node:os";
 import { and, eq, sql } from "drizzle-orm";
+import { todayIn } from "@rules/calendar";
 import { canManageIntegrations } from "@/auth/permissions";
 import { integrationConnections, integrationSyncRuns } from "@/db/schema";
 import { withTenantAsSystem, type TenantTx } from "@/db/tenant";
@@ -33,6 +34,7 @@ import { decryptField, encryptField } from "@/lib/crypto/field";
 import { syntheticDataOnly } from "@/lib/env";
 import { log } from "@/lib/log";
 import { hit } from "@/lib/rate-limit";
+import { requestContext } from "@/lib/request-context";
 import {
   assertEnvironmentAllows,
   IntegrationConnectionError,
@@ -144,23 +146,41 @@ export function runtimeWhere(): { function: string; host: string } {
   return { function: safe(process.env.AWS_LAMBDA_FUNCTION_NAME, "next-server"), host };
 }
 
+/**
+ * Who pressed Sync now, from the request: recorded on `integration.sync_started` for a manual run so that
+ * the event answers "who, from where" (R-7.5.1) although the engine itself writes it as the service
+ * principal. Absent for a scheduled run, which has no requester. IDs and network facts only.
+ */
+export interface RunOrigin {
+  ip: string | null;
+  userAgent: string | null;
+  sessionId: string | null;
+}
+
 function systemAudit(
   tenantId: string,
   action: AuditEvent["action"],
   entityId: string,
   reason: string,
   metadata: NonNullable<AuditEvent["metadata"]>,
+  origin?: RunOrigin,
 ): AuditEvent {
   const where = runtimeWhere();
   return {
     action,
     system: true,
+    ...(origin ? { ipAddress: origin.ip, userAgent: origin.userAgent } : {}),
     actorUserId: INTEGRATION_SERVICE_PRINCIPAL_ID,
     tenantId,
     entityType: "integration_connection",
     entityId,
     reason,
-    metadata: { ...metadata, runtime_function: where.function, runtime_host: where.host },
+    metadata: {
+      ...metadata,
+      ...(origin ? { session_id: origin.sessionId } : {}),
+      runtime_function: where.function,
+      runtime_host: where.host,
+    },
   };
 }
 
@@ -175,6 +195,7 @@ function systemAudit(
 async function claimRun(input: {
   tenantId: string;
   runId: string;
+  origin?: RunOrigin;
 }): Promise<{ kind: "started"; started: Started } | { kind: "abandoned" }> {
   return withTenantAsSystem(input.tenantId, input.runId, async (tx, ctx) => {
     const [connection] = await tx
@@ -192,6 +213,9 @@ async function claimRun(input: {
       .where(eq(integrationSyncRuns.id, input.runId))
       .for("update");
     if (!connection || !run) throw new Error("sync run or connection not found");
+    // A Pause (or an error, or a revoke) between queueing and claiming abandons the queued run
+    // (drizzle/0043): that is a result, not an error page.
+    if (run.status === "abandoned") return { kind: "abandoned" } as const;
     // Only a queued run can be claimed: a second worker (or a replay) finds it already taken.
     if (run.status !== "queued") throw new Error("sync run is not queued");
     if (connection.status !== "active") {
@@ -207,12 +231,19 @@ async function claimRun(input: {
       .where(eq(integrationSyncRuns.id, input.runId));
     await audit(
       tx,
-      systemAudit(input.tenantId, "integration.sync_started", connection.id, "ehr_sync", {
-        run_id: input.runId,
-        trigger: run.trigger,
-        triggered_by: run.triggeredBy,
-        sandbox: connection.isSandbox,
-      }),
+      systemAudit(
+        input.tenantId,
+        "integration.sync_started",
+        connection.id,
+        "ehr_sync",
+        {
+          run_id: input.runId,
+          trigger: run.trigger,
+          triggered_by: run.triggeredBy,
+          sandbox: connection.isSandbox,
+        },
+        run.trigger === "manual" ? input.origin : undefined,
+      ),
     );
     return {
       kind: "started",
@@ -227,13 +258,16 @@ async function claimRun(input: {
 export function toSyncFailure(error: unknown): SyncFailure {
   if (isSyncFailure(error)) return error;
   if (isFhirConnectError(error)) {
+    // The status of a non-2xx token or discovery answer is recorded on the run (`http_status`), a number, never a body.
+    const httpStatus = error.response?.httpStatus;
+    const status = httpStatus !== undefined ? { httpStatus } : {};
     if (error.outcome === "auth_refused") {
-      return new SyncFailure("auth_refused", { connectionError: true });
+      return new SyncFailure("auth_refused", { connectionError: true, ...status });
     }
     // A refused address or redirect keeps its own code; other transport trouble reads as `unreachable`.
-    if (error.outcome === "unreachable") return new SyncFailure(error.transportCode ?? "unreachable");
+    if (error.outcome === "unreachable") return new SyncFailure(error.transportCode ?? "unreachable", status);
     // `not_fhir_r4` has a digit, which the `issue_codes` CHECK (`^[a-z_]{1,64}$`) refuses: stored as `not_fhir`.
-    return new SyncFailure(error.outcome === "not_fhir_r4" ? "not_fhir" : error.outcome);
+    return new SyncFailure(error.outcome === "not_fhir_r4" ? "not_fhir" : error.outcome, status);
   }
   if (isTransportError(error)) return new SyncFailure(error.code);
   if (isNotSyntheticError(error)) return new SyncFailure("not_synthetic");
@@ -351,15 +385,23 @@ function splitEntries(
 
 const FHIR_ID = /^[A-Za-z0-9\-.]{1,64}$/;
 
-/** The environment rule for a run: a sandbox only where synthetic data is the only kind allowed, a real host only where it isn't. */
+/**
+ * The environment rule for a run, and the fail-closed rule for real connections. A sandbox runs only
+ * where only synthetic data is allowed. **A real connection never runs yet**: where only synthetic data
+ * is allowed it is refused as before (`environment_refused`), and where real data is allowed it is
+ * refused with `population_scope_unenforced`, because the sync can't yet apply the operator-recorded
+ * population scope (`group_export` needs Bulk Data, PI4; a `verified_filter` isn't captured as a
+ * structured value). Without it a real run would copy the whole population its credentials can read,
+ * not the practice's, against minimum necessary (R-5.1.2, threat model I3). This check comes before a
+ * transport is even asked for, so nothing leaves the process. Lifted by PI4.
+ */
 function assertRunEnvironment(connection: Started["connection"], synthetic: boolean): void {
   if (connection.isSandbox) {
     if (!synthetic) throw new SyncFailure("environment_refused");
     return;
   }
-  if (synthetic && !VENDOR_SANDBOX_HOSTS.includes(new URL(connection.baseUrl).hostname)) {
-    throw new SyncFailure("environment_refused");
-  }
+  if (synthetic) throw new SyncFailure("environment_refused");
+  throw new SyncFailure("population_scope_unenforced");
 }
 
 type CommitResult = { stopped: true } | { stopped: false };
@@ -461,6 +503,7 @@ async function pipeline(
     mrnSystem: connection.mrnIdentifierSystem,
     nineDigitsVerified: connection.mrnNineDigitsVerified,
     now: startedAt,
+    today: todayIn("America/New_York", startedAt),
   };
 
   // Where only synthetic data is allowed, the first page is requested with `_count=1` and every raw
@@ -478,19 +521,23 @@ async function pipeline(
   }
 
   const issueRows = { remaining: MAX_ISSUE_ROWS_PER_RUN };
-  const pageContext = (): PageContext => ({
-    tenantId: input.tenantId,
-    runId: input.runId,
-    connectionId: connection.id,
-    triggeredBy: started.triggeredBy,
-    mrnSystem: mapping.mrnSystem,
-    nineDigitsVerified: mapping.nineDigitsVerified,
-    now: now(),
-    encrypt: deps.encrypt ?? ((plaintext) => encryptField(plaintext)),
-    decrypt: deps.decrypt ?? ((ciphertext) => decryptField(ciphertext)),
-    runtime: runtimeWhere(),
-    issueRows,
-  });
+  const pageContext = (): PageContext => {
+    const pageNow = now();
+    return {
+      tenantId: input.tenantId,
+      runId: input.runId,
+      connectionId: connection.id,
+      triggeredBy: started.triggeredBy,
+      mrnSystem: mapping.mrnSystem,
+      nineDigitsVerified: mapping.nineDigitsVerified,
+      now: pageNow,
+      today: todayIn("America/New_York", pageNow),
+      encrypt: deps.encrypt ?? ((plaintext) => encryptField(plaintext)),
+      decrypt: deps.decrypt ?? ((ciphertext) => decryptField(ciphertext)),
+      runtime: runtimeWhere(),
+      issueRows,
+    };
+  };
 
   // A payer mapping saved after a patient's coverage was derived applies now, even to a patient that
   // hasn't changed at the EHR/PM (spec PI2b "Payer mapping"): before the patient pages, so it doesn't
@@ -671,7 +718,7 @@ function resultOf(
  * failure can't be recorded.
  */
 export async function executeSyncRun(
-  input: { tenantId: string; runId: string },
+  input: { tenantId: string; runId: string; origin?: RunOrigin },
   deps: SyncDeps,
 ): Promise<SyncRunResult> {
   const claimed = await claimRun(input);
@@ -745,6 +792,12 @@ export async function syncNow(
     return row;
   });
   assertEnvironmentAllows(connection.isSandbox, actor, t);
+  if (!connection.isSandbox) {
+    // Fail closed (compliance B1, security M1): a real connection can't sync until the population scope
+    // can be applied (PI4). Nothing is queued, nothing is dialed; the refusal is audited.
+    await auditRefusedRealSync(actor, connectionId, run);
+    refuse(t, "sync.error.populationScopeUnenforced");
+  }
   if (connection.status !== "active") refuse(t, "sync.error.notActive");
 
   const limited = await hit("integration_sync_now", `connection:${connectionId}`, deps.now?.());
@@ -786,7 +839,32 @@ export async function syncNow(
     if (isRunAlreadyActive(error)) refuse(t, "sync.error.alreadyRunning");
     throw error;
   }
-  return executeSyncRun({ tenantId: actor.tenantId, runId }, deps);
+  const context = await requestContext();
+  const origin: RunOrigin = {
+    ip: context.ip,
+    userAgent: context.userAgent,
+    sessionId: actor.sessionId ?? null,
+  };
+  return executeSyncRun({ tenantId: actor.tenantId, runId, origin }, deps);
+}
+
+/** Audits a refused Sync now on a real connection (no run exists to attach it to). */
+async function auditRefusedRealSync(
+  actor: IntegrationActor,
+  connectionId: string,
+  run: TxRunner,
+): Promise<void> {
+  await run((tx) =>
+    audit(tx, {
+      action: "integration.sync_failed",
+      actorUserId: actor.userId,
+      tenantId: actor.tenantId,
+      entityType: "integration_connection",
+      entityId: connectionId,
+      reason: "sync_now",
+      metadata: { code: "population_scope_unenforced", sandbox: false },
+    }),
+  );
 }
 
 /** The message key for why a run failed (used by the action; never contains remote text). */
@@ -796,6 +874,7 @@ export const SYNC_FAILURE_MESSAGE_KEYS = {
   issuer_mismatch: "sync.failure.issuer_mismatch",
   not_synthetic: "sync.failure.not_synthetic",
   environment_refused: "sync.failure.environment_refused",
+  population_scope_unenforced: "sync.failure.population_scope_unenforced",
   signing_key_unavailable: "sync.failure.signing_key_unavailable",
   unreachable: "sync.failure.unreachable",
   timeout: "sync.failure.unreachable",

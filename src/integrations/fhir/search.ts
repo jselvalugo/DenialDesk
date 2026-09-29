@@ -5,7 +5,8 @@ import { assertBundleEntryLimit, assertNextIsSameOrigin, PagingLoopGuard, RunBud
 import { FhirConnectError } from "./outcomes";
 import { FHIR_JSON, FORM_URLENCODED, type Transport, type TransportResponse } from "./transport";
 import type { SyncFailureCode } from "./sync-codes";
-import { bundleSchema, type FhirBundle } from "./types";
+import { beneficiaryId } from "./map-coverage";
+import { bundleSchema, coverageResourceSchema, type FhirBundle } from "./types";
 import type { JwtSigner } from "@/lib/crypto/jwt-sign";
 
 // Authenticated FHIR search for the sync (docs/specs/patient-integrations.md PI2b "Search",
@@ -27,6 +28,8 @@ export const PAGE_SIZE = 100;
 /** Patients per Coverage search: POST keeps ids out of the URL; GET keeps the URL short. */
 const COVERAGE_POST_CHUNK = 50;
 const COVERAGE_GET_CHUNK = 20;
+/** Result pages followed for one Coverage search chunk (at most 100 entries a page): more is `too_large`. */
+export const MAX_COVERAGE_PAGES_PER_CHUNK = 20;
 
 export type { SyncFailureCode } from "./sync-codes";
 
@@ -127,7 +130,13 @@ export function createTokenSource(input: TokenSourceInput): TokenSource {
             error.outcome === "unreachable" &&
             attempt < input.policy.retries
           ) {
-            await input.policy.sleep(backoffDelayMs(attempt, input.policy));
+            // A throttled token endpoint says how long to wait: honour it, capped at 60 s (as for data requests).
+            const retryAfter = error.response?.retryAfterSeconds;
+            await input.policy.sleep(
+              retryAfter !== undefined
+                ? Math.min(retryAfter, RETRY_AFTER_CAP_SECONDS) * 1000
+                : backoffDelayMs(attempt, input.policy),
+            );
             continue;
           }
           throw error;
@@ -301,9 +310,16 @@ export class PatientSearch {
         bundles = await this.coveragePostSearch(ids);
         if (bundles === null) continue; // just switched to GET: redo this chunk in smaller pieces
       }
+      // Only Coverage whose beneficiary is one of the patients asked for in this chunk is kept: a
+      // server (or a bug) that answers with anyone else's coverage never reaches the mapper, the
+      // synthetic guard, or the database (minimum necessary, threat model I2/L1).
+      const asked = new Set(ids);
       for (const bundle of bundles ?? (await this.collect(this.coverageGetUrl(ids)))) {
         for (const entry of bundle.entry ?? []) {
-          if (entry.search?.mode !== "outcome") found.push(entry.resource);
+          if (entry.search?.mode === "outcome") continue;
+          const parsed = coverageResourceSchema.safeParse(entry.resource);
+          const beneficiary = parsed.success ? beneficiaryId(parsed.data) : null;
+          if (beneficiary !== null && asked.has(beneficiary)) found.push(entry.resource);
         }
       }
       index += ids.length;
@@ -320,7 +336,15 @@ export class PatientSearch {
 
   private async collect(url: URL): Promise<FhirBundle[]> {
     const bundles: FhirBundle[] = [];
-    for await (const bundle of this.client.pages({ method: "GET", url })) bundles.push(bundle);
+    for await (const bundle of this.client.pages({ method: "GET", url })) {
+      bundles.push(bundle);
+      if (
+        bundles.length >= MAX_COVERAGE_PAGES_PER_CHUNK &&
+        bundle.link?.some((link) => link.relation === "next")
+      ) {
+        throw new SyncFailure("too_large");
+      }
+    }
     return bundles;
   }
 
@@ -342,6 +366,8 @@ export class PatientSearch {
     for (;;) {
       const next = current.link?.find((link) => link.relation === "next")?.url;
       if (!next) return bundles;
+      // A chunk of at most 50 patients has no business filling this many pages: stop the run.
+      if (bundles.length >= MAX_COVERAGE_PAGES_PER_CHUNK) throw new SyncFailure("too_large");
       let nextUrl: URL;
       try {
         nextUrl = new URL(next, `${this.baseUrl}/`);

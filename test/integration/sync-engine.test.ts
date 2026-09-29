@@ -19,6 +19,7 @@ import {
 } from "@/integrations/fhir/sandbox/dataset";
 import type { TransportResponse } from "@/integrations/fhir/transport";
 import {
+  activeRealConnection,
   activeSandbox,
   adminActor,
   auditRows,
@@ -1086,6 +1087,47 @@ describe("the synthetic guard", () => {
   });
 });
 
+describe("record limits (patients CHECKs, drizzle/0018)", () => {
+  const edit = (h: Harness, n: number, change: (resource: Record<string, unknown>) => void) =>
+    h.dataset.patch(sandboxPatientId(n), change, h.clock.current);
+
+  it("skips a record whose MRN is over 40 characters (mrn_invalid) and the run still succeeds", async () => {
+    const h = harness();
+    const id = await activeSandbox(ctx, h);
+    edit(h, 40, (resource) => {
+      (resource.identifier as { value: string }[])[0]!.value = `SYN-${"A".repeat(37)}`; // 41 characters
+    });
+    edit(h, 41, (resource) => {
+      (resource.identifier as { value: string }[])[0]!.value = `SYN-${"A".repeat(36)}`; // 40 characters: allowed
+    });
+    const { runId, result } = await runSync(ctx, id, h);
+    expect(result).toMatchObject({ status: "succeeded", created: EXPECTED_STORED - 1, skipped: 3 });
+    expect(await byExternalId(40)).toBeUndefined();
+    expect((await byExternalId(41))!.mrn).toHaveLength(40);
+    const issues = await issueRows(runId);
+    expect(issues.map((issue) => issue.code)).toContain("mrn_invalid");
+    expect((await runRow(runId)).issueCodes).toContain("mrn_invalid");
+    // The value itself is nowhere in the run's record.
+    expect(JSON.stringify(issues)).not.toContain("AAAA");
+  });
+
+  it("skips a record whose name is over 60 characters (name_invalid) and the run still succeeds", async () => {
+    const h = harness();
+    const id = await activeSandbox(ctx, h);
+    edit(h, 40, (resource) => {
+      (resource.name as { family: string }[])[0]!.family = `Synthetic${"x".repeat(52)}`; // 61 characters
+    });
+    edit(h, 41, (resource) => {
+      (resource.name as { family: string }[])[0]!.family = `Synthetic${"x".repeat(51)}`; // 60 characters
+    });
+    const { runId, result } = await runSync(ctx, id, h);
+    expect(result).toMatchObject({ status: "succeeded", created: EXPECTED_STORED - 1, skipped: 3 });
+    expect(await byExternalId(40)).toBeUndefined();
+    expect((await byExternalId(41))!.lastName).toHaveLength(60);
+    expect((await issueRows(runId)).map((issue) => issue.code)).toContain("name_invalid");
+  });
+});
+
 describe("environment rules", () => {
   it("a sandbox connection is refused where real data is allowed: no transport is even asked for", async () => {
     const h = harness();
@@ -1113,8 +1155,61 @@ describe("environment rules", () => {
     // Pausing abandons the queued run (drizzle/0043), so it can't even be claimed.
     await withTenant(ctx, async (tx) => pauseConnection(tx, adminActor(ctx), id, await stampOf(ctx, id)));
     expect((await runRow(runId)).status).toBe("abandoned");
-    await expect(executeSyncRun({ tenantId: ctx.tenantId, runId }, h.deps)).rejects.toThrow(/not queued/);
+    // A Pause between queueing and claiming is a result, not an error (PR #98 review).
+    const result = await executeSyncRun({ tenantId: ctx.tenantId, runId }, h.deps);
+    expect(result).toMatchObject({ runId, status: "abandoned", created: 0, updated: 0, linked: 0 });
+    expect((await runRow(runId)).status).toBe("abandoned");
     expect(h.transport.requests.filter((request) => path(request).endsWith("/Patient"))).toEqual([]);
+    expect(await patientRows(ctx)).toEqual([]);
+  });
+
+  it("a real connection is refused until the population scope can be applied: no request leaves the process and no patient is written (fail closed, PI4)", async () => {
+    const h = harness();
+    const id = await activeRealConnection(ctx);
+    const asked: unknown[] = [];
+    // Real data is allowed here (`syntheticOnly` false): the one environment where a real connection is meant to run.
+    const deps = {
+      ...h.deps,
+      syntheticOnly: () => false,
+      transportFor: (connection: { id: string; isSandbox: boolean }) => {
+        asked.push(connection);
+        return h.transport;
+      },
+    };
+    const { result, runId } = await runSync(ctx, id, h, deps);
+    expect(result).toMatchObject({
+      status: "failed",
+      failure: "population_scope_unenforced",
+      created: 0,
+      updated: 0,
+      linked: 0,
+    });
+    expect(asked).toEqual([]);
+    expect(h.transport.requests).toEqual([]);
+    expect(await patientRows(ctx)).toEqual([]);
+    expect((await runRow(runId)).issueCodes).toEqual(["population_scope_unenforced"]);
+    // Audited, with the fixed code; the connection is not put in error (nothing is wrong with it).
+    const failed = (await auditRows(ctx.tenantId)).filter(
+      (event) => event.action === "integration.sync_failed",
+    );
+    expect(failed).toHaveLength(1);
+    expect(failed[0]!.metadata).toMatchObject({ run_id: runId, code: "population_scope_unenforced" });
+    expect((await connectionRow(id)).status).toBe("active");
+    expect((await connectionRow(id)).hasSynced).toBe(false);
+  });
+
+  it("a real connection where only synthetic data is allowed is refused as environment_refused, also without a request", async () => {
+    const h = harness();
+    const id = await activeRealConnection(ctx);
+    const { result } = await runSync(ctx, id, h, {
+      ...h.deps,
+      transportFor: () => {
+        throw new Error("no transport may be asked for");
+      },
+    });
+    expect(result).toMatchObject({ status: "failed", failure: "environment_refused" });
+    expect(h.transport.requests).toEqual([]);
+    expect(await patientRows(ctx)).toEqual([]);
   });
 
   it("only a queued run can be claimed: a second execution of the same run is refused", async () => {

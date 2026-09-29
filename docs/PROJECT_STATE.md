@@ -98,7 +98,7 @@ _Last updated: 2026-09-29_
   Owner questions OA-045 onward; data source DS-12 in `docs/data-sources.xlsx`.
   **PI2b part 1 done: sync engine and synthetic sandbox** (branch `claude/vigilant-tesla-ps41e9-pi2b-engine`,
   after #91 merged the payer-mapping page, sync history and `sync-codes.ts`; migration
-  `0043_patient_integrations_sync_engine.sql`, **owner sign-off R-15.9 needed for its identity seed, OA-076**;
+  `0043_patient_integrations_sync_engine.sql`, its identity seed **approved by the owner 2026-09-29 (R-15.9, OA-076, resolved)**;
   no GRANT, REVOKE, role, SECURITY DEFINER or RLS change). What it is: `withTenantAsSystem` (the
   `denialdesk_app` role, the fixed integration service principal as actor, transaction-local run settings);
   the in-process `SandboxTransport` (125 deterministic synthetic patients, verifies the SMART assertion;
@@ -112,8 +112,15 @@ _Last updated: 2026-09-29_
   **re-derive pass that applies a saved payer mapping to patients whose payer mapping is newer than their
   `synced_at`** even at an unchanged `versionId`. Codes are a fixed allow-list (`sync-codes.ts`, documented
   in the spec; a minor is the neutral `review_required`). "Sync now" is an admin action that runs in the
-  request (jobs are the next slice). **Not built:** background jobs and `integration_claim_run`
-  (HMAC-signed `{runId}`), Coverage-only search and `_elements`, PI3, PI4. Owner: OA-076, OA-077.
+  request (jobs are the next slice). **Fails closed on real connections (PR #98 review):** any connection that is not
+  the synthetic sandbox is refused, in the run and in Sync now, with the code `population_scope_unenforced`, until PI4
+  can apply `population_scope` (see "PI4 blocker" under Deferred review findings). **Not built:** background jobs and
+  `integration_claim_run` (HMAC-signed `{runId}`), Coverage-only search and `_elements`, PI3, PI4. Owner: OA-077 to
+  OA-082 (OA-076 is resolved).
+  **Local development databases:** a database created before 0043 that holds a sandbox connection with
+  `issuer = 'sandbox-client'` (0040's pin) cannot take 0043, whose replacement sandbox CHECK does not validate that
+  row. Reset it: `docker compose down -v` (drops the `db-data` volume), `docker compose up -d db`, `pnpm db:migrate`,
+  `pnpm db:seed`. (Only a row written by hand or by an older test seed can carry that issuer; a passing Test connection never wrote it.)
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
   (`RecordHeader`, `RecordLayout`, `FieldList`, `FormShell`) and `src/components/ui/`
@@ -547,6 +554,15 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    reserved/marked range? (compliance #7)
 
 ### Deferred review findings (tracked, not blocking pre-prod)
+- **PI4 blocker (open, blocks the first real connection): population scope.** `population_scope` is recorded at
+  approval but nothing applies it yet, so a real connection could pull patients beyond the practice's own. The sync
+  therefore refuses every non-sandbox connection (`population_scope_unenforced`; `assertRunEnvironment` and
+  `syncNow`, audited, en/es/pt message, tests in `sync-engine.test.ts` and `sync-now.test.ts`). PI4 must lift that check
+  in the same change that applies the Group export or the verified filter, with a test (spec PI4).
+- Migration follow-up (PR #98 review L3): 0043 seeds the service principal with `ON CONFLICT DO NOTHING` and no
+  target, so an email clash silently skips the seed (sync then fails closed on the foreign key, quietly). A later
+  migration should make it `ON CONFLICT (id) DO NOTHING` so a clash fails loudly. 0043 itself is not edited: Netlify has
+  applied it.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).

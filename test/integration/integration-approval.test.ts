@@ -438,6 +438,8 @@ describe("approveConnection", () => {
     // approved_at is the statement's clock (now(), the transaction start); drizzle/0043 stamps
     // updated_at with clock_timestamp() on every status change, so it is at or just after it.
     expect(stored.updatedAt.getTime()).toBeGreaterThanOrEqual(stored.approvedAt!.getTime());
+    // ...and only just after it: an upper bound, so a stamp that drifted (a stale or wrong clock) fails too.
+    expect(stored.updatedAt.getTime() - stored.approvedAt!.getTime()).toBeLessThan(5_000);
     expect(stored.updatedAt.getTime()).toBeGreaterThanOrEqual(new Date(reviewed).getTime());
     // The registry claim stays while the connection is live.
     expect(await registryRows(id)).toHaveLength(1);

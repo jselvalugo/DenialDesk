@@ -46,8 +46,14 @@ export interface MapPatientContext {
   mrnSystem: string;
   /** `mrn_nine_digits_verified`: bare nine-digit MRNs are allowed (the operator confirmed it). */
   nineDigitsVerified: boolean;
-  /** Our clock. Never the server's: clamping and "today" come from here. */
+  /** Our clock. Never the server's: clamping comes from here. */
   now: Date;
+  /**
+   * "Today" as a practice date, `YYYY-MM-DD` in America/New_York (`todayIn`, `rules/calendar.ts`), never
+   * the UTC date: at 23:30 Eastern the UTC date is already tomorrow, which would age a patient a day,
+   * end a coverage period a day early and start one a day early.
+   */
+  today: string;
 }
 
 /** "Server timestamps are clamped (future beyond 5 min skew -> our now)" (spec, threat model T4). */
@@ -57,19 +63,16 @@ const FHIR_ID = /^[A-Za-z0-9\-.]{1,64}$/;
 const V2_0203 = "http://terminology.hl7.org/CodeSystem/v2-0203";
 /** v2-0203 identifier types that are never a medical record number: SSN, MBI, Medicare, DL, passport. */
 const GOVERNMENT_TYPES = new Set(["SS", "MB", "MC", "DL", "PPN"]);
-const MRN_VALUE = /^[\x21-\x7e]{1,64}$/;
+// `patients_mrn_present` (drizzle/0018): 1 to 40 characters. A longer value would fail the INSERT.
+const MRN_VALUE = /^[\x21-\x7e]{1,40}$/;
 const FULL_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const PARTIAL_DATE = /^\d{4}(-\d{2})?$/;
 const MIN_BIRTH_DATE = "1900-01-01";
-const NAME_MAX = 100;
+// `patients_names_present` (drizzle/0018): 1 to 60 characters each.
+const NAME_MAX = 60;
 // 837P segment maxima: N301 55, N401 30 (⚠️ VERIFY with the edi-x12-specialist).
 const ADDRESS_LINE_MAX = 55;
 const CITY_MAX = 30;
-
-/** Our clock's calendar date, `YYYY-MM-DD` (UTC). */
-export function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
 
 /** Whether `YYYY-MM-DD` is a real calendar date (no month 13, no 31 February). */
 function isRealDate(year: number, month: number, day: number): boolean {
@@ -193,7 +196,7 @@ export function mapPatient(raw: unknown, ctx: MapPatientContext): MapPatientResu
   const externalId = resource.id;
   const skip = (code: SkipCode): MapPatientResult => ({ ok: false, code, externalId });
 
-  const today = isoDate(ctx.now);
+  const { today } = ctx;
   const mrn = chooseMrn(resource, ctx);
   if (typeof mrn === "string") return skip(mrn);
   const name = chooseName(resource);

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { INTEGRATION_SERVICE_PRINCIPAL_ID } from "@/domain/integrations/principal";
+import { INTEGRATION_SERVICE_PRINCIPAL_ID } from "./integration-principal";
 import { systemDb, type Database } from "./client";
 import { sanitizeDatabaseError } from "./errors";
 

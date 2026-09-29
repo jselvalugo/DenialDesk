@@ -804,7 +804,7 @@ describe("submitConnection — withdraw, then submit again", () => {
 
 describe("submitConnection — the built-in sandbox", () => {
   // These tests seed the pass Test connection records, exactly as the gate reads it; the real
-  // Test connection against the in-process sandbox (PI2b) is covered in `sandbox-sync.test.ts`.
+  // Test connection against the in-process sandbox (PI2b) runs end to end in `sync-engine.test.ts` and `sync-now.test.ts` (through `activeSandbox` in `test/support/sandbox-sync.ts`).
   const SANDBOX_TOKEN_ENDPOINT = "https://sandbox.fhir.denialdesk.invalid/token";
   // Discovery records the issuer as the normalized base URL (drizzle/0043 pins the sandbox to it).
   const SANDBOX_ISSUER = SANDBOX_BASE_URL;

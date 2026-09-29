@@ -9,7 +9,7 @@ import {
   pauseConnection,
   revokeConnection,
 } from "@/domain/integrations/connections";
-import { syncNow } from "@/domain/integrations/sync";
+import { syncNow, syncResultMessage } from "@/domain/integrations/sync";
 import {
   abandonStaleRuns,
   insertQueuedRun,
@@ -17,6 +17,7 @@ import {
   RUN_LEASE_MS,
 } from "@/domain/integrations/sync-runs";
 import {
+  activeRealConnection,
   activeSandbox,
   adminActor,
   auditRows,
@@ -147,9 +148,54 @@ describe("syncNow — refusals before anything is queued", () => {
     );
     expect(h.transport.to("Patient")).toEqual([]);
   });
+
+  it("an active real connection is refused, audited, and nothing is queued or dialed, until PI4 applies the population scope", async () => {
+    const h = harness();
+    const id = await activeRealConnection(ctx);
+    const error = await refusal(sync(ctx, id, h, adminActor(ctx, { synthetic: false })));
+    expect(error.message).toBe(
+      "Real EHR/PM connections can't sync yet: DenialDesk can't yet limit them to your practice's own patients. Nothing was requested.",
+    );
+    expect(
+      await systemDb().select().from(integrationSyncRuns).where(eq(integrationSyncRuns.connectionId, id)),
+    ).toEqual([]);
+    expect(h.transport.requests).toEqual([]);
+    expect(await patientRows(ctx)).toEqual([]);
+    const refused = (await auditRows(ctx.tenantId)).filter(
+      (event) => event.action === "integration.sync_failed",
+    );
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toMatchObject({ entityId: id, actorUserId: ctx.userId, reason: "sync_now" });
+    expect(refused[0]!.metadata).toMatchObject({ code: "population_scope_unenforced" });
+  });
 });
 
 describe("syncNow — a run", () => {
+  it("a Pause between queueing the run and starting it is an abandoned result, not an error page (PR #98 review)", async () => {
+    const h = harness();
+    const id = await activeSandbox(ctx, h);
+    const base = runnerFor(ctx);
+    let paused = false;
+    // Pause the connection right after the run row is inserted, before the engine claims it.
+    const runner: typeof base = async (fn) => {
+      const value = await base(fn);
+      if (!paused && typeof value === "string" && /^[0-9a-f-]{36}$/.test(value)) {
+        paused = true;
+        await withTenant(ctx, async (tx) => pauseConnection(tx, adminActor(ctx), id, await stampOf(ctx, id)));
+      }
+      return value;
+    };
+    const result = await syncNow(runner, adminActor(ctx), id, h.deps);
+    expect(paused).toBe(true);
+    expect(result).toMatchObject({ status: "abandoned", created: 0, updated: 0, linked: 0, skipped: 0 });
+    expect((await runRow(result.runId)).status).toBe("abandoned");
+    expect(h.transport.to("Patient")).toEqual([]);
+    expect(await patientRows(ctx)).toEqual([]);
+    expect(syncResultMessage(result)).toBe(
+      "The sync stopped because the connection was paused, revoked, or put in error while it ran. Patients already saved were kept.",
+    );
+  });
+
   it("queues a manual run for the administrator, executes it, and records who pressed the button", async () => {
     const h = harness();
     const id = await activeSandbox(ctx, h);

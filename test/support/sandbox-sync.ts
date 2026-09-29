@@ -149,6 +149,34 @@ export async function activeSandbox(ctx: Ctx, h: Harness): Promise<string> {
   return id;
 }
 
+/**
+ * An `active` connection to a (synthetic, `.test`) real-style EHR, inserted directly as the table owner:
+ * the approval flow that produces one in production is covered elsewhere, and PI2b must refuse to sync it
+ * until the population scope can be applied (PI4). Nothing here is ever dialed.
+ */
+export async function activeRealConnection(ctx: Ctx): Promise<string> {
+  const host = `real-ehr-${Math.random().toString(36).slice(2, 10)}.example.test`;
+  const [row] = await systemDb()
+    .insert(integrationConnections)
+    .values({
+      tenantId: ctx.tenantId,
+      displayName: "Synthetic real-style EHR",
+      baseUrl: `https://${host}/r4`,
+      endpointKey: `https://${host}/r4`,
+      tokenEndpoint: `https://${host}/token`,
+      tokenEndpointKey: `https://${host}/token`,
+      issuer: `https://${host}/r4`,
+      clientId: "client-synthetic-real",
+      mrnIdentifierSystem: `https://${host}/mrn`,
+      status: "active",
+      populationScope: "group_export",
+      createdBy: ctx.userId,
+      updatedBy: ctx.userId,
+    })
+    .returning({ id: integrationConnections.id });
+  return row!.id;
+}
+
 export async function queueRun(ctx: Ctx, connectionId: string): Promise<string> {
   return withTenant(ctx, (tx) =>
     insertQueuedRun(tx, { tenantId: ctx.tenantId, connectionId, trigger: "manual", triggeredBy: ctx.userId }),

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { todayIn } from "@rules/calendar";
 import { beneficiaryId, memberIdOf, organizationKey, selectPrimaryCoverage } from "./map-coverage";
 import type { CoverageResource } from "./types";
 
@@ -162,5 +163,25 @@ describe("helpers", () => {
     expect(organizationKey("Patient/abc")).toBeNull();
     expect(organizationKey(undefined)).toBeNull();
     expect(memberIdOf({ resourceType: "Coverage", subscriberId: " ABC 123 " })).toBe("ABC 123");
+  });
+});
+
+describe("selectPrimaryCoverage — the practice's date at 23:30 Eastern (PR #98 review)", () => {
+  // 23:30 Eastern on 2026-09-28 is 03:30 UTC on 2026-09-29: the UTC date is a day ahead.
+  const evening = new Date("2026-09-29T03:30:00.000Z");
+  const today = todayIn("America/New_York", evening);
+  const selectLate = (...coverages: Record<string, unknown>[]) =>
+    selectPrimaryCoverage(coverages, PATIENT, today);
+
+  it("uses the Eastern date, not the UTC date", () => {
+    expect(today).toBe("2026-09-28");
+    expect(evening.toISOString().slice(0, 10)).toBe("2026-09-29");
+  });
+
+  it("a period ending today still covers today; one starting tomorrow does not; one ending yesterday does not", () => {
+    expect(selectLate(coverage({ period: { end: "2026-09-28" } })).status).toBe("unmapped");
+    expect(selectLate(coverage({ period: { start: "2026-09-28" } })).status).toBe("unmapped");
+    expect(selectLate(coverage({ period: { start: "2026-09-29" } })).status).toBe("none");
+    expect(selectLate(coverage({ period: { end: "2026-09-27" } })).status).toBe("none");
   });
 });
