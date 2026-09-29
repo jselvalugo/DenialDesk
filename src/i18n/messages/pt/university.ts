@@ -115,6 +115,8 @@ export const university: Messages["university"] = {
   "access.title": "Obtenha acesso à Universidade DenialDesk",
   "access.body":
     "Um programa de treinamento no seu ritmo para a equipe do consultório: como o DenialDesk funciona, como ler uma negativa, os prazos de pagamento pontual e de recurso da Flórida que o produto aplica e como os dados dos pacientes são protegidos, além da Wiki de referência.",
+  "access.imageAlt":
+    "Universidade DenialDesk: treinamento sob demanda, guias passo a passo e suporte especializado. Aprenda. Domine. Obtenha resultados.",
   "access.coursesLabel": "Cursos",
   "access.lengthLabel": "Duração",
   "access.lengthMinutes": "cerca de {count, plural, one {# minuto} other {# minutos}}",

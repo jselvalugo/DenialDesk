@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useId, useRef } from "react";
+import Image from "next/image";
 import { CircleCheck, GraduationCap, X } from "lucide-react";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import type { ProgramSummary } from "@/domain/university/offer";
@@ -11,7 +12,8 @@ import { requestUniversityAccess, type RequestAccessState } from "./actions";
  * The access prompt on the course catalog (spec: denialdesk-university.md, "Access"). Rendered only
  * while the practice has no access: a native modal <dialog> that opens on every visit (owner
  * request 2026-09-27), states how long the program is and that access starts at the offer price,
- * and lets the user request access or continue to the locked catalog. Nothing is stored about a
+ * and lets the user request access or continue to the locked catalog. The owner's University banner
+ * (`public/brand/university-welcome.webp`, added 2026-09-29) heads the body. Nothing is stored about a
  * dismissal, so it opens again next time; it disappears once the operator records the purchase.
  */
 export function AccessPrompt({
@@ -54,7 +56,7 @@ export function AccessPrompt({
       onClick={(event) => {
         if (event.target === dialog.current) close(); // backdrop click
       }}
-      className="fixed inset-x-0 top-24 mx-auto w-[min(560px,calc(100vw-2rem))] rounded-panel border border-border bg-surface p-0 text-text shadow-lg backdrop:bg-navy/40"
+      className="fixed inset-x-0 top-16 mx-auto max-h-[calc(100vh-5rem)] w-[min(560px,calc(100vw-2rem))] overflow-y-auto rounded-panel border border-border bg-surface p-0 text-text shadow-lg backdrop:bg-navy/40"
     >
       <div className="flex items-start gap-4 border-b border-border px-5 py-4">
         <span
@@ -80,6 +82,15 @@ export function AccessPrompt({
       </div>
 
       <div className="flex flex-col gap-4 px-5 py-4 text-body text-text">
+        <Image
+          src="/brand/university-welcome.webp"
+          alt={t("access.imageAlt")}
+          width={1536}
+          height={1024}
+          sizes="(max-width: 592px) calc(100vw - 4.5rem), 520px"
+          priority
+          className="h-auto w-full rounded-panel border border-border"
+        />
         <p id={bodyId}>{t("access.body")}</p>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-panel border border-border bg-surface-muted px-4 py-3 sm:grid-cols-4">
           <div>

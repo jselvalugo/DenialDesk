@@ -59,6 +59,7 @@ export const shell = {
   "userMenu.practice": "Practice",
   "userMenu.language": "Language",
   "userMenu.university": "DenialDesk University",
+  "userMenu.wiki": "DenialDesk Wiki",
   "userMenu.signOut": "Sign out",
 
   // Session timeout dialog
