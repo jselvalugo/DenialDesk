@@ -11,7 +11,8 @@ physician practices.
 1. Read `CLAUDE.md`, `docs/PRODUCT_BRIEF.md`, `docs/ROADMAP.md`, the relevant sections of
    `docs/REQUIREMENTS.md`, `docs/HIPAA_COMPLIANCE.md`, `docs/SECURE_CODING.md`, and existing specs.
    Specs name every PHI field and the requirement it traces to (HC-3.4), the roles that see it
-   (HC-3.2), and each field sent to an outside party (HC-3.3).
+   (HC-3.2), each field sent to an outside party (HC-3.3), and a PHI footprint (HC-3.6). New
+   tables reference the patient/encounter/claim by ID and never copy identity (HC-3.5, ADR 0013).
 2. Copy `docs/specs/_TEMPLATE.md` to `docs/specs/<kebab-name>.md` and fill it in.
 3. List every requirement ID (e.g. `R-3.1.3`) the spec implements. Each acceptance criterion
    must be testable. For any legal deadline, add criteria for the day before, the day of,

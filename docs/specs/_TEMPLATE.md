@@ -18,6 +18,9 @@ One or two sentences: what the user can do after this ships.
 ## Data / API changes
 Tables, fields, endpoints touched. Data classification (REQUIREMENTS §9.1) and audit events.
 
+PHI footprint (HC-3.6): each PHI field stored, why (requirement ID), where it is sent, and when it is
+deleted or de-identified. Reference the patient/encounter/claim by ID; never copy identity (HC-3.5).
+
 ## Legal rules used
 Rule IDs from `rules/` with citations; ⚠️ VERIFY status. "None" if the feature has no legal clock.
 

@@ -30,6 +30,13 @@ track outcomes. Product brief: `docs/PRODUCT_BRIEF.md`. Requirements baseline: `
 
 If a task is not backed by a spec, write or update the spec first.
 
+## Data model and PHI (ADR 0013)
+
+- The **claim** drives billing, legal deadlines, denials, and appeals. An **encounter** (the visit; spec pending)
+  will group the claims of one visit. Appointments are deferred; never make them the driver.
+- DenialDesk holds PHI (it is a business associate). Minimize it: identity lives only in `patients`, other tables
+  reference IDs, and every spec states its PHI footprint (`HC-3.4` to `HC-3.8`).
+
 ## Non-negotiables
 
 1. **No real PHI, ever.** Synthetic data only (Synthea, fixtures in `test/fixtures/synthetic/`) in code, fixtures, tests, logs, and issues. If you see anything that looks like real patient data, stop and tell the human.

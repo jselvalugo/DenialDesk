@@ -39,6 +39,7 @@ Setup:
 
 Claims:
 - [x] Revenue cycle accounting module: monthly PM file, rules and ledger, journal vouchers, aging, deposits, statements, RCM dashboard (`specs/revenue-cycle-accounting.md`)
+- [ ] Encounter as the parent of claims (one visit → primary, secondary, split, corrected claims); backfill one per existing claim; no identity fields (ADR 0013) [§8.2, §8.3, R-5.1.2]
 - [x] Claim data model with immutable version history [R-3.10.3] — claims list/detail, corrections with reason, append-only `claim_versions` (`specs/claims.md` C1)
 - [~] Charge capture via CSV import [§8.2] — C2 built: `/claims/import` creates draft claims (all or nothing) through the C1 version history, patients and payers matched never created, row-level error report, duplicate detection, synthetic-only guard (`specs/claims.md` C2); integration tests await a CI run
 - [ ] Timely-filing guardrail (6 months FL, 12 months Medicare) [R-3.1.5] — warnings done (C1); blocking at submission comes with 837P (C3)
@@ -70,6 +71,7 @@ University:
 - [ ] Rest of the University (owner to structure: OA-036) [R-10.4]
 
 Evidence and security:
+- [ ] PHI minimization backlog (ADR 0013, `HIPAA_COMPLIANCE.md` HC-3.5 to HC-3.8): `rcm_claim_lines` references the patient instead of copying identity; unused patient fields reviewed; appeal attachments not kept after sending; retention purge of closed cases [R-5.1.2, §9.2]
 - [ ] OIR complaint evidence package export [R-3.1.7]
 - [ ] Customer-facing audit log viewer and export [R-7.5.4]
 
@@ -102,3 +104,4 @@ Evidence and security:
 - [ ] Workers' comp and PIP modules
 - [ ] Patient statements, payments, good-faith estimates [§8.6]
 - [ ] HITRUST (if customers require it)
+- [ ] Appointments imported read-only from the PM/EHR, linked zero-or-one to an encounter (deferred by owner 2026-09-29; never the workflow driver, ADR 0013)

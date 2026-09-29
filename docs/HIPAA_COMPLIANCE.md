@@ -91,6 +91,15 @@ evidence.
   that party needs for the transaction, and the spec lists each field sent.
 - **HC-3.4 MUST** We do not collect a PHI field "in case it is useful later." Every PHI field in the
   schema traces to a requirement ID.
+- **HC-3.5 MUST** Patient identity (name, birth date, address, member ID, MRN, account number) is
+  stored once, in `patients`. Other tables reference the patient (or its encounter/claim) by ID and
+  never copy identity fields (ADR 0013).
+- **HC-3.6 MUST** Every spec that adds or reads PHI has a "PHI footprint" in its Data section: each
+  PHI field stored, why, where it is sent, and when it is deleted or de-identified.
+- **HC-3.7 MUST** Clinical attachments (records bundled into appeals) are not kept after they are
+  sent unless the spec justifies it and sets a retention period.
+- **HC-3.8 SHOULD** Reports and analytics use aggregates or data de-identified under 45 CFR
+  164.514(b) (Safe Harbor); cross-practice analytics MUST.
 
 ## 4. Access control and authentication (45 CFR 164.312(a), (d))
 
@@ -236,6 +245,8 @@ These MUST rules are not yet met as of 2026-09-28. Pre-production holds syntheti
 
 | Rule | Gap |
 | --- | --- |
+| HC-3.5 | `rcm_claim_lines` stores patient name and account number in plain text (encryption open, OA-104) instead of referencing the patient (ADR 0013). |
+| HC-3.4 | Stored patient fields not used by any feature (for example phone) still need a review against a requirement (ADR 0013). |
 | HC-4.2 | Phishing-resistant MFA (WebAuthn) not built; TOTP only (`specs/operator-login.md`, `specs/sign-in-and-sessions.md`, OA-063). |
 | HC-4.6 | No just-in-time workforce access, session recording, or break-glass accounts yet. |
 | HC-5.3 | No WORM audit storage or SIEM alerting yet (Azure cutover, ADR 0003). |
