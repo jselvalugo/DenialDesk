@@ -3,7 +3,7 @@
 Read this at the start of every session, after `CLAUDE.md`. Update it at the end of every session
 that changes decisions, status, or open questions. Keep it short: facts and links, not narrative.
 
-_Last updated: 2026-09-28_
+_Last updated: 2026-09-29_
 
 ## Where we are
 - Home page revamp (`specs/welcome-page.md`, owner request 2026-09-27): header band with a live strip
@@ -85,7 +85,7 @@ _Last updated: 2026-09-28_
   the sandbox too (only the attestation is real-only), so sandbox Submit is domain-tested with a seeded
   pass and unreachable from the page until PI2b (and a sandbox in `error` can't be resumed until PI2b
   gives it a test path). **Open owner decisions from this slice:** OA-045 (N3 stamp time floor, N6
-  attestation wording scope), OA-065 (c). **PI1c operator approval done except the activation notice and the conflict alert (open items)** (branch `claude/vigilant-tesla-ps41e9-pi1c-approval`, PR #89; no migration and no GRANT: writes go through `withTenantAsPlatform`, the connection owner's path; `src/domain/integrations/approval.ts`; queue `/operator/integrations`, review page under the practice; Approve records the method code, date, contact role, optional 9-digit MRNs and the required client-ID-ownership confirmation, and is refused for a scope other than `group_export`, in a synthetic-only environment, before the submission date, without a BAA in force, and for a non-operator account (`isOperatorAccount`); Reject takes a fixed reason code and releases the registry claim; audited `operator.integration_approved|rejected` with `session_id`, and views audited `operator.integration_viewed`). **Open from PI1c** (unticked spec items, owner rows OA-066 to OA-073): the activation notice to practice administrators (no in-app notice mechanism exists), the operator alert on `integration.registry_conflict` (R-15.9 owner sign-off), operator step-up before Approve, operator-side revoke, capturing a verified filter as a structured value. **PI2b UI slice done** (branch `claude/vigilant-tesla-ps41e9-pi2b-ui`, no migration, no GRANT): payer mapping `/settings/integrations/[id]/payers` (administrators; saving needs a step-up; each changed mapping audited `integration.payer_mapping_changed` with IDs and counts only, viewing audited `integration.payer_mappings_viewed`) and sync history `/settings/integrations/[id]/runs` (counts and codes; issue rows link to DenialDesk patient IDs; no PHI), plus the PR #89 follow-ups N1 to N7. **Open, for the sync-engine slice:** applying a saved mapping to the patients that carry the key (a synced patient's payer and coverage are read-only outside a running run, so the sync must re-derive coverage for a patient whose mapping is newer than its `synced_at`, even at an unchanged `versionId`); spec PI2b. **Next: PI2b** (sync engine, sandbox, jobs); its spec now also carries the error-transition stamp item. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  attestation wording scope), OA-065 (c). **PI1c operator approval done except the activation notice and the conflict alert (open items)** (branch `claude/vigilant-tesla-ps41e9-pi1c-approval`, PR #89; no migration and no GRANT: writes go through `withTenantAsPlatform`, the connection owner's path; `src/domain/integrations/approval.ts`; queue `/operator/integrations`, review page under the practice; Approve records the method code, date, contact role, optional 9-digit MRNs and the required client-ID-ownership confirmation, and is refused for a scope other than `group_export`, in a synthetic-only environment, before the submission date, without a BAA in force, and for a non-operator account (`isOperatorAccount`); Reject takes a fixed reason code and releases the registry claim; audited `operator.integration_approved|rejected` with `session_id`, and views audited `operator.integration_viewed`). **Open from PI1c** (unticked spec items, owner rows OA-066 to OA-073): the activation notice to practice administrators (no in-app notice mechanism exists), the operator alert on `integration.registry_conflict` (R-15.9 owner sign-off), operator step-up before Approve, operator-side revoke, capturing a verified filter as a structured value. **PI2b UI slice done** (branch `claude/vigilant-tesla-ps41e9-pi2b-ui`, no migration, no GRANT): payer mapping `/settings/integrations/[id]/payers` (administrators; saving needs a step-up; each changed mapping audited `integration.payer_mapping_changed` with IDs and counts only, viewing audited `integration.payer_mappings_viewed`) and sync history `/settings/integrations/[id]/runs` (counts and codes; issue rows link to DenialDesk patient IDs; no PHI), plus the PR #89 follow-ups N1 to N7. **Open, for the sync-engine slice:** applying a saved mapping to the patients that carry the key (a synced patient's payer and coverage are read-only outside a running run, so the sync must re-derive coverage for a patient whose mapping is newer than its `synced_at`, even at an unchanged `versionId`); spec PI2b. **Next: PI2b part 2** (jobs); the engine and sandbox are below. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
   **PI2a lifecycle + step-up slice done** (PR #86, ported from closed #81 onto the
   #82/#84/#85 domain layer; Submit, the residency attestation, and the Submit registry claim wait on
   Test connection, PI2a-2): step-up MFA (R-7.2.2) — migration 0041 `sessions.mfa_verified_at`,
@@ -96,6 +96,31 @@ _Last updated: 2026-09-28_
   `endpoint_key`/`token_endpoint_key` CHECKs (0041). Compliance follow-up: Withdraw clears the residency attestation, and migration 0042 makes Submit (`draft → pending_approval`) require fresh attestation and submission stamps. No GRANT or privilege change (`sessions` is
   owner-only; the CHECKs add no privilege). Owner decisions and the TOTP-vs-WebAuthn gap: `OA-063`.
   Owner questions OA-045 onward; data source DS-12 in `docs/data-sources.xlsx`.
+  **PI2b part 1 done: sync engine and synthetic sandbox** (branch `claude/vigilant-tesla-ps41e9-pi2b-engine`,
+  after #91 merged the payer-mapping page, sync history and `sync-codes.ts`; migration
+  `0043_patient_integrations_sync_engine.sql`, its identity seed **approved by the owner 2026-09-29 (R-15.9, OA-076, resolved)**;
+  no GRANT, REVOKE, role, SECURITY DEFINER or RLS change). What it is: `withTenantAsSystem` (the
+  `denialdesk_app` role, the fixed integration service principal as actor, transaction-local run settings);
+  the in-process `SandboxTransport` (125 deterministic synthetic patients, verifies the SMART assertion;
+  Test connection, Submit and Sync now work for the sandbox); the sync run (`src/domain/integrations/sync.ts`,
+  `sync-upsert.ts`, `sync-runs.ts`, `src/integrations/fhir/search.ts`, `map-patient.ts`, `map-coverage.ts`):
+  issuer check first, paged `_lastUpdated` search with same-origin `next`, paging-loop guard, run budget and
+  bundle cap, Coverage by POST, retries with backoff, 401/403/`invalid_client` and a changed token endpoint
+  set `error`, SSN/MBI-shaped MRNs refused, upsert/link/conflict with no regression, member IDs
+  field-encrypted, page-by-page commits with a re-check that the connection is still active, watermark on
+  success only, every patient write audited as the service principal (reason `ehr_sync`), and a
+  **re-derive pass that applies a saved payer mapping to patients whose payer mapping is newer than their
+  `synced_at`** even at an unchanged `versionId`. Codes are a fixed allow-list (`sync-codes.ts`, documented
+  in the spec; a minor is the neutral `review_required`). "Sync now" is an admin action that runs in the
+  request (jobs are the next slice). **Fails closed on real connections (PR #98 review):** any connection that is not
+  the synthetic sandbox is refused, in the run and in Sync now, with the code `population_scope_unenforced`, until PI4
+  can apply `population_scope` (see "PI4 blocker" under Deferred review findings). **Not built:** background jobs and
+  `integration_claim_run` (HMAC-signed `{runId}`), Coverage-only search and `_elements`, PI3, PI4. Owner: OA-077 to
+  OA-082 (OA-076 is resolved).
+  **Local development databases:** a database created before 0043 that holds a sandbox connection with
+  `issuer = 'sandbox-client'` (0040's pin) cannot take 0043, whose replacement sandbox CHECK does not validate that
+  row. Reset it: `docker compose down -v` (drops the `db-data` volume), `docker compose up -d db`, `pnpm db:migrate`,
+  `pnpm db:seed`. (Only a row written by hand or by an older test seed can carry that issuer; a passing Test connection never wrote it.)
 - Record pattern P1 (`specs/record-pages.md`, owner request 2026-09-27 "modernize the Patient
   pages … create the staple to edit other tables"): reusable parts in `src/components/records/`
   (`RecordHeader`, `RecordLayout`, `FieldList`, `FormShell`) and `src/components/ui/`
@@ -529,6 +554,15 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    reserved/marked range? (compliance #7)
 
 ### Deferred review findings (tracked, not blocking pre-prod)
+- **PI4 blocker (open, blocks the first real connection): population scope.** `population_scope` is recorded at
+  approval but nothing applies it yet, so a real connection could pull patients beyond the practice's own. The sync
+  therefore refuses every non-sandbox connection (`population_scope_unenforced`; `assertRunEnvironment` and
+  `syncNow`, audited, en/es/pt message, tests in `sync-engine.test.ts` and `sync-now.test.ts`). PI4 must lift that check
+  in the same change that applies the Group export or the verified filter, with a test (spec PI4).
+- Migration follow-up (PR #98 review L3): 0043 seeds the service principal with `ON CONFLICT DO NOTHING` and no
+  target, so an email clash silently skips the seed (sync then fails closed on the foreign key, quietly). A later
+  migration should make it `ON CONFLICT (id) DO NOTHING` so a clash fails loudly. 0043 itself is not edited: Netlify has
+  applied it.
 - Sensitivity tags (HIV, SUD/Part 2, …) not yet enforced in queries — before any real data (R-3.5.1, R-4.5.1).
 - Composite `(tenant_id, id)` foreign keys; today code validates referenced IDs.
 - WORM audit export at Azure cutover (owner can still drop the trigger).

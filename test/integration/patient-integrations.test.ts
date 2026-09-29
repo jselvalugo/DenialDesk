@@ -539,8 +539,18 @@ describe("security review H1: sandbox self-activation", () => {
     const id = await makeConnection(a, { isSandbox: true });
     await setDraftField(a, id, "token_endpoint", SANDBOX_TOKEN_ENDPOINT);
     await setDraftField(a, id, "token_endpoint_key", SANDBOX_TOKEN_ENDPOINT);
-    await setDraftField(a, id, "issuer", SANDBOX_CLIENT_ID);
+    // drizzle/0043: discovery records the issuer as the normalized base URL, so that is the sandbox
+    // value ('sandbox-client', 0040's, could never be pinned by a passing Test connection).
+    await setDraftField(a, id, "issuer", SANDBOX_URL);
     expect(await connectionStatus(id)).toBe("draft");
+  });
+
+  it("no longer accepts the client ID as a sandbox issuer (drizzle/0043 replaced 0040's value)", async () => {
+    const id = await makeConnection(a, { isSandbox: true });
+    await expectDbError(
+      setDraftField(a, id, "issuer", SANDBOX_CLIENT_ID),
+      /integration_connections_sandbox_is_builtin/,
+    );
   });
 
   it("refuses a non-sandbox connection reaching active/paused/error without a recorded approval (CHECK, independent of the trigger)", async () => {

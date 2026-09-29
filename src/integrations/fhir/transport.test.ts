@@ -376,6 +376,23 @@ describe("HttpsTransport — non-2xx responses (reviewer N3)", () => {
     expect(await fhirGet(loopbackTransport(), server.url)).toMatchObject({ status: 502, body: "" });
   });
 
+  it("reads Retry-After (and only that) from an error response, for PI2b's backoff", async () => {
+    server = await startTestServer((_req, res) => {
+      res.writeHead(429, { "content-type": "text/html", "retry-after": "7" });
+      res.end("SENSITIVE-ERROR-BODY");
+    });
+    const response = await fhirGet(loopbackTransport(), server.url);
+    expect(response).toEqual({ status: 429, contentType: "text/html", body: "", retryAfterSeconds: 7 });
+  });
+
+  it("has no retryAfterSeconds when the header is missing or unusable", async () => {
+    server = await startTestServer((_req, res) => {
+      res.writeHead(503, { "retry-after": "soon" });
+      res.end();
+    });
+    expect(await fhirGet(loopbackTransport(), server.url)).not.toHaveProperty("retryAfterSeconds");
+  });
+
   it("still refuses a 3xx as redirect_refused (not resolved as a status)", async () => {
     server = await startTestServer((_req, res) => {
       res.writeHead(307, { location: "https://localhost:1/" });

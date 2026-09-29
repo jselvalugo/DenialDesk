@@ -77,7 +77,9 @@ production only a practice-scoped population is accepted (see Environment and po
   fails the run (`not_synthetic`). No prefixing on ingest.
 - **Population (production):** only a practice-scoped population: Bulk Data export of the
   practice's Group (PI4), or a search filter the operator verified at approval. Blocking before
-  real data.
+  real data. **Until PI4 can apply `population_scope`, the sync fails closed:** any run whose connection is
+  not the synthetic sandbox is refused (`population_scope_unenforced`) before a transport is asked for, and
+  Sync now refuses it with a message before anything is queued (compliance B1, security M1).
 
 ## Connection lifecycle
 `draft` → (admin **Submit**: passing test in the last 24 h, residency attested, MFA step-up) →
@@ -310,7 +312,7 @@ or `revoked`. Domain: `src/domain/integrations/approval.ts`, vocabularies in `ap
       a **method code** (`phone_callback`, `video_call`, `written_confirmation`, `vendor_portal`), the
       **date**, and the **contact's role at the practice** (`ehr_administrator`,
       `practice_administrator`, `it_contact`, `vendor_representative`, `other`; never a name), the
-      **population scope**, optionally "MRNs are 9 digits (verified)", and **the operator's
+      **population scope**, optionally "MRNs contain a nine-digit number (verified)", and **the operator's
       confirmation, required, that the practice owns the `client_id`, verified outside the app**
       (pre-production signs every connection with one shared key (coordinator decision pending owner
       confirmation, OA-065), so the key alone doesn't tie a client registration to a practice). The
@@ -665,18 +667,20 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       (gzip/deflate/br, tested for each), streamed and aborted over the cap rather than buffered;
       truncated compressed responses reject rather than hang. Test-only overrides for these are
       refused outside tests.
-- [ ] Limits (M1), run-level, **PI2b** wires these into the sync loop: `MAX_BUNDLE_ENTRIES`
+- [x] Limits (M1), run-level, **PI2b** wires these into the sync loop: `MAX_BUNDLE_ENTRIES`
       (`assertBundleEntryLimit`, Bundle ≤ 1,000 entries), `RunBudget` (12 min / 5,000 requests /
       500 MB per run) and `PagingLoopGuard` (same `next` URL twice) exist in `limits.ts` with unit
       tests, and `assertNextIsSameOrigin` refuses a cross-origin `next`, but none of them is called
       from a sync loop yet.
+      **Built in PI2b part 1** (`search.ts`, `sync.ts`; tests in `search.test.ts`).
 - [x] Callers of the transport, **discovery and the token request** (PI2a part 2), **never log or
       store a non-2xx response body** (the transport discards it unread, N3; `AccessToken` refuses to
       serialize; errors carry only fixed codes) and emit `address_refused`, `tls_failed` and
       `redirect_refused` as security events (`integration.transport_refused`, IDs and the code only,
       no URL or host). Tests: `test/integration/test-connection.test.ts`.
-- [ ] Callers of the transport, **search** (PI2b): the same two rules, carried into PI2b's acceptance
+- [x] Callers of the transport, **search** (PI2b): the same two rules, carried into PI2b's acceptance
       criteria.
+      **Built**: the search never logs or stores a non-2xx body (the transport discards it; `Retry-After` is the only header read), and refusals are audited `integration.transport_refused` (code only) when they end a run.
 - [x] Decided (reviewer N3, PR #83): **a non-2xx response resolves with its status and the body is
       discarded unread, whatever its `Content-Type` or `Content-Encoding`** (`transport.ts`; a 3xx is
       still `redirect_refused`; a 2xx with a wrong type is still `content_type_refused`). So a
@@ -719,8 +723,9 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `scope_insufficient` for now (⚠️ VERIFY per vendor). `exp` is `iat + 4 min` (skew margin under
       the 5-minute cap); `AccessToken` redacts itself under JSON, string, template, and
       `util.inspect`; the in-memory `AccessTokenCache` exists.
-- [ ] Token: re-request on expiry **or one 401** from the FHIR server — the sync loop that does this
+- [x] Token: re-request on expiry **or one 401** from the FHIR server — the sync loop that does this
       is PI2b (`AccessTokenCache.invalidate` is ready for it).
+      **Built** (`createTokenSource`, `FhirClient`).
 - [x] Keys, pre-production (R-7.3.4, R-7.3.5; decided 2026-09-28: follow the spec, no migration, no
       grant). **A pre-production exception, production control deferred:** R-7.3.4/R-7.3.5 call for
       per-connection, non-exportable keys; the shared environment key below is a pre-production exception
@@ -800,7 +805,7 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       Messages in en/es/pt (`integrations.test.*`).
 
 ### PI2b — sync engine, sandbox, jobs, history, payer mapping
-- [ ] Every writer of `error` stamps the transition in the database (PI2a follow-up, PR #88 review):
+- [x] Every writer of `error` stamps the transition in the database (PI2a follow-up, PR #88 review):
       the lifecycle trigger sets `NEW.updated_at := clock_timestamp()` on any status change (a PI2b
       migration, changing the trigger function only, no privilege). Resume's gate compares a pass's
       `occurred_at` with `updated_at` in the database (`afterLastChange`, "the pass is strictly newer
@@ -811,26 +816,67 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       therefore get the database's actual clock, not the writer's start-of-transaction one. Test: an
       `error` set inside a transaction that started before a pass was recorded is not cleared by that
       pass.
-- [ ] Pause and `error` stop work already in flight: a connection leaving `active` (pause, error)
+      **Built** (`drizzle/0043_patient_integrations_sync_engine.sql`, the lifecycle function only, no privilege): the
+      trigger sets `NEW.updated_at := clock_timestamp()` on any status change. Tests: `test/integration/sync-db.test.ts`
+      (a status change carries the real time whatever the writer wrote; an `error` set inside a transaction that
+      started before a pass was recorded is not cleared by that pass, and Resume then needs a newer one). One existing
+      assertion changed: approval's `approved_at` (transaction start) and `updated_at` (real clock) are no longer
+      equal, only ordered (`integration-approval.test.ts`).
+- [x] Pause and `error` stop work already in flight: a connection leaving `active` (pause, error)
       abandons its queued runs (as revoke does), and the sync loop re-checks `status = 'active'`
       before each page commit, so a run that started before a Pause stops at its next page instead of
       finishing. PI2a's Pause only stops new runs from being queued.
-- [ ] The transport is chosen from `is_sandbox` only (never the host), and a sandbox run is refused
+      **Built** (0043: the abandon trigger also fires on `paused` and `error`, queued and running runs alike; the
+      loop locks the connection row (`FOR NO KEY UPDATE`, which a concurrent Pause waits for) and re-checks
+      `status = 'active'` and the run `running` before each page commit, so a run stops at its next page). Tests:
+      `sync-engine.test.ts` (Pause during a run: the first page stays, nothing after it, the watermark doesn't move;
+      Pause between fetching and committing a page stores nothing; an `error` set by someone else) and
+      `sync-db.test.ts` (each state, a finished run and another practice's runs untouched).
+- [x] The transport is chosen from `is_sandbox` only (never the host), and a sandbox run is refused
       unless `syntheticDataOnly()`, so `SYN` patients never land in a production tenant (compliance
       review #13, security review L-1).
-- [ ] Refuse SSN- and MBI-shaped MRN values at ingest, whatever the identifier system (security
+      **Built** (`src/integrations/fhir/select-transport.ts`, `src/app/(app)/settings/integrations/test-deps.ts`):
+      a sandbox connection gets the in-process `SandboxTransport` only where `syntheticDataOnly()` (elsewhere no
+      transport at all, and the transport class refuses to be constructed), never chosen by host; the sync run and
+      `syncNow` refuse a sandbox where real data is allowed (`environment_refused` before any transport is asked
+      for) and a real connection where only synthetic data is. Test (`APP_ENV=production` on Netlify:
+      `test-deps.test.ts`; the run itself: `sync-engine.test.ts`, `sync-now.test.ts`).
+- [x] **Fail closed on real connections** (PR #98 review, blocking): `assertRunEnvironment` (run) and `syncNow`
+      refuse every connection that is not the synthetic sandbox until PI4 applies `population_scope`: the run ends
+      `failed` with the allow-listed code `population_scope_unenforced` (a real connection where only synthetic data is
+      allowed stays `environment_refused`), no transport is asked for, no request leaves the process, no patient row is
+      written; Sync now queues nothing, audits the refusal (`integration.sync_failed`, reason `sync_now`) and shows
+      `sync.error.populationScopeUnenforced` in en/es/pt. Tests: `sync-engine.test.ts`, `sync-now.test.ts`. Recorded as
+      an open PI4 blocker in `docs/PROJECT_STATE.md`; the PI4 item below lifts it.
+- [x] **Review round hardening** (PR #98): the practice's calendar date (`todayIn("America/New_York")`, not UTC) is used
+      for coverage periods, address periods and the minor check, with boundary tests at 23:30 Eastern; the mapper holds
+      MRN to 40 and names to 60 characters and a `23514` from the database skips one record (`record_rejected`) instead
+      of failing the page; Coverage entries whose beneficiary is not in the chunk are dropped and a chunk is capped at 20
+      pages; the token request honours `Retry-After` (60 s cap) and records `http_status`; a sandbox access token is
+      bound to the key set that obtained it and expired tokens are pruned; a manual run's `integration.sync_started`
+      carries the administrator's IP, user agent and `session_id`; a Pause between queueing and claiming a run is an
+      `abandoned` result, not an error.
+- [x] Refuse SSN- and MBI-shaped MRN values at ingest, whatever the identifier system (security
       review M-1: a deny-list can't know a vendor's local SSN OID); also check `Identifier.type`
       (v2-0203 SS, MB, MC, DL, PPN).
+      **Built** (`src/integrations/fhir/mrn-shapes.ts`, `map-patient.ts`; security review M2): judged on the whole value,
+      wherever the shape sits (a `SYN-` marker or a vendor prefix does not hide it). An SSN grouped 3-2-4 with any
+      one or more separators (`-`, `.`, space, `_`, `/`, so `123.45.6789` and `123--45--6789` too) is refused always;
+      any standalone run of exactly nine digits (`A123456789`, `MRN 123456789`), also when separators split it
+      (`123-456789`, `12345-6789`), is refused unless the operator recorded "MRNs contain a nine-digit number"
+      (`mrn_nine_digits_verified`); the CMS MBI format (⚠️ VERIFY) is refused as a token anywhere in the value,
+      compact, grouped 4-3-4 or split at other places by separators (`1EG4TE5-MK73`). `Identifier.type` SS, MB, MC, DL, PPN →
+      `mrn_government_identifier`. Tests: `mrn-shapes.test.ts`, `map-patient.test.ts`.
 - [ ] Jobs: payload `{ runId }` only, with an HMAC-SHA256 header (body + timestamp, 5-min window)
       keyed by `INTEGRATION_JOB_SECRET`. The worker claims the run with SECURITY DEFINER
       `integration_claim_run(run_id)` (only a `queued` run; returns `tenant_id, connection_id`;
       EXECUTE granted to a `denialdesk_jobs` role, not `denialdesk_app`; also requires the
       connection to be `active`; HMAC compared in constant time). Tests: unsigned call,
       stale timestamp, and forged or already-claimed `runId` refused.
-- [ ] All sync reads and writes run as `denialdesk_app` under a new
+- [x] All sync reads and writes run as `denialdesk_app` under a new
       `withTenantAsSystem(tenantId, runId)` (sets tenant, run, and connection settings; never
-      `withTenantAsPlatform` or `systemDb`). Audit actor: a fixed per-environment integration
-      service-principal UUID in reviewed code, seeded by migration as a `users` row that cannot
+      `withTenantAsPlatform` or `systemDb`). Audit actor: one fixed integration
+      service-principal UUID (the same in every environment) in reviewed code, seeded by migration as a `users` row that cannot
       sign in, has no memberships and no roles (keeps the `audit_events.actor_user_id` FK; a test
       asserts the FK stays); the admin who pressed Sync now in
       `metadata.triggeredBy`; reason `ehr_sync`; "where" = runtime function id and host.
@@ -839,29 +885,67 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       `is_local = false`/session-level: a pooled connection reused by another request afterwards
       must not inherit a stale run/connection setting that `patients_synced_readonly` would then
       trust.
-- [ ] Every run first checks the connection's issuer against discovery; a mismatch fails the run
+      **Built** (`src/db/tenant.ts` `withTenantAsSystem(tenantId, runId, fn)`, `src/db/integration-principal.ts` (re-exported by `src/domain/integrations/principal.ts`)
+      `INTEGRATION_SERVICE_PRINCIPAL_ID = d3a7c0de-5a1c-4e11-8a0c-0000000d0d01`, seeded by 0043 as a disabled `users`
+      row whose password hash is not a hash: no sign-in, no membership, no session, no second factor). Settings are
+      `set_config(..., true)` only; a test checks nothing is left on the pooled connection, that another practice's or a
+      made-up run is refused, and that the service principal stays a foreign-key target
+      (`connection.updated_by`). **The FK note:** `audit_events` has no foreign keys (ADR 0005); the FKs that need the
+      row are `integration_connections.updated_by` and `integration_payer_mappings.updated_by`. Audit events written
+      by the engine carry no request IP or user agent (`AuditEvent.system`); the runtime function id and host are in
+      their metadata.
+- [x] Every run first checks the connection's issuer against discovery; a mismatch fails the run
       before any upsert (`issuer_mismatch`); a changed token endpoint sets `error`.
       Issuer format (PI2a, `discovery.ts`): the normalized base URL, or `<base URL> <implementation.url>`
       (space-separated, the second only when the CapabilityStatement carried one that passes the URL
       rules); compare the whole string.
-- [ ] Search: `Patient?_lastUpdated=ge<watermark>&_count=100`; Coverage for a page's patients by POST
-      `Coverage/_search` (`patient=<id>`) where supported so FHIR ids stay out of request URLs
-      (⚠️ VERIFY support), else GET (documented: the URL goes only to the practice's own EHR);
-      Coverage-only changes by `Coverage?_lastUpdated` when advertised; `_elements` when advertised.
-- [ ] Retries: 3, exponential backoff, `Retry-After` capped at 60 s; 401/403/`invalid_client` → `error`.
-- [ ] Mapping as in the table below; a record failing a required rule is skipped with a code, never
+      **Built** (`src/domain/integrations/sync.ts`): discovery, then the pinned token endpoint (a change sets `error`,
+      `token_endpoint_changed`), then the issuer (`issuer_mismatch`, the run fails, nothing is requested for patients;
+      a missing pin counts as a change). Tests in `sync-engine.test.ts`.
+- [x] Search: `Patient?_lastUpdated=ge<watermark>&_count=100` (no filter on the initial load); Coverage for a
+      page's patients by POST `Coverage/_search` (`patient=<id>,<id>`, 50 a request) so FHIR ids stay out of
+      request URLs, else, for a server that answers 404/405/415/501 to it, GET in chunks of 20 (documented: the
+      URL goes only to the practice's own EHR; ⚠️ VERIFY support per vendor); every result page is followed,
+      `next` same-origin only (`assertNextIsSameOrigin`), `PagingLoopGuard`, `RunBudget` and
+      `MAX_BUNDLE_ENTRIES` wired in (`src/integrations/fhir/search.ts`). Where only synthetic data is allowed
+      the first request is `_count=1` (the `SYN` probe). Tests: `search.test.ts`, `sync-engine.test.ts`.
+- [ ] Not built yet, left for a follow-up: Coverage-only changes by `Coverage?_lastUpdated` when advertised (the
+      `coverage_watermark` column stays unused; a Coverage-only change reaches a patient at its next
+      Patient change or, for a payer mapping, by the re-derive pass), and `_elements` when advertised.
+- [x] Retries: 3, exponential backoff, `Retry-After` capped at 60 s; 401/403/`invalid_client` → `error`.
+      **Built**: 3 retries after the first attempt, 1 s, 2 s, 4 s (cap 30 s), `Retry-After` capped at 60 s (the
+      transport now returns `retryAfterSeconds` for an error response, the header being the only thing read from it),
+      408/425/429/5xx and a timeout or unreachable server retried, address/TLS/redirect refusals never; one 401
+      re-requests the token, a second 401, a 403, or `invalid_client` sets the connection to `error`.
+- [x] Mapping as in the table below; a record failing a required rule is skipped with a code, never
       partially guessed. Server timestamps are clamped (future beyond 5 min skew → our now; the
       watermark never exceeds our clock). `OperationOutcome.issue.code` kept only if it is an R4
-      IssueType code, else `unknown`; `diagnostics` never stored.
-- [ ] Upsert keyed by `(tenant_id, source_connection_id, external_id)`; no regression on
-      `meta.lastUpdated`; same `versionId` = unchanged. Linking: MRN **and** birth date equal to a
+      IssueType code, else `other`; `diagnostics` never stored.
+      **Built** (`map-patient.ts`, `map-coverage.ts`, `security-labels.ts`). Source status (`inactive`, `merged`) is
+      mapped too, although the table assigns it to PI3; `gone` and the weekly reconciliation stay PI3. An R4
+      `OperationOutcome.issue.code` is mapped onto our own vocabulary (see "Sync run and issue codes"): the R4
+      IssueType codes with hyphens as underscores, **anything else `other`** (not `unknown`, which is itself an R4
+      code); `diagnostics` is never read.
+- [x] Upsert keyed by `(tenant_id, source_connection_id, external_id)`; no regression on
+      `meta.lastUpdated` (and, when that is missing or equal, on a numeric `meta.versionId`: `isOlderCopy`); same `versionId` = unchanged. Linking: MRN **and** birth date equal to a
       manual patient → linked (`patient.linked_to_source`); MRN equal, birth date different →
       `mrn_conflict` with the manual patient's ID; otherwise a new row. No fuzzy matching.
-- [ ] Page-by-page commits; watermark advances only on success to the first page's server time minus
+      **Built** (`src/domain/integrations/sync-upsert.ts`): the update writes only the columns that differ (member ID
+      compared decrypted, so an unchanged value is not re-encrypted); a patient with no billing-minimum change is
+      `unchanged` (no write, no audit; the run-level `integration.sync_completed` counts it); a link also writes an
+      issue row `linked_to_source`; every patient write is audited `patient.synced_created|synced_updated|
+      linked_to_source` (plus `source_inactivated|merged` on a change), as the service principal, reason `ehr_sync`.
+- [x] Page-by-page commits; watermark advances only on success to the first page's server time minus
       5 minutes. One run per connection (partial unique on `(tenant_id, connection_id)` while
       `queued`/`running`); no heartbeat for 20 min → `abandoned`. Sync now once a minute.
-- [ ] Sync never writes `claims` or claim versions; the 837P builder (claims C3) snapshots patient
+      **Built**: one transaction per page (or re-derive batch); `has_synced` is set by the first page that stored a
+      patient (a page that stored nothing doesn't lock the endpoint); the watermark is the first page's server time
+      (clamped to our clock) minus 5 minutes, never backwards, written only on success. "Sync now" is limited to once
+      a minute per connection (bucket `integration_sync_now`), refuses while a run is queued or running, and
+      abandons a run with no heartbeat for 20 minutes first (`abandonStaleRuns`, the database clock).
+- [x] Sync never writes `claims` or claim versions; the 837P builder (claims C3) snapshots patient
       demographics into the claim version at submission (R-3.10.3).
+      **Built**: the engine touches only `patients`, `integration_*` and `audit_events`; a test asserts no `claims` or `claim_versions` row appears.
 - [x] Payer mapping page (step-up), `/settings/integrations/[id]/payers` (PI2b UI slice; no migration,
       no GRANT: `integration_payer_mappings` grants SELECT/INSERT/UPDATE to the app role and has tenant
       RLS; `src/domain/integrations/payer-mappings.ts`): payor keys (`Organization/<id>`, with the
@@ -898,14 +982,19 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       planted key, a key reported only by another connection of the same practice, stale page and a
       first-decision race, audit atomicity, PHI-free audit, live-only counts, more than 500 insurers, an
       unsavable stored key, the page and the action, a revoked connection read-only).
-- [ ] **The sync mapper enforces the payor-key rules on write** (PI2b sync engine): a payor key stored in
+- [x] **The sync mapper enforces the payor-key rules on write** (PI2b sync engine): a payor key stored in
       `patients.coverage_payor_key` or `integration_payer_mappings.payor_key` is 1 to 256 characters
       and contains no control, zero-width, or bidi character (the same rules `isSavablePayorKey` applies
       when a save is read); a key that fails is not stored, and the resource is skipped with a code.
       Test: a Coverage whose payor reference is over-long or has an invisible character is skipped and
       writes neither a patient key nor a mapping row. Until then the page lists such a stored key
       read-only.
-- [ ] **Apply a saved mapping to the patients that carry the key** (the second half of the spec's
+      **Built by construction and by test**: the mapper accepts a payor only as `Organization/<id>` with `<id>` a FHIR id
+      (1 to 64 characters of letters, digits, `-` and `.`), so the stored key is at most 77 characters and can hold no
+      control, zero-width, or bidi character; a Coverage whose payor reference fails that is not used (the patient is
+      stored with coverage `needs_review`, no payer, no member ID), and writes neither a patient key nor a mapping
+      row. The display name is stored only if it is at most 200 characters with no invisible character.
+- [x] **Apply a saved mapping to the patients that carry the key** (the second half of the spec's
       "one audited update of affected patients"; **open, by design of the database**). A synced patient's
       `primary_payer_id`, `coverage_status`, and member ID are read-only outside a running sync run
       (trigger `patients_synced_readonly`), and the run's own context (`withTenantAsSystem`) belongs to the
@@ -915,6 +1004,16 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       resource's `versionId` is unchanged ("same `versionId` = unchanged" would otherwise never apply a
       new mapping), and audit that update once per run (`patient.synced_updated`, changed field names).
       Until then the page says what a mapping is for, not that it has been applied.
+      **Built** (`findRederiveCandidates`, `rederiveCoverage`, `sync.ts` `rederivePass`): at the start of every run,
+      before the Patient pages, the sync finds this connection's synced patients whose mapping row's `updated_at` is
+      newer than the patient's `synced_at`, fetches only their Coverage, re-derives payer, coverage status, payor key
+      and member ID, and updates and audits (`patient.synced_updated`, changed field names, one event per patient per
+      run) the ones that changed; a patient whose derivation did not change only has `synced_at` refreshed (no audit
+      event, no `updated_at` bump), so it leaves the set. Works at an unchanged `versionId` and for a patient that
+      isn't in the Patient search at all. Up to 10,000 patients a run. Tests: `sync-engine.test.ts` "payer
+      mappings" (mapped, applied once, cleared, and unchanged-touch cases; mapping rows created by the sync use the
+      service principal and are never overwritten). The mapping page's wording "applies when the sync next updates" is
+      now accurate for the next run.
 - [x] Sync history (`/settings/integrations/[id]/runs`, admin; PI2b UI slice,
       `src/domain/integrations/sync-history.ts`): every run of the connection, newest first (25 a page),
       as counts (created, updated, linked, skipped), status, queued and finished times, who started it as
@@ -936,25 +1035,67 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       run's issue rows is** (`integration.sync_run_viewed`: entity = the run, metadata `connection_id`,
       `row_count`, `session_id`, reason `sync_history`; IDs and a count only). Tests:
       `test/integration/integration-sync-history.test.ts`, `src/domain/integrations/sync-codes.test.ts`.
-- [ ] **The sync engine writes codes only from `sync-codes.ts`, and keeps them PHI-free** (PI2b sync
+- [x] **The sync engine writes codes only from `sync-codes.ts`, and keeps them PHI-free** (PI2b sync
       engine; the engine's own module path is reconciled with `src/domain/integrations/sync-codes.ts`
       at merge). Every value written to `integration_sync_runs.issue_codes` and
       `integration_sync_issues.code` is a member of `SYNC_RUN_CODES` or `SYNC_ISSUE_CODES` (an R4
-      `OperationOutcome.issue.code` outside the list is stored as `unknown`). **A code on a row linked to
+      `OperationOutcome.issue.code` outside the list is stored as `other`). **A code on a row linked to
       a patient must not reveal what the EHR says about the patient beyond a data-quality defect:**
       never a sensitivity label (HIV, psychiatric, substance use, 42 CFR Part 2, ethnicity, domestic
       violence), a restriction (R/V), minor status, a diagnosis, or a program. Test: for every skip and
       link path of the mapper, and with restricted, sensitive, and minor synthetic patients, the stored
       codes are all on the allow-list and none is derived from `meta.security`, `birthDate`, or a
       clinical resource.
-- [ ] Synthetic sandbox (base URL `https://sandbox.fhir.denialdesk.invalid/r4`, in-process
+      **Built**: `src/domain/integrations/sync-codes.ts` is the one module (the engine extended #91's lists; the
+      mapper's, transport's and R4 groupings are defined in `src/integrations/fhir/sync-codes.ts` and asserted to be
+      inside the lists). Every value written to `issue_codes` or `integration_sync_issues.code` goes through
+      `normalizeRunCodes` / `normalizeIssueCode` (anything not listed is stored as `other`). A minor is recorded
+      with the neutral `review_required` (never a minor, sensitivity, or restriction code; `source_restricted`
+      and the labels produce no code at all). One code was renamed to fit the CHECK: `not_fhir_r4` is stored as
+      `not_fhir`. Tests: `sync-codes.test.ts`, `sync-codes-engine.test.ts` (every code the mapper, the failures and the
+      R4 mapping can produce is listed).
+- [x] Synthetic sandbox (base URL `https://sandbox.fhir.denialdesk.invalid/r4`, in-process
       `SandboxTransport`, only when `syntheticDataOnly()`): token endpoint verifies the assertion
       (signature, alg allow-list, `aud`, `exp`, `jti` remembered until `exp`); deterministic
       `SYN-` resources with a synthetic `meta.tag`, multi-page, and one each of: inactive,
       `replaced-by`, partial birth date, dependent coverage, unmapped payor, non-Organization payor,
       `R` label, `HIV` label, unknown label, minor, SSN-shaped MRN.
-- [ ] Test: `APP_ENV=production` on Netlify refuses a real endpoint and allows only the sandbox.
-- [ ] Update `docs/data-sources.xlsx` with the FHIR R4 source.
+      **Built** (`src/integrations/fhir/sandbox/`): 125 deterministic Synthea-style synthetic patients (seeded PRNG,
+      `SYN-` MRNs and member IDs, a synthetic `meta.tag`, Florida cities and made-up addresses, 555-01xx phone numbers
+      that the sync must never store), two pages at `_count=100`, and the fixtures `SANDBOX_FIXTURES` (inactive,
+      `replaced-by`, partial birth date, dependent coverage, unmapped payor, non-Organization payor, `R`, `HIV` and an
+      unknown label, a minor, an SSN-shaped MRN, no coverage, a secondary coverage). The token endpoint verifies the
+      assertion against the public half of the signing key (signature, ES384/RS384 only, `kid`, `typ`, `iss`, `sub`,
+      `aud`, `exp` and lifetime ≤ 5 min, `jti` remembered until `exp`) and issues an opaque bearer token; searches
+      need it and the scope. Test connection, Submit and Sync now all work for the sandbox (needs the shared
+      signing key configured, OA-064). `submit.blocked.sandbox` and `test.error.sandboxUnavailable` were reworded and
+      the Test panel now shows for the sandbox. **Migration 0043 also replaces the sandbox CHECK**: 0040 pinned the
+      sandbox issuer to the string `sandbox-client`, which discovery never produces (it records the base URL), so a
+      passing test could not pin it; the issuer is now NULL or the base URL.
+- [x] Test: `APP_ENV=production` on Netlify refuses a real endpoint and allows only the sandbox.
+      **Built**: `src/app/(app)/settings/integrations/test-deps.test.ts`; the run-level refusals are in `sync-engine.test.ts` and `sync-now.test.ts`.
+- [x] Update `docs/data-sources.xlsx` with the FHIR R4 source.
+
+### Sync run and issue codes (PI2b)
+The codes on `integration_sync_runs.issue_codes` and `integration_sync_issues.code` are shown on screen as raw
+labels on the sync-history page, which is not audited and must contain no PHI. They are a **fixed vocabulary
+defined in code** (`src/domain/integrations/sync-codes.ts`: `SYNC_RUN_CODES`, `SYNC_ISSUE_CODES`), lower-case
+snake_case, no digits (the CHECK is `^[a-z_]{1,64}$`), each with a `runs.code.<code>` label in en/es/pt. Nothing
+from a server is stored verbatim: anything not listed is `other`. A code on a patient row never names a
+sensitivity, restriction, minor or Part 2 category.
+
+| Family | Codes |
+|---|---|
+| Record skipped (issue row, counted in `skipped_count`) | `resource_invalid`, `id_invalid`, `mrn_missing`, `mrn_ambiguous`, `mrn_invalid`, `mrn_government_identifier`, `mrn_looks_like_ssn`, `mrn_looks_like_mbi`, `name_incomplete`, `name_invalid`, `birthdate_incomplete`, `birthdate_invalid` |
+| Record stored, with a note (issue row) | `address_incomplete`, `review_required` (a new patient the administrator should look at; the reason is not stated) |
+| Matching (issue row, names the other patient) | `mrn_conflict` (skipped), `linked_to_source` (linked) |
+| Run notice | `issues_truncated` (only the first 1,000 issue rows of a run are kept) |
+| Why a run failed | `unreachable`, `tls_failed`, `timeout`, `address_refused`, `redirect_refused`, `content_type_refused`, `too_large`, `paging_loop`, `bad_response`, `not_fhir`, `smart_config_invalid`, `capability_missing`, `auth_refused`, `issuer_mismatch`, `token_endpoint_changed`, `not_synthetic`, `environment_refused`, `signing_key_unavailable`, `connection_not_active`, `internal_error` |
+| R4 `OperationOutcome.issue.code` (only if exactly an R4 IssueType code, hyphen → underscore) | `invalid`, `structure`, `required`, `value`, `invariant`, `security`, `login`, `unknown`, `expired`, `forbidden`, `suppressed`, `processing`, `not_supported`, `duplicate`, `multiple_matches`, `not_found`, `deleted`, `too_long`, `code_invalid`, `extension`, `too_costly`, `business_rule`, `conflict`, `transient`, `lock_error`, `no_store`, `exception`, `timeout`, `incomplete`, `throttled`, `informational` |
+| Anything else | `other` |
+
+`scope_insufficient`, `invalid_client` and `needs_review` are on the lists for the history page but are not
+written by the engine today (a 400 at the token endpoint is `auth_refused`).
 
 ### PI3 — scheduled sync and source-state hardening
 - [ ] Scheduled every 15 minutes (OA-056): SECURITY DEFINER `integration_enqueue_due_runs()`
@@ -969,6 +1110,12 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       failures, unusually large runs.
 
 ### PI4 — Bulk Data (before the first real practice; OA-050)
+- [ ] **Lift the `population_scope_unenforced` refusal** (`assertRunEnvironment`, `syncNow`) only together with the
+      code that applies `population_scope` (the practice's Group export, or the operator-verified filter), and a test
+      that a real connection syncs that population and nothing else. Until then no real connection can sync.
+- [ ] ⚠️ VERIFY (Coverage page cap): PI2b caps a Coverage chunk at 20 pages (`too_large`). A server that ignores `_count`
+      and returns a huge single page, or one that pages Coverage far below the requested size, could hit that cap for a
+      large practice; check each vendor's behavior before the first real connection and revisit the cap with PI4.
 - [ ] `Group/<practice group>/$export?_type=Patient,Coverage,Organization&_since=…`; the status URL
       and every output URL pass the URL rules and address guard; the bearer token is sent only to
       the FHIR origin (`requiresAccessToken=true` files must be on it); other output hosts are
@@ -982,14 +1129,14 @@ Must-support (MS) notes ⚠️ VERIFY against the published StructureDefinitions
 |---|---|---|---|
 | `external_id` | `Patient.id` | — | Required; FHIR `id` syntax, ≤ 64 chars |
 | `source_version_id`, `source_last_updated` | `Patient.meta.versionId`, `.lastUpdated` | not MS | Clamped; no-regression rule |
-| `mrn` | `Patient.identifier` whose `system` = the connection's MRN system | `identifier` 1..*, MS `system`, `value` | Exactly one, else `mrn_missing`/`mrn_ambiguous`. `ddd-dd-dddd` → `mrn_looks_like_ssn`; bare 9 digits too unless the operator recorded "MRNs are 9 digits"; MBI-shaped (CMS format, ⚠️ VERIFY) → `mrn_looks_like_mbi` |
-| `first_name`, `last_name` | `Patient.name` (official, else usual, else the only one): `given[0]`, `family` | MS | Missing → `name_incomplete` |
-| `birth_date` | `Patient.birthDate` | MS | Full date, 1900..today; partial → `birthdate_incomplete`. Under 18 → "minor" tag **suggested** to administrators, never set automatically |
+| `mrn` | `Patient.identifier` whose `system` = the connection's MRN system | `identifier` 1..*, MS `system`, `value` | Exactly one, else `mrn_missing`/`mrn_ambiguous`; visible ASCII, 1 to 40 characters (the `patients` CHECK), else `mrn_invalid`. `ddd-dd-dddd` → `mrn_looks_like_ssn`; any standalone run of exactly nine digits (also when separators split it) too, unless the operator recorded "MRNs contain a nine-digit number"; MBI-shaped (CMS format, ⚠️ VERIFY) → `mrn_looks_like_mbi` |
+| `first_name`, `last_name` | `Patient.name` (official, else usual, else the only one): `given[0]`, `family` | MS | Missing → `name_incomplete`; each name at most 60 characters (the `patients` CHECK), else `name_invalid` |
+| `birth_date` | `Patient.birthDate` | MS | Full date, 1900..today; partial → `birthdate_incomplete`. Under 18 (on the practice's calendar date, `America/New_York`) → the new patient gets the neutral history note `review_required`; nothing is tagged, restricted or named "minor" automatically (OA-081) |
 | `sex` | `Patient.gender` | 1..1 | female → F, male → M, other/unknown → U (837P DMG03) |
 | `address_line1`, `city`, `state`, `postal_code` | `Patient.address` (home or no use, current) | MS | Invalid → all four null + `address_incomplete` |
 | `source_status` | `Patient.active`, `Patient.link` `replaced-by` | not MS | PI3 |
 | `source_restricted`, `source_sensitivity` | `Patient.meta.security` | — | Restricted if confidentiality `R`/`V`, an ActCode sensitivity code (`HIV`, `PSY`, `ETH`, `SDV`, `42CFRPart2`; ⚠️ VERIFY), or **any unrecognized label**. Codes stored as a fixed vocabulary (`unknown` for unrecognized) |
-| `primary_payer_id`, `coverage_payor_key` | primary Coverage `payor` | 1..1 MS | Must reference `Organization`, else `needs_review`; payer only by explicit mapping (CLAUDE.md #9) |
+| `primary_payer_id`, `coverage_payor_key` | primary Coverage `payor` | 1..1 MS | Must reference `Organization`, else `needs_review`; payer only by explicit mapping (CLAUDE.md #9). The payor name is the reference's own `display`; PI2b fetches no `Organization` resource (the scope is requested for a later lookup) |
 | `member_id_enc`, `member_id_last4` | primary Coverage `identifier` type MB, else `subscriberId` | MS | Encrypted (R-7.3.3); null unless coverage is `mapped`/`unmapped` |
 | `coverage_status` | primary Coverage selection | — | `none` / `mapped` / `unmapped` / `needs_review` |
 | `phone` | not synced (null) | — | OA-047 |
@@ -1097,7 +1244,7 @@ real vendor endpoints in pre-production.
   they stay unusable until the owner decides how their synthetic origin is proven.
 - **OA-050** Bulk Data (PI4) before the first real practice.
 - **OA-051** Who at the practice confirms the population scope at approval.
-- **OA-066** Approval method and contact-role lists. **OA-067** R-15.9 sign-off for the registry-conflict operator alert. **OA-068** Whether Reject clears the attestation. **OA-069** Notifications spec (activation notice). **OA-070** Retention of approval evidence. **OA-071** Operator-side revoke. **OA-072** Single-person approval and the operator account. **OA-073** Operator step-up before Approve. **OA-074** CI runs as a superuser, so FORCE RLS on owner and platform paths is never exercised: a non-superuser, NOBYPASSRLS owner role in CI (R-15.9). **OA-075** Is a payor key detached from any patient PHI? (Decides whether `integration_payer_mappings` is Confidential or Restricted.)
+- **OA-066** Approval method and contact-role lists. **OA-067** R-15.9 sign-off for the registry-conflict operator alert. **OA-068** Whether Reject clears the attestation. **OA-069** Notifications spec (activation notice). **OA-070** Retention of approval evidence. **OA-071** Operator-side revoke. **OA-072** Single-person approval and the operator account. **OA-073** Operator step-up before Approve. **OA-074** CI runs as a superuser, so FORCE RLS on owner and platform paths is never exercised: a non-superuser, NOBYPASSRLS owner role in CI (R-15.9). **OA-075** Is a payor key detached from any patient PHI? (Decides whether `integration_payer_mappings` is Confidential or Restricted.) **OA-076** Migration 0043 (the service-principal identity): **resolved, approved by the owner 2026-09-29** (R-15.9). **OA-077** Three small sync decisions: (a) Sync now in-request until jobs ship; (b) the neutral `review_required` note for a new minor, chosen so the unaudited history page never names a minor or a sensitivity category (the audited patient page is where a person can see why); (c) Coverage-only change search. **OA-078** Member-ID field encryption has no AAD binding to record or practice, app-wide (needs an ADR and a re-encryption migration). **OA-079** Linking a synced patient overwrites a manually entered patient with the same MRN (and birth date): confirm that is wanted. **OA-080** Store the source's sensitivity category, or only the `source_restricted` flag. **OA-081** Should minors be restricted by default. **OA-082** Restricted patients are visible to every role until patients P4 masking: accept the interim?
 - **OA-052** Restricted-in-source patients until patients P4 masking; whether any practice is a
   42 CFR Part 2 program (human decision).
 - **OA-053** MRN conflicts: EHR-only fix or an admin tool.

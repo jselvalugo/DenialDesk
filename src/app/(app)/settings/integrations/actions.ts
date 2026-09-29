@@ -21,6 +21,7 @@ import {
   type IntegrationActor,
   type ResolvedSigningKid,
 } from "@/domain/integrations/connections";
+import { syncNow, syncResultMessage } from "@/domain/integrations/sync";
 import { testConnection } from "@/domain/integrations/test-connection";
 import type { TenantTx } from "@/db/tenant";
 import type { Messages } from "@/i18n/messages/types";
@@ -30,8 +31,10 @@ import { getLocale, getT } from "@/i18n/server";
 import {
   connectionFormFailure,
   integrationActor,
+  syncNowFailure,
   testConnectionFailure,
   type ConnectionFormState,
+  type SyncNowState,
   type TestConnectionState,
 } from "./form-state";
 import { connectionTestDeps } from "./test-deps";
@@ -138,6 +141,29 @@ export async function testConnectionAction(
     return result;
   } catch (error) {
     return testConnectionFailure(error, t);
+  }
+}
+
+/**
+ * Sync now (spec PI2b): queues a run and executes it in this request (background jobs are a later
+ * slice). Admin only, re-checked here and in the domain; the environment rule, the once-a-minute limit
+ * and the one-run-at-a-time rule are the domain's. A run-level failure is a result shown as text, not
+ * an error page; nothing the remote server sent is returned.
+ */
+export async function syncNowAction(_: SyncNowState, formData: FormData): Promise<SyncNowState> {
+  const auth = await requireAuth();
+  const t = await getT("integrations");
+  if (!canManageIntegrations(auth.role)) return { error: t("error.notAdmin") };
+  const id = uuid.safeParse(text(formData, "id", 40));
+  if (!id.success) return { error: t("error.notFound") };
+  const actor = integrationActor(auth);
+  try {
+    const result = await syncNow((fn) => withTenant(auth, fn), actor, id.data, connectionTestDeps(), t);
+    // The page and the tab-bar drop-down show the last sync time and the state.
+    revalidatePath("/", "layout");
+    return { status: result.status, message: syncResultMessage(result, t) };
+  } catch (error) {
+    return syncNowFailure(error, t);
   }
 }
 
