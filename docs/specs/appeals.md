@@ -1,6 +1,6 @@
 # Spec: Appeals module
 
-Status: A1 shipped (2026-09-26) — A2–A5 draft
+Status: A1 shipped (2026-09-26) — A2 criteria approved (2026-09-29) — A3–A5 draft
 Roadmap items: Phase 1 → Appeals ("Appeal deadline engine per payer regime" [x], "Appeal letter
 templates with merge fields and attachments; human review before export", "Medicare 5-level appeal
 workflow", "Appeal outcome tracking"); §8.4
@@ -43,7 +43,7 @@ vendor names, screenshots, or copied wording are used.
 | Phase | Scope |
 |---|---|
 | **A1** (this PR) | Appeal record + lifecycle, `/appeals` list, appeal detail, create-appeal page from a denial, record submission, record decision, denial-status sync, audit, tests |
-| A2 | Letter templates by denial category, merge fields, editable body, human-review attestation, PDF/print export |
+| **A2** | Letter templates by denial category, merge fields, editable body, human-review attestation, print/PDF export (see "Acceptance criteria (A2)"; attachments stay A5) |
 | A3 | Multi-level escalation, including the Medicare 5-level ladder, via the rules engine |
 | A4 | Outcome analytics: overturn rate by payer and denial category |
 | A5 | Attachment file storage; collections hold while an appeal is pending (R-3.9.2) |
@@ -115,6 +115,122 @@ vendor names, screenshots, or copied wording are used.
       flips from `available: false` to `available: true`.
 - [x] e2e: denial detail → new appeal → appeal detail → record submission → record decision →
       denial status reflects the outcome.
+
+## Acceptance criteria (A2)
+
+Approved by delegated technical authority (2026-09-29). Requirement IDs: R-7.11.2 (a named user
+approves before anything reaches a payer), R-3.10.1/R-3.10.2 (no code changes; recorded approval),
+R-7.5.1 (audit), R-7.2.4 (tenant isolation), HC-1.2, HC-2.2, HC-2.4, HC-3.3, HC-3.4, HC-6.1 in
+`docs/HIPAA_COMPLIANCE.md`, and SC-B3.1, SC-B4.1, SC-B4.4 in `docs/SECURE_CODING.md`. Threat model:
+`docs/threat-models/appeal-letters.md`.
+
+### Templates
+- [x] A practice can edit one letter template per denial category (`denial_category`, 11 values) on
+      `/settings/appeal-templates` (list) and `/settings/appeal-templates/[category]` (edit). The URL
+      carries the category name only, never PHI. Admins and managers can edit
+      (`canManageAppealTemplates`); every role that can open appeals can read them.
+- [x] A small set of starter templates ships in code (`src/domain/appeals/letter/starter-templates.ts`), not
+      as database rows: eligibility, authorization, coding, medical necessity, timely filing, and a
+      generic "other" that every category without its own starter falls back to. A practice template, when
+      it exists, always wins over the starter.
+- [x] Starter wording is generic and synthetic. It cites **no** payer rule, statute, or policy (constraint
+      9): each place a citation or clinical fact belongs holds a visible `[⚠️ VERIFY: …]` or
+      `[FILL IN: …]` placeholder. Starter text never suggests changing a billed code (constraint 8).
+- [x] A template can only use allow-listed merge fields (below); an unknown field is refused at save.
+- [ ] Template versions: not built. A template edit is audited (who/when, IDs only) but the previous
+      wording is not kept, because a letter copies its own body when it is started, so changing a
+      template never changes an existing letter. Revisit if the owner wants template history (OA-093).
+
+### Template language
+- [x] Templates are English (`language = 'en'`, enforced by a CHECK). A letter goes to a payer, and the
+      payer reads English. The UI around it is en/es/pt like everything else. Whether Spanish or
+      Portuguese payer-facing templates are needed is an owner question (OA-093); the column and the
+      unique key `(tenant, category, language)` leave room without a rewrite.
+
+### Merge fields (allow-list)
+A letter body holds tokens like `{{claim.number}}`. **The stored body keeps the tokens; values are filled
+in when the letter is shown or printed**, so a saved letter holds no copy of a patient's name, birth
+date, or member ID (HC-3.4) and a corrected claim/patient record flows into the letter. Only these keys
+exist (`src/domain/appeals/letter/merge-fields.ts`):
+
+| Key | Source | Note |
+| --- | --- | --- |
+| `patient.fullName`, `patient.birthDate` | patients | Payers match the member by name and date of birth. |
+| `patient.memberIdMasked` | patients.member_id_last4 | **Masked (`****1234`).** Minimum necessary (HC-3.3): the encrypted full member ID is never decrypted into a letter. A user who must print the full ID types it into the body after the audited reveal on the appeal page. Owner question OA-094. |
+| `claim.number`, `claim.serviceDate`, `claim.billedAmount` | claims | |
+| `denial.carc`, `denial.carcDescription`, `denial.rarcs`, `denial.category`, `denial.amount`, `denial.noticeDate` | denials, `src/domain/carc.ts` | The CARC description is DenialDesk's summary (⚠️ VERIFY status in `carc.ts`); the letter shows it as stored. |
+| `payer.name` | payers | The `payers` table has no address column, so there is no payer-address field; the starter has a placeholder for it. Owner question OA-095. |
+| `provider.name`, `provider.npi` | providers | |
+| `practice.name`, `practice.city` | tenants, locations | |
+| `appeal.deadline` | appeals (from the rules engine or the payer contract) | Shown as stored, never recomputed here. |
+| `letter.date` | the saved version's date (practice calendar) | Stable, so a reprint does not change the letter. |
+
+- [x] Unknown or malformed merge fields are refused at save (template and letter): `{{ nope }}`,
+      `{{patient.ssn}}`, a lone `{{`, and an unclosed token all fail with a message naming the field.
+- [x] Rendering is a single pass and returns plain text. A value that itself contains `{{…}}` is not expanded,
+      and every value reaches the page as a React text node (auto-escaped); no `dangerouslySetInnerHTML`.
+      A test renders `<script>` in a patient name and in the body and proves it comes out escaped.
+- [x] A field with no value renders the visible marker `[not on file]`; the editor lists the fields that are
+      missing so the reviewer sees them.
+
+### Letter per appeal
+- [x] `/appeals/[id]/letter` shows the editable body. With no saved letter the body starts from the
+      template for the denial's category (or the category picked with "Load template"); it is saved as
+      version 1. A save with a stale base version (someone saved meanwhile) is refused, not merged.
+- [x] Every save is a new row in `appeal_letter_versions` (append-only: the app role has no UPDATE or
+      DELETE): version, body, who, when, and which category template it started from. Identical text is
+      not saved again. The page lists the history (version, who, when).
+- [x] Body limit 20,000 characters; a letter can only be started or changed while the appeal is draft,
+      in review, or ready. After submission it is read-only (and stays printable).
+- [x] Roles: admin, manager, and specialist edit, attest, and export; compliance can read the letter but not
+      change or export it (R-5.1.2).
+
+### Human review (R-7.11.2)
+- [x] Before export, a signed-in user attests, by ticking a statement and pressing "I reviewed this
+      letter", that they reviewed **this** version. The attestation row (`appeal_letter_attestations`,
+      append-only) records the user, the time, the version, and a SHA-256 of the fully rendered letter.
+- [x] An attestation is refused while the body still contains a `⚠️ VERIFY` or `[FILL IN: …]` placeholder.
+- [x] Any new saved version has no attestation until someone attests it. Export is refused when the
+      latest version has no attestation, and also when the rendered letter no longer matches the
+      attested digest (for example, the claim or patient record changed after review): the user must
+      review again.
+- [x] Nothing in A2 changes a claim, a denial, or any billed code. The attestation does not move the
+      appeal's status (A1's status machine is unchanged); gating "record submission" on an attestation
+      is an open question below.
+
+### Export
+- [x] `/appeals/[id]/letter/print` is a print-friendly page (the browser's print dialog saves a PDF).
+      No new dependency, no PDF library, no third-party asset. The page title is generic ("Appeal
+      letter"), so a saved file name carries no PHI (HC-2.4). Screen chrome is hidden with print styles.
+- [x] The page is reached with a normal link (not prefetched) and each render is one audited export.
+      Refusals are audited too.
+
+### Audit (IDs only, never letter content)
+- [x] `appeal.template_created`, `appeal.template_updated` (entity `appeal_letter_template`),
+      `appeal.letter_viewed`, `appeal.letter_saved`, `appeal.letter_attested`, `appeal.letter_exported`,
+      `appeal.letter_export_refused` (entity `appeal`). Metadata: version number, category, refusal reason
+      code. No body text, no field values, no names.
+- [x] No PHI in URLs (`/appeals/[id]/letter` uses the appeal UUID) or logs.
+
+### Data (A2)
+- [x] New tables, each with tenant RLS (`FORCE`), a composite tenant FK, and an isolation test in
+      `test/integration/tenancy.test.ts`: `appeal_letter_templates` (`SELECT, INSERT, UPDATE`),
+      `appeal_letter_versions` (`SELECT, INSERT`), `appeal_letter_attestations` (`SELECT, INSERT`). Grants
+      follow the established pattern (table grants to `denialdesk_app` in the migration); no role,
+      no `SECURITY DEFINER`, nothing beyond it. The migration is `drizzle/0048_appeal_letters.sql`.
+- [x] Classification: all three tables are Restricted PHI by inheritance (HC-1.2: appeal letters and
+      free text). Template bodies are practice free text, so they get RLS and audited edits, but they are
+      meant to hold merge tokens and no patient details (the template page says so); viewing a template
+      is not audited, viewing or exporting a letter is.
+
+### i18n
+- [x] Every label, hint, error, and status is a key in `appeals` / `settings` for en, es, and pt. The
+      letter body and the starter wording are user content and stay English (see Template language).
+
+### Owner questions (recorded in `docs/owner/OWNER_ACTION_ITEMS.xlsx`)
+- Spanish/Portuguese payer letters (OA-093); full member ID in the letter at export (OA-094); a payer
+  address field on payers (OA-095); whether recording a submission should require an attestation and
+  whether a second person must attest (OA-096).
 
 ## Data / API changes (A1)
 - New table `appeals` (Restricted PHI by inheritance — links to a claim/denial — §9.1):
