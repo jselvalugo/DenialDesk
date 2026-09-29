@@ -266,7 +266,7 @@ export const operator: Messages["operator"] = {
     "O registro do endpoint desta conexão não corresponde mais à configuração. Ela não pode ser aprovada; rejeite-a.",
   "errors.integrationPracticeSuspended":
     "Esta clínica está suspensa. Reative-a antes de aprovar uma conexão.",
-  "integrations.scope.notYet": "ainda não disponível",
+  "integrations.scope.verified_filter_unavailable": "Filtro de busca verificado (ainda não disponível)",
   "errors.approvalScopeUnsupported":
     "Um filtro de busca verificado ainda não tem onde ser registrado, então só uma exportação de Group pode ser aprovada.",
   "errors.integrationRealEndpointRefused":

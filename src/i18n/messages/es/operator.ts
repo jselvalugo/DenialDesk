@@ -269,7 +269,7 @@ export const operator: Messages["operator"] = {
     "El registro del punto de conexión de esta conexión ya no coincide con su configuración. No se puede aprobar; rechácela.",
   "errors.integrationPracticeSuspended":
     "Este consultorio está suspendido. Reactívelo antes de aprobar una conexión.",
-  "integrations.scope.notYet": "aún no disponible",
+  "integrations.scope.verified_filter_unavailable": "Filtro de búsqueda verificado (aún no disponible)",
   "errors.approvalScopeUnsupported":
     "Un filtro de búsqueda verificado aún no tiene dónde registrarse, así que solo se puede aprobar una exportación de Group.",
   "errors.integrationRealEndpointRefused":

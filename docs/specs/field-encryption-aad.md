@@ -223,7 +223,7 @@ None (no legal clock). `LEGACY_V1_READ_EXPIRES` is an engineering date, not a st
   - HC-7.3 and R-7.3.3 list only SSN, MBI, member IDs, and bank data, so storing it in plaintext
     breaks no MUST rule.
   - It is still an HC-1.1 identifier. Whether to field-encrypt it is an owner and officer decision:
-    see owner row OA-078.
+    see owner row OA-083.
 
 ## Open questions
 Listed at the end of the implementation plan.
@@ -491,8 +491,8 @@ Each PR is about 400 changed lines or fewer, not counting generated drizzle snap
   does bounded work per call, returns a cursor, and reports `done`.
 
 ### Open questions for the owner
-In `docs/owner/OWNER_ACTION_ITEMS.xlsx`: questions 1–5 are OA-074, 6 is OA-075, 7–10 are OA-076,
-and 11 is OA-078.
+In `docs/owner/OWNER_ACTION_ITEMS.xlsx`: questions 1–5 are OA-080, 6 is OA-081, 7–10 are OA-082,
+and 11 is OA-083.
 1. Approve ADR 0011: the `v2` envelope with `kid`, the header-bound AAD, and the `global` scope for
    TOTP secrets, including the platform operator.
 2. Pre-production conversion: run the job, or wipe and re-seed after PR 3 is deployed?

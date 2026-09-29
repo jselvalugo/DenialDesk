@@ -85,7 +85,7 @@ _Last updated: 2026-09-28_
   the sandbox too (only the attestation is real-only), so sandbox Submit is domain-tested with a seeded
   pass and unreachable from the page until PI2b (and a sandbox in `error` can't be resumed until PI2b
   gives it a test path). **Open owner decisions from this slice:** OA-045 (N3 stamp time floor, N6
-  attestation wording scope), OA-065 (c). **PI1c operator approval done except the activation notice and the conflict alert (open items)** (branch `claude/vigilant-tesla-ps41e9-pi1c-approval`, PR #89; no migration and no GRANT: writes go through `withTenantAsPlatform`, the connection owner's path; `src/domain/integrations/approval.ts`; queue `/operator/integrations`, review page under the practice; Approve records the method code, date, contact role, optional 9-digit MRNs and the required client-ID-ownership confirmation, and is refused for a scope other than `group_export`, in a synthetic-only environment, before the submission date, without a BAA in force, and for a non-operator account (`isOperatorAccount`); Reject takes a fixed reason code and releases the registry claim; audited `operator.integration_approved|rejected` with `session_id`, and views audited `operator.integration_viewed`). **Open from PI1c** (unticked spec items, owner rows OA-066 to OA-073): the activation notice to practice administrators (no in-app notice mechanism exists), the operator alert on `integration.registry_conflict` (R-15.9 owner sign-off), operator step-up before Approve, operator-side revoke, capturing a verified filter as a structured value. **Next: PI2b** (sync engine, sandbox, jobs); its spec now also carries the error-transition stamp item. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
+  attestation wording scope), OA-065 (c). **PI1c operator approval done except the activation notice and the conflict alert (open items)** (branch `claude/vigilant-tesla-ps41e9-pi1c-approval`, PR #89; no migration and no GRANT: writes go through `withTenantAsPlatform`, the connection owner's path; `src/domain/integrations/approval.ts`; queue `/operator/integrations`, review page under the practice; Approve records the method code, date, contact role, optional 9-digit MRNs and the required client-ID-ownership confirmation, and is refused for a scope other than `group_export`, in a synthetic-only environment, before the submission date, without a BAA in force, and for a non-operator account (`isOperatorAccount`); Reject takes a fixed reason code and releases the registry claim; audited `operator.integration_approved|rejected` with `session_id`, and views audited `operator.integration_viewed`). **Open from PI1c** (unticked spec items, owner rows OA-066 to OA-073): the activation notice to practice administrators (no in-app notice mechanism exists), the operator alert on `integration.registry_conflict` (R-15.9 owner sign-off), operator step-up before Approve, operator-side revoke, capturing a verified filter as a structured value. **PI2b UI slice done** (branch `claude/vigilant-tesla-ps41e9-pi2b-ui`, no migration, no GRANT): payer mapping `/settings/integrations/[id]/payers` (administrators; saving needs a step-up; each changed mapping audited `integration.payer_mapping_changed` with IDs and counts only, viewing audited `integration.payer_mappings_viewed`) and sync history `/settings/integrations/[id]/runs` (counts and codes; issue rows link to DenialDesk patient IDs; no PHI), plus the PR #89 follow-ups N1 to N7. **Open, for the sync-engine slice:** applying a saved mapping to the patients that carry the key (a synced patient's payer and coverage are read-only outside a running run, so the sync must re-derive coverage for a patient whose mapping is newer than its `synced_at`, even at an unchanged `versionId`); spec PI2b. **Next: PI2b** (sync engine, sandbox, jobs); its spec now also carries the error-transition stamp item. (PI1b-1 is #82 and PI1b-2 is #84; #81 was closed as superseded.) PR #83 review fixes: IP-literal hosts now pass the address guard, truncated compressed responses reject, IPv6 limited to `2000::/3` minus special-purpose ranges, test key generated at test time, spec ticks split (run-level limits stay open for PI2b), test-only transport options need a positive test signal (`VITEST`/`NODE_ENV=test`).
   **PI2a lifecycle + step-up slice done** (PR #86, ported from closed #81 onto the
   #82/#84/#85 domain layer; Submit, the residency attestation, and the Submit registry claim wait on
   Test connection, PI2a-2): step-up MFA (R-7.2.2) — migration 0041 `sessions.mfa_verified_at`,
@@ -382,7 +382,7 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 ## Next up
 - SC-B7.1 AAD on member IDs and TOTP secrets: **plan proposed, not built** (ADR 0011,
   `specs/field-encryption-aad.md`, `threat-models/field-encryption-aad.md`). Six PRs, expand →
-  convert → contract; the build waits on owner approval (OA-074).
+  convert → contract; the build waits on owner approval (OA-080).
 0. Revenue cycle module (`specs/revenue-cycle-accounting.md`): B1 rules and ledger, B2 monthly file
    import, C0 (own design: month-end activity file, routing-only rules), B3 journal vouchers, and
    B4 aging/deposits/reconciliation, and B5 statements and RCM dashboard (denial tie-ins by
@@ -418,12 +418,12 @@ technical decisions"). Decisions still get an ADR so a human can review them.
 
 ## Open questions for humans
 
-- **Field-encryption AAD (SC-B7.1) plan, ADR 0011 Proposed (OA-074 to OA-076 and OA-078, 2026-09-28):**
+- **Field-encryption AAD (SC-B7.1) plan, ADR 0011 Proposed (OA-080 to OA-083, 2026-09-28):**
   approve the `v2` envelope with key ID and header-bound AAD, and choose job vs. re-seed for
   pre-production (security review recommends re-seed), the cut-off owner, and an empty Azure start
-  (OA-074); a separate rate-limit hash key (OA-075); rotation of append-only history, key retirement
-  under backups and legal hold, a rotation drill, and a member-ID blind index (OA-076); whether
-  `rcm_claim_lines.account_number` is field-encrypted (OA-078). PR 3's key-usage sequence needs a
+  (OA-080); a separate rate-limit hash key (OA-081); rotation of append-only history, key retirement
+  under backups and legal hold, a rotation drill, and a member-ID blind index (OA-082); whether
+  `rcm_claim_lines.account_number` is field-encrypted (OA-083). PR 3's key-usage sequence needs a
   `GRANT USAGE`, so that build PR needs R-15.9 sign-off.
 - **Confirm three PI2a coordinator decisions (OA-065, 2026-09-28; due before the first real connection):** (a) Submit's gate is stricter than the spec's plain wording: the newest Test connection must be a pass within 24 h, bound to the tested configuration and signing `kid` (a later failure or transport refusal voids it); (b) pre-production signs every connection with one shared key (`INTEGRATION_SIGNING_KEY`), a residual risk recorded in threat model S3, mitigated by the operator verifying `client_id` ownership at approval (PI1c); (c) a refused Submit ("This endpoint and client ID are already connected") reveals that *some* practice holds that endpoint and client ID pair, with no identity disclosed, bounded by the Test connection and Submit rate limits: accept or reject.
 - **PI1c operator approval, eight owner decisions (OA-066 to OA-073, 2026-09-28; all due before the first real connection unless noted):**
@@ -439,7 +439,24 @@ technical decisions"). Decisions still get an ADR so a human can review them.
   before the first real connection; (g) **OA-072** accept single-person approval and confirm exactly one person
   uses the operator account (unique user identification, 45 CFR 164.312(a)(2)(i)), else plan per-person
   operator accounts before production; (h) **OA-073** an operator-realm step-up gating Approve before the Azure
-  cutover (`step_up_verified_at` in the approve audit); not built by decision.
+  cutover (`step_up_verified_at` in the approve audit); not built, pending this owner decision.
+- **CI runs the integration suite as a PostgreSQL superuser, so FORCE ROW LEVEL SECURITY on the owner and
+  platform paths is never exercised (raised 2026-09-28 after PR #89; owner action item **OA-074**, an
+  R-15.9 decision; needs a CI change, not made here).** A superuser (and any BYPASSRLS role) ignores every policy, even on FORCE
+  tables, so tests that pass in CI cannot show that `withTenantAsPlatform` (the connection owner with
+  `app.tenant_id` set: operator approval, BAAs, University access) and the owner-role reads in tests
+  (`systemDb()`) behave under the policy a non-superuser owner is subject to in Netlify and Azure. The
+  practice path (`withTenant`, `set local role denialdesk_app`) is exercised under RLS regardless. A
+  policy or an omitted `app.tenant_id` on an owner path would pass CI and fail (or show no rows) at the
+  first real deploy; the same blind spot is behind the data-backfill lesson below. **Proposal (owner
+  decision, then a CI/`docker-compose` change):** create the migration owner as a plain non-superuser,
+  non-BYPASSRLS role that owns the schema (`CREATE ROLE denialdesk_owner LOGIN NOBYPASSRLS` with
+  `CREATE`/ownership on the database), migrate and run `pnpm test:integration` as that role, keeping one
+  superuser connection only for test setup that must bypass policies (`createTestTenant`, fixtures);
+  assert in a test that the connection's role is neither `rolsuper` nor `rolbypassrls`. Expect some
+  owner-path tests to need `app.tenant_id` set, which is the point. See spec `patient-integrations.md`,
+  "Test infrastructure gap".
+- **Is a payor key detached from any patient's PHI? (OA-075, 2026-09-28.)** A payor key (`Organization/<id>`) names an insurer, but it sits on the synced patient row (`coverage_payor_key`, Restricted PHI) and is repeated in `integration_payer_mappings` (classified Confidential). The answer decides whether the mapping table is reclassified to Restricted. Until then the payer mapping page is audited and no audit event or log carries a key (`specs/patient-integrations.md`, Classification).
 - **TLS 1.3 minimum for the FHIR transport?** (2026-09-28, pending, `OA-062`.) R-7.3.1 is TLS 1.2+ (prefer 1.3); the transport enforces 1.2 with ECDHE + AEAD suites only and negotiates 1.3 when offered. A 1.3 minimum would refuse EHR vendors that only support 1.2. Must be decided before the first real endpoint is enabled.
 - Patient integrations (`specs/patient-integrations.md`): U.S.-hosting attestation vs. vendor letter
   and BAA scope (OA-045); retire manual registration once connected (OA-046); phone/email not synced

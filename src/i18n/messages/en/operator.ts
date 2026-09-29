@@ -261,7 +261,7 @@ export const operator = {
     "This connection's endpoint registration no longer matches its configuration. It can't be approved; reject it.",
   "errors.integrationPracticeSuspended":
     "This practice is suspended. Reactivate it before approving a connection.",
-  "integrations.scope.notYet": "not available yet",
+  "integrations.scope.verified_filter_unavailable": "Verified search filter (not available yet)",
   "errors.approvalScopeUnsupported":
     "A verified search filter has nowhere to be recorded yet, so only a Group export can be approved.",
   "errors.integrationRealEndpointRefused":
