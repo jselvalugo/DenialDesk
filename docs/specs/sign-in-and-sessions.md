@@ -26,7 +26,7 @@ Requirement IDs: R-7.2.2, R-7.2.7, R-7.2.9, R-7.5.1
       synthetic render, no PHI, provenance in `public/brand/README.md`) in a matted frame. At 1024px
       and wider the image and a short product description sit beside the card; below that the image
       alone stacks above the card. Borders and a hairline shadow only, per DESIGN.md §3 and §7; the
-      product text is Inter (§6). The image is decorative (`alt=""`); the logo still names the
+      product text is IBM Plex Sans (§6). The image is decorative (`alt=""`); the logo still names the
       product. `/login` fits 1280×800 without scrolling and the platform console sign-in has no
       image (both covered by `test/e2e/auth.spec.ts`).
 

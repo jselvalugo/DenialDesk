@@ -8,26 +8,21 @@ import { appEnv, isProduction } from "@/lib/env";
 import "./globals.css";
 
 // Fonts are bundled in ./fonts (SIL OFL 1.1) so builds need no network access (fonts/README.md).
-const inter = localFont({
-  src: "./fonts/inter-latin-wght.woff2",
-  weight: "100 900",
-  variable: "--font-inter",
+// One sober sans for UI and titles plus a readable mono for codes: the clinical-software look
+// the owner asked for (DESIGN.md §6).
+const plexSans = localFont({
+  src: "./fonts/ibm-plex-sans-latin-wght.woff2",
+  weight: "100 700",
+  variable: "--font-plex-sans",
   display: "swap",
 });
 
-const playfair = localFont({
-  src: "./fonts/playfair-display-latin-wght.woff2",
-  weight: "400 900",
-  variable: "--font-playfair",
-  display: "swap",
-});
-
-const spaceMono = localFont({
+const plexMono = localFont({
   src: [
-    { path: "./fonts/space-mono-latin-400.woff2", weight: "400", style: "normal" },
-    { path: "./fonts/space-mono-latin-700.woff2", weight: "700", style: "normal" },
+    { path: "./fonts/ibm-plex-mono-latin-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/ibm-plex-mono-latin-700.woff2", weight: "700", style: "normal" },
   ],
-  variable: "--font-space-mono",
+  variable: "--font-plex-mono",
   display: "swap",
 });
 
@@ -49,7 +44,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // language is handed to client components once, here (spec: internationalization).
   const { locale, messages } = await getMessages();
   return (
-    <html lang={locale} className={`${inter.variable} ${playfair.variable} ${spaceMono.variable}`}>
+    <html lang={locale} className={`${plexSans.variable} ${plexMono.variable}`}>
       <body className="flex h-dvh flex-col print:block print:h-auto">
         <LocaleProvider locale={locale} messages={messages}>
           {!isProduction() && (
