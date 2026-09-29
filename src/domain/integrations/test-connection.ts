@@ -44,9 +44,9 @@ export interface TestConnectionDeps {
   /**
    * The transport for this connection. Chosen from `is_sandbox` alone, never from the host
    * (spec PI2b: the sandbox's in-process transport must not be reachable by naming its host).
-   * `null` means no transport exists yet (the built-in sandbox arrives in PI2b).
+   * `null` means this environment has none for it (the built-in sandbox where real data is allowed).
    */
-  transportFor(connection: { isSandbox: boolean }): Transport | null;
+  transportFor(connection: { id: string; isSandbox: boolean }): Transport | null;
   /** Called per test, so a store that can't be built here (production with an env key) is a refusal, not a crash. */
   keyStore(): SigningKeyStore;
   /** The clock the rate-limit window is computed from (tests pin it so a window can't roll mid-test). */
@@ -389,6 +389,9 @@ export async function testConnection(
   // never be presented to a real practice EHR. The built-in sandbox is in-process, never dialed.
   if (!target.isSandbox) {
     assertEnvironmentAllowsHost(new URL(target.baseUrl).hostname, actor.syntheticOnly, t);
+  } else if (!actor.syntheticOnly) {
+    // The built-in sandbox is synthetic data only: never tested where real data is allowed.
+    refuse(t, "error.sandboxRefused");
   }
   // Refusals that dial nothing come before the rate limit, so they don't spend it.
   const transport = deps.transportFor(target);

@@ -17,8 +17,11 @@ function toIso(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** The practice's calendar: legal clocks and "today" for periods and ages run in Eastern time (REQUIREMENTS §11). */
+export const PRACTICE_TIME_ZONE = "America/New_York";
+
 /** Today's date in the given IANA time zone (default Eastern). */
-export function todayIn(timeZone = "America/New_York", now: Date = new Date()): string {
+export function todayIn(timeZone: string = PRACTICE_TIME_ZONE, now: Date = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",

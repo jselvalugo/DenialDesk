@@ -280,7 +280,7 @@ export interface ApproveInput {
   contactRole: string;
   /** `group_export` or `verified_filter`: the population the sync is limited to. */
   populationScope: string;
-  /** Optional: the operator verified that the practice's MRNs are nine digits ("MRNs are 9 digits (verified)"). */
+  /** Optional: the operator verified that the practice's MRNs are nine digits ("MRNs contain a nine-digit number (verified)"). */
   mrnNineDigitsVerified: boolean;
   /** The operator verified, outside the app, that the practice owns this client ID. Required. */
   clientIdOwnershipVerified: boolean;

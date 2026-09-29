@@ -159,7 +159,7 @@ export const integrations = {
     "DenialDesk's signing key isn't configured in this environment, so connections can't be tested. Ask the platform operator to set it up.",
   "test.error.keyUnavailable":
     "DenialDesk's signing key isn't usable right now. Ask the platform operator to check it.",
-  "test.error.sandboxUnavailable": "The built-in test sandbox can't be tested yet.",
+  "test.error.sandboxUnavailable": "The built-in test sandbox isn't available in this environment.",
   "test.error.failed": "The test couldn't be completed. Reload the page and try again.",
   "test.title": "Test connection",
   "test.description":
@@ -179,7 +179,7 @@ export const integrations = {
   "submit.blocked.noPassingTest":
     "Submit is unavailable: this connection has no passing Test connection from the last 24 hours. Run Test connection above. A failed test, or a change to the connection or to DenialDesk's signing key, needs a new pass.",
   "submit.blocked.sandbox":
-    "Submit is unavailable: it needs a passing Test connection, and the built-in test sandbox can't be tested yet.",
+    "Submit is unavailable: the built-in test sandbox needs a passing Test connection from the last 24 hours too. Run Test connection above. A failed test, or a change to DenialDesk's signing key, needs a new pass.",
   "submit.submit": "Submit for approval",
   "submit.submitSandbox": "Activate sandbox",
   "submit.pending": "Submitting…",
@@ -212,6 +212,42 @@ export const integrations = {
     "DenialDesk did not approve this connection: the configuration is incorrect. Correct it, run Test connection, and submit it again.",
   "rejected.notice.other":
     "DenialDesk did not approve this connection. DenialDesk will contact you about why. Once it is resolved, run Test connection and submit it again.",
+  "sync.title": "Sync now",
+  "sync.description":
+    "Pulls the latest patient changes from the connected EHR/PM now. It runs to the end in this request, so a large practice should wait for the scheduled sync instead. Patients are read-only copies: fix demographics in the EHR/PM.",
+  "sync.submit": "Sync now",
+  "sync.pending": "Syncing…",
+  "sync.resultOk": "Sync finished",
+  "sync.resultFailed": "Sync stopped",
+  "sync.result.succeeded":
+    "{created} new, {updated} updated, {linked} linked to existing patients, {skipped} skipped. Skipped records and their reasons are kept with the sync run.",
+  "sync.result.abandoned":
+    "The sync stopped because the connection was paused, revoked, or put in error while it ran. Patients already saved were kept.",
+  "sync.error.notActive": "Only an active connection can sync. Resume it first.",
+  "sync.error.rateLimited": "Sync now can run once a minute. Wait a moment and try again.",
+  "sync.error.alreadyRunning": "A sync is already running for this connection.",
+  "sync.error.failed": "The sync couldn't be completed. Reload the page and try again.",
+  "sync.failure.auth_refused":
+    "The EHR/PM refused DenialDesk's credentials, so the connection now needs attention. Once the EHR/PM administrator has fixed it, run Test connection and resume.",
+  "sync.failure.token_endpoint_changed":
+    "The EHR/PM's sign-in endpoint changed, so the connection now needs attention. A different endpoint is a new connection.",
+  "sync.failure.issuer_mismatch":
+    "The server no longer identifies itself as the system this connection was approved for, so nothing was synced. Contact DenialDesk support.",
+  "sync.failure.not_synthetic":
+    "The data didn't carry the synthetic marker, and this environment only accepts synthetic data. Nothing was saved.",
+  "sync.failure.environment_refused": "This connection can't sync in this environment.",
+  "sync.failure.signing_key_unavailable":
+    "DenialDesk's signing key isn't usable right now. Ask the platform operator to check it.",
+  "sync.failure.unreachable":
+    "DenialDesk couldn't reach the EHR/PM, or it took too long. Nothing was lost. Try again in a few minutes.",
+  "sync.failure.bad_response":
+    "The EHR/PM sent an answer DenialDesk couldn't use. Nothing more was saved. Run Test connection to check the setup.",
+  "sync.failure.capability_missing":
+    "The EHR/PM can't do a search DenialDesk needs. Run Test connection to check the setup.",
+  "sync.failure.too_large":
+    "The EHR/PM sent more data than one sync accepts. Patients saved so far were kept; try again.",
+  "sync.failure.other":
+    "The sync stopped because of an unexpected problem. Try again, and contact DenialDesk support if it repeats.",
   "detail.moreTitle": "Payers and sync history",
   "detail.moreDescription": "What DenialDesk read from this connection, and how insurers map to your payers.",
   "detail.payersLink": "Payer mapping",
@@ -331,7 +367,46 @@ export const integrations = {
   "runs.code.incomplete": "The EHR/PM's answer was incomplete",
   "runs.code.informational": "The EHR/PM sent a notice",
   "runs.code.unknown": "An unspecified EHR/PM problem",
+  "runs.code.resource_invalid": "A record was not a usable patient",
+  "runs.code.id_invalid": "A record had no usable identifier",
+  "runs.code.mrn_invalid": "Record number not usable",
+  "runs.code.mrn_government_identifier": "Record number is a government identifier",
+  "runs.code.name_invalid": "Name not usable",
+  "runs.code.birthdate_invalid": "Birth date not usable",
+  "runs.code.review_required": "Please review this patient",
+  "runs.code.address_refused": "The EHR/PM's address was refused",
+  "runs.code.redirect_refused": "The EHR/PM tried to redirect the request",
+  "runs.code.content_type_refused": "The EHR/PM answered in an unexpected format",
+  "runs.code.too_large": "The EHR/PM sent more data than one sync accepts",
+  "runs.code.bad_response": "The EHR/PM sent an answer DenialDesk couldn't use",
+  "runs.code.not_fhir": "The server didn't answer as FHIR R4",
+  "runs.code.environment_refused": "This connection can't sync in this environment",
+  "runs.code.signing_key_unavailable": "DenialDesk's signing key wasn't usable",
+  "runs.code.connection_not_active": "The connection wasn't active",
+  "runs.code.issues_truncated": "Only the first issues of this run are listed",
+  "runs.code.structure": "The EHR/PM reported a structure problem",
+  "runs.code.required": "The EHR/PM reported a missing required element",
+  "runs.code.value": "The EHR/PM reported a bad value",
+  "runs.code.invariant": "The EHR/PM reported a rule violation",
+  "runs.code.suppressed": "The EHR/PM withheld some content",
+  "runs.code.not_supported": "The EHR/PM doesn't support the request",
+  "runs.code.multiple_matches": "The EHR/PM found more than one match",
+  "runs.code.not_found": "The EHR/PM couldn't find what was asked for",
+  "runs.code.deleted": "The EHR/PM reported a deleted record",
+  "runs.code.too_long": "The EHR/PM reported content that is too long",
+  "runs.code.code_invalid": "The EHR/PM reported an invalid code",
+  "runs.code.extension": "The EHR/PM reported an unsupported extension",
+  "runs.code.too_costly": "The EHR/PM refused a request as too costly",
+  "runs.code.business_rule": "The EHR/PM refused the request under a business rule",
+  "runs.code.lock_error": "The EHR/PM reported a locking problem",
+  "runs.code.no_store": "The EHR/PM couldn't store the request",
   "runs.code.other": "Other",
   "payers.keyUnsupported":
     "This insurer's key is too long or contains hidden characters, so it can't be mapped here.",
+  "runs.code.record_rejected": "A record was refused by the data store's own limits",
+  "runs.code.population_scope_unenforced": "The patients to sync can't yet be limited to your practice",
+  "sync.failure.population_scope_unenforced":
+    "Nothing was synced. DenialDesk can't yet limit a real EHR/PM connection to your practice's own patients, so real connections don't sync until it can. Nothing was requested from the EHR/PM.",
+  "sync.error.populationScopeUnenforced":
+    "Real EHR/PM connections can't sync yet: DenialDesk can't yet limit them to your practice's own patients. Nothing was requested.",
 } as const;

@@ -36,13 +36,20 @@ vi.mock("next/navigation", () => ({
   },
 }));
 // The same shape as the real wiring: the transport is chosen from is_sandbox alone (the built-in
-// sandbox has none until PI2b), the key store is the environment adapter over the key made below.
-vi.mock("@/app/(app)/settings/integrations/test-deps", () => ({
-  connectionTestDeps: () => ({
-    transportFor: (connection: { isSandbox: boolean }) => (connection.isSandbox ? null : wiring.transport),
-    keyStore: () => wiring.keyStore,
-  }),
-}));
+// sandbox gets the real in-process `SandboxTransport`, PI2b; a real connection the scripted fake), the
+// key store is the environment adapter over the key made below.
+vi.mock("@/app/(app)/settings/integrations/test-deps", async () => {
+  const { transportForConnection } = await import("@/integrations/fhir/select-transport");
+  return {
+    connectionTestDeps: () => ({
+      transportFor: (connection: { id: string; isSandbox: boolean }) =>
+        connection.isSandbox
+          ? transportForConnection(connection, () => wiring.keyStore as never)
+          : wiring.transport,
+      keyStore: () => wiring.keyStore,
+    }),
+  };
+});
 
 const {
   createConnectionAction,
@@ -375,26 +382,35 @@ describe("submitConnectionAction (PI2a)", () => {
     expect((await run(submitConnectionAction, await submitForm(id))).redirectedTo).toBeDefined();
   });
 
-  it("can't submit the built-in sandbox yet: it needs a passing test, and the sandbox can't be tested until PI2b", async () => {
+  it("tests and submits the built-in sandbox (PI2b): Submit needs the passing test, then activates it", async () => {
     // Where only synthetic data is allowed (the test environment's default): Create makes the sandbox.
     const ctx = await createTestTenant("Submit sandbox action");
     auth = { ...ctx, role: "admin", mfaVerifiedAt: new Date() };
     const created = await run(createConnectionAction, form({ displayName: "Sandbox" }));
     const id = created.redirectedTo!.replace("/settings/integrations/", "");
-    expect((await run(testConnectionAction, form({ id }))).state).toMatchObject({
-      error: expect.stringMatching(/can't be tested yet/),
-    });
-    const refused = await run(
-      submitConnectionAction,
+    const submitFields = async () =>
       form({
         id,
         updatedAt: await stampOf(id),
         locale: language,
         attestationVersion: String(US_RESIDENCY_ATTESTATION_VERSION),
-      }),
+      });
+    // Untested: refused in the spec's words.
+    expect(errorOf(await run(submitConnectionAction, await submitFields()))).toMatch(
+      /Test connection has to pass first/,
     );
-    expect(errorOf(refused)).toMatch(/Test connection has to pass first/);
     expect(await row(id)).toMatchObject({ status: "draft", submittedAt: null });
+
+    // The in-process sandbox answers discovery and the token request, verifying the signed assertion.
+    expect((await run(testConnectionAction, form({ id }))).state).toMatchObject({ outcome: "ok" });
+    expect(await row(id)).toMatchObject({
+      tokenEndpoint: "https://sandbox.fhir.denialdesk.invalid/token",
+      issuer: "https://sandbox.fhir.denialdesk.invalid/r4",
+    });
+    const submitted = await run(submitConnectionAction, await submitFields());
+    expect(submitted.redirectedTo).toBe(`/settings/integrations/${id}`);
+    expect(await row(id)).toMatchObject({ status: "active" });
+    expect((await row(id)).submittedAt).not.toBeNull();
   });
 });
 
