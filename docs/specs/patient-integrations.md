@@ -873,8 +873,9 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       EXECUTE granted to a `denialdesk_jobs` role, not `denialdesk_app`; also requires the
       connection to be `active`; HMAC compared in constant time). Tests: unsigned call,
       stale timestamp, and forged or already-claimed `runId` refused.
-      **Built** (PI2c; `drizzle/0044_patient_integrations_jobs.sql`, ADR 0012 Proposed; **R-15.9 owner
-      sign-off required before it runs beyond a local or test database, OA-085**). Core (no Netlify, no Next.js):
+      **Built** (PI2c; `drizzle/0044_patient_integrations_jobs.sql` and, after the PR #100 review,
+      `0045_patient_integrations_jobs_review.sql`; ADR 0012 Proposed; **R-15.9 owner sign-off required for both
+      before they run beyond a local or test database, OA-085**; 0044 had already run on the PR's preview branch database). Core (no Netlify, no Next.js):
       `src/integrations/jobs/signature.ts` (`x-denialdesk-job-timestamp` + `x-denialdesk-job-signature: v1=<hex>`,
       HMAC-SHA256 over `<timestamp>.<body>`, `timingSafeEqual`, 5-minute window either way, 1 KB body cap,
       `z.strictObject({ runId })` parsed only after the MAC verifies; `jobSecret()` refuses a missing or
@@ -893,11 +894,21 @@ possible only in PI2b, which adds the in-process sandbox a test can pass against
       (grants by `SET ROLE`, catalog ACLs, no other column, non-active connections, forged/non-queued run IDs),
       `test/integration/jobs-worker.test.ts` (end to end: valid job runs; unsigned, stale, bad signature, forged,
       replayed, running, three racing workers, paused/error/revoked connection all refused with nothing changed; the
-      real-connection guard still refuses). Sync now: `requestSync` queues a job and answers `queued` when
-      `INTEGRATION_JOB_SECRET` and a worker URL are set, otherwise runs inline (tests, local development); audited
-      `integration.sync_queued` with the administrator's origin; a worker that can't be reached abandons the run and
-      refuses the press. Messages `sync.resultQueued`, `sync.result.queued`, `sync.error.notQueued` in en/es/pt
-      (the Spanish and Portuguese are agent-written; native-speaker review is OA-041).
+      real-connection guard still refuses). Sync now: `requestSync` (`SyncDeps.jobs`) queues a job and
+      answers `queued` when `INTEGRATION_JOB_SECRET` and a worker URL are set; audits `integration.sync_queued` with the
+      administrator's origin **in the same transaction as the run row**; a worker that can't be reached abandons the run
+      (`UPDATE ... WHERE status = 'queued' RETURNING`) and audits `job_not_sent` with the same IP and user agent, and
+      refuses the press, unless nothing was abandoned because the worker had already claimed the run (a post that timed out
+      after the worker started), which counts as queued. A secret that is set but too short refuses **before anything is
+      queued** (no run row, no rate-limit use). With the secret unset the run executes in the request only where
+      `syntheticDataOnly()` (tests, local development, pre-production not yet set up); **where real data is allowed and
+      jobs are not fully configured the press is refused** (security review L4), logged once at boot
+      (`integrations.jobs_not_configured`). The worker reads its body from the stream with the 1,024-byte cap enforced while
+      reading (`readJobBody`, security review L1) and a database error in the claim is a 500, not an exception. Messages `sync.resultQueued`, `sync.result.queued`, `sync.error.notQueued` in en/es/pt
+      (the Spanish and Portuguese are agent-written; native-speaker review is OA-041). Tests added in the review round:
+      `src/platform/netlify/job-handlers*.test.ts` (405, 413 including a chunked body with no Content-Length, response mapping,
+      the 503s), the requestSync timeout-after-claim race, refusal before queueing, and the L4 refusal in
+      `sync-now-action.test.ts`.
 - [x] All sync reads and writes run as `denialdesk_app` under a new
       `withTenantAsSystem(tenantId, runId)` (sets tenant, run, and connection settings; never
       `withTenantAsPlatform` or `systemDb`). Audit actor: one fixed integration
@@ -1127,19 +1138,29 @@ written by the engine today (a 400 at the token endpoint is `auth_refused`).
       (EXECUTE: `denialdesk_jobs`) inserts `queued` runs for due `active` connections and returns run
       IDs only; the scheduled function posts one signed job per run ID. Isolation test: the
       function exposes no other column and `denialdesk_app` cannot execute it.
-      **Built** (PI2c, migration 0044 above; OA-056's 15 minutes is unconfirmed by the owner). "Due" is an `active`
-      connection with no queued or running run and none queued in the last 14 minutes (a minute of slack for a tick
-      that fires early); the function first abandons a run quiet for the 20-minute lease (the SQL constant mirrors
-      `RUN_LEASE_MS`, a test pins both), so a lost job is retried by the next tick. It queues for every active
-      connection, real ones too: the engine's fail-closed guard (`environment_refused` /
-      `population_scope_unenforced`) refuses them, and after three such failures the connection is in `error`, so
-      only sandbox connections can run where only synthetic data is allowed. `src/integrations/jobs/scheduler.ts`
-      (`runScheduledSync`: refuses without a proper secret or worker URL *before* queueing anything; posts jobs 8 at a
-      time) and `netlify/functions/integration-sync-scheduler.ts` (`*/15 * * * *`; Netlify runs scheduled functions on
-      the published deploy only). Tests: `test/integration/jobs-db.test.ts` (one column named for the function; ACL
-      and `has_function_privilege`; `denialdesk_app` and the jobs role's table access refused; draft, paused, error,
-      revoked and no-connection practices untouched; idempotence; 13/15-minute and 19/21-minute boundaries;
-      `app.tenant_id` restored), `jobs-worker.test.ts` (tick to signed job to a succeeded scheduled run).
+      **Built** (PI2c, migrations 0044 and 0045; OA-056's 15 minutes is unconfirmed by the owner).
+      `integration_enqueue_due_runs(p_sandbox_only boolean)` returns `(tenant_id, run_id, outcome)` with `outcome` `queued` or
+      `abandoned`. "Due" is an `active` connection with no queued or running run and none queued in the last 14 minutes (a
+      minute of slack for a tick that fires early); a run abandoned before it ever started doesn't count as recent. The
+      function first abandons a run quiet for the 20-minute lease (the SQL constant mirrors `RUN_LEASE_MS`, a test pins
+      both), so a lost job is retried by the next tick; the checks are two `NOT EXISTS` and the stale update is split by
+      status, so each uses its index; the due connections are locked `FOR SHARE ... SKIP LOCKED` so a concurrent Pause
+      can't leave a queued run on a paused connection (a test proves a Pause waits, then abandons the run). **Only
+      sandbox connections are queued** (`p_sandbox_only`, passed as `SCHEDULED_SANDBOX_ONLY` in `sync.ts` beside
+      `assertRunEnvironment`, `true` until PI4 lifts the population-scope refusal): the engine's fail-closed guard still
+      refuses every real run, but queueing one each tick would only walk it into `error` with a misleading
+      `repeated_failures`. `src/integrations/jobs/scheduler.ts` (`runScheduledSync`: refuses without a proper secret or
+      worker URL *before* queueing anything; shuffles the queued runs; at most 8 jobs in flight; audits each abandoned run
+      as `integration.sync_abandoned` under `withTenantAsSystem` with reason `lease_expired`; abandons and audits a run
+      whose post fails (`job_not_sent`) so its connection isn't blocked; after about 25 s abandons and audits the runs it
+      didn't reach (`deadline`), so the next tick queues them again) and `netlify/functions/integration-sync-scheduler.ts`
+      (`*/15 * * * *`; Netlify runs scheduled functions on the published deploy only). Tests:
+      `test/integration/jobs-db.test.ts` (three named columns; ACL and `has_function_privilege`; the zero-argument
+      version is gone; `denialdesk_app` and the jobs role's table access refused; draft, paused, error, revoked and
+      no-connection practices untouched; sandbox-only; idempotence; 13/15-minute and 19/21-minute boundaries;
+      never-started abandoned runs; locks; `app.tenant_id` restored; probe owner), `jobs-worker.test.ts` (tick to signed
+      job to a succeeded scheduled run; lease and `job_not_sent` audits; next tick re-queues), `scheduler.test.ts`
+      (shuffle, max 8 in flight, deadline).
 - [ ] `source_status`: `inactive`, `merged` (`replaced-by`), `gone` (404/410 in a weekly
       reconciliation, which also re-reads Coverage when Coverage `_lastUpdated` is not advertised).
       Nothing is deleted; synced rows follow the §9.2 retention of the claims they support.
@@ -1148,7 +1169,8 @@ written by the engine today (a 400 at the token endpoint is `auth_refused`).
       last three finished runs (`succeeded` or `failed`, queued since the connection last changed state, so a Resume
       starts a fresh count) all failed: the connection moves to `error` with `status_reason = repeated_failures`
       (`CONNECTION_ERROR_REASONS` in `sync-codes.ts`, a fixed allow-list) and `integration.connection_errored` is
-      audited as the service principal with `failed_runs: 3`. Manual and scheduled runs count alike; an `abandoned`
+      audited as the service principal with `failed_runs: 3` and `last_failure_code` (an allow-listed run code); the
+      connection page shows a translated notice (`detail.repeatedFailuresNotice`, en/es/pt). Manual and scheduled runs count alike; an `abandoned`
       run neither counts nor rescues; a success ends the streak; a failure that already errors the connection keeps
       its own reason (`auth_refused`, `token_endpoint_changed`). A rename or the first stored page of the very first
       sync also restarts the count (it moves `updated_at`), which only delays the error. Tests:
@@ -1292,7 +1314,7 @@ real vendor endpoints in pre-production.
   they stay unusable until the owner decides how their synthetic origin is proven.
 - **OA-050** Bulk Data (PI4) before the first real practice.
 - **OA-051** Who at the practice confirms the population scope at approval.
-- **OA-066** Approval method and contact-role lists. **OA-067** R-15.9 sign-off for the registry-conflict operator alert. **OA-068** Whether Reject clears the attestation. **OA-069** Notifications spec (activation notice). **OA-070** Retention of approval evidence. **OA-071** Operator-side revoke. **OA-072** Single-person approval and the operator account. **OA-073** Operator step-up before Approve. **OA-074** CI runs as a superuser, so FORCE RLS on owner and platform paths is never exercised: a non-superuser, NOBYPASSRLS owner role in CI (R-15.9). **OA-075** Is a payor key detached from any patient PHI? (Decides whether `integration_payer_mappings` is Confidential or Restricted.) **OA-076** Migration 0043 (the service-principal identity): **resolved, approved by the owner 2026-09-29** (R-15.9). **OA-077** Three small sync decisions: (a) Sync now in-request until jobs ship (jobs shipped in PI2c: in the request only where no job secret is set); (b) the neutral `review_required` note for a new minor, chosen so the unaudited history page never names a minor or a sensitivity category (the audited patient page is where a person can see why); (c) Coverage-only change search. **OA-078** Member-ID field encryption has no AAD binding to record or practice, app-wide (needs an ADR and a re-encryption migration). **OA-079** Linking a synced patient overwrites a manually entered patient with the same MRN (and birth date): confirm that is wanted. **OA-080** Store the source's sensitivity category, or only the `source_restricted` flag. **OA-081** Should minors be restricted by default. **OA-082** Restricted patients are visible to every role until patients P4 masking: accept the interim? **OA-085** R-15.9 sign-off on migrations 0044 and 0045 (the `denialdesk_jobs` role, two SECURITY DEFINER functions, their GRANT and REVOKE statements). **OA-086** Set `INTEGRATION_JOB_SECRET` on Netlify (functions only) and confirm the site password protection doesn't block the worker's function URL.
+- **OA-066** Approval method and contact-role lists. **OA-067** R-15.9 sign-off for the registry-conflict operator alert. **OA-068** Whether Reject clears the attestation. **OA-069** Notifications spec (activation notice). **OA-070** Retention of approval evidence. **OA-071** Operator-side revoke. **OA-072** Single-person approval and the operator account. **OA-073** Operator step-up before Approve. **OA-074** CI runs as a superuser, so FORCE RLS on owner and platform paths is never exercised: a non-superuser, NOBYPASSRLS owner role in CI (R-15.9). **OA-075** Is a payor key detached from any patient PHI? (Decides whether `integration_payer_mappings` is Confidential or Restricted.) **OA-076** Migration 0043 (the service-principal identity): **resolved, approved by the owner 2026-09-29** (R-15.9). **OA-077** Three small sync decisions: (a) Sync now in-request until jobs ship (jobs shipped in PI2c: in the request only where no job secret is set); (b) the neutral `review_required` note for a new minor, chosen so the unaudited history page never names a minor or a sensitivity category (the audited patient page is where a person can see why); (c) Coverage-only change search. **OA-078** Member-ID field encryption has no AAD binding to record or practice, app-wide (needs an ADR and a re-encryption migration). **OA-079** Linking a synced patient overwrites a manually entered patient with the same MRN (and birth date): confirm that is wanted. **OA-080** Store the source's sensitivity category, or only the `source_restricted` flag. **OA-081** Should minors be restricted by default. **OA-082** Restricted patients are visible to every role until patients P4 masking: accept the interim? **OA-085** R-15.9 sign-off on migrations 0044 and 0045 (0044 already ran on PR #100's preview database branch). **OA-086** Set `INTEGRATION_JOB_SECRET` per deploy context on Netlify (functions only), confirm the plan supports Background Functions and that the site password protection doesn't block the worker's function URL. **OA-087** Confirm the Netlify functions region and the Netlify Database region are U.S.
 - **OA-052** Restricted-in-source patients until patients P4 masking; whether any practice is a
   42 CFR Part 2 program (human decision).
 - **OA-053** MRN conflicts: EHR-only fix or an admin tool.

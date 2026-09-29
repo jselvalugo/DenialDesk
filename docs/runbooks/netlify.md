@@ -153,22 +153,43 @@ sandbox connections only (a real connection is refused by the sync engine).
   `INTEGRATION_JOB_SECRET` unset it runs in the request instead (the result appears on the page).
 - **Setting it up (owner, OA-086).** Generate the secret (`openssl rand -base64 48`), add it as a *secret* with the
   **Functions** scope, redeploy (a value change reaches running functions only after a redeploy). Never commit it or paste it
-  elsewhere. Rotating: change the value and redeploy; a job in flight during the switch is refused and its run is retried by
-  the next tick after the 20-minute lease (a queued run nobody picked up is abandoned then).
-- **The migration is a privilege change (R-15.9).** `0044` creates the `denialdesk_jobs` role and two SECURITY DEFINER
-  functions and needs the owner's sign-off (OA-085) before Netlify applies it to the shared pre-production database.
-  It needs no new database credential: the app's own login is made a member of the role, as it is of `denialdesk_app`.
+  elsewhere. **Use a different secret per deploy context**: one for *Production*, another for *Deploy Previews* and
+  *Branch deploys* (Netlify's environment variables can differ per context). Previews run pull-request code, which can read
+  its own environment; a shared value would let a pull request forge jobs against the production site. Rotating: change the
+  value and redeploy; a job in flight during the switch is refused and its run is retried by the next tick (a run whose job
+  was never delivered is abandoned when the scheduler can't post it, or after the 20-minute lease).
+- **Before relying on it, verify on a deploy preview (owner or the next builder, OA-086):**
+  1. `DEPLOY_URL` (or `URL`) exists at *runtime* in both the Next.js server (Sync now builds the worker URL from it) and the
+     functions. Netlify documents some of these as build-time variables. If they are missing at runtime, Sync now (which
+     then has a secret but no worker URL) keeps running in the request and answers with the result rather than "queued", and
+     the scheduler logs `integration.schedule_refused` `no_worker_url`; set `INTEGRATION_JOB_URL` for that context or add a
+     runtime source for the deploy URL (`src/platform/netlify/jobs.ts`).
+  2. The Netlify **plan supports Background Functions** (the `-background` suffix is what makes a function one).
+  3. The **deploy log lists both functions**, `integration-sync-background` and `integration-sync-scheduler` (*Deploys →
+     the deploy → Functions*); a scheduled function shows its schedule there, and only on the published deploy.
+  4. The site's **password protection** doesn't cover `/.netlify/functions/*` (see the `http_401` row below).
+- **The migrations are a privilege change (R-15.9).** `0044` creates the `denialdesk_jobs` role and two SECURITY DEFINER
+  functions, and `0045` replaces the scheduler function; together they need the owner's sign-off (OA-085) before Netlify
+  applies them to the shared pre-production database. (`0044` had already run on PR #100's preview database branch.)
+  They need no new database credential: the app's own login is made a member of the role, as it is of `denialdesk_app`.
 - **Troubleshooting** (function log: *Logs → Functions*; every line is a code and, where one exists, a run ID):
   | Log event and `status` | Meaning / fix |
   |---|---|
   | `integration.job_refused` `missing_secret` / `weak_secret` | `INTEGRATION_JOB_SECRET` isn't reaching the function (scope *Functions*, redeploy) or is under 32 bytes. |
   | `integration.job_refused` `unsigned`, `bad_timestamp`, `stale`, `bad_signature` | Something posted to the worker without a valid signature, or the two sides' secrets differ (set in different contexts) or their clocks are more than 5 minutes apart. Unrelated internet noise is expected to show up here occasionally and does nothing. |
+  | Sync now says "A sync is already running for this connection" and the log shows `integration.job_refused` `bad_signature` | The run was queued but its job was refused: the app and the worker of that deploy hold **different** `INTEGRATION_JOB_SECRET` values (set in different contexts, or only one side redeployed). The run is abandoned after the 20-minute lease. Make them equal (same context) and redeploy. |
+  | `integration.job_refused` `too_large` | A body over 1,024 bytes was refused while reading. Not one of ours. |
   | `integration.job_refused` `not_claimable` (with a run ID) | The run is already running or finished (a replay or a second worker), was abandoned, or its connection is no longer active. Nothing to fix. |
   | `integration.job_send_failed` `http_401` / `http_403` | The post to the worker was refused before it reached the function: check whether the site's **password protection** covers `/.netlify/functions/*` (OA-086). `http_404`: the deploy has no `netlify/functions` build. `network`: timeout or DNS. |
   | `integration.schedule_refused` `no_worker_url` / `missing_secret` | The scheduler queued nothing because it could not send. |
-  | `integration.schedule_ran` | One line per tick: `count` runs queued, `status` `ok` or `partial` (some jobs not sent; those runs are retried after the lease). |
-- **A connection is in `error` with reason `repeated_failures`:** three runs in a row failed. Open Sync history for the
-  codes, fix the cause (the EHR endpoint, or for the sandbox nothing external), run **Test connection**, then **Resume**.
+  | `integration.schedule_ran` | One line per tick: `count` runs queued, `status` `ok` or `partial` (some jobs not sent or not reached before the ~25 s deadline; those runs are abandoned and audited `integration.sync_abandoned`, and the next tick queues the connections again). |
+  | `integration.schedule_audit_failed` | An audit write or an abandon failed during a tick; the run is retried through the 20-minute lease. |
+  | `integrations.jobs_not_configured` (once, at boot) | Real data is allowed in this environment and jobs are not fully configured (or the secret is too short): Sync now refuses every press until they are. |
+- **A connection is in `error` with reason `repeated_failures`:** three runs in a row failed. The connection page says so;
+  Sync history has the codes (and the audit event `integration.connection_errored` carries the last failure code). Fix the
+  cause (the EHR endpoint, or for the sandbox nothing external), run **Test connection**, then **Resume**.
+- The scheduler queues **sandbox connections only** until the population-scope work (PI4) lands; a real connection is never
+  queued by the schedule, and a manual Sync now on one is refused.
 
 ## Deploy preview fails with "migration … has been modified after being applied"
 

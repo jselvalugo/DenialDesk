@@ -117,42 +117,55 @@ _Last updated: 2026-09-29_
   can apply `population_scope` (see "PI4 blocker" under Deferred review findings). **Not built:** Coverage-only
   search and `_elements`, PI4 (background jobs, the scheduler and the three-failure rule are PI2c, below). Owner:
   OA-077 to OA-082 (OA-076 is resolved).
-  **PI2c done: signed background jobs and the 15-minute scheduled sync** (branch `claude/vigilant-tesla-ps41e9-pi2c-jobs`,
-  from `claude/quirky-feynman-ufql5a`; migration `drizzle/0044_patient_integrations_jobs.sql`; ADR 0012 Proposed;
-  **R-15.9 owner sign-off required before it runs anywhere but a local or test database, OA-085**). Spec items ticked:
-  PI2b "Jobs", PI3 "Scheduled every 15 minutes", PI3 "Three consecutive failed runs -> error" (SIEM alerts stay
-  deferred to the Azure cutover). What it is: a job is a signed POST of `{ runId }` (HMAC-SHA256 over timestamp +
-  body, 5-minute window, constant-time compare, `INTEGRATION_JOB_SECRET` of at least 32 bytes, refused when missing
-  or short) handled by a platform-neutral worker (`src/integrations/jobs/`) that claims the run through
-  `integration_claim_run(run_id)` (read-only: a `queued` run of an `active` connection, returns tenant and
-  connection) and runs the existing `executeSyncRun` under `withTenantAsSystem`; `integration_enqueue_due_runs()`
-  queues a `scheduled` run per due active connection and returns run IDs; Sync now (`requestSync`) queues and posts the
-  same signed job when `INTEGRATION_JOB_SECRET` and a worker URL are set (audited `integration.sync_queued` with the
-  administrator's origin), otherwise runs inline as before (tests, local development); Netlify adapter =
-  `src/platform/netlify/` plus `netlify/functions/integration-sync-background.ts` (Background Function) and
-  `integration-sync-scheduler.ts` (Scheduled Function, `*/15 * * * *`, published deploy only); after a run fails,
-  three finished runs in a row failed move the connection to `error` with the allow-listed reason `repeated_failures`
-  (audited). L3 (PR #98 review): 0044 begins by verifying the service-principal row seeded by 0043 (exists, disabled,
-  password_hash '!', no membership) and raises otherwise; 0043 is not edited. The real-connection guard is kept: real
-  connections are refused by the engine, so only sandbox connections run where only synthetic data is allowed.
-  **Privilege statements in 0044 (R-15.9), verbatim:**
-  - `CREATE ROLE denialdesk_jobs NOLOGIN;` (inside `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'denialdesk_jobs') THEN ... END IF; END $$;`)
-  - `GRANT denialdesk_jobs TO CURRENT_USER;`
-  - `GRANT USAGE ON SCHEMA public TO denialdesk_jobs;`
-  - `CREATE FUNCTION integration_claim_run(p_run_id uuid) RETURNS TABLE (tenant_id uuid, connection_id uuid) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$ ... $$;`
-  - `REVOKE ALL ON FUNCTION integration_claim_run(uuid) FROM PUBLIC;`
-  - `GRANT EXECUTE ON FUNCTION integration_claim_run(uuid) TO denialdesk_jobs;`
-  - `CREATE FUNCTION integration_enqueue_due_runs() RETURNS SETOF uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$ ... $$;`
-  - `REVOKE ALL ON FUNCTION integration_enqueue_due_runs() FROM PUBLIC;`
-  - `GRANT EXECUTE ON FUNCTION integration_enqueue_due_runs() TO denialdesk_jobs;`
+  **PI2c done: signed background jobs and the 15-minute scheduled sync** (PR #100, branch `claude/vigilant-tesla-ps41e9-pi2c-jobs`,
+  from `claude/quirky-feynman-ufql5a`; migrations `drizzle/0044_patient_integrations_jobs.sql` and, after the review round,
+  `0045_patient_integrations_jobs_review.sql` (0044 had already run on the PR's Netlify preview database branch, so it
+  is not edited); ADR 0012 Proposed; **R-15.9 owner sign-off required for 0044 and 0045 together before they run anywhere
+  but a local or test database, OA-085**). Spec items ticked: PI2b "Jobs", PI3 "Scheduled every 15 minutes", PI3 "Three
+  consecutive failed runs -> error" (SIEM alerts stay deferred to the Azure cutover). What it is: a job is a signed POST
+  of `{ runId }` (HMAC-SHA256 over timestamp + body, 5-minute window, constant-time compare, body read with a 1,024-byte
+  cap while streaming, `INTEGRATION_JOB_SECRET` of at least 32 bytes, refused when missing or short) handled by a
+  platform-neutral worker (`src/integrations/jobs/`) that claims the run through `integration_claim_run(run_id)`
+  (read-only: a `queued` run of an `active` connection, returns tenant and connection) and runs the existing
+  `executeSyncRun` under `withTenantAsSystem`; `integration_enqueue_due_runs(p_sandbox_only)` queues a `scheduled` run per
+  due active connection (sandbox connections only until PI4, `SCHEDULED_SANDBOX_ONLY`) and returns `(tenant_id, run_id,
+  outcome)` so the scheduler can audit runs the database abandoned (`integration.sync_abandoned`, `lease_expired`),
+  abandon and audit a run whose job can't be posted (`job_not_sent`) or that it ran out of time for (`deadline`);
+  Sync now (`requestSync`) audits `integration.sync_queued` in the run's own transaction and posts the same signed job
+  when `INTEGRATION_JOB_SECRET` and a worker URL are set, refuses before queueing when the secret is too short, and
+  otherwise runs in the request only where `syntheticDataOnly()` (where real data is allowed it refuses, logged once at
+  boot); Netlify adapter = `src/platform/netlify/` plus `netlify/functions/integration-sync-background.ts` (Background
+  Function) and `integration-sync-scheduler.ts` (Scheduled Function, `*/15 * * * *`, published deploy only); three finished
+  runs in a row failed move the connection to `error` with the allow-listed reason `repeated_failures` (audited with the
+  last failure code; the connection page shows a translated notice). L3 and O8: 0044 and 0045 begin by verifying the
+  service-principal row seeded by 0043 (exists, disabled, password_hash '!', no membership; 0045 also no second-factor
+  secret and the reserved `.invalid` address) and raise otherwise; 0043 is not edited. The real-connection guard is kept.
+  **Privilege statements in 0044 + 0045 (R-15.9), final list, verbatim** (function bodies are in the migration files):
+  - 0044: `CREATE ROLE denialdesk_jobs NOLOGIN;` (inside `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'denialdesk_jobs') THEN ... END IF; END $$;`)
+  - 0044: `GRANT denialdesk_jobs TO CURRENT_USER;`
+  - 0044: `GRANT USAGE ON SCHEMA public TO denialdesk_jobs;`
+  - 0044: `CREATE FUNCTION integration_claim_run(p_run_id uuid) RETURNS TABLE (tenant_id uuid, connection_id uuid) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$ ... $$;`
+  - 0044: `REVOKE ALL ON FUNCTION integration_claim_run(uuid) FROM PUBLIC;`
+  - 0044: `GRANT EXECUTE ON FUNCTION integration_claim_run(uuid) TO denialdesk_jobs;`
+  - 0044: `CREATE FUNCTION integration_enqueue_due_runs() RETURNS SETOF uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$ ... $$;` (replaced by 0045)
+  - 0044: `REVOKE ALL ON FUNCTION integration_enqueue_due_runs() FROM PUBLIC;` (function dropped by 0045)
+  - 0044: `GRANT EXECUTE ON FUNCTION integration_enqueue_due_runs() TO denialdesk_jobs;` (function dropped by 0045)
+  - 0045: `DROP FUNCTION integration_enqueue_due_runs();`
+  - 0045: `CREATE FUNCTION integration_enqueue_due_runs(p_sandbox_only boolean) RETURNS TABLE (tenant_id uuid, run_id uuid, outcome text) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$ ... $$;`
+  - 0045: `REVOKE ALL ON FUNCTION integration_enqueue_due_runs(boolean) FROM PUBLIC;`
+  - 0045: `GRANT EXECUTE ON FUNCTION integration_enqueue_due_runs(boolean) TO denialdesk_jobs;`
   No table, column, policy or trigger changes; `denialdesk_app` gains nothing. Both functions walk the practices
   (`app.tenant_id` set per practice and restored) because every integration table is FORCE ROW LEVEL SECURITY; a probe
   owner test proves it for an owner that doesn't bypass it. **No new database credential:** `withJobsRole` uses
   `SET LOCAL ROLE denialdesk_jobs` from the same login, which `GRANT denialdesk_jobs TO CURRENT_USER` makes a member,
-  as 0002 does for `denialdesk_app`. **Owner actions:** OA-085 (this sign-off), OA-086 (set `INTEGRATION_JOB_SECRET`
-  as a functions-only Netlify secret, and confirm site password protection doesn't block the worker's function URL;
-  until it is set Sync now keeps running in the request and the worker and scheduler refuse). Not verifiable outside
-  Netlify: the function bundle was checked with esbuild and smoke-run against a stub, not deployed.
+  as 0002 does for `denialdesk_app`. **Owner actions:** OA-085 (this sign-off, and confirm that preview database branches
+  count as test databases for R-15.9; ⚠️ VERIFY that roles created on a Netlify Database preview branch don't reach the
+  shared pre-production database), OA-086 (set `INTEGRATION_JOB_SECRET` per deploy context as a functions-only Netlify
+  secret, confirm the plan supports Background Functions, and that site password protection doesn't block the worker's
+  function URL; until it is set Sync now keeps running in the request and the worker and scheduler refuse), OA-087
+  (confirm the Netlify functions and Netlify Database regions are U.S.; the scheduler now processes data unattended there).
+  Not verifiable outside Netlify: the function bundle was checked with esbuild and smoke-run against a stub, not
+  deployed; whether `DEPLOY_URL`/`URL` exist at runtime is on the runbook's verify list.
   **Local development databases:** a database created before 0043 that holds a sandbox connection with
   `issuer = 'sandbox-client'` (0040's pin) cannot take 0043, whose replacement sandbox CHECK does not validate that
   row. Reset it: `docker compose down -v` (drops the `db-data` volume), `docker compose up -d db`, `pnpm db:migrate`,
