@@ -76,7 +76,8 @@ export default async function ClaimPage({ params }: { params: Promise<{ id: stri
   const status = CLAIM_STATUSES[claim.status];
   const unsubmitted = isUnsubmitted(claim.status);
   const filing = filingStatus(payer.regime, claim.serviceDate, today);
-  // Sent but not yet confirmed received (999/277CA capture is phase C4): the window still matters.
+  // Sent but not yet confirmed received (999/277CA capture is phase C4): the window still matters, since
+  // the claim is timely if submitted by the deadline, evidenced by the clearinghouse acknowledgement.
   const awaitingReceipt = claim.status === "submitted" && !claim.payerReceivedDate;
   const showDeadline = unsubmitted || awaitingReceipt;
   const canCorrect = canCorrectClaims(auth.role) && unsubmitted;

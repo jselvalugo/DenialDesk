@@ -83,7 +83,8 @@ export const claims: Messages["claims"] = {
   "detail.filing.receivedNoLongerApplies":
     "Recibido por el pagador el {date}. La presentación oportuna ya no aplica.",
   "detail.filing.acceptedNoLongerApplies": "Aceptado por el pagador. La presentación oportuna ya no aplica.",
-  "detail.filing.awaitingReceipt": "Enviada; el plazo se cumple en cuanto el pagador confirme su recepción.",
+  "detail.filing.awaitingReceipt":
+    "Enviada; la reclamación es oportuna si se presentó a más tardar en la fecha límite, según el acuse de recibo de la cámara de compensación.",
   "detail.filing.pastDeadlineWarning":
     "El plazo de envío se ha cerrado. Es probable que el pagador deniegue esta reclamación por extemporánea, salvo que aplique una excepción.",
   "detail.filing.fromServiceDate": "Desde la fecha de servicio ({citation}).",

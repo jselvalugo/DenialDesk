@@ -655,5 +655,7 @@ billing and a rendering provider; validating a POS code against the CMS set; USP
 - PIP (Fla. Stat. § 627.736(5)(c)), workers' comp, and Medicaid filing limits are not in `rules/`
   yet; the UI says "no filing rule configured", never that none exists. (florida-rules-engine + counsel)
 - `fl.timely_filing.initial` cites § 627.6131(2) for HMO claims too; confirm § 641.3155. (counsel)
-- Is timely filing met when the claim is sent or when the payer receives it? Submitted claims
-  without a receipt date keep showing the deadline until C4. (counsel)
+- Is timely filing met when the claim is sent or when the payer receives it? Owner (2026-09-26,
+  ⚠️ counsel): timely if **submitted** by the deadline, evidenced by the clearinghouse
+  acknowledgement (`rules/deadlines.ts` `timelyFilingDeadline`); the claim page says so. Submitted
+  claims without a receipt date keep showing the deadline until C4 captures the acknowledgement.

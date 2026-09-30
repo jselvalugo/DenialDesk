@@ -3,7 +3,7 @@
 Read this at the start of every session, after `CLAUDE.md`. Update it at the end of every session
 that changes decisions, status, or open questions. Keep it short: facts and links, not narrative.
 
-_Last updated: 2026-09-29_
+_Last updated: 2026-09-30_
 
 ## Where we are
 - University access prompt now opens with the owner's banner (`public/brand/university-welcome.webp`,
@@ -559,9 +559,9 @@ technical decisions"). Decisions still get an ADR so a human can review them.
    Payers with its own "edit custom fields" page) done (#76), review polish follow-up done (payer
    role check runs before the row lock; tighter tests; `payerSourceLabel` unit test). Next: S3
    (Users and roles tab).
-7. Claim page timely-filing copy (review D2, builder PR): "Sent; the filing window is met once the
-   payer confirms receipt" in `src/app/(app)/claims/[id]/page.tsx` must change to the owner's answer —
-   timely if **submitted** by the deadline, evidenced by the clearinghouse acknowledgement.
+7. Claim page timely-filing copy (review D2): done 2026-09-30 — `detail.filing.awaitingReceipt` now
+   says the claim is timely if submitted by the deadline, as the clearinghouse acknowledgement shows
+   (en/es/pt; es/pt agent-written, native-speaker review with OA-041).
 8. Re-seed pre-production data after PR #59 (P1 rules): `denials.appeal_deadline` rows written
    before it hold the old rolled (later) date and show no "pending counsel" marker.
 9. DenialDesk University U2–U3 (`specs/denialdesk-university.md`): knowledge checks; per-user
