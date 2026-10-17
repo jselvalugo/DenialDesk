@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       # pnpm comes from package.json's packageManager; corepack refuses it unless its sha512 matches
@@ -37,7 +37,7 @@ jobs:
       # no longer bundles corepack, so a NODE_VERSION bump past 24 must install it first.
       - run: corepack enable && corepack install
       # Again, now that pnpm exists, to restore the pnpm store cache.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       # pnpm comes from package.json's packageManager; corepack refuses it unless its sha512 matches
@@ -75,7 +75,7 @@ jobs:
       # no longer bundles corepack, so a NODE_VERSION bump past 24 must install it first.
       - run: corepack enable && corepack install
       # Again, now that pnpm exists, to restore the pnpm store cache.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -103,7 +103,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       # pnpm comes from package.json's packageManager; corepack refuses it unless its sha512 matches
@@ -111,7 +111,7 @@ jobs:
       # no longer bundles corepack, so a NODE_VERSION bump past 24 must install it first.
       - run: corepack enable && corepack install
       # Again, now that pnpm exists, to restore the pnpm store cache.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -139,7 +139,7 @@ jobs:
           persist-credentials: false
       # No dependency cache: this job reads the lockfile only (no install), so there's nothing to
       # save, and setup-node's post step fails when the cache path doesn't exist.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       # pnpm from packageManager, sha512-checked by corepack (SC-A4.2).
